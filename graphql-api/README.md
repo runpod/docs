@@ -21,3 +21,15 @@ If you need detailed queries, mutations, fields, and inputs, take a look at our 
 {% content-ref url="get-gpu-types.md" %}
 [get-gpu-types.md](get-gpu-types.md)
 {% endcontent-ref %}
+
+{% content-ref url="get-pod.md" %}
+[get-pod.md](get-pod.md)
+{% endcontent-ref %}
+
+{% content-ref url="start-pod.md" %}
+[start-pod.md](start-pod.md)
+{% endcontent-ref %}
+
+{% content-ref url="stop-pod.md" %}
+[stop-pod.md](stop-pod.md)
+{% endcontent-ref %}
