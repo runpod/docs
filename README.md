@@ -1,12 +1,12 @@
 # Welcome
 
-Please use the search or browse through our docs before contacting us directly with any general questions. Feel free to reach us on discord, our support chat, or email. You can find more info on [**contact**](https://www.runpod.io/contact) page.
+Please use the search or browse through our docs before contacting us directly with any general questions. Feel free to reach us on discord, our support chat, or email. You can find more info on our [**contact**](https://www.runpod.io/contact) page.
 
 ### **Our Mission**
 
 RunPod is on a mission to democratize AI from the ground up. Our first goal is to bring cloud compute to all with very competitive prices without sacrificing usability, experience, or features.
 
-RunPod provides two cloud compute services: **Secure Cloud** and **Community Cloud**.
+RunPod currently provides two cloud compute services: **Secure Cloud** and **Community Cloud**.
 
 **Secure Cloud** runs in T4 data centers by our trusted partners. Our close partnership comes with high reliability w/ redundancy, security, and fast response times to mitigate any downtimes. For any sensitive and enterprise workloads, we highly recommend Secure Cloud.
 
