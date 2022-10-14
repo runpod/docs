@@ -10,5 +10,3 @@
   * [Stop Pod](graphql-api/stop-pod.md)
 * [GraphQL API Spec](https://graphql-spec.runpod.io)
 * [runpodctl](https://github.com/Run-Pod/runpodctl)
-* [RunPod Discord](https://discord.gg/cUpRmau42V)
-* [Contact](https://www.runpod.io/contact)
