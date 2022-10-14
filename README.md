@@ -10,7 +10,7 @@ RunPod currently provides two cloud compute services: **Secure Cloud** and **Com
 
 **Secure Cloud** runs in T4 data centers by our trusted partners. Our close partnership comes with high reliability w/ redundancy, security, and fast response times to mitigate any downtimes. For any sensitive and enterprise workloads, we highly recommend Secure Cloud.
 
-**Community Cloud** brings power in numbers and diversity spanning the whole world. Through our decentralized platform, we are able to offer peer-to-peer gpu compute that connects individual compute providers to compute consumers. Our Community Cloud hosts are invite-only and vetted by us.
+**Community Cloud** brings power in numbers and diversity spanning the whole world. Through our decentralized platform, we are able to offer peer-to-peer gpu compute that connects individual compute providers to consumers. Community Cloud providers are invite-only and vetted by us to offer compute with good security, and uptime.
 
 Both solutions offer prices that are far more competitive than large cloud providers such as AWS or GCP.
 
