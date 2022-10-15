@@ -26,5 +26,6 @@ Both solutions offer prices that are far more competitive than large cloud provi
 
 {% embed url="https://graphql-spec.runpod.io" %}
 
-{% embed url="https://github.com/Run-Pod/runpodctl" %}
 
+
+{% embed url="https://github.com/runpod/runpodctl" %}
