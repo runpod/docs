@@ -9,4 +9,4 @@
   * [Start Pod](graphql-api/start-pod.md)
   * [Stop Pod](graphql-api/stop-pod.md)
 * [GraphQL API Spec](https://graphql-spec.runpod.io)
-* [runpodctl](https://github.com/Run-Pod/runpodctl)
+* [runpodctl](https://github.com/runpod/runpodctl)
