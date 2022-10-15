@@ -4,7 +4,7 @@ description: General questions about RunPod and its services.
 
 # FAQ
 
-### **What is Secure Cloud or Community Cloud?**
+### **Secure Cloud vs Community Cloud**
 
 RunPod provides two cloud compute services: **Secure Cloud** and **Community Cloud**.
 
@@ -13,6 +13,12 @@ RunPod provides two cloud compute services: **Secure Cloud** and **Community Clo
 **Community Cloud** brings power in numbers and diversity spanning the whole world. Through our decentralized platform, we are able to offer peer-to-peer gpu compute that connects individual compute providers to compute consumers. Our Community Cloud hosts are invite-only and vetted by us.
 
 Both solutions offer prices that are far more competitive than large cloud providers such as AWS or GCP.
+
+### OnDemand vs Spot Pod
+
+**OnDemand** pods can run forever without any interruptions with resources that are dedicated to your pod. They do incur higher cost than **Spot** pods.
+
+**Spot** pods use spare compute capacity and allow you to bid for those compute resources. Resources are dedicated to your pod, but someone else can bid higher or start a **OnDemand** pod which will stop your pod. When this happens, your pod is given 5 seconds to stop with _SIGTERM_ and eventually _SIGKILL_ after 5 seconds. You can use volumes to save any data to the disk in that 5s period, or push data to the cloud periodically.
 
 #### **How does RunPod work?**
 
