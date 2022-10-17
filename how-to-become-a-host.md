@@ -27,7 +27,7 @@ Our community cloud empowers hosts to offer their compute on our platform. Curre
 
 * RunPod service fee is 24%
   * we cover \~3% Stripe processing fees
-  * also 2% referral and %1 template program is included as well ([learn more](https://www.runpod.io/refer-a-friend))
+  * also 2% referral and 1% template program is included as well ([learn more](https://www.runpod.io/refer-a-friend))
 * Payments are made once a week through Stripe (many countries are supported)
   * billing shows real-time earnings and is updated per min
 * GPU OnDemand prices are standard, hosts can set min bid price for Spot
