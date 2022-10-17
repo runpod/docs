@@ -10,3 +10,4 @@
   * [Stop Pod](graphql-api/stop-pod.md)
 * [GraphQL API Spec](https://graphql-spec.runpod.io)
 * [runpodctl](https://github.com/runpod/runpodctl)
+* [How to become a Host?](how-to-become-a-host.md)
