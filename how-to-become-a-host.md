@@ -16,13 +16,13 @@ Our community cloud empowers hosts to offer their compute on our platform. Curre
   * 4x A6000 should have at least 9 Cores
 * Latest GPUs, at least 30xx or RTX A4000 or higher
   * PCIE 3 x16 per GPU or PCIE 4 x8
-* RAM 4GB + Total VRAM of all GPUs
+* RAM 4 GB + Total VRAM of all GPUs
   * 2x 3090s should have (24+24+4) 52 GB RAM
   * 4x A6000 should have (48+48+48+48+4) 196 GB RAM
-* 1TB disk space at minimum
+* 1 TB disk space at minimum
   * at least 150 MB/s read speed required
   * disk speed test: `hdparm -tv {device}`
-* 100 Mbps Down / 50 Mbps Up at minimum per server
+* 100 Mb/s Down / 50 Mb/s Up at minimum per server
 
 ****
 
