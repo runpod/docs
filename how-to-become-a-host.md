@@ -20,6 +20,8 @@ Our community cloud empowers hosts to offer their compute on our platform. Curre
   * 2x 3090s should have (24+24+4) 52 GB RAM
   * 4x A6000 should have (48+48+48+48+4) 196 GB RAM
 * 1TB disk space at minimum
+  * at least 150 MB/s read speed required
+  * disk speed test: `hdparm -tv {device}`
 * 100 Mbps Down / 50 Mbps Up at minimum per server
 
 ****
