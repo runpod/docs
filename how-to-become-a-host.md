@@ -19,7 +19,7 @@ Our community cloud empowers hosts to offer their compute on our platform. Curre
 * RAM 4 GB + Total VRAM of all GPUs
   * 2x 3090s should have (24+24+4) 52 GB RAM
   * 4x A6000 should have (48+48+48+48+4) 196 GB RAM
-* 1 TB disk space at minimum
+* 1 TB disk space at minimum, 2 TB for 4 GPUs, 3 TB for 8 GPUs
   * at least 150 MB/s read speed required
   * disk speed test: `hdparm -tv {device}`
 * 100 Mb/s Down / 50 Mb/s Up at minimum per server
