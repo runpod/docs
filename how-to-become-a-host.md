@@ -23,6 +23,8 @@ Our community cloud empowers hosts to offer their compute on our platform. Curre
   * at least 150 MB/s read speed required
   * disk speed test: `hdparm -tv {device}`
 * 100 Mb/s Down / 50 Mb/s Up at minimum per server
+* Public IP support (20 ports per GPU)
+  * single IP can be shared between multiple servers
 
 ****
 
