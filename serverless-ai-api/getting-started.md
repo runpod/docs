@@ -11,7 +11,7 @@ description: Interact with your favorite models without the need to deploy pods.
 
 ### Models Available
 
-| Model                                             |    Model API Name   | Description            |
-| ------------------------------------------------- | :-----------------: | ---------------------- |
-| [Stable Diffusion v1.5](stable-diffusion-v1.5.md) | stable-diffusion-v1 | Stable Diffusion Model |
-| [DreamBooth](dreambooth.md)                       |          -          | Coming in Q1 2023      |
+| Model                                           |    Model API Name   | Description            |
+| ----------------------------------------------- | :-----------------: | ---------------------- |
+| [Stable Diffusion v1.5](stable-diffusion-v1.md) | stable-diffusion-v1 | Stable Diffusion Model |
+| [DreamBooth](dreambooth.md)                     |          -          | Coming in Q1 2023      |

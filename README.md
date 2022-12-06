@@ -16,12 +16,12 @@ Both solutions offer far more competitive prices than large cloud providers such
 
 
 
-{% content-ref url="welcome/faq.md" %}
-[faq.md](welcome/faq.md)
+{% content-ref url="faq.md" %}
+[faq.md](faq.md)
 {% endcontent-ref %}
 
-{% content-ref url="pods/graphql-api/" %}
-[graphql-api](pods/graphql-api/)
+{% content-ref url="graphql-api/" %}
+[graphql-api](graphql-api/)
 {% endcontent-ref %}
 
 {% embed url="https://graphql-spec.runpod.io" %}

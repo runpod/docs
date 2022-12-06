@@ -1,10 +1,10 @@
 ---
 description: >-
-  Stable Diffusion is a latent text-to-image diffusion model capable of
+  Stable Diffusion v1.5 is a latent text-to-image diffusion model capable of
   generating photo-realistic images given any text input.
 ---
 
-# Stable Diffusion v1.5
+# Stable Diffusion v1
 
 ### Examples
 
