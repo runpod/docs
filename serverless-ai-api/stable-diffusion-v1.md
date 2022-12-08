@@ -178,7 +178,7 @@ func main() {
 {% endtab %}
 {% endtabs %}
 
-{% swagger method="post" path="/stable-diffusion-v1/run" baseUrl="https://api.runpod.ai" summary="Run an inference request." %}
+{% swagger method="post" path="/v1/stable-diffusion-v1/run" baseUrl="https://api.runpod.ai" summary="Run an inference request." %}
 {% swagger-description %}
 
 {% endswagger-description %}
@@ -278,7 +278,7 @@ Random seed.
 {% endswagger-response %}
 {% endswagger %}
 
-{% swagger method="get" path="/stable-diffusion-v1/run/{ REQUEST_ID }" baseUrl="https://api.runpod.ai" summary="Status and output of an inference request." %}
+{% swagger method="get" path="/v1/stable-diffusion-v1/run/{ REQUEST_ID }" baseUrl="https://api.runpod.ai" summary="Status and output of an inference request." %}
 {% swagger-description %}
 
 {% endswagger-description %}
