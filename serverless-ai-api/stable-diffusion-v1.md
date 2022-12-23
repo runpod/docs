@@ -57,6 +57,7 @@ curl https://api.runpod.ai/v1/stable-diffusion-v1/status/xxxxxxxx-xxxx-xxxx-xxxx
     {
       "image": "https://job.results2",
       "seed": 2
+    }
   ],
   "status": "COMPLETED"
 }
