@@ -7,7 +7,7 @@ description: Interact with your favorite models without managing the pods yourse
 ### Getting Started
 
 1. You will need a RunPod API key which can be generated under your [user settings](https://www.runpod.io/console/user/settings).
-2. Select one of the models from below for further instructions or [bring your own model](bring-your-model/).
+2. Select one of the models from below for further instructions or [bring your own code](bring-your-own-code.md).
 
 ### Models Available
 
