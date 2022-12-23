@@ -49,7 +49,15 @@ curl https://api.runpod.ai/v1/stable-diffusion-v1/status/xxxxxxxx-xxxx-xxxx-xxxx
   "input": {
     "prompt": "a cute magical flying dog, fantasy art drawn by disney concept artists"
   },
-  "output": ["https://job.results"],
+  "output": [
+    {
+      "image": "https://job.results1",
+      "seed": 1
+    },
+    {
+      "image": "https://job.results2",
+      "seed": 2
+  ],
   "status": "COMPLETED"
 }
 ```
