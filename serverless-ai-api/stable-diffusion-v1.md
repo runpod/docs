@@ -33,7 +33,7 @@ curl -X POST https://api.runpod.ai/v1/stable-diffusion-v1/run \
 ### Retrieve Status/Output
 
 ```bash
-curl https://api.runpod.ai/v1/stable-diffusion-v1/run/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx \
+curl https://api.runpod.ai/v1/stable-diffusion-v1/status/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx \
 -H 'Content-Type: application/json'                             \
 -H 'Authorization: Bearer xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'    
 ```
@@ -278,7 +278,7 @@ Random seed.
 {% endswagger-response %}
 {% endswagger %}
 
-{% swagger method="get" path="/v1/stable-diffusion-v1/run/{ REQUEST_ID }" baseUrl="https://api.runpod.ai" summary="Status and output of an inference request." %}
+{% swagger method="get" path="/v1/stable-diffusion-v1/status/{ REQUEST_ID }" baseUrl="https://api.runpod.ai" summary="Status and output of an inference request." %}
 {% swagger-description %}
 
 {% endswagger-description %}

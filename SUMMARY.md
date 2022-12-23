@@ -22,7 +22,10 @@
 * [Getting Started](serverless-ai-api/getting-started.md)
 * [Stable Diffusion v1](serverless-ai-api/stable-diffusion-v1.md)
 * [DreamBooth](serverless-ai-api/dreambooth.md)
-* [Bring your own Model](serverless-ai-api/bring-your-own-model.md)
+* [Bring Your Model](serverless-ai-api/bring-your-model/README.md)
+  * [Create Your Container](serverless-ai-api/bring-your-model/create-your-container.md)
+  * [Create Template](serverless-ai-api/bring-your-model/create-template.md)
+  * [Create AI API](serverless-ai-api/bring-your-model/create-ai-api.md)
 
 ## Hosts
 
