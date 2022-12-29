@@ -4,8 +4,6 @@ description: Bring your own container image, we scale and handle the rest.
 
 # Bring Your Own Code
 
-### _Note: We will be releasing billing updates to our serverless offerings in the near future. For now, you are just billed for your normal pod usage on a per-minute basis._
-
 ## Create your worker image
 
 It's easy to create a container image using our [python sdk](https://github.com/runpod/runpod-python). For a simple hello world example, you can check out [this repository](https://github.com/runpod/serverless-workers/tree/main/helloworld).
