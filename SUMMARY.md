@@ -22,6 +22,7 @@
 * [Getting Started](serverless-ai-api/getting-started.md)
 * [Bring Your Own Code](serverless-ai-api/bring-your-own-code.md)
 * [Stable Diffusion v1](serverless-ai-api/stable-diffusion-v1.md)
+* [SD Anything v3](serverless-ai-api/sd-anything-v3.md)
 * [DreamBooth](serverless-ai-api/dreambooth.md)
 
 ## Hosts
