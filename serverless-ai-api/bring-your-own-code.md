@@ -72,3 +72,5 @@ Important things to note for handler.py:
 This hello world example simply takes whatever is passed to it, pretends its doing work for 3 (or whatever is configured in the env variable) seconds, then returns "hello world" as an output.
 
 Build and push your image to your favorite container image repository when you're done.
+
+While you can't currently use RunPod for this step, we are looking for ways to make this part of the development experience more smooth. Let us know if you have ideas or feature requests to make this part of the workflow more streamlined!

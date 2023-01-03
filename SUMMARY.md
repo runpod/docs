@@ -19,12 +19,12 @@
 
 ## Serverless AI
 
-* [RunPod APIs](serverless-ai/runpod-apis/README.md)
-  * [Stable Diffusion v1](serverless-ai/runpod-apis/stable-diffusion-v1.md)
-  * [SD Anything v3](serverless-ai/runpod-apis/sd-anything-v3.md)
-  * [DreamBooth](serverless-ai/runpod-apis/dreambooth.md)
+* [RunPod APIs](serverless-ai-api/getting-started.md)
+  * [Stable Diffusion v1](serverless-ai-api/stable-diffusion-v1.md)
+  * [SD Anything v3](serverless-ai-api/sd-anything-v3.md)
+  * [DreamBooth](serverless-ai-api/dreambooth.md)
 * [Custom APIs](serverless-ai/custom-apis/README.md)
-  * [Worker Image Creation](serverless-ai/custom-apis/worker-image-creation.md)
+  * [Worker Image Creation](serverless-ai-api/bring-your-own-code.md)
   * [Template Creation](serverless-ai/custom-apis/template-creation.md)
   * [Autoscaling](serverless-ai/custom-apis/autoscaling.md)
   * [Using Your API](serverless-ai/custom-apis/using-your-api.md)
