@@ -200,12 +200,8 @@ RunPod API Key
 Input Object contains prompt, and more
 {% endswagger-parameter %}
 
-{% swagger-parameter in="body" name="input.prompt" required="true" type="String" %}
+{% swagger-parameter in="body" name="input.prompt" required="true" %}
 Your input prompt.
-{% endswagger-parameter %}
-
-{% swagger-parameter in="body" name="input.negative_prompt" type="String" required="false" %}
-Specify things to not see in the output.
 {% endswagger-parameter %}
 
 {% swagger-parameter in="body" name="input.height" type="Integer" %}

@@ -206,6 +206,10 @@ Input Object contains prompt, and more
 Your input prompt.
 {% endswagger-parameter %}
 
+{% swagger-parameter in="body" name="negative_prompt" type="String" %}
+Specify things to not see in the output. 
+{% endswagger-parameter %}
+
 {% swagger-parameter in="body" name="input.height" type="Integer" %}
 Height of output image.\
 128, 256, 384, 448, 512, 576, 640, 704, 768
