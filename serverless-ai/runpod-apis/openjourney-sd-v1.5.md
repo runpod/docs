@@ -1,10 +1,12 @@
 ---
 description: >-
   Openjourney is an open-source Stable Diffusion fine-tuned model on Midjourney
-  images by PromptHero
+  images by PromptHero.
 ---
 
 # Openjourney (SD-v1.5)
+
+Model: [https://huggingface.co/prompthero/openjourney](https://huggingface.co/prompthero/openjourney)
 
 {% tabs %}
 {% tab title="cURL" %}
