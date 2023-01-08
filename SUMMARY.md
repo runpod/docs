@@ -21,6 +21,7 @@
 
 * [RunPod APIs](serverless-ai-api/getting-started.md)
   * [Stable Diffusion v1](serverless-ai-api/stable-diffusion-v1.md)
+  * [Stable Diffusion v2](serverless-ai/runpod-apis/stable-diffusion-v2.md)
   * [SD Anything v3](serverless-ai-api/sd-anything-v3.md)
   * [Openjourney (SD-v1.5)](serverless-ai/runpod-apis/openjourney-sd-v1.5.md)
   * [DreamBooth](serverless-ai-api/dreambooth.md)
