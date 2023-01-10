@@ -5,6 +5,15 @@
 * [About](README.md)
 * [FAQ](faq.md)
 
+***
+
+* [How Do I?](how-do-i/README.md)
+  * [Transfer Data](how-do-i/transfer-data.md)
+  * [Automatically Stop My Pod](how-do-i/automatically-stop-my-pod.md)
+  * [Customize a Template](how-do-i/customize-a-template.md)
+  * [Use Real SSH](how-do-i/use-real-ssh.md)
+  * [Override My Public Key](how-do-i/override-my-public-key.md)
+
 ## Pods
 
 * [Env Variables](pods/env-variables.md)

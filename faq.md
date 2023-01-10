@@ -28,7 +28,9 @@ RunPod leverages technologies such as docker to containerize and isolate guest w
 
 We'd be happy to help! Join our community on [discord](https://discord.gg/pJ3P2DbUUq), message us in our support chat, or send us an email at support@runpod.io!
 
+### Refunds and Credits
 
+If you aren't sure if RunPod is for you, feel free to hang out in our [Discord](https://discord.gg/cUpRmau42V) to ask questions or shoot an email to [support@runpod.io](mailto:support@runpod.io). You can load as little as $10 into your account to start to try things out. We don't currently offer refunds or trial credits due to the overhead of processing these types of requests. Please plan accordingly!
 
 ### Pods
 
