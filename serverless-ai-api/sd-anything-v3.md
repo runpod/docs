@@ -206,7 +206,7 @@ Input Object contains prompt, and more
 Your input prompt.
 {% endswagger-parameter %}
 
-{% swagger-parameter in="body" name="negative_prompt" type="String" %}
+{% swagger-parameter in="body" name="input.negative_prompt" type="String" %}
 Specify things to not see in the output. 
 {% endswagger-parameter %}
 
