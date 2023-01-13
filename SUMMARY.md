@@ -31,6 +31,7 @@
   * [Anything v3 (SD-v1.5)](serverless-ai/runpod-apis/anything-v3-sd-v1.5.md)
   * [Openjourney (SD-v1.5)](serverless-ai/runpod-apis/openjourney-sd-v1.5.md)
   * [DreamBooth (SD-v1.5)](serverless-ai/runpod-apis/dreambooth-sd-v1.5.md)
+  * [Whisper](serverless-ai/runpod-apis/whisper.md)
 * [Custom APIs](serverless-ai/custom-apis/README.md)
   * [Worker Image Creation](serverless-ai-api/bring-your-own-code.md)
   * [Template Creation](serverless-ai/custom-apis/template-creation.md)
