@@ -202,6 +202,10 @@ RunPod API Key
 Input Object contains prompt, and more
 {% endswagger-parameter %}
 
+{% swagger-parameter in="body" name="webhook" type="String" %}
+URL endpoint to receive a webhook call on job complete, fail, or timeout.
+{% endswagger-parameter %}
+
 {% swagger-parameter in="body" name="input.prompt" required="true" %}
 Your input prompt.
 {% endswagger-parameter %}
