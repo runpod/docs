@@ -6,12 +6,11 @@ description: Interact with your favorite models without managing the pods yourse
 
 ### Prerequisites
 
-1. We are currently in open beta, so all of our self-hosted APIs are free! We do have a fairly low maximum scale set currently, but this will be raised once we go generally available. When we go live, you will need a RunPod account and will be billed for inference time.
-2. You will need a RunPod API key which can be generated under your [user settings](https://www.runpod.io/console/user/settings). This API key will be used to identify you for billing purposes, so guard it well!
+* You will need a RunPod API key which can be generated under your [user settings](https://www.runpod.io/console/user/settings). This API key will identify you for billing purposes, so guard it well!
 
 ### Overview
 
-Our initial API implementation works in an asynchronous manner. This means that you fire an API request to our endpoint with your input parameters and you immediately get back a response with a unique job ID. What do I do with this useless response, you say? Well, you can then query the status endpoint and pass it your job ID. When your job is completed, the status endpoint will give you the results of the job.
+Our initial API implementation works in an asynchronous manner. This means you fire an API request to our endpoint with your input parameters, and you immediately get a response with a unique job ID. What do I do with this useless response, you say? Well, you can then query the status endpoint and pass it your job ID. The status endpoint will give you the job results when your job is completed.
 
 Let's take the Stable Diffusion v1 inference endpoint, for example.
 
@@ -39,13 +38,13 @@ In this example, your job ID would be "c80ffee4-f315-4e25-a146-0f3d98cf024b". Yo
 
 #### Check the status of your job
 
-At this point, you haven't gotten any output, so you must make an additional call after some time to the status endpoint. Your status endpoint uses the job ID to route to the correct job status. In this case, the status endpoint is
+You haven't gotten any output at this point, so you must make an additional call to the status endpoint after some time. Your status endpoint uses the job ID to route to the correct job status. In this case, the status endpoint is
 
 ```
 https://api.runpod.ai/v1/stable-diffusion-v1/status/c80ffee4-f315-4e25-a146-0f3d98cf024b
 ```
 
-Note how the last part of the URL is your job ID. You could make a request to that endpoint like so. Remember to use your API key for this request too!
+Note how the last part of the URL is your job ID. You could request that endpoint like so. Remember to use your API key for this request too!
 
 ```bash
 curl https://api.runpod.ai/v1/stable-diffusion-v1/status/c80ffee4-f315-4e25-a146-0f3d98cf024b \
@@ -101,4 +100,4 @@ Note how you don't get the images directly in the output. The output simply cont
 
 You've successfully generated your first images with our stable diffusion API! :tada::tada:
 
-If you're interested in descriptions for all of the parameters as well as code examples past curl, read on!
+If you're interested in descriptions for all parameters and code examples past curl, read on!

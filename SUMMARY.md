@@ -4,15 +4,12 @@
 
 * [About](README.md)
 * [FAQ](faq.md)
-
-***
-
-* [How Do I?](how-do-i/README.md)
-  * [Transfer Data](how-do-i/transfer-data.md)
-  * [Automatically Stop My Pod](how-do-i/automatically-stop-my-pod.md)
-  * [Customize a Template](how-do-i/customize-a-template.md)
-  * [Use Real SSH](how-do-i/use-real-ssh.md)
-  * [Override My Public Key](how-do-i/override-my-public-key.md)
+* [How Do I?](welcome/how-do-i/README.md)
+  * [Transfer Data](welcome/how-do-i/transfer-data.md)
+  * [Automatically Stop My Pod](welcome/how-do-i/automatically-stop-my-pod.md)
+  * [Customize a Template](welcome/how-do-i/customize-a-template.md)
+  * [Use Real SSH](welcome/how-do-i/use-real-ssh.md)
+  * [Override My Public Key](welcome/how-do-i/override-my-public-key.md)
 
 ## Pods
 
