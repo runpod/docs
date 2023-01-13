@@ -4,7 +4,7 @@ description: Whisper is an automatic speech recognition (ASR) system.
 
 # Whisper
 
-### it Required Input
+### Required Input
 
 ```json
 {
