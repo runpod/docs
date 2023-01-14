@@ -8,7 +8,7 @@ RunPod is on a mission to democratize AI from the ground up. Our first goal is t
 
 RunPod currently provides two cloud compute services: **Secure Cloud** and **Community Cloud**.
 
-**Secure Cloud** runs in T3/T4 data centers by our trusted partners. Our close partnership comes with high reliability with redundancy, security, and fast response times to mitigate any downtimes. For any sensitive and enterprise workloads, we highly recommend Secure Cloud.
+**Secure Cloud** runs in T3/T4 data centers by our trusted partners. Our close partnership comes with high reliability, redundancy, security, and fast response times to mitigate any downtimes. For any sensitive and enterprise workloads, we highly recommend Secure Cloud.
 
 **Community Cloud** brings power in numbers and diversity spanning the whole world. Through our decentralized platform, we can offer peer-to-peer GPU compute that connects individual compute providers to consumers. Community Cloud providers are invite-only and vetted by us to offer compute with good security and uptime.
 
