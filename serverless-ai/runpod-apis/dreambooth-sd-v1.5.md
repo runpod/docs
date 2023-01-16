@@ -362,13 +362,6 @@ Flag to pad tokens to length 77.
 **Default: False**
 {% endswagger-parameter %}
 
-{% swagger-parameter in="body" name="input.scheduler" type="String" %}
-Choose a scheduler.\
-Options: DDIM, K\_EULER,  DPMSolverMultistep, K\_EULER\_ANCESTRAL, PNDM, KLMS
-
-**Default: DDIM**
-{% endswagger-parameter %}
-
 {% swagger-parameter in="body" name="input.concepts" type="Array" required="true" %}
 Contains the array of concepts that will be used to fine-tune your model. 
 {% endswagger-parameter %}
@@ -423,6 +416,13 @@ The negative prompt used to generate sample outputs to save.
 CFG for save sample.
 
 **Default: 7.5**
+{% endswagger-parameter %}
+
+{% swagger-parameter in="body" name="input.samples.scheduler" type="String" %}
+Choose a scheduler.\
+Options: DDIM, K\_EULER,  DPMSolverMultistep, K\_EULER\_ANCESTRAL, PNDM, KLMS
+
+**Default: DDIM**
 {% endswagger-parameter %}
 
 {% swagger-parameter in="body" name="input.samples.infer_steps" type="Integer" %}
