@@ -20,7 +20,7 @@ ADD handler.py .
 CMD [ "python", "-u", "/handler.py" ]
 ```
 
-Your Dockerfile should package all dependencies required to run your code. You should also bake in any models that you wish to have cached between jobs. You should aim to build a docker container that is less than 15-20GB maximum.
+Your Dockerfile should package all dependencies required to run your code. You should also bake in any models that you wish to have cached between jobs. You should aim to build a docker container that is less than 15-20GB maximum. Also, you should build your image for `linux/amd64` (look for docker buildx).
 
 Our simple example only packages the handler.py file, which is called as the default docker command, so that it runs when the container starts.
 
