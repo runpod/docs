@@ -362,6 +362,13 @@ Flag to pad tokens to length 77.
 **Default: False**
 {% endswagger-parameter %}
 
+{% swagger-parameter in="body" name="input.scheduler" type="String" %}
+Choose a scheduler.\
+Options: DDIM, K\_EULER,  DPMSolverMultistep, K\_EULER\_ANCESTRAL, PNDM, KLMS
+
+**Default: DDIM**
+{% endswagger-parameter %}
+
 {% swagger-parameter in="body" name="input.concepts" type="Array" required="true" %}
 Contains the array of concepts that will be used to fine-tune your model. 
 {% endswagger-parameter %}
