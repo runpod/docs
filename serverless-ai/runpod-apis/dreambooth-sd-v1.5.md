@@ -444,7 +444,8 @@ The number of inference steps for save sample.
 {% endswagger-parameter %}
 
 {% swagger-parameter in="body" name="input.samples.num_outputs" type="Integer" %}
-The number of samples to save.
+The number of images to output.\
+Range 1 -> 10
 
 **Default: 1**
 {% endswagger-parameter %}
