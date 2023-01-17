@@ -112,16 +112,20 @@ headers = {
 
 # Define your inputs
 input_data = {
-  "input": {
-    "instance_prompt": "My random_subject_namevision.",
-    "class_prompt": "subject_category",
-    "instance_data": ["https://URL_TO_SUBJECT_ASSETS"],
-    "samples": [
-      {"save_sample_prompt": "random_subject_name having fun in the sun"},
-      {"save_sample_prompt": "random_subject_name having fun as a wizard"}
-    ]
-  }
- }
+    "input": {
+        "concepts": [            
+                {
+                    "instance_data": "https://LINK_TO_ZIP.FILE",
+                    "instance_prompt": "a unique 123xyz concept name",                
+                    "class_prompt": "a thing doing something"
+                }            
+        ],
+        "samples": 
+        [        
+            {"prompt": "a unique 123xyz concept name as a superhero"}            
+        ]
+    }   
+}
  
 # Make the request
 response = requests.post(endpoint, json=input_data, headers=headers)
@@ -141,16 +145,20 @@ const endpoint = 'https://api.runpod.ai/v1/dream-booth-v1/run';
 // Set the API key and input data
 const apiKey = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
 const inputData = {
-  "input": {
-    "instance_prompt": "My random_subject_namevision.",
-    "class_prompt": "subject_category",
-    "instance_data": ["https://URL_TO_SUBJECT_ASSETS"],
-    "samples": [
-      {"save_sample_prompt": "random_subject_name having fun in the sun"},
-      {"save_sample_prompt": "random_subject_name having fun as a wizard"}
-    ]
-  }
- };
+    "input": {
+        "concepts": [            
+                {
+                    "instance_data": "https://LINK_TO_ZIP.FILE",
+                    "instance_prompt": "a unique 123xyz concept name",                
+                    "class_prompt": "a thing doing something"
+                }            
+        ],
+        "samples": 
+        [        
+            {"prompt": "a unique 123xyz concept name as a superhero"}            
+        ]
+    }   
+};
 
 // Set the headers for the request
 const headers = {
@@ -198,16 +206,20 @@ func main() {
   // Set the API key and input data
   apiKey := "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
   inputData := map[string]interface{}{
-  "input": {
-    "instance_prompt": "My random_subject_namevision.",
-    "class_prompt": "subject_category",
-    "instance_data": ["https://URL_TO_SUBJECT_ASSETS"],
-    "samples": [
-      {"save_sample_prompt": "random_subject_name having fun in the sun"},
-      {"save_sample_prompt": "random_subject_name having fun as a wizard"}
-    ]
-  }
- }
+    "input": {
+        "concepts": [            
+                {
+                    "instance_data": "https://LINK_TO_ZIP.FILE",
+                    "instance_prompt": "a unique 123xyz concept name",                
+                    "class_prompt": "a thing doing something"
+                }            
+        ],
+        "samples": 
+        [        
+            {"prompt": "a unique 123xyz concept name as a superhero"}            
+        ]
+    }   
+}
 
   // Convert the input data to JSON
   inputJSON, err := json.Marshal(inputData)
