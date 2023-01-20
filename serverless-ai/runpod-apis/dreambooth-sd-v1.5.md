@@ -82,7 +82,8 @@ curl https://api.runpod.ai/v1/dream-booth-v1/status/xxxxxxxx-xxxx-xxxx-xxxx-xxxx
       {"save_sample_prompt": "random_subject_name having fun in the sun"}, 
       {"save_sample_prompt": "random_subject_name having fun as a wizard"}
     ]
-    }, "output": [
+    }, "output": {
+      "samples":[
     {
       "image": "https://job.results1",
       "seed": 2
@@ -91,7 +92,7 @@ curl https://api.runpod.ai/v1/dream-booth-v1/status/xxxxxxxx-xxxx-xxxx-xxxx-xxxx
       "image": "https://job.results2",
       "seed": 2
     }
-  ],
+  ]},
   "status": "COMPLETED"
 }
 ```
@@ -450,6 +451,12 @@ Range 1 -> 10
 **Default: 1**
 {% endswagger-parameter %}
 
+{% swagger-parameter in="body" name="input.samples.seed" type="Integer" %}
+A seed for reproducible sampling.
+
+**Default: Random**
+{% endswagger-parameter %}
+
 {% swagger-parameter in="body" name="input.adam_beta2" type="Float" %}
 The beta2 parameter for the Adam optimizer.
 
@@ -472,6 +479,33 @@ Default: 1.0
 Max gradient norm.
 
 Default: 1.0
+{% endswagger-parameter %}
+
+{% swagger-parameter in="body" name="s3Config" type="Object" %}
+Credentials for a user-defined S3 compatible bucket where the trained model can be uploaded to. 
+{% endswagger-parameter %}
+
+{% swagger-parameter in="body" name="s3Config.accessId" type="String" %}
+The ID required for your S3 bucket.
+
+\
+
+
+
+
+**Default: None**
+{% endswagger-parameter %}
+
+{% swagger-parameter in="body" name="s3Config.accessSecret" type="String" %}
+The secret required for your S3 bucket.
+{% endswagger-parameter %}
+
+{% swagger-parameter in="body" name="s3Config.bucketName" type="String" %}
+The name of 
+{% endswagger-parameter %}
+
+{% swagger-parameter in="body" name="s3Config.endpointUrl" type="String" %}
+
 {% endswagger-parameter %}
 
 {% swagger-response status="200: OK" description="JSON Response" %}
