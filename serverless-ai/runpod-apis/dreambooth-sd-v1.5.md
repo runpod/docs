@@ -20,8 +20,8 @@ Your dataset should contain around 20 - 24 photos. It is recommended to have an 
         "concepts": [            
                 {
                     "instance_data": "https://LINK_TO_ZIP.FILE",
-                    "instance_prompt": "a unique 123xyz concept name",                
-                    "class_prompt": "a thing doing something"
+                    "instance_prompt": "abc_xyz",                
+                    "class_prompt": "person"
                 }            
         ],
         "samples": 
