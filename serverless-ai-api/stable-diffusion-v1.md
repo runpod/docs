@@ -212,6 +212,14 @@ Your input prompt.
 Specify things to not see in the output.
 {% endswagger-parameter %}
 
+{% swagger-parameter in="body" name="input.width" type="Integer" %}
+With of output image.\
+128, 256, 384, 448, 512, 576, 640, 704, 768
+
+**Default: 512**\
+
+{% endswagger-parameter %}
+
 {% swagger-parameter in="body" name="input.height" type="Integer" %}
 Height of output image.\
 128, 256, 384, 448, 512, 576, 640, 704, 768
@@ -219,12 +227,16 @@ Height of output image.\
 **Default: 512**
 {% endswagger-parameter %}
 
-{% swagger-parameter in="body" name="input.width" type="Integer" %}
-With of output image.\
-128, 256, 384, 448, 512, 576, 640, 704, 768
+{% swagger-parameter in="body" name="input.init_image" type="String" %}
+URL for an initial image to generate variations of. Will be resized to the specific width and height.
 
-**Default: 512**\
+**Default: None**
+{% endswagger-parameter %}
 
+{% swagger-parameter in="body" name="input.mask" type="String" %}
+URL of a black and white image to use as a mask for inpainting over init\_image. Black pixels are inpainted and white pixels are preserved.
+
+**Default: None**
 {% endswagger-parameter %}
 
 {% swagger-parameter in="body" name="input.guidance_scale" type="Float" %}
@@ -257,7 +269,7 @@ Range: 0.0 -> 1.0
 
 {% swagger-parameter in="body" name="input.scheduler" type="String" %}
 Choose a scheduler.\
-Options: DDIM, K-LMS, PNDM
+Options: DDIM, DDPM, DPM-M, DPM-S,  EULER-A, EULER-D, HEUN, IPNDM, KDPM2-A, KDPM2-D, PNDM, K-LMS
 
 **Default: K-LMS**
 {% endswagger-parameter %}
