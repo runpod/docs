@@ -31,6 +31,6 @@ For the 16 GB variety, we deploy NVIDIA RTX A4000.\
 For the 24 GB variety, we deploy NVIDIA RTX A5000 or 3090. \
 For the 80 GB variety, we deploy NVIDIA A100 80 GB.&#x20;
 
-A100s are about 1.5 - 2x faster than A5000s and also allow double the VRAM with very high bandwidth throughout. 3090s and A5000s are 1.5 - 2x faster than A4000s. Sometimes it may make more sense to use 24 GB even if you don't need it compared to 16 GB due to faster response times. Do your own calculations to figure out what's more cost effective for your workload.
+A100s are about 2-3x faster than A5000s and also allow double the VRAM with very high bandwidth throughout. 3090s and A5000s are 1.5-2x faster than A4000s. Sometimes it may make more sense to use 24 GB even if you don't need it compared to 16 GB due to faster response times. Do your own calculations to figure out what's more cost effective for your workload.
 
 Want access to different flavors? Let us know and we can look at expanding our offerings!
