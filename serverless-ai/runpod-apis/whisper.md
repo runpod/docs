@@ -257,8 +257,26 @@ Temperature to use for sampling.
 **Default: 0**
 {% endswagger-parameter %}
 
+{% swagger-parameter in="body" name="input.best_of" type="Integer" %}
+The number of candidates when sampling with non-zero temperature.
+
+**Default: 5**
+{% endswagger-parameter %}
+
+{% swagger-parameter in="body" name="input.beam_size" type="Integer" %}
+Number of beams in beam search, only applicable when temperature is zero.
+
+**Default: 5**
+{% endswagger-parameter %}
+
 {% swagger-parameter in="body" name="input.patience" type="Float" %}
 Optional patience value to use in beam decoding.
+
+**Default: None**
+{% endswagger-parameter %}
+
+{% swagger-parameter in="body" name="input.length_penalty" type="Float" %}
+Optional token length penalty coefficient (alpha) as in https://arxiv.org/abs/1609.08144, uses simple length normalization by default.
 
 **Default: None**
 {% endswagger-parameter %}
@@ -344,20 +362,30 @@ inference request id
 {% swagger-response status="200: OK" description="JSON response" %}
 ```json
 {
-    "delayTime": 71, // (milliseconds) time in queue
-    "executionTime": 3423, // (milliseconds) time it took to complete the job
-    "gpu": "24", // gpu type used to run the job
-    "id": "39a6a9eb-3f39-40ee-892f-d3c2b2545a2f",
+    "delayTime": 157664,
+    "executionTime": 3289,
+    "id": "4b82e3fb-ce2b-49dc-bd35-965041cd161b",
     "input": {
-        "height": 640,
-        "num_inference_steps": 50,
-        "prompt": "a cute magical flying dog, fantasy art drawn by disney concept artists",
-        "width": 512
+        "audio": "https://github.com/runpod/serverless-workers/raw/main/Input-Samples/gettysburg.wav"
     },
-    "output": [
-        "https://r2..." // securely signed URLs
-    ],
-    "status": "COMPLETED" // COMPLETED, IN_QUEUE, IN_PROGRESS, FAILED
+    "output": {
+        "detected_language": "english",
+        "segments": [{
+            "avg_logprob": -0.18336993294793205,
+            "compression_ratio": 1.3858267716535433,
+            "end": 10,
+            "id": 0,
+            "no_speech_prob": 0.06009136512875557,
+            "seek": 0,
+            "start": 0,
+            "temperature": 0,
+            "text": " Four score and seven years ago, our fathers brought forth on this continent a new nation, conceived in liberty, and dedicated to the proposition that all men are created equal.",
+            "tokens": [50364, 7451, 6175, 293, 3407, 924, 2057, 11, 527, 23450, 3038, 5220, 322, 341, 18932, 257, 777, 4790, 11, 34898, 294, 22849, 11, 293, 8374, 281, 264, 24830, 300, 439, 1706, 366, 2942, 2681, 13, 50864]
+        }],
+        "transcription": "00:00.000 --> 00:10.000\nFour score and seven years ago, our fathers brought forth on this continent a new nation, conceived in liberty, and dedicated to the proposition that all men are created equal.\n\n",
+        "translation": null
+    },
+    "status": "COMPLETED"
 }
 ```
 {% endswagger-response %}
