@@ -4,7 +4,7 @@ description: Workers are docker containers that can be easily configured to run 
 
 # Worker Image Creation
 
-It's easy to create a container image using our [python sdk](https://github.com/runpod/runpod-python). For a simple hello world example, you can check out [this repository](https://github.com/runpod/serverless-workers/tree/main/helloworld).
+It's easy to create a container image using our [python sdk](https://github.com/runpod/runpod-python). For a simple hello world example, you can check out [this repository](https://github.com/runpod/serverless-workers/tree/main/Tutorials/helloworld).
 
 This is the Dockerfile for hello world:
 

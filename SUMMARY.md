@@ -41,3 +41,5 @@
 ## Hosts
 
 * [How to become a Host?](how-to-become-a-host.md)
+* [Maintenance and Reliability](hosts/maintenance-and-reliability.md)
+* [Burn Testing](hosts/burn-testing.md)
