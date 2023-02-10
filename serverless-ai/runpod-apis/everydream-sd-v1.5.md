@@ -7,7 +7,7 @@ description: >-
 
 # EveryDream (SD-v1.5)
 
-This is an adaptation of [EveryDream2trainer by victorchall](https://github.com/victorchall/EveryDream2trainer) to a [RunPod Endpoint](https://www.runpod.io/endpoints). To run this endpoint, you will need a publicly accessible .zip file that contains images of a concept you wish to fine-tune the model with. The key to successfully using EveryDream is to have well-captioned images. Here is the [official guide on data preparation](https://github.com/victorchall/EveryDream2trainer/blob/main/doc/DATA.md).
+This is an adaptation of [EveryDream2trainer by victorchall](https://github.com/victorchall/EveryDream2trainer) to a [RunPod Endpoint](https://www.runpod.io/endpoints). To run this endpoint, you will need a publicly accessible .zip file that contains images of a concept you wish to fine-tune the model with. The key to successfully using EveryDream is to have well-captioned images; look at our blog post to learn more.&#x20;
 
 ### Examples
 
