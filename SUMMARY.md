@@ -3,6 +3,7 @@
 ## Welcome
 
 * [About](README.md)
+* [Blog](https://www.runpod.io/blog)
 * [FAQ](faq.md)
 * [How Do I?](welcome/how-do-i/README.md)
   * [Transfer Data](welcome/how-do-i/transfer-data.md)
@@ -31,6 +32,7 @@
   * [Anything v3 (SD-v1.5)](serverless-ai/runpod-apis/anything-v3-sd-v1.5.md)
   * [Openjourney (SD-v1.5)](serverless-ai/runpod-apis/openjourney-sd-v1.5.md)
   * [DreamBooth (SD-v1.5)](serverless-ai/runpod-apis/dreambooth-sd-v1.5.md)
+  * [EveryDream (SD-v1.5)](serverless-ai/runpod-apis/everydream-sd-v1.5.md)
   * [Whisper](serverless-ai/runpod-apis/whisper.md)
 * [Custom APIs](serverless-ai/custom-apis/README.md)
   * [Worker Image Creation](serverless-ai-api/bring-your-own-code.md)
