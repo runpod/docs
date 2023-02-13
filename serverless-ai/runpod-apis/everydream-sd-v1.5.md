@@ -7,7 +7,7 @@ description: >-
 
 # EveryDream (SD-v1.5)
 
-This is an adaptation of [EveryDream2trainer by victorchall](https://github.com/victorchall/EveryDream2trainer) to a [RunPod Endpoint](https://www.runpod.io/endpoints). To run this endpoint, you will need a publicly accessible .zip file that contains images of a concept you wish to fine-tune the model with. The key to successfully using EveryDream is to have well-captioned images; look at our blog post to learn more.&#x20;
+This is an adaptation of [EveryDream2trainer by victorchall](https://github.com/victorchall/EveryDream2trainer) to a [RunPod Endpoint](https://www.runpod.io/endpoints). To run this endpoint, you will need a publicly accessible .zip file that contains images of a concept you wish to fine-tune the model with. The key to successfully using EveryDream is to have well-captioned images. Here is the [official guide on data preparation](https://github.com/victorchall/EveryDream2trainer/blob/main/doc/DATA.md).
 
 ### Examples
 
@@ -20,7 +20,7 @@ curl -X POST https://api.runpod.ai/v1/everydream-v1/run             \
 -H 'Content-Type: application/json'                                 \
 -H 'Authorization: Bearer xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
 -d '{"input": {"train": {"data_url": "https://LINK_TO_ZIP.FILE"},    
-    "inference": {"prompt": "a unique 123xyz concept name as a superhero"}}}'
+    "inference": [{"prompt": "a unique 123xyz concept name as a superhero"}]}}'
 ```
 
 #### Response
