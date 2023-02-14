@@ -8,6 +8,8 @@ description: Interact with your favorite models without managing the pods yourse
 
 * You will need a RunPod API key which can be generated under your [user settings](https://www.runpod.io/console/user/settings). This API key will identify you for billing purposes, so guard it well!
 
+#### Note\*: You must retrieve your results via the status endpoint within 1 hour. We do not keep your inputs or outputs for longer than that to protect your privacy!
+
 ### Overview
 
 Our initial API implementation works in an asynchronous manner. This means you fire an API request to our endpoint with your input parameters, and you immediately get a response with a unique job ID. What do I do with this useless response, you say? Well, you can then query the status endpoint and pass it your job ID. The status endpoint will give you the job results when your job is completed.
@@ -93,6 +95,8 @@ Eventually, you will get the final results of your job. They would look somethin
   "status": "COMPLETED"
 }
 ```
+
+#### Note\*: You must retrieve your results via the status endpoint within 1 hour. We do not keep your inputs or outputs for longer than that to protect your privacy!
 
 #### Get your stuff
 
