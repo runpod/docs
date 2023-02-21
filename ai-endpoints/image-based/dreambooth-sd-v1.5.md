@@ -501,11 +501,11 @@ The secret required for your S3 bucket.
 {% endswagger-parameter %}
 
 {% swagger-parameter in="body" name="s3Config.bucketName" type="String" %}
-The name of 
+The name of the bucket where you want to upload your model to.
 {% endswagger-parameter %}
 
 {% swagger-parameter in="body" name="s3Config.endpointUrl" type="String" %}
-
+The URL for your S3 bucket.
 {% endswagger-parameter %}
 
 {% swagger-response status="200: OK" description="JSON Response" %}
