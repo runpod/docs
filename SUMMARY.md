@@ -13,37 +13,37 @@
 
 ## GPU Instances
 
-* [Pod Env Variables](gpu-instances/pod-env-variables.md)
-* [GraphQL API](gpu-instances/graphql-api/README.md)
-  * [Create Pod](gpu-instances/graphql-api/create-pod.md)
-  * [Get GPU Types](gpu-instances/graphql-api/get-gpu-types.md)
-  * [Get Pod](gpu-instances/graphql-api/get-pod.md)
-  * [Start Pod](gpu-instances/graphql-api/start-pod.md)
-  * [Stop Pod](gpu-instances/graphql-api/stop-pod.md)
+* [Pod Env Variables](pods/env-variables.md)
+* [GraphQL API](graphql-api/README.md)
+  * [Create Pod](graphql-api/create-pod.md)
+  * [Get GPU Types](graphql-api/get-gpu-types.md)
+  * [Get Pod](graphql-api/get-pod.md)
+  * [Start Pod](graphql-api/start-pod.md)
+  * [Stop Pod](graphql-api/stop-pod.md)
 * [GraphQL API Spec](https://graphql-spec.runpod.io)
 * [runpodctl](https://github.com/runpod/runpodctl)
 
 ## Serverless GPUs
 
-* [Custom APIs](serverless-gpus/custom-apis/README.md)
-  * [Worker Image Creation](serverless-gpus/custom-apis/worker-image-creation.md)
-  * [Template Creation](serverless-gpus/custom-apis/template-creation.md)
-  * [Autoscaling](serverless-gpus/custom-apis/autoscaling.md)
-  * [Using Your API](serverless-gpus/custom-apis/using-your-api.md)
+* [Custom APIs](serverless-ai/custom-apis/README.md)
+  * [Worker Image Creation](serverless-ai-api/bring-your-own-code.md)
+  * [Template Creation](serverless-ai/custom-apis/template-creation.md)
+  * [Autoscaling](serverless-ai/custom-apis/autoscaling.md)
+  * [Using Your API](serverless-ai/custom-apis/using-your-api.md)
 * [Worker Functions](serverless-gpus/worker-functions.md)
 
 ## AI Endpoints
 
-* [RunPod APIs](ai-endpoints/runpod-apis.md)
+* [RunPod APIs](serverless-ai-api/getting-started.md)
 * [Image Based](ai-endpoints/image-based/README.md)
-  * [Stable Diffusion v1](ai-endpoints/image-based/stable-diffusion-v1.md)
-  * [Stable Diffusion v2](ai-endpoints/image-based/stable-diffusion-v2.md)
-  * [Anything v3 (SD-v1.5)](ai-endpoints/image-based/anything-v3-sd-v1.5.md)
-  * [Openjourney (SD-v1.5)](ai-endpoints/image-based/openjourney-sd-v1.5.md)
-  * [DreamBooth (SD-v1.5)](ai-endpoints/image-based/dreambooth-sd-v1.5.md)
-  * [EveryDream (SD-v1.5)](ai-endpoints/image-based/everydream-sd-v1.5.md)
+  * [Stable Diffusion v1](serverless-ai-api/stable-diffusion-v1.md)
+  * [Stable Diffusion v2](serverless-ai/runpod-apis/stable-diffusion-v2.md)
+  * [Anything v3 (SD-v1.5)](serverless-ai/runpod-apis/anything-v3-sd-v1.5.md)
+  * [Openjourney (SD-v1.5)](serverless-ai/runpod-apis/openjourney-sd-v1.5.md)
+  * [DreamBooth (SD-v1.5)](serverless-ai/runpod-apis/dreambooth-sd-v1.5.md)
+  * [EveryDream (SD-v1.5)](serverless-ai/runpod-apis/everydream-sd-v1.5.md)
 * [Audio Based](ai-endpoints/audio-based/README.md)
-  * [Whisper](ai-endpoints/audio-based/whisper.md)
+  * [Whisper](serverless-ai/runpod-apis/whisper.md)
 
 ## Hosts
 

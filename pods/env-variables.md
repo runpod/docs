@@ -4,7 +4,7 @@ description: >-
   that are set by default.
 ---
 
-# Env Variables
+# Pod Env Variables
 
 | Variable              | Description                                                                               |
 | --------------------- | ----------------------------------------------------------------------------------------- |
