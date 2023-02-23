@@ -211,11 +211,13 @@ func main() {
                "text_seed": int,
                "text_learning_rate": float,
                "text_lr_scheduler": str,
+               "text_8_bit_adam": bool,
                "unet_seed": int,
                "unet_resolution": int,
                "unet_epochs": int,
                "unet_learning_rate": float,
-               "unet_lr_scheduler": str      
+               "unet_lr_scheduler": str,
+               "unet_8_bit_adam": bool,      
           },
           "inference": [
                {
@@ -315,6 +317,12 @@ _Options: linear, cosine, cosine\_with\_restarts, polynomial, constant, constant
 **Default: linear**
 {% endswagger-parameter %}
 
+{% swagger-parameter in="body" name="input.train.text_8_bit_adam" type="Boolean" %}
+Enable 8-bit-adam.
+
+**Default: False**
+{% endswagger-parameter %}
+
 {% swagger-parameter in="body" name="input.train.unet_seed" type="Integer" %}
 The seed used for training the UNet.&#x20;
 
@@ -345,6 +353,12 @@ The scheduler used when training the UNet ext encoder.
 _Options: linear, cosine, cosine\_with\_restarts, polynomial, constant, constant\_with\_warmup_
 
 **Default: linear**
+{% endswagger-parameter %}
+
+{% swagger-parameter in="body" name="input.train.unet_8_bit_adam" type="Boolean" %}
+Enable 8-bit-adam.
+
+**Default: False**
 {% endswagger-parameter %}
 
 {% swagger-parameter in="body" name="input.inference" type="List" %}
