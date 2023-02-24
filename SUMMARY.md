@@ -5,6 +5,7 @@
 * [About](README.md)
 * [FAQ](faq.md)
 * [How Do I?](welcome/how-do-i/README.md)
+  * [Expose Ports](welcome/how-do-i/expose-ports.md)
   * [Transfer Data](welcome/how-do-i/transfer-data.md)
   * [Automatically Stop My Pod](welcome/how-do-i/automatically-stop-my-pod.md)
   * [Customize a Template](welcome/how-do-i/customize-a-template.md)
