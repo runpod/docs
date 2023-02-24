@@ -20,7 +20,7 @@ Once you have done this, and your server is running, you should be able to hit y
 https://{POD_ID}-{INTERNAL_PORT}.proxy.runpod.net
 ```
 
-Where the pod id is the unique ID of your pod, and the internal port in this case is 4000. Keep in mind that this exposed via public internal. While your pod id can act as a password of sorts, it's not a replacement for real authentication, which should be implemented at your API level.
+Where the pod id is the unique ID of your pod, and the internal port in this case is 4000. Keep in mind that this exposed to the public internet. While your pod id can act as a password of sorts, it's not a replacement for real authentication, which should be implemented at your API level.
 
 #### Through TCP Public IP
 
