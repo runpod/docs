@@ -4,7 +4,9 @@ There are a few ways to expose ports on your pod to the outside world. The first
 
 Let's say that I want to run a public API on my pod using uvicorn with the following command:
 
-`uvicorn main:app --host 0.0.0.0 --port 4000`
+```
+uvicorn main:app --host 0.0.0.0 --port 4000
+```
 
 This means that uvicorn would be listening on all interfaces on port 4000. Let's now expose this port to public internet using two different methods.
 
@@ -36,7 +38,9 @@ For example, your connect menu may look something like this:
 
 In this case, you would be hitting your service running on 4000 with the following ip:port combination
 
-`73.10.226.56:10027`
+```
+73.10.226.56:10027
+```
 
 Be aware that the public IP should not change (for secure cloud - it may change sometimes for community cloud), but the port will change if your pod gets reset.
 
