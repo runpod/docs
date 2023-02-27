@@ -14,7 +14,7 @@ RunPod provides two cloud compute services: **Secure Cloud** and **Community Clo
 
 Both solutions offer prices that are far more competitive than large cloud providers such as AWS or GCP.
 
-### On Demand vs Spot Pod
+### OnDemand vs Spot Pod
 
 **OnDemand** pods can run forever without any interruptions with resources that are dedicated to your pod. They do incur higher cost than **Spot** pods.
 
@@ -41,6 +41,8 @@ On-demand instances are for non-interruptible workloads. You pay the on-demand p
 #### **What is a spot instance?**
 
 A spot instance is an interruptible instance that can generally be rented for much cheaper than an on-demand instance**.** Spot instances are great for workloads that are stateless like an API, or for workloads that you can periodically save to volume disk. Your volume disk is retained even if your spot instance is interrupted.
+
+
 
 ### Billing
 
@@ -77,10 +79,6 @@ Usually this happens for one of several reasons. If you can't figure it out, rea
 1. You are trying to run a pod to SSH into, but you did not give the pod an idle job to run like "sleep infinity"
 2. You have given your pod a command that it doesn't know how to run. Check the logs to make sure that you don't have any syntax errors, etc.
 
-#### Can I run Windows?
-
-We don't currently support windows :( We would like to do this in the future, but we do not have a solid timeframe for windows support.
-
 #### **How do I find a reliable server in Community Cloud?**
 
 It is important for RunPod to provide you with reliable servers. All of our listed servers must meet a minimum reliability and most of them are running in a datacenter! However, if you want the highest level of reliability and security, use Secure Cloud. RunPod calculates server reliability by maintaining a heartbeat with each server in real time.
@@ -95,7 +93,7 @@ Keep in mind that this does not mean that there are no more GPUs of that type av
 
 #### **What if I run out of funds?**
 
-All your pods are stopped automatically when you don't have enough funds to keep your pods running for at least 10 more minutes. When your pods are stopped, your container disk data will be lost, but your volume data will be preserved. You will have 2 days to add more funds. If you fail to do so, your pods will be terminated and pod volumes will be removed.
+All your pods are stopped automatically when you don't have enough funds to keep your pods running for at least 10 more mins. When your pods are stopped, your container disk data will be lost, but your volume data will be preserved. You will have 2 days to add more funds. If you fail to do so, your pods will be terminated and pod volumes will be removed.
 
 After you add more funds to your account, you can start your pod if you wish (assuming that there are enough GPUs available on the host machine).
 
@@ -110,6 +108,48 @@ The host machine will continue to run your pod to the best of its ability even i
 #### **What if it says that my spending limit has been exceeded?**
 
 We implement a spending limit for newer accounts that will grow over time. This is because we have found that sometimes scammers try to interfere with the natural workings of the platform. We believe that normal usage should not be impacted by this limit. That being said, we are perfectly happy to up your spending limit if you contact us and share your use case with us.
+
+### Recipes
+
+### **How do I get my data into my pod?**
+
+The best way to get data into your pod is to put it somewhere in the cloud and then use our Cloud Sync feature to pull it from your private bucket. We currently offer multiple integrations with cloud providers like AWS, Google Cloud, Azure, Dropbox, and Backblaze. If you just want to get running and have a small dataset (megs, not gigs), then you can use the upload feature inside Jupyter notebook. You can also use scp or sftp if you add and configure sshd in your pod as described [in this blog post](https://www.runpod.io/blog/how-to-achieve-true-ssh-on-runpod).
+
+#### **How do I get SSH terminal access to my pod to set it up?**
+
+The easiest way to get access to your pod is through the Jupyter notebook if you have it set up. If you need quick terminal access, you can find a step-by-step [in this blog post](https://www.runpod.io/blog/how-to-set-up-terminal-access-on-runpod). Note that this terminal access is not a real ssh daemon and therefore only supports basic functionality. Our custom TensorFlow and PyTorch images have easy configuration for real SSH access if you are on our secure cloud. If you need IDE/SCP/SFTP support on your own custom container, then you should add openSSH daemon to your pod and tunnel over an open TCP port.
+
+#### **How to I add true SSH with SCP support to my pod?**
+
+If you need to run a real SSH daemon in your pod, you can use a runpod container image, or you can find a step-by-step [in this blog post](https://www.runpod.io/blog/how-to-achieve-true-ssh-on-runpod) to roll your own.
+
+#### **How do I run a Jupyter notebook?**
+
+The easiest way to run a Jupyter notebook is to choose the runpod TensorFlow or runpod PyTorch run templates.
+
+1. Choose the default settings when renting and choose deploy.
+2. Navigate to your "my pods" dashboard when asked on the deploy success page.
+3. Wait a 20 seconds to a few minutes for your pod to get ready.
+4. The Connect button should light up. Click on it for access to the Connect to Jupyter button. Note that it may take an additional 10-30 seconds for the webserver to start serving the notebook. You may get a "502" error in the meantime.
+
+#### **How do I add some automation so that my pod resumes if the pod is interrupted?**
+
+1. Choose a container that fits your use case. Some simple ones to start with are runpod/tensorflow or runpod/pytorch.
+2. When renting your pod, put bash -c "sleep infinity" into the docker command box if you aren't using one of our runpod images.
+3. Add a volume and a volume path. This will allow you to have persistent storage on the host machine.
+4. Rent the pod.
+5. Navigate to your "my pods" dashboard.
+6. Click on detail expander button on the bottom left of the pod card.
+7. Click on the SSH button on the pod card. You can find it under the name and ID on the left side of the card.
+8. Generate and set up your SSH key in RunPod if you have not already done so.
+9. Copy the SSH command into your local terminal to log in.
+10. Do everything you need to set up your environment
+11. Create a script that you can run to restart your job on failure and that saves your job to the volume path disk every once in a while.
+12. Save your script and anything else your job needs in your volume path
+13. Go to RunPod and navigate to your "my pods" dashboard.
+14. Click on the "edit job" button on the pod you are using.
+15. Edit the docker command to run your script. For example, if your volume mount path is /volume and you have a start.sh script, then your docker command command should look like bash -c "./volume/start.sh"
+16. Your container should restart and begin running your job. If the container goes down, it will automatically start running your script again when it comes back up.
 
 ### Legal
 

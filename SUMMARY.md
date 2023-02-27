@@ -10,6 +10,7 @@
   * [Automatically Stop My Pod](welcome/how-do-i/automatically-stop-my-pod.md)
   * [Customize a Template](welcome/how-do-i/customize-a-template.md)
   * [Use Real SSH](welcome/how-do-i/use-real-ssh.md)
+  * [Bulk Start/Stop Pods](welcome/how-do-i/bulk-start-stop-pods.md)
   * [Override My Public Key](welcome/how-do-i/override-my-public-key.md)
 
 ## GPU Instances
