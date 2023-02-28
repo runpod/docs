@@ -207,7 +207,7 @@ func main() {
           "train": {
                "data_url": str,
                "concept_name": str,
-               "text_steps": str,
+               "text_steps": int,
                "text_seed": int,
                "text_learning_rate": float,
                "text_lr_scheduler": str,
