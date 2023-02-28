@@ -41,6 +41,7 @@
   * [Stable Diffusion v1](serverless-ai-api/stable-diffusion-v1.md)
   * [Stable Diffusion v2](serverless-ai/runpod-apis/stable-diffusion-v2.md)
   * [Anything v3 (SD-v1.5)](serverless-ai/runpod-apis/anything-v3-sd-v1.5.md)
+  * [Anything v4 (SD-v1.5)](ai-endpoints/image-based/anything-v4-sd-v1.5.md)
   * [Openjourney (SD-v1.5)](serverless-ai/runpod-apis/openjourney-sd-v1.5.md)
   * [DreamBooth (SD-v1.5)](serverless-ai/runpod-apis/dreambooth-sd-v1.5.md)
   * [EveryDream (SD-v1.5)](serverless-ai/runpod-apis/everydream-sd-v1.5.md)
