@@ -19,8 +19,7 @@ This is an adaptation of [EveryDream2trainer by victorchall](https://github.com/
 curl -X POST https://api.runpod.ai/v1/everydream-v1/run             \
 -H 'Content-Type: application/json'                                 \
 -H 'Authorization: Bearer xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
--d '{"input": {"train": {"data_url": "https://LINK_TO_ZIP.FILE"},    
-    "inference": [{"prompt": "a unique 123xyz concept name as a superhero"}]}}'
+-d '{"input": {"train": {"data_url": "https://LINK_TO_ZIP.FILE"}, "inference": [{"prompt": "a unique 123xyz concept name as a superhero"}]}}'
 ```
 
 #### Response
