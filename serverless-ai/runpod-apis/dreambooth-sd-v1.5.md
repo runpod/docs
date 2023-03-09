@@ -207,6 +207,7 @@ func main() {
           "train": {
                "data_url": str,
                "concept_name": str,
+               "offset_noise": bool,
                "text_steps": int,
                "text_seed": int,
                "text_learning_rate": float,
@@ -289,6 +290,12 @@ A bublicly accessible URL to your zip file containing your data set images.
 A uniqe name to train your concept with, this will over-ride your file names using the following scheme:  
 
 _"concept (#).jpg"_
+{% endswagger-parameter %}
+
+{% swagger-parameter in="body" name="input.train.offset_noise" type="Boolean" %}
+Enables [offset noise](https://blog.runpod.io/get-awesomer-outputs-from-dreambooth-with-offset-noise/) for style training.
+
+**Default: False**
 {% endswagger-parameter %}
 
 {% swagger-parameter in="body" name="input.train.text_steps" type="Integer" %}
