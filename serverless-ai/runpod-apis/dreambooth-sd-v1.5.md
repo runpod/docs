@@ -16,8 +16,7 @@ This is an adaptation of [DreamBooth](https://github.com/TheLastBen/fast-stable-
 curl -X POST https://api.runpod.ai/v1/dream-booth-v1/run            \
 -H 'Content-Type: application/json'                                 \
 -H 'Authorization: Bearer xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
--d '"input": {"train": {"data_url": "https://your_public.zip"},
-    "inference":[ {"prompt": "A yellow submarine."} ] }}'    
+-d '{"input": {"train": {"data_url": "https://your_public.zip"}, "inference":[ {"prompt": "A yellow submarine."} ] }}'    
 ```
 
 #### Response
