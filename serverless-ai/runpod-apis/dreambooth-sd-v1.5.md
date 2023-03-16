@@ -207,12 +207,18 @@ func main() {
                "data_url": str,
                "concept_name": str,
                "offset_noise": bool,
+               "hf_model": str,
+               "hf_token": str,
+               "ckpt_link": str,
                "text_steps": int,
                "text_seed": int,
+               "text_batch_size": int,
+               "text_resolution": int,
                "text_learning_rate": float,
                "text_lr_scheduler": str,
                "text_8_bit_adam": bool,
                "unet_seed": int,
+               "unet_batch_size": int,
                "unet_resolution": int,
                "unet_epochs": int,
                "unet_learning_rate": float,
@@ -297,6 +303,24 @@ Enables [offset noise](https://blog.runpod.io/get-awesomer-outputs-from-dreamboo
 **Default: False**
 {% endswagger-parameter %}
 
+{% swagger-parameter in="body" name="input.train.hf_model" type="String" %}
+URL to a HuggingFace model(repository/model). The model MUST contain a diffuser style model. If it is a standard CKPT, use ckpt\_url&#x20;
+
+**Default: None**
+{% endswagger-parameter %}
+
+{% swagger-parameter in="body" name="input.trian.hf_token" type="String" %}
+If the huggingface repo is private, your user access token.&#x20;
+
+**Default: None**
+{% endswagger-parameter %}
+
+{% swagger-parameter in="body" name="input.train.ckpt_link" type="String" %}
+Publicly accessable link toa ckpt file.&#x20;
+
+**Default: None**
+{% endswagger-parameter %}
+
 {% swagger-parameter in="body" name="input.train.text_steps" type="Integer" %}
 The number of steps used to train the text encoder.
 
@@ -307,6 +331,18 @@ The number of steps used to train the text encoder.
 The seed used to train the text encoder.
 
 **Default: 555**
+{% endswagger-parameter %}
+
+{% swagger-parameter in="body" name="input.train.text_batch_size" type="Integer" %}
+The number of images passed each step of the text encoder process.
+
+Default: 1
+{% endswagger-parameter %}
+
+{% swagger-parameter in="body" name="input.train.text_resolution" type="Integer" %}
+The training resolution used for the text training.
+
+**Default: 512**
 {% endswagger-parameter %}
 
 {% swagger-parameter in="body" name="input.train.text_learning_rate" type="Float" %}
@@ -333,6 +369,12 @@ Enable 8-bit-adam.
 The seed used for training the UNet.&#x20;
 
 **Default: 555**
+{% endswagger-parameter %}
+
+{% swagger-parameter in="body" name="input.train.unet_batch_size" type="Integer" %}
+The number of images that are passed through in a single training step.
+
+**Default: 1**
 {% endswagger-parameter %}
 
 {% swagger-parameter in="body" name="input.train.unet_resolution" type="Integer" %}
