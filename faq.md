@@ -108,6 +108,14 @@ You can run any docker container available on any publicly reachable container r
 
 <details>
 
+<summary>Can I run my own Docker daemon on RunPod?</summary>
+
+You can't currently spin up your own instance of docker, as we run Docker for you! This unfortunately does mean that you cannot currently build docker containers on runpod or use things like docker compose. Many use cases can be solved by creating a custom template with the docker image that you want to run.
+
+</details>
+
+<details>
+
 <summary>My pod is stuck on initializing? What gives?</summary>
 
 Usually, this happens for one of several reasons. If you can't figure it out, contact us, and we'll be happy to help you.
