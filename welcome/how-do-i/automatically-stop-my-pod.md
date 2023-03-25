@@ -16,3 +16,9 @@ If you simply want to stop your pod after a specific amount of time, you can run
 This simple command sleeps for 2 hours (change 2h to whatever you want), and then stops the pod. Keep in mind that you will still incur disk fees on a stopped pod.
 
 If you want to terminate the pod completely, you can configure your pod with 0 volume disk. In this case, stopping the pod is equivalent to terminating it.&#x20;
+
+You can also request to terminate the pod directly using a similar cli command:
+
+```
+runpodctl remove pod $RUNPOD_POD_ID
+```

@@ -50,7 +50,6 @@
 * [Text Based](ai-endpoints/text-based/README.md)
   * [GPT Neo 1.3B](ai-endpoints/text-based/gpt-neo-1.3b.md)
   * [GPT Neo 2.7B](ai-endpoints/text-based/gpt-neo-2.7b.md)
-  * [GPT NeoX 20B](ai-endpoints/text-based/gpt-neox-20b.md)
   * [Pygmalion 6B](ai-endpoints/text-based/pygmalion-6b.md)
 
 ## Hosts
