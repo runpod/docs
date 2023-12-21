@@ -1,0 +1,48 @@
+name: Manage ReadMe Docs on Branch and PR Events
+
+on:
+  create:
+    # Triggered when a branch or tag is created
+  push:
+    branches-ignore:
+      - main
+    branches:
+      - '*'
+  pull_request:
+    types: [opened, reopened, closed]
+    # Triggered when a pull request is opened, reopened, or closed
+  delete:
+    # Triggered when a branch is deleted
+
+jobs:
+  manage-rdme-docs:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out repo 📚
+      uses: actions/checkout@v3
+
+    - name: Generate branch version string
+      run: |
+        BRANCH_NAME="${{ github.head_ref || github.ref || github.event.ref }}"
+        BRANCH_VERSION=$(echo $BRANCH_NAME | tr -cd '0-9.')
+        echo "BRANCH_VERSION=$BRANCH_VERSION" >> $GITHUB_ENV
+
+    - name: Create or Update version of docs for branch/PR (if push or PR open event) 🚀
+      if: github.event_name == 'push' || github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'reopened')
+      uses: readmeio/rdme@v8
+      with:
+        rdme: versions:create ${{ env.BRANCH_VERSION }} --fork=1.0 --main=false --beta=true --deprecated=false --isPublic=false --key=${{ secrets.README_API_KEY }} || \
+              versions:update ${{ env.BRANCH_VERSION }} --fork=1.0 --main=false --beta=true --deprecated=false --isPublic=false --key=${{ secrets.README_API_KEY }}
+
+    - name: Run `docs` command for branch/PR version (if push or PR open/synchronize event) 📝
+      if: github.event_name == 'push' || github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'reopened')
+      uses: readmeio/rdme@v8
+      with:
+        rdme: docs ${{ env.BRANCH_VERSION }} --version=${{ env.BRANCH_VERSION }} --key=${{ secrets.README_API_KEY }}
+
+    - name: Delete version of docs for branch (if delete or PR merge event) 🚀
+      if: github.event_name == 'delete' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+      uses: readmeio/rdme@v8
+      with:
+        rdme: versions:delete ${{ env.BRANCH_VERSION }} --key=${{ secrets.README_API_KEY }}
