@@ -1,29 +1,64 @@
-# About
+# RunPod Documentation Guide
 
-Please use the search or browse through our docs before contacting us directly with any general questions. Feel free to reach us on discord, our support chat, or by email. You can find more info on our [**contact**](https://www.runpod.io/contact) page.
+Welcome to the RunPod Documentation Guide. This repository contains all the necessary information and tools to help you effectively use and contribute to the RunPod project.
 
-### **Our Mission**
+## Table of Contents
 
-RunPod is on a mission to democratize AI from the ground up. Our first goal is to bring cloud compute to all with very competitive prices without sacrificing usability, experience, or features.
+- [Dryrun Documentation](#dryrun-documentation)
+- [Format Documentation](#format-documentation)
+- [Lint Documentation](#lint-documentation)
+- [Creating a New Version](#creating-a-new-version)
+- [Contributing](#contributing)
+- [License](#license)
 
-RunPod currently provides two cloud compute services: **Secure Cloud** and **Community Cloud**.
+## Dryrun Documentation
 
-**Secure Cloud** runs in T3/T4 data centers by our trusted partners. Our close partnership comes with high reliability, redundancy, security, and fast response times to mitigate any downtimes. For any sensitive and enterprise workloads, we highly recommend Secure Cloud.
+To perform a dry run of the project, use the following command:
 
-**Community Cloud** brings power in numbers and diversity spanning the whole world. Through our decentralized platform, we can offer peer-to-peer GPU compute that connects individual compute providers to consumers. Community Cloud providers are invite-only and vetted by us to offer compute with good security and uptime.
+```bash
+yarn dryrun
+```
 
-Both solutions offer far more competitive prices than large cloud providers such as AWS or GCP.
+This will simulate the project execution without making any real changes, allowing you to verify the setup and functionality.
 
+## Format Documentation
 
+For formatting your codebase to ensure consistency and readability, use the following command:
 
-{% content-ref url="faq.md" %}
-[faq.md](faq.md)
-{% endcontent-ref %}
+```bash
+yarn format
+```
 
-{% content-ref url="graphql-api/" %}
-[graphql-api](graphql-api/)
-{% endcontent-ref %}
+This command will automatically format your code following the predefined coding standards of the project.
 
-{% embed url="https://graphql-spec.runpod.io" %}
+## Lint Documentation
 
-{% embed url="https://github.com/runpod/runpodctl" %}
+Vale helps in keeping your documentation style clean and consistent.
+First, ensure that you have [Vale](https://vale.sh/docs/vale-cli/installation/) installed.
+
+Once Vale is installed, you can lint your documentation with:
+
+```bash
+yarn lint
+```
+
+This will check the documentation for any issues or inconsistencies based on the defined linting rules.
+
+## Creating a New Version
+
+Versioning is crucial for tracking changes and releases.
+For RunPod, we use an automated GitHub workflow for version updates.
+This ensures a standardized and error-free process.
+
+You should rely on the GitHub workflow to update versions.
+
+## Contributing
+
+We welcome contributions to the RunPod project.
+Whether you're fixing bugs, adding new features, or improving documentation, your help is greatly appreciated.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for more information.
+
+## License
+
+This project is protected under the [Apache 2.0 License](LICENSE).
+For more details, refer to the [LICENSE](LICENSE) file.
