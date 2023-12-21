@@ -10,7 +10,7 @@ createdAt: "Tue Jul 25 2023 19:30:06 GMT+0000 (Coordinated Universal Time)"
 updatedAt: "Mon Nov 06 2023 19:58:50 GMT+0000 (Coordinated Universal Time)"
 ---
 
-After you convert your account to a team account, you will be the only member of your team. In order to invite users to join you, navigate to your Team page, and click the "Invite New Member" button at the top of the "Members" section.
+After you convert your account to a team account, you will be the only member of your team. In order to invite users to join you, navigate to your Team page, and select the "Invite New Member" button at the top of the "Members" section.
 
 [block:image]
 {
