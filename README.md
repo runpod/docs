@@ -44,6 +44,14 @@ yarn lint
 
 This will check the documentation for any issues or inconsistencies based on the defined linting rules.
 
+## Update runpodctl docs
+
+The CLI reference documentation for runpodctl are configured by using the `runpodctl-docs.py` file.
+
+```bash
+python3 runpodctl-docs.py
+```
+
 ## Creating a New Version
 
 Versioning is crucial for tracking changes and releases.
