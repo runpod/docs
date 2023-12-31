@@ -170,7 +170,7 @@ running your api via **/run** runs the code asynchronously, here's a sample resp
 ```Text cURL
 curl https://api.runpod.ai/v2/<your-api-id>/status/<your-status-id>
 ```
-```python
+```python Start a job and return a status
 # this requires the installation of runpod-python
 # with `pip install runpod-python` beforehand
 
@@ -185,6 +185,18 @@ run_request = endpoint.run(
 )
 
 print(run_request.status())
+```
+```python Get the status of a running job
+# Prerequisite: Install runpod-python using `pip install runpod-python`
+import runpod
+
+runpod.api_key = "xxxxxxxxxxxxxxxxxxxxxx"  # Replace with your API key
+client = runpod.endpoint.runner.RunPodClient()
+
+
+job = runpod.endpoint.Job(endpoint_id="your_endpoint_id", job_id="your_job_id", client=client)
+
+print(job.status())
 ```
 <!-- dprint-ignore-end -->
 
