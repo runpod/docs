@@ -10,7 +10,11 @@ createdAt: "Tue Oct 31 2023 17:02:51 GMT+0000 (Coordinated Universal Time)"
 updatedAt: "Tue Oct 31 2023 20:58:01 GMT+0000 (Coordinated Universal Time)"
 ---
 
-After logging into RunPod navigate to [Templates](https://www.dev.runpod.io/console/user/templates) then press `New Template` to open up the template dialog and choose `Serverless` from the Template Type.
+1. Login into the RunPod console and navigate to [Templates](https://www.dev.runpod.io/console/user/templates).
+2. Select **New Template**.
+3. Choose **Serverless** from the **Template Type**.
+
+![Screenshot of a serverless template](static/serverless-template.png)
 
 ### Template Name
 
