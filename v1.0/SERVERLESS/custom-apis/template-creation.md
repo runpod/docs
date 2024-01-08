@@ -10,8 +10,6 @@ createdAt: "Tue Mar 28 2023 23:42:35 GMT+0000 (Coordinated Universal Time)"
 updatedAt: "Sat Apr 29 2023 14:17:05 GMT+0000 (Coordinated Universal Time)"
 ---
 
-You can access [template creation here](https://www.runpod.io/console/serverless/user/templates).
-
 The following properties can be defined per template.
 
 [block:image]

@@ -10,24 +10,7 @@ createdAt: "Tue Oct 31 2023 17:02:51 GMT+0000 (Coordinated Universal Time)"
 updatedAt: "Tue Oct 31 2023 20:58:01 GMT+0000 (Coordinated Universal Time)"
 ---
 
-After logging into RunPod navigate to [Serverless > Custom Template](https://www.runpod.io/console/serverless/user/templates) then press `New Template` to open up the template dialog.
-
-[block:image]
-{
-"images": [
-{
-"image": [
-"https://files.readme.io/99cd8c7-image.png",
-null,
-"The Template Creation Dialog"
-],
-"align": "center",
-"sizing": "80% ",
-"caption": "The Template Creation Dialog"
-}
-]
-}
-[/block]
+After logging into RunPod navigate to [Templates](https://www.dev.runpod.io/console/user/templates) then press `New Template` to open up the template dialog and choose `Serverless` from the Template Type.
 
 ### Template Name
 
