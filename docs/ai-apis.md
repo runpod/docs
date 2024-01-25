@@ -8,7 +8,7 @@ description: This overview is your starting point for integrating RunPod's AI En
 The RunPod AI API is a versatile and user-friendly interface that provides seamless access to a range of prebuilt AI models, including text-to-image conversion, speech recognition, and large language models, enabling developers and businesses to easily integrate advanced AI capabilities into their applications.
 Managed and scaled by RunPod, AI APIs offers a cost-effective solution for harnessing the power of AI with minimal infrastructure overhead.
 
-For more information, see the [RunPod AI API](https://docs.runpod.io/reference/runpod-apis) reference.
+For more information, see the [RunPod AI API](https://doc.runpod.io/reference/runpod-apis) reference.
 
 ### Introduction
 
@@ -58,7 +58,7 @@ To start using RunPod AI Endpoints, follow these simple steps:
    1. [Sign up with RunPod](/get-started/manage-accounts#create-an-account).
    2. [Obtain your API Key](/get-started/api-keys#generate).
 2. **Choose your model**:
-   - [Select from the available AI models](https://docs.runpod.io/reference/runpod-apis) based on your requirements or application needs.
+   - [Select from the available AI models](https://doc.runpod.io/reference/runpod-apis) based on your requirements or application needs.
 3. **Integrate into your application**:
    - (optional) Use the provided API to integrate the AI model into your application.
    - (optional) Run it in the browser.

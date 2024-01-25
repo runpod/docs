@@ -107,7 +107,7 @@ const config = {
         },
         {
           position: "left",
-          href: "https://docs.runpod.io/reference/runpod-apis",
+          href: "https://doc.runpod.io/reference/runpod-apis",
           collapsed: false,
           label: "AI APIs",
         },
@@ -136,7 +136,7 @@ const config = {
             },
             {
               label: "AI APIs",
-              to: "https://docs.runpod.io/reference/runpod-apis",
+              to: "https://doc.runpod.io/reference/runpod-apis",
             },
           ],
         },
