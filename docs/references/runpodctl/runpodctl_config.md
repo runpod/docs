@@ -1,0 +1,27 @@
+---
+title: "Config"
+---
+
+## runpodctl config
+
+CLI Config
+
+### Synopsis
+
+RunPod CLI Config Settings
+
+```
+runpodctl config [flags]
+```
+
+### Options
+
+```
+    --apiKey string   runpod api key
+    --apiUrl string   runpod api url
+-h, --help            help for config
+```
+
+### SEE ALSO
+
+- [runpodctl](runpodctl.md) - runpodctl for runpod.io

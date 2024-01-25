@@ -39,3 +39,33 @@ $ GIT_USER=<Your GitHub username> yarn deploy
 ```
 
 If you are using GitHub pages for hosting, this command is a convenient way to build the website and push to the `gh-pages` branch.
+
+## Linting
+
+To lint a specific folder or file, run:
+
+```command
+vale path/to/docs/
+# or
+vale path/to/*.md
+```
+
+To lint the entire repo, run:
+
+```command
+yarn lint
+```
+
+## Format Python code examples
+
+Install `blacken-docs`.
+
+```bash
+python -m pip install blacken-docs
+```
+
+Run the formatter.
+
+```bash
+git ls-files -z -- '*.md' | xargs -0 blacken-docs
+```

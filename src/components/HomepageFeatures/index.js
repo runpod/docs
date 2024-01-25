@@ -1,48 +1,62 @@
-import clsx from 'clsx';
-import Heading from '@theme/Heading';
-import styles from './styles.module.css';
+import Heading from "@theme/Heading";
+import clsx from "clsx";
+import styles from "./styles.module.css";
 
 const FeatureList = [
   {
-    title: 'Easy to Use',
-    Svg: require('@site/static/img/undraw_docusaurus_mountain.svg').default,
+    title: "Pods",
+    Svg: require("@site/static/img/home_1.svg").default,
+    url: "/pods/overview", // Add URL here
     description: (
       <>
-        Docusaurus was designed from the ground up to be easily installed and
-        used to get your website up and running quickly.
+        <a href="/pods/overview">
+          <b>Pods</b>
+        </a>{" "}
+        offer fast deployment of container-based GPU instances, with Secure Cloud for high reliability and security, and
+        Community Cloud for a secure peer-to-peer network.
       </>
     ),
   },
   {
-    title: 'Focus on What Matters',
-    Svg: require('@site/static/img/undraw_docusaurus_tree.svg').default,
+    title: "Serverless",
+    Svg: require("@site/static/img/home_2.svg").default,
+    url: "/serverless/overview", // Add URL here
     description: (
       <>
-        Docusaurus lets you focus on your docs, and we&apos;ll do the chores. Go
-        ahead and move your docs into the <code>docs</code> directory.
+        <a href="/serverless/overview">
+          <b>Serverless</b>
+        </a>{" "}
+        service provides pay-per-second serverless computing with autoscaling, quick start times, and robust security in
+        its Secure Cloud.
       </>
     ),
   },
   {
-    title: 'Powered by React',
-    Svg: require('@site/static/img/undraw_docusaurus_react.svg').default,
+    title: "AI APIs",
+    Svg: require("@site/static/img/home_3.svg").default,
+    url: "/ai-apis",
     description: (
       <>
-        Extend or customize your website layout by reusing React. Docusaurus can
-        be extended while reusing the same header and footer.
+        <a href="ai-apis">
+          <b>AI APIs</b>
+        </a>{" "}
+        are scalable and managed services tailored for various applications like Dreambooth and Stable Diffusion,
+        ensuring efficient handling of diverse workloads.
       </>
     ),
   },
 ];
 
-function Feature({Svg, title, description}) {
+function Feature({ Svg, title, description, url }) {
   return (
-    <div className={clsx('col col--4')}>
+    <div className={clsx("col col--4")}>
       <div className="text--center">
-        <Svg className={styles.featureSvg} role="img" />
+        <a href={url}>
+          <Svg className={styles.featureSvg} role="img" />
+        </a>
       </div>
       <div className="text--center padding-horiz--md">
-        <Heading as="h3">{title}</Heading>
+        <Heading as="h2">{title}</Heading>
         <p>{description}</p>
       </div>
     </div>
@@ -54,9 +68,7 @@ export default function HomepageFeatures() {
     <section className={styles.features}>
       <div className="container">
         <div className="row">
-          {FeatureList.map((props, idx) => (
-            <Feature key={idx} {...props} />
-          ))}
+          {FeatureList.map((props, idx) => <Feature key={idx} {...props} />)}
         </div>
       </div>
     </section>
