@@ -1,64 +1,41 @@
-# RunPod Documentation Guide
+# Website
 
-Welcome to the RunPod Documentation Guide. This repository contains all the necessary information and tools to help you effectively use and contribute to the RunPod project.
+This website is built using [Docusaurus](https://docusaurus.io/), a modern static website generator.
 
-## Table of Contents
+### Installation
 
-- [Dryrun Documentation](#dryrun-documentation)
-- [Format Documentation](#format-documentation)
-- [Lint Documentation](#lint-documentation)
-- [Creating a New Version](#creating-a-new-version)
-- [Contributing](#contributing)
-- [License](#license)
-
-## Dryrun Documentation
-
-To perform a dry run of the project, use the following command:
-
-```bash
-yarn dryrun
+```
+$ yarn
 ```
 
-This will simulate the project execution without making any real changes, allowing you to verify the setup and functionality.
+### Local Development
 
-## Format Documentation
-
-For formatting your codebase to ensure consistency and readability, use the following command:
-
-```bash
-yarn format
+```
+$ yarn start
 ```
 
-This command will automatically format your code following the predefined coding standards of the project.
+This command starts a local development server and opens up a browser window. Most changes are reflected live without having to restart the server.
 
-## Lint Documentation
+### Build
 
-Vale helps in keeping your documentation style clean and consistent.
-First, ensure that you have [Vale](https://vale.sh/docs/vale-cli/installation/) installed.
-
-Once Vale is installed, you can lint your documentation with:
-
-```bash
-yarn lint
+```
+$ yarn build
 ```
 
-This will check the documentation for any issues or inconsistencies based on the defined linting rules.
+This command generates static content into the `build` directory and can be served using any static contents hosting service.
 
-## Creating a New Version
+### Deployment
 
-Versioning is crucial for tracking changes and releases.
-For RunPod, we use an automated GitHub workflow for version updates.
-This ensures a standardized and error-free process.
+Using SSH:
 
-You should rely on the GitHub workflow to update versions.
+```
+$ USE_SSH=true yarn deploy
+```
 
-## Contributing
+Not using SSH:
 
-We welcome contributions to the RunPod project.
-Whether you're fixing bugs, adding new features, or improving documentation, your help is greatly appreciated.
-See [CONTRIBUTING.md](CONTRIBUTING.md) for more information.
+```
+$ GIT_USER=<Your GitHub username> yarn deploy
+```
 
-## License
-
-This project is protected under the [Apache 2.0 License](LICENSE).
-For more details, refer to the [LICENSE](LICENSE) file.
+If you are using GitHub pages for hosting, this command is a convenient way to build the website and push to the `gh-pages` branch.
