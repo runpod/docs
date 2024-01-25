@@ -76,12 +76,12 @@ const config = {
   ],
 
   themeConfig: {
-    algolia: {
-      appId: "LZTDWL431O",
-      apiKey: "1e83cdfb201f930cb2a80e8b0fd0401a",
-      indexName: "runpod-vercel",
-      // insights: true,
-    },
+    // algolia: {
+    //  appId: "LZTDWL431O",
+    //  apiKey: "1e83cdfb201f930cb2a80e8b0fd0401a",
+    //  indexName: "runpod-vercel",
+    //  // insights: true,
+    // },
     image: "img/docusaurus-social-card.jpg",
     navbar: {
       title: "RunPod",
@@ -207,7 +207,7 @@ const config = {
       defer: true,
     },
   ],
-  plugins: [],
+  plugins: [require.resolve('docusaurus-lunr-search')],
 };
 
 export default config;

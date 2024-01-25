@@ -11,7 +11,7 @@ In the previous step, you created a Dockerfile and executed a command. Now, you'
 This walk through teach you how to persist data outside of container.
 RunPod has the same concept used for attaching a Network Volume to your Pod.
 
-Consult the documentation on [attaching a Network Volume to your Pod](/pods/network-storage/create-network-volumes).
+Consult the documentation on [attaching a Network Volume to your Pod](/pods/storage/create-network-volumes).
 
 :::
 

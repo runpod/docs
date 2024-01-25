@@ -97,7 +97,7 @@ You are charged for storing idle Pods. If you do not need to store your Pod, be 
 
 :::danger
 
-Terminating a Pod permanently deletes all data outside your [network volume](/pods/network-storage/create-network-volumes). Be sure you've saved any data you want to access again.
+Terminating a Pod permanently deletes all data outside your [network volume](/pods/storage/create-network-volumes). Be sure you've saved any data you want to access again.
 
 :::
 
