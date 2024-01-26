@@ -38,7 +38,7 @@ const config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           routeBasePath: "",
-          editUrl: "https://github.com/runpod/docs",
+          editUrl: "https://github.com/runpod/docs/main/blob",
         },
         /*
         blog: {
