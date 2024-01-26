@@ -51,6 +51,8 @@ def handler(job):
 runpod.serverless.start({"handler": handler})  # Required.
 ```
 
+You must return something as output when your worker is done processing the job. This can directly be the output, or it can be links to cloud storage where the artifacts are saved. Keep in mind that the input and output payloads are limited to 2MB each
+
 :::note
 
 Keep setup processes and functions outside of your handler function. For example, if you are running models make sure they are loaded into VRAM prior to calling `serverless.start` with your handler function.
@@ -58,9 +60,18 @@ Keep setup processes and functions outside of your handler function. For example
 
 ### Development and deployment
 
+You should return something as output for when your Worker is done processing a job.
+This can be directly the output, or it can be links to cloud storage where the artifacts are saved.
+
+Payloads are limited to:
+
+- `run` 10 MB.
+- `runsync`: 20 MB.
+
 If any errors are returned by the worker while running a `test_input` job, the worker will exit with a non-zero exit code.
 Otherwise, the worker will exit with a zero exit code.
 This can be used to check if the worker ran successfully, for example, in a CI/CD pipeline.
 
 - For information on testing your handler locally, see [Local testing](/serverless/workers/development/local-testing).
 - For information on setting a continuous integration pipeline, see [Continuous integration](/serverless/workers/deploy).
+
