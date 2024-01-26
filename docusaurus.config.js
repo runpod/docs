@@ -82,7 +82,7 @@ const config = {
     //  indexName: "runpod-vercel",
     //  // insights: true,
     // },
-    image: "img/docusaurus-social-card.jpg",
+    image: "img/docusaurus-social-card.png",
     navbar: {
       title: "RunPod",
 
