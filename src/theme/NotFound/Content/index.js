@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import clsx from 'clsx';
 import Translate from '@docusaurus/Translate';
 import Heading from '@theme/Heading';
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 
 export default function NotFoundContent({className}) {
   const [imageData, setImageData] = useState(null);
+  const { siteConfig: { customFields } } = useDocusaurusContext();
 
   useEffect(() => {
     const options = {
@@ -12,7 +14,7 @@ export default function NotFoundContent({className}) {
       headers: {
         accept: 'application/json',
         'content-type': 'application/json',
-        authorization: process.env.REACT_APP_RUNPOD_AI_KEY
+        authorization: customFields.runPodAIKey
       },
       body: JSON.stringify({
         input: {
