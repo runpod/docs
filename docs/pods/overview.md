@@ -4,7 +4,7 @@ description: Learn about Pods.
 sidebar_position: 1
 ---
 
-Pods are running container instances. You can pull an instance from a container registry such as Docker Hub, GitHub Container Registry, Amazon Elastic Container Registry, or another compatible registry. 
+Pods are running container instances. You can pull an instance from a container registry such as Docker Hub, GitHub Container Registry, Amazon Elastic Container Registry, or another compatible registry.
 
 :::note
 

@@ -8,6 +8,10 @@ import { injectSpeedInsights } from "@vercel/speed-insights";
 import path from "path";
 import { themes as prismThemes } from "prism-react-renderer";
 
+const {
+  remarkCodeHike,
+} = require("@code-hike/mdx");
+
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: "RunPod Documentation",
@@ -42,6 +46,9 @@ const config = {
           // Remove this to remove the "edit this page" links.
           routeBasePath: "",
           editUrl: "https://github.com/runpod/docs",
+          beforeDefaultRemarkPlugins: [
+            [remarkCodeHike, { theme: "nord" }],
+          ],
         },
         /*
         blog: {
@@ -53,7 +60,10 @@ const config = {
         },
         */
         theme: {
-          customCss: "./src/css/custom.css",
+          customCss: [
+            "./src/css/custom.css",
+          require.resolve("@code-hike/mdx/styles.css")
+          ],
         },
       }),
     ],
@@ -80,7 +90,7 @@ const config = {
 
   themeConfig: {
     colorMode: {
-      defaultMode: 'dark',
+      defaultMode: "dark",
     },
     // algolia: {
     //  appId: "LZTDWL431O",
@@ -213,7 +223,7 @@ const config = {
       defer: true,
     },
   ],
-  plugins: [require.resolve('docusaurus-lunr-search')],
+  plugins: [require.resolve("docusaurus-lunr-search")],
 };
 
 export default config;
