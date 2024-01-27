@@ -1,29 +1,29 @@
 ---
-title: Concurrent Hanlders
+title: Concurrent Handlers
+sidebar_position: 4
 ---
 
-## Overview
-
-RunPod enables serverless functions to handle multiple requests concurrently. This document explains how to configure a RunPod serverless function to efficiently manage and process multiple concurrent requests using the `concurrency_modifier` argument.
+RunPod enables your Workers to handle multiple requests concurrently.
+This document explains how to configure a RunPod Serverless Handler to efficiently manage and process multiple concurrent requests using the `concurrency_modifier` argument.
 
 ## Key Concepts
 
 ### Asynchronous Request Handling
 
-RunPod supports [asynchronous functions](/serverless/workers/handlers/handler-async) for request handling.
-An asynchronous handler allows a single worker to manage multiple tasks concurrently by executing non-blocking operations and switching between tasks efficiently.
+RunPod supports [asynchronous functions](/serverless/Workers/handlers/handler-async) for request handling.
+An asynchronous function allows a single Worker to manage multiple tasks concurrently by executing non-blocking operations and switching between tasks efficiently.
 
 ### Concurrency in Serverless
 
-In a serverless environment, each worker can process multiple requests simultaneously.
+In a serverless environment, each Worker can process multiple requests simultaneously.
 The degree of concurrency depends on the runtime's capacity and the available resources.
 
 ### `concurrency_modifier`
 
-The `concurrency_modifier` is a configurable argument in `runpod.serverless.start` that dynamically determines the concurrency level of a worker.
-It adjusts the number of simultaneous tasks a worker can handle, optimizing resource usage and performance.
+The `concurrency_modifier` is a configurable argument in `runpod.serverless.start` that dynamically determines the concurrency level of a Worker.
+It adjusts the number of simultaneous tasks a Worker can handle, optimizing resource usage and performance.
 
-## Implementation Guide
+## Implementation guide
 
 <CH.Scrollycoding showCopyButton={true} rows="focus" showExpandButton={true}>
 
@@ -33,7 +33,7 @@ Define an asynchronous handler function to process incoming requests. This funct
 
 <CH.Code>
 
-```python
+```python handler.py
 async def handler(job):
     # Process job and yield results
     # ...
@@ -49,7 +49,7 @@ Set the `concurrency_modifier` argument to a lambda function. This function shou
 
 <CH.Code>
 
-```python
+```python handler.py
 concurrency_modifier = lambda x: vllm_engine.max_concurrency
 ```
 
@@ -63,7 +63,7 @@ Initialize the serverless function with the handler and `concurrency_modifier`.
 
 <CH.Code>
 
-```python
+```python handler.py focus=3
 runpod.serverless.start({
     "handler": handler,
     "concurrency_modifier": concurrency_modifier,
@@ -77,13 +77,13 @@ runpod.serverless.start({
 
 </CH.Scrollycoding>
 
-## Example Code
+## Example code
 
-Here is an example demonstrating the setup for a RunPod serverless function capable of handling multiple concurrent requests.
+Here is an example demonstrating the setup for a RunPod Serverless Handler capable of handling multiple concurrent requests.
 
 <CH.Code>
 
-```python
+```python handler.py focus=1,9,18
 import runpod
 from utils import JobInput
 from engine import vLLMEngine
