@@ -21,6 +21,9 @@ const config = {
 
   onBrokenLinks: "log",
   onBrokenMarkdownLinks: "warn",
+  customFields: {
+    runPodAPI: process.env.REACT_APP_RUNPOD_AI_KEY,
+  },
 
   i18n: {
     defaultLocale: "en",

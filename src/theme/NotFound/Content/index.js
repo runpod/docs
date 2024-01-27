@@ -2,24 +2,23 @@ import React, { useState, useEffect } from 'react';
 import clsx from 'clsx';
 import Translate from '@docusaurus/Translate';
 import Heading from '@theme/Heading';
-import './spinner.css';
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 
-export default function NotFoundContent({ className }) {
-  const [imageUrl, setImageUrl] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
+export default function NotFoundContent({className}) {
+  const [imageData, setImageData] = useState(null);
+  const { siteConfig: { customFields } } = useDocusaurusContext();
 
   useEffect(() => {
-    setIsLoading(true); 
-    const fetchImage = async () => {
-      const options = {
-        method: 'POST',
-        headers: {
-          accept: 'application/json',
-          'content-type': 'application/json',
-          authorization: '5YLEDXAQKUKF86DX487GVYNGX3GDVW81Q881N5A4'
-        },
-        body: JSON.stringify({
-          prompt: '404 Sign glitch art in space.',
+    const options = {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/json',
+        authorization: customFields.runPodAPI,
+      },
+      body: JSON.stringify({
+        input: {
+          prompt: 'A visually striking 404 error page design, featuring bold Glitch Art influences with digital distortion effects. The theme is outer space, with a background of stars and galaxies. The design prominently displays the number 404 in a futuristic font, centered in the composition, evoking a sense of being lost in the cosmos. Make sure there are bright gold stars.',
           num_inference_steps: 25,
           refiner_inference_steps: 50,
           width: 1024,
@@ -28,60 +27,63 @@ export default function NotFoundContent({ className }) {
           strength: 0.3,
           seed: null,
           num_images: 1
-
-        })
-      };
-
-      try {
-        const response = await fetch('https://api.runpod.ai/v2/sdxl/runsync', options);
-        const data = await response.json();
-        if (data && data.output && data.output.image_url) {
-          setImageUrl(data.output.image_url);
         }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setIsLoading(false); // Stop loading regardless of the outcome
-      }
+      })
     };
 
-    fetchImage();
+    fetch('https://api.runpod.ai/v2/2hija9yaxkmo8g/runsync', options)
+      .then(response => response.json())
+      .then(data => {
+        if (data && data.output) {
+          const imageBase64 = data.output;
+          const imageUrl = `data:image/jpeg;base64,${imageBase64}`;
+          setImageData(imageUrl);
+        }
+      })
+      .catch(err => console.error(err));
   }, []);
 
   return (
     <main className={clsx('container margin-vert--xl', className)}>
       <div className="row">
         <div className="col col--6 col--offset-3">
-        <Heading as="h1" className="hero__title">
+          <Heading as="h1" className="hero__title">
             <Translate
               id="theme.NotFound.title"
               description="The title of the 404 page">
-              Page Not Found
+              Oops! This page is on a Space Mission.
             </Translate>
           </Heading>
           <p>
             <Translate
               id="theme.NotFound.p1"
               description="The first paragraph of the 404 page">
-              We could not find what you were looking for.
+              It looks like the page you're seeking might have been abducted by aliens.
+              Fear not, we'll help you navigate back to familiar space.
             </Translate>
           </p>
           <p>
             <Translate
               id="theme.NotFound.p2"
               description="The 2nd paragraph of the 404 page">
-              Please contact the owner of the site that linked you to the
-              original URL and let them know their link is broken.
+              If you're feeling a bit lost, don't hesitate to reach out to the hyperlink helpline —
+              let the site owner know their link is floating in the digital void.
             </Translate>
           </p>
-          {/* Display the image if it's available */}
-          {imageUrl && <img src={imageUrl} alt="Generated for 404 Page" />}
-          {<div className="spinner"></div>}
-
-          <p>This image was generated using RunPod's API.</p>
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            {/* Display the image if it's available */}
+            {imageData && <img src={imageData} alt="AI generated 404 error page" />}
+          </div>
+          <p>
+            <Translate
+              id="theme.NotFound.p3"
+              description="Paragraph explaining about the generated art">
+              The cosmic art you see here was conjured up by the digital wizards at RunPod's Serverless Endpoint,
+              specifically for this 404 page. Pretty neat, huh?
+            </Translate>
+          </p>
         </div>
-
       </div>
     </main>
   );
-}
+  }
