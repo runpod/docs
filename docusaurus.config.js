@@ -16,7 +16,7 @@ const config = {
   url: "https://docs.runpod.io",
   baseUrl: "/",
 
-  organizationName: "runpod", // Usually your GitHub org/user name.
+  organizationName: "runpod",
   projectName: "docs",
 
   onBrokenLinks: "log",
@@ -76,6 +76,9 @@ const config = {
   ],
 
   themeConfig: {
+    colorMode: {
+      defaultMode: 'dark',
+    },
     // algolia: {
     //  appId: "LZTDWL431O",
     //  apiKey: "1e83cdfb201f930cb2a80e8b0fd0401a",
