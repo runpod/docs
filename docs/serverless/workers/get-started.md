@@ -47,7 +47,7 @@ gh repo clone runpod-workers/worker-template
 2. Navigate to the root of the cloned repo:
 
 ```command
-cd worker/template
+cd worker-template
 ```
 
 3. Build the Docker image:
