@@ -12,7 +12,7 @@ export default function NotFoundContent({className}) {
       headers: {
         accept: 'application/json',
         'content-type': 'application/json',
-        authorization: process.env.RUNPOD_AI_KEY
+        authorization: process.env.REACT_APP_RUNPOD_AI_KEY
       },
       body: JSON.stringify({
         input: {
@@ -84,4 +84,4 @@ export default function NotFoundContent({className}) {
       </div>
     </main>
   );
-  }  
+  }
