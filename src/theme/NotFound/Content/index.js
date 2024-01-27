@@ -14,7 +14,7 @@ export default function NotFoundContent({className}) {
       headers: {
         accept: 'application/json',
         'content-type': 'application/json',
-        authorization: customFields.runPodAIKey
+        authorization: customFields.runPodAPI,
       },
       body: JSON.stringify({
         input: {
