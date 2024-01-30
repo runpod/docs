@@ -14,7 +14,7 @@ In this tutorial, you'll build a web application, where you'll leverage RunPod's
 
 By the end of this tutorial, you'll have an understanding of running a Serverless Worker on RunPod and sending requests to an Endpoint to receive a response.
 
-You can proceed with the tutorial by following the build steps outlined here or skip directly to [Deploy the Model](#deploy-the-model) section.
+You can proceed with the tutorial by following the build steps outlined here or skip directly to [Deploy a Serverless Endpoint](#deploy-a-serverless-endpoint) section.
 
 ## Prerequisites
 
@@ -270,7 +270,7 @@ async function generateImage() {
 
 1. Replace `${process.env.REACT_APP_AUTH_TOKEN}` with your actual API key.
 2. Replace `${process.env.REACT_APP_ENDPOINT_ID}` with your specific Endpoint.
-3. Open `index.html` in a web browser, enter a prompt, and click the "Generate Image" button to see the result.
+3. Open `index.html` in a web browser, enter a prompt, and select **Generate Image** to see the result.
 
 This web application serves as a basic example of how to interact with your RunPod serverless endpoint from a client-side application.
 It can be expanded or modified to fit more complex use cases.
@@ -298,7 +298,7 @@ You can run a server through Python or by opening the `index.html` page in your 
     Open the `index.html` file directly in your web browser.
 
     1. Navigate to the folder where your `index.html` file is located.
-    2. Right-click on the file and choose "Open with" and select your preferred web browser.
+    2. Right-click on the file and choose **Open with** and select your preferred web browser.
     - Alternatively, you can drag and drop the `index.html` file into an open browser window.
     - The URL will look something like `file:///path/to/your/index.html`.
 
