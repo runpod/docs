@@ -10,9 +10,10 @@ Savings Plans are a powerful cost-saving feature designed to optimize your RunPo
 
 To start saving with RunPod's Savings Plans, ensure you have sufficient RunPod credits in your account.
 
-There are two ways to create a savings plan. 
-- Add a Savings Plan to your existing Pod from the Pod dashboard. 
-- Initiate a Savings Plan during Pod deployment. 
+There are two ways to create a savings plan.
+
+- Add a Savings Plan to your existing Pod from the Pod dashboard.
+- Initiate a Savings Plan during Pod deployment.
 
 Regularly check the **Savings Plans** section to track your Savings Plans and associated pods.
 
@@ -23,7 +24,7 @@ Regularly check the **Savings Plans** section to track your Savings Plans and as
 
 **Reduced Costs**: By paying upfront for a Savings Plan, you can enjoy discounted rates on uninterrupted instances. This means significant cost savings for your RunPod deployments.
 
-**Flexible Savings**: When you stop a Pod, the Savings Plan associated with it applies to your next deployment of the same card. This means you continue to benefit from your savings commitment even after temporary pauses in your pod usage. 
+**Flexible Savings**: When you stop a Pod, the Savings Plan associated with it applies to your next deployment of the same card. This means you continue to benefit from your savings commitment even after temporary pauses in your pod usage.
 
 :::warning
 

@@ -63,7 +63,6 @@ If your job is still processing, the response will indicate that. Here's an exam
 }
 ```
 
-
 ### Get Completed Job Status
 
 Once your job is complete, you'll receive a final response like this:

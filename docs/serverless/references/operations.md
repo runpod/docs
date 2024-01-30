@@ -4,9 +4,9 @@ description: "Comprehensive guide on interacting with models using RunPod's API 
 sidebar_position: 2
 ---
 
-RunPod's endpoints facilitate submitting jobs and retrieving outputs. 
+RunPod's endpoints facilitate submitting jobs and retrieving outputs.
 
-To use these endpoints, you will need to have your endpoint ID. 
+To use these endpoints, you will need to have your endpoint ID.
 The constructed URL will start with `https://api.runpod.ai/v2/{endpoint_id}/{operation}` followed by an operation.
 
 Operations available to all users are:
