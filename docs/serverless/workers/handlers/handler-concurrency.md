@@ -50,10 +50,13 @@ Set the `concurrency_modifier` argument to a lambda function. This function shou
 <CH.Code>
 
 ```python handler.py
-concurrency_modifier = lambda x: vllm_engine.max_concurrency
+def concurrency_modifier(current_concurrency):
+    return absolute_desired_concurrency
 ```
 
 </CH.Code>
+
+The function calculates the desired concurrency using the current concurrency as an input.
 
 ---
 
@@ -66,8 +69,7 @@ Initialize the serverless function with the handler and `concurrency_modifier`.
 ```python handler.py focus=3
 runpod.serverless.start({
     "handler": handler,
-    "concurrency_modifier": concurrency_modifier,
-    "return_aggregate_stream": True,
+    "concurrency_modifier": concurrency_modifier
 })
 ```
 
@@ -84,25 +86,26 @@ Here is an example demonstrating the setup for a RunPod Serverless Handler capab
 <CH.Code>
 
 ```python handler.py focus=1,9,18
+
 import runpod
-from utils import JobInput
-from engine import vLLMEngine
+import asyncio
+import random
 
-# Initialize engine
-vllm_engine = vLLMEngine()
+# Simulated Metrics
+request_rate = 0
 
-# Asynchronous handler function
-async def handler(job):
-    job_input = JobInput(job["input"])
-    results_generator = vllm_engine.generate(job_input)
-    async for batch in results_generator:
-        yield batch
+def update_request_rate():
+    global request_rate
+    request_rate = random.randint(20, 100)
 
-# Start serverless function with concurrency management
+async def process_request(job):
+    await asyncio.sleep(1)  # Simulate processing time
+    return f"Processed: {job['data']}"
+
+# Start the serverless function with the handler and concurrency modifier
 runpod.serverless.start({
-    "handler": handler,
-    "concurrency_modifier": lambda x: vllm_engine.max_concurrency,
-    "return_aggregate_stream": True,
+    "handler": process_request,
+    "concurrency_modifier": lambda current_concurrency: min(10, max(1, current_concurrency + 1 if request_rate > 50 else current_concurrency - 1))
 })
 ```
 
