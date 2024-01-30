@@ -15,5 +15,3 @@ You can use both asynchronous and synchronous jobs.
 Ensure you have a RunPod API key, available under user settings, for identification and billing purposes. Remember, your inputs or outputs are not retained beyond 30 minutes to ensure privacy.
 
 :::
-
-

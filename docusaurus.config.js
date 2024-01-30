@@ -80,7 +80,7 @@ const config = {
 
   themeConfig: {
     colorMode: {
-      defaultMode: 'dark',
+      defaultMode: "dark",
     },
     // algolia: {
     //  appId: "LZTDWL431O",
@@ -213,7 +213,7 @@ const config = {
       defer: true,
     },
   ],
-  plugins: [require.resolve('docusaurus-lunr-search')],
+  plugins: [require.resolve("docusaurus-lunr-search")],
 };
 
 export default config;
