@@ -82,12 +82,12 @@ const config = {
     colorMode: {
       defaultMode: "dark",
     },
-    // algolia: {
-    //  appId: "LZTDWL431O",
-    //  apiKey: "1e83cdfb201f930cb2a80e8b0fd0401a",
-    //  indexName: "runpod-vercel",
-    //  // insights: true,
-    // },
+    algolia: {
+      appId: "LZTDWL431O",
+      apiKey: "579a75d22533b970ddf821f8fd0389d9",
+      indexName: "runpod-vercel",
+      //  // insights: true,
+    },
     image: "img/docusaurus-social-card.png",
     navbar: {
       title: "RunPod",
@@ -213,7 +213,7 @@ const config = {
       defer: true,
     },
   ],
-  plugins: [require.resolve("docusaurus-lunr-search")],
+  plugins: [],
 };
 
 export default config;
