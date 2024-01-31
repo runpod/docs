@@ -20,8 +20,8 @@ You can create a Secret using the RunPod Web interface or the RunPod API.
 
 :::note
 
-Once a Secret is created, it cannot be viewed.
-If you need to change the Secret, you must create a new one or edit the Secret Value.
+Once a Secret is created, its value cannot be viewed.
+If you need to change the Secret, you must create a new one or [modify the Secret Value](#modify-a-secret).
 
 :::
 
@@ -52,7 +52,7 @@ You can reference your Secret directly or select it from the Web interface when 
 
 **Reference your Secret directly**
 
-You can reference your Secret directly in the Environment Variables section of your Pod template.
+You can reference your Secret directly in the [Environment Variables](/pods/references/environment-variables) section of your Pod template.
 To reference your Secret, reference it's key appended to the `RUNPOD_SECRET_` prefix.
 For example:
 
