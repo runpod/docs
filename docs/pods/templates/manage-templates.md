@@ -40,3 +40,5 @@ Use environment variables to pass configuration settings and secrets to your con
 ![](/img/docs/b7670dd-image.png)
 
 RunPod also provides a set of predefined [environment variables](/pods/references/environment-variables) that provide information about the pod, such as the unique identifier for your pod (`RUNPOD_POD_ID`), the API key used to make RunPod API calls to the specific pod (`RUNPOD_API_KEY`), the name of the host server the pod is running on (`RUNPOD_POD_HOSTNAME`), and more.
+
+You can references [Secrets](/pods/templates/secrets) in your Pod templates.

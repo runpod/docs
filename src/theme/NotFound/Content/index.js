@@ -78,15 +78,18 @@ export default function NotFoundContent({ className }) {
             {/* Display the image if it's available */}
             {imageData && <img src={imageData} alt="AI generated 404 error page" />}
           </div>
-          <p>
-            <Translate
-              id="theme.NotFound.p3"
-              description="Paragraph explaining about the generated art"
-            >
-              The cosmic art you see here was conjured up by the digital wizards at RunPod's Serverless Endpoint,
-              specifically for this 404 page. Pretty neat, huh?
-            </Translate>
-          </p>
+          {/* Display the paragraph only if the image is available */}
+          {imageData && (
+            <p>
+              <Translate
+                id="theme.NotFound.p3"
+                description="Paragraph explaining about the generated art"
+              >
+                The cosmic art you see here was conjured up by the digital wizards at RunPod's Serverless Endpoint,
+                specifically for this 404 page. Pretty neat, huh?
+              </Translate>
+            </p>
+          )}
         </div>
       </div>
     </main>

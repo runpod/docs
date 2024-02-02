@@ -6,15 +6,55 @@ sidebar_position: 1
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-To get started with RunPod, you can use the RunPod SDK to build and connect with your Severless Endpoints.
+To get started with RunPod:
+
+- [Create a RunPod account](/get-started/manage-accounts)
+- [Add funds](/get-started/billing-information)
+- [Use the RunPod SDK](#setting-up-your-project) to build and connect with your Serverless Endpoints
+
+The rest of this guide will help you set up a RunPod project.
 
 ## Setting up your project
 
+Just like with Banana, RunPod provides a Python SDK to run your projects.
+
+To get started, install setup a virtual environment then install the SDK library.
+
+
+<Tabs>
+  <TabItem value="macos" label="macos" default>
+
+  Create a Python virtual environment with venv:
+
+    ```command
+    python3 -m venv env
+    source env/bin/activate
+    ```
+
+  </TabItem>
+  <TabItem value="windows" label="windows">
+
+  Create a Python virtual environment with venv:
+
+    ```command
+    python -m venv env
+    env\Scripts\activate
+    ```
+
+  </TabItem>
+
+</Tabs>
+
+To install the SDK, run the following command from the terminal.
+
 ```command
-pip install runpod
+python -m pip install runpod
 ```
 
-RunPod provides a [repository of templates for your project](https://github.com/runpod-workers). 
+
+## Project examples
+
+RunPod provides a [repository of templates for your project](https://github.com/runpod-workers).
 
 You can use the template to get started with your project.
 
@@ -22,59 +62,65 @@ You can use the template to get started with your project.
 gh repo clone runpod-workers/worker-template
 ```
 
-Now that you've got a basic RunPod Worker template created, let's see how you'd migrate from Banana to RunPod.
+Now that you've got a basic RunPod Worker template created:
+
+- Continue reading to see how you'd migrate from Banana to RunPod
+- See [Generate SDXL Turbo](/tutorials/serverless/generate-sdxl-turbo) for a general approach on deploying your first Serverless Endpoint with RunPod.
 
 ## Project structure
 
-When begining to migrate your Banana monorepo to RunPod, you will need to understand the structure of your project.
+When beginning to migrate your Banana monorepo to RunPod, you will need to understand the structure of your project.
 
 <Tabs>
 
   <TabItem value="banana" label="Banana" default>
 
-Banana is a monorepo that contains multiple services. The basic structure for Banana projects look like:
+Banana is a monorepo that contains multiple services. The basic structure for Banana projects is aligned with the RunPod Serverless projects for consistency:
 
 ```text
-Dockerfile # Your Docker file
-README.md
-app.py  # your code
-banana_config.json
-download.py
-requirements.txt # required files
+.
+├── Dockerfile               # Docker configuration
+├── README.md                # Project documentation
+├── banana_config.json       # Configuration settings
+├── requirements.txt         # Dependencies
+└── src
+    ├── app.py               # Main application code
+    └── download.py          # Download script
+
 ```
 
   </TabItem>
   <TabItem value="runpod" label="Runpod">
 
-RunPod Serverless is a monorepo that contains multiple services. The basic structure for RunPod Serverless projects look like:
+RunPod Serverless is a monorepo that contains multiple services.
 
 ```text
 .
-├── Dockerfile # Your Docker file
-├── LICENSE
-├── README.md
+├── Dockerfile               # Docker configuration
+├── LICENSE                  # License information
+├── README.md                # Project documentation
 ├── builder
-│   ├── requirements.txt # required files
-│   └── setup.sh  # start script
+│   ├── requirements.txt     # Dependencies
+│   └── setup.sh             # Setup script
 └── src
-    └── handler.py # your code
+    └── handler.py           # Main handler code
 ```
 
   </TabItem>
 </Tabs>
 
-Both project setups at miniumn contain:
+Both project setups at a minimum contain:
 
-- A Dockerfile: This is the file that defines the container that will be used to run your application.
-- Application code: This is the code that will be executed when the container is run.
+- `Dockerfile`: Defines the container for running the application.
+- Application code: The executable code within the container.
 
-Both provide optional files:
+Optional files included in both setups:
 
-- `requirements.txt`: This is the file that lists the required dependencies for the application.
+- `requirements.txt`: Lists dependencies needed for the application.
 
 ### Banana Configuration settings
 
-Banana configuraiton settings are stored in a `banana_config.json` file.
+Banana configuration settings are stored in a `banana_config.json` file.
 
 Banana uses a `banana_config.json` file which contains things like Idle Timeout, Inference Timeout, and Max Replicas.
 
