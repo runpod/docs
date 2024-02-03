@@ -16,8 +16,6 @@ Below, we'll walk through how to adapt a Python application from Banana Dev to R
 
 First, take a comprehensive look at your current Banana Dev application. Our example application uses the `potassium` framework for serving a machine learning model:
 
-
-
 ```python
 from io import BytesIO
 from potassium import Potassium, Request, Response
@@ -123,6 +121,7 @@ runpod.serverless.start({"handler": handler})
 ```
 
 ---
+
 This modification involves initializing your model outside of the handler function to ensure it's loaded into memory before processing jobs, a crucial step for efficient serverless execution.
 
 ## Step 3: Update Your Dockerfile
@@ -138,6 +137,7 @@ CMD python3 -u app.py
 ```
 
 ---
+
 ### RunPod Dockerfile
 
 ```dockerfile

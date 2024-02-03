@@ -13,6 +13,64 @@ To get started with RunPod:
 - [Add funds](/get-started/billing-information)
 - [Use the RunPod SDK](#setting-up-your-project) to build and connect with your Serverless Endpoints
 
+<details>
+<summary>
+
+**Quick migration with Docker**
+
+</summary>
+
+Transitioning from Banana to RunPod doesn't have to be a lengthy process.
+For users seeking a swift migration path while maintaining Banana's dependencies for the interim, the Docker approach provides an efficient solution.
+This method allows you to leverage Docker to encapsulate your environment, simplifying the migration process and enabling a smoother transition to RunPod.
+
+**Why consider the Dockerfile approach?**
+
+Utilizing a Dockerfile for migration offers a bridge between Banana and RunPod, allowing for immediate deployment of existing projects without the need to immediately discard Banana's dependencies. This approach is particularly beneficial for those looking to test or move their applications to RunPod with minimal initial adjustments.
+
+**Dockerfile**
+
+The provided Dockerfile outlines a straightforward process for setting up your application on RunPod.
+
+Add this Dockerfile to your project.
+
+```dockerfile
+FROM runpod/banana:peel as bread
+FROM repo/image:tag
+
+RUN pip install runpod
+
+COPY --from=bread /handler.py .
+COPY --from=bread /start.sh .
+
+RUN chmod +x start.sh
+CMD ["./start.sh"]
+```
+
+**Building and deploying**
+
+After creating your Dockerfile, build your Docker image and deploy it to RunPod.
+This process involves using Docker commands to build the image and then deploying it through RunPod's CLI or web interface, depending on your preference and the specifics of your RunPod setup.
+
+**Advantages and considerations**
+
+This Dockerfile approach expedites the migration process, allowing you to leverage RunPod's powerful features with minimal initial changes to your project.
+It's an excellent way to quickly transition and test your applications on RunPod.
+
+However, while this method facilitates a quick start on RunPod, it's advisable to plan for a future migration away from Banana's dependencies, as there is overhead to building Banana's dependencies and deploying them to RunPod.
+
+Gradually adapting your project to utilize RunPod's native features and services will optimize your application's performance and scalability.
+
+**Moving forward**
+
+Once you've migrated your application using the Docker approach, consider exploring RunPod's full capabilities.
+Transitioning away from Banana's dependencies and fully integrating with RunPod's services will allow you to take full advantage of what RunPod has to offer.
+
+This quick migration guide is just the beginning.
+Continue with the rest of our tutorial to learn how to leverage RunPod's features to their fullest and ensure your project is fully adapted to its new environment.
+
+</details>
+
 The rest of this guide will help you set up a RunPod project.
 
 ## Setting up your project
@@ -21,28 +79,27 @@ Just like with Banana, RunPod provides a Python SDK to run your projects.
 
 To get started, install setup a virtual environment then install the SDK library.
 
-
 <Tabs>
-  <TabItem value="macos" label="macos" default>
+  <TabItem value="macos" label="macOS" default>
 
-  Create a Python virtual environment with venv:
+Create a Python virtual environment with venv:
 
     ```command
     python3 -m venv env
     source env/bin/activate
     ```
 
-  </TabItem>
-  <TabItem value="windows" label="windows">
+</TabItem>
+  <TabItem value="windows" label="Windows">
 
-  Create a Python virtual environment with venv:
+Create a Python virtual environment with venv:
 
     ```command
     python -m venv env
     env\Scripts\activate
     ```
 
-  </TabItem>
+</TabItem>
 
 </Tabs>
 
@@ -51,7 +108,6 @@ To install the SDK, run the following command from the terminal.
 ```command
 python -m pip install runpod
 ```
-
 
 ## Project examples
 
@@ -74,7 +130,7 @@ When beginning to migrate your Banana monorepo to RunPod, you will need to under
 
 <Tabs>
 
-  <TabItem value="banana" label="Banana" default>
+<TabItem value="banana" label="Banana" default>
 
 Banana is a monorepo that contains multiple services. The basic structure for Banana projects is aligned with the RunPod Serverless projects for consistency:
 
@@ -87,10 +143,9 @@ Banana is a monorepo that contains multiple services. The basic structure for Ba
 └── src
     ├── app.py               # Main application code
     └── download.py          # Download script
-
 ```
 
-  </TabItem>
+</TabItem>
   <TabItem value="runpod" label="Runpod">
 
 RunPod Serverless is a monorepo that contains multiple services.
@@ -107,7 +162,7 @@ RunPod Serverless is a monorepo that contains multiple services.
     └── handler.py           # Main handler code
 ```
 
-  </TabItem>
+</TabItem>
 </Tabs>
 
 Both project setups at a minimum contain:

@@ -8,7 +8,6 @@ import { injectSpeedInsights } from "@vercel/speed-insights";
 import path from "path";
 import { themes as prismThemes } from "prism-react-renderer";
 
-
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: "RunPod Documentation",
