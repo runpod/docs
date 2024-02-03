@@ -146,7 +146,7 @@ Banana is a monorepo that contains multiple services. The basic structure for Ba
 ```
 
 </TabItem>
-  <TabItem value="runpod" label="Runpod">
+  <TabItem value="runpod" label="RunPod">
 
 RunPod Serverless is a monorepo that contains multiple services.
 
