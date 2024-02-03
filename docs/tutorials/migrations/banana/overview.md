@@ -50,7 +50,7 @@ CMD ["./start.sh"]
 **Building and deploying**
 
 After creating your Dockerfile, build your Docker image and deploy it to RunPod.
-This process involves using Docker commands to build the image and then deploying it through RunPod's CLI or web interface, depending on your preference and the specifics of your RunPod setup.
+This process involves using Docker commands to build the image and then deploying it to RunPod.
 
 **Advantages and considerations**
 
