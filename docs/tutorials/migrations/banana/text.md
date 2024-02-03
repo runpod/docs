@@ -1,6 +1,7 @@
 ---
 title: Migrate Your Banana Text to RunPod
 sidebar_label: Migrate texts
+draft: true
 ---
 
 Migrating your AI models and applications from one cloud service to another can often present a challenge, especially when the two platforms operate differently. This tutorial aims to streamline the process of moving from Banana Dev to RunPod, focusing on transferring Docker-based applications and AI models. Whether you're shifting due to preferences in service offerings, pricing, or performance, this guide will help you through the transition smoothly.

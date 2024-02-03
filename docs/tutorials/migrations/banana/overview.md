@@ -1,6 +1,7 @@
 ---
 title: Overview
 sidebar_position: 1
+description: Migrating from Banana to RunPod? Checkout our migration page to get started.
 ---
 
 import Tabs from '@theme/Tabs';
