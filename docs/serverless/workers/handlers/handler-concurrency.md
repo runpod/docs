@@ -19,7 +19,7 @@ This function should efficiently yield results, ideally in batches, to enhance t
 async def process_request(job):
     # Simulates processing delay
     await asyncio.sleep(1)
-    return f"Processed: {job['data']}"
+    return f"Processed: {job['input']}"
 ```
 
 ### Step 2: Set up the `concurrency_modifier` function
@@ -76,7 +76,7 @@ request_rate = 0
 
 async def process_request(job):
     await asyncio.sleep(1)  # Simulate processing time
-    return f"Processed: {job['data']}"
+    return f"Processed: { job['input'] }"
 
 def adjust_concurrency(current_concurrency):
     """
