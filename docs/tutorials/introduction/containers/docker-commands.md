@@ -4,7 +4,7 @@ title: Docker commands
 
 RunPod enables bring-your-own-container (BYOC) development. If you choose this workflow, you will be using Docker commands to build, run, and manage your containers.
 
-:::note 
+:::note
 
 For a Dockerless workflow, see [RunPod projects](/docs/projects/overview.md).
 

@@ -14,7 +14,7 @@ module.exports = {
           dirName: "get-started",
         },
       ],
-    }, 
+    },
     {
       type: "category",
       label: "Projects",
