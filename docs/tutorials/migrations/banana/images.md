@@ -26,18 +26,16 @@ import base64
 # create a new Potassium app
 app = Potassium("my_app")
 
+
 # @app.init runs at startup, and loads models into the app's context
 @app.init
 def init():
-    repo_id="Meina/MeinaUnreal_V3"
+    repo_id = "Meina/MeinaUnreal_V3"
 
     ddpm = DDPMScheduler.from_pretrained(repo_id, subfolder="scheduler")
-    
+
     model = DiffusionPipeline.from_pretrained(
-        repo_id, 
-        use_safetensors=True,
-        torch_dtype=torch.float16,
-        scheduler=ddpm
+        repo_id, use_safetensors=True, torch_dtype=torch.float16, scheduler=ddpm
     ).to("cuda")
 
     context = {
@@ -45,6 +43,7 @@ def init():
     }
 
     return context
+
 
 # @app.handler runs for every call
 @app.handler()
@@ -59,7 +58,9 @@ def handler(context: dict, request: Request) -> Response:
         negative_prompt=negative_prompt,
         guidance_scale=7,
         num_inference_steps=request.json.get("steps", 30),
-        generator=torch.Generator(device="cuda").manual_seed(request.json.get("seed")) if request.json.get("seed") else None,
+        generator=torch.Generator(device="cuda").manual_seed(request.json.get("seed"))
+        if request.json.get("seed")
+        else None,
         width=512,
         height=512,
     ).images[0]
@@ -68,10 +69,8 @@ def handler(context: dict, request: Request) -> Response:
     image.save(buffered, format="JPEG", quality=80)
     img_str = base64.b64encode(buffered.getvalue())
 
-    return Response(
-        json = {"output": str(img_str, "utf-8")}, 
-        status=200
-    )
+    return Response(json={"output": str(img_str, "utf-8")}, status=200)
+
 
 if __name__ == "__main__":
     app.serve()
@@ -101,10 +100,11 @@ try:
 except RuntimeError:
     quit()
 
+
 def handler(job):
-    """ Handler function that will be used to process jobs. """
-    job_input = job['input']
-    prompt = job_input['prompt']
+    """Handler function that will be used to process jobs."""
+    job_input = job["input"]
+    prompt = job_input["prompt"]
 
     time_start = time.time()
     image = pipe(prompt=prompt, num_inference_steps=1, guidance_scale=0.0).images[0]
@@ -114,7 +114,7 @@ def handler(job):
     image.save(buffer, format="PNG")
     image_bytes = buffer.getvalue()
 
-    return base64.b64encode(image_bytes).decode('utf-8')
+    return base64.b64encode(image_bytes).decode("utf-8")
 
 
 runpod.serverless.start({"handler": handler})
