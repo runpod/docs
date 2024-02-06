@@ -2,43 +2,185 @@
 title: Endpoints
 ---
 
-## Run Sync
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
-## Run
+This documentation provides detailed instructions on how to use the RunPod Python Language Library to interact with various endpoints.
+With this library, you can perform synchronous and asynchronous operations, stream data, and check the health status of endpoints.
 
-### Async Job requests
+## Prerequisites
 
-Example of calling an endpoint using asyncio.
+Before using the RunPod Python, ensure that you have:
 
-## Health
+- Installed the RunPod Python package.
+- Configured your API key.
 
-Example of calling a Health Endpoint.
+## Run Synchronously
+
+To execute an endpoint synchronously and wait for the result, use the `run_sync` method. This method blocks the execution until the endpoint run is complete or until it times out.
 
 ```python
 import runpod
+
+# Set your global API key:
+# runpod.api_key = "YOUR_RUNPOD_API_KEY"
+
+endpoint = runpod.Endpoint("sdxl")  # Replace "sdxl" with your endpoint ID.
+
+try:
+    run_request = endpoint.run_sync(
+        {
+            "input": {
+                "prompt": "a photo of a horse the size of a Boeing 787"
+            }
+        },
+        timeout=60  # Timeout in seconds.
+    )
+
+    print(run_request)
+except TimeoutError:
+    print("Job timed out.")
+```
+
+## Run Asynchronously
+
+For non-blocking operations, use the `run` method.
+This method allows you to start an endpoint run and then check its status or wait for its completion at a later time.
+
+````python
+import runpod
+# Set your global API key:
+# runpod.api_key = "YOUR_RUNPOD_API_KEY"
+log = runpod.RunPodLogger()
+input_payload = {
+    "input": {
+        "prompt": "Hello, World!"
+    }
+}
+
+try:
+    endpoint = runpod.Endpoint("n74gtin2lgmieh")
+    run_request = endpoint.run(input_payload)
+
+    # Initial check without blocking, useful for quick tasks
+    status = run_request.status()
+    log.info(f"Initial job status: {status}")
+
+    if status != "COMPLETED":
+        # Polling with timeout for long-running tasks
+        output = run_request.output(timeout=60)
+    else:
+        output = run_request.output()
+    log.info(f"Job output: {output}")
+except Exception as e:
+    log.error(f"An error occurred: {e}")
+
+## Async Job Requests
+
+Utilize the asynchronous capabilities of Python with `asyncio` for handling concurrent endpoint calls efficiently.
+
+```python
+import asyncio
+import aiohttp
+import runpod
+from runpod import AsyncioEndpoint, AsyncioJob
+# asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())  # For Windows users.
+
+
+import asyncio
+import aiohttp
+from runpod import AsyncioEndpoint, AsyncioJob
+
+async def main():
+    async with aiohttp.ClientSession() as session:
+        payload = {
+            "input": {
+                "prompt": "Hello World"
+            }
+        }
+        endpoint = AsyncioEndpoint("n74gtin2lgmieh", session)
+        job: AsyncioJob = await endpoint.run(payload)
+
+        # Polling job status
+        while True:
+            status = await job.status()
+            print(f"Current job status: {status}")
+            if status == "COMPLETED":
+                break
+            elif status == "FAILED":
+                print("Job failed.")
+                break
+            await asyncio.sleep(5)  # Wait for 5 seconds before polling again
+
+        # If job is complete, fetch the output
+        if status == "COMPLETED":
+            output = await job.output()
+            print("Job output:", output)
+        else:
+            print("Job did not complete successfully.")
+
+asyncio.run(main(), debug=True)
+````
+
+## Health Check
+
+Monitor the health of an endpoint by checking its status, including jobs completed, failed, in progress, in queue, and retried, as well as the status of workers.
+
+<Tabs>
+  <TabItem value="python" label="Python" default>
+```python
+import runpod
+import json
 
 endpoint = runpod.Endpoint("gwp4kx5yd3nur1")
 
 endpoint_health = endpoint.health()
 
-print(endpoint_health)
-```
+print(json.dumps(endpoint_health, indent=2))
+
+````
+  </TabItem>
+  <TabItem value="output" label="Output">
+```json
+{
+  "jobs": {
+    "completed": 100,
+    "failed": 0,
+    "inProgress": 0,
+    "inQueue": 0,
+    "retried": 0
+  },
+  "workers": {
+    "idle": 1,
+    "initializing": 0,
+    "ready": 1,
+    "running": 0,
+    "throttled": 0
+  }
+}
+````
+
+</TabItem>
+
+</Tabs>
 
 ## Streaming
 
-Example of Streaming your Endpoint.
+For endpoints that support streaming output, use the `stream` method to receive data as it becomes available.
 
 ```python
 import runpod
 
 endpoint = runpod.Endpoint("gwp4kx5yd3nur1")
 
-run_request = endpoint.run({
-    "input": {
-        "mock_return": ["a", "b", "c", "d", "e", "f", "g"],
-        "mock_delay": 1,
+run_request = endpoint.run(
+    {
+        "input": {
+            "mock_return": ["a", "b", "c", "d", "e", "f", "g"],
+            "mock_delay": 1,
+        }
     }
-})
+)
 
 for output in run_request.stream():
     print(output)

@@ -30,7 +30,7 @@ This example sends a response to the Endpoint using cURL; however, you can use a
 
 ```curl
 curl --request POST \
-     --url https://api.runpod.ai/v2/${YOUR_ENDPOINT}/runsync 
+     --url https://api.runpod.ai/v2/${YOUR_ENDPOINT}/runsync
      --header "accept: application/json" \
      --header "authorization: ${YOUR_API_KEY}" \
      --header "content-type: application/json" \

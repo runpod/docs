@@ -28,9 +28,7 @@ import runpod
 
 endpoint = runpod.Endpoint("YOUR_ENDPOINT_ID")
 
-endpoint.run(
-    {"input": "your custom prompt"}
-)
+endpoint.run({"input": "your custom prompt"})
 ```
 
 ---
@@ -43,9 +41,7 @@ import runpod
 
 endpoint = runpod.Endpoint("YOUR_ENDPOINT_ID")
 
-endpoint.run_sync(
-    {"input": "your custom prompt"}
-)
+endpoint.run_sync({"input": "your custom prompt"})
 ```
 
 You can also set a timeout on the `run_sync` request.
@@ -56,8 +52,5 @@ import runpod
 
 endpoint = runpod.Endpoint("YOUR_ENDPOINT_ID")
 
-endpoint.run_sync(
-    {"input": "your custom prompt"},
-    timeout=60
-)
+endpoint.run_sync({"input": "your custom prompt"}, timeout=60)
 ```

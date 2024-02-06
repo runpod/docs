@@ -285,7 +285,7 @@ You can run a server through Python or by opening the `index.html` page in your 
 
     Run the following command to start a server locally using Python.
 
-    ```python
+    ```command
     python -m http.server 8000
     ```
 
