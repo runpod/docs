@@ -17,7 +17,7 @@ runpod project create
 ```
 
 2. Select a starter project. Starter projects include preliminary settings for different kinds of project environments, such as LLM or image diffusion development.
-3. Check the base image for included dependencies.
+3. Check the [base image](https://github.com/runpod/containers/tree/main/official-templates/base) for included dependencies.
 4. (Optional) If you need dependencies that are not included or added by your starter project, add them to the generated `requirements.txt` file.
 5. Save your changes.
 
@@ -30,14 +30,14 @@ A development session is the active connection between your local environment an
 1. To start a development session, run the following command.
 
 ```
-runpod project dev
+runpodctl project dev
 ```
 
 2. When you're done developing, press `ctrl` + `c` to end the session. Your Pod will terminate automatically when the session ends.
 
 :::tip
 
-You can resume developing at any time by running `runpod project dev` again.
+You can resume developing at any time by running `runpodctl project dev` again.
 
 :::
 
@@ -50,19 +50,19 @@ When you deploy a project, RunPod creates a serverless endpoint with access to s
 To deploy a project, run the following command.
 
 ```
-runpod project deploy
+runpodctl project deploy
 ```
 
 You now have a serverless endpoint. To learn more, refer to [Endpoints](/docs/serverless/endpoints/).
 
 ## Build a project
 
-When you build a project, RunPod emits a Dockerfile.
+You have the option to build your project instead of deploying it as an endpoint. When you build a project, RunPod emits a Dockerfile.
 
 To build a project, run the following command.
 
 ```
-runpod project build
+runpodctl project build
 ```
 
 You can use the generated Dockerfile to build an image, then deploy the image to any API server.
