@@ -2,6 +2,7 @@
 title: "runpodctl"
 ---
 
+
 You can use RunPod's CLI [runpodctl](https://github.com/runpod/runpodctl) to manage Pods.
 
 The runpodctl is a tool for managing your GPU pods on RunPod.
@@ -16,6 +17,7 @@ Choose one of the following methods to install the RunPod CLI.
 ```bash
 wget --quiet --show-progress https://github.com/runpod/runpodctl/releases/download/v1.10.0/runpodctl-darwin-arm -O runpodctl && chmod +x runpodctl && sudo mv runpodctl /usr/local/bin/runpodctl
 ```
+
 
 **AMD**
 
@@ -43,7 +45,7 @@ wget https://github.com/runpod/runpodctl/releases/download/v1.10.0/runpodctl-win
 !cp runpodctl /usr/bin/runpodctl
 ```
 
-### Jupyter notebook
+###  Jupyter notebook
 
 ```bash
 !wget --quiet --show-progress https://github.com/Run-Pod/runpodctl/releases/download/v1.10.0/runpodctl-linux-amd -O runpodctl
@@ -51,28 +53,32 @@ wget https://github.com/runpod/runpodctl/releases/download/v1.10.0/runpodctl-win
 !cp runpodctl /usr/bin/runpodctl
 ```
 
+
 ## runpodctl
 
-runpodctl for runpod.io
+CLI for runpod.io
 
 ### Synopsis
 
-runpodctl is a CLI tool to manage your pods for runpod.io
+CLI tool to manage your pods for runpod.io
 
 ### Options
 
 ```
--h, --help   help for runpodctl
+  -h, --help   help for runpodctl
 ```
 
 ### SEE ALSO
 
-- [runpodctl config](runpodctl_config.md) - CLI Config
-- [runpodctl create](runpodctl_create.md) - create a resource
-- [runpodctl get](runpodctl_get.md) - get resource
-- [runpodctl receive](runpodctl_receive.md) - receive file(s), or folder
-- [runpodctl remove](runpodctl_remove.md) - remove a resource
-- [runpodctl send](runpodctl_send.md) - send file(s), or folder
-- [runpodctl start](runpodctl_start.md) - start a resource
-- [runpodctl stop](runpodctl_stop.md) - stop a resource
-- [runpodctl version](runpodctl_version.md) - runpodctl version
+* [runpodctl config](runpodctl_config.md)	 - CLI Config
+* [runpodctl create](runpodctl_create.md)	 - create a resource
+* [runpodctl get](runpodctl_get.md)	 - get resource
+* [runpodctl project](runpodctl_project.md)	 - manage projects
+* [runpodctl receive](runpodctl_receive.md)	 - receive file(s), or folder
+* [runpodctl remove](runpodctl_remove.md)	 - remove a resource
+* [runpodctl send](runpodctl_send.md)	 - send file(s), or folder
+* [runpodctl start](runpodctl_start.md)	 - start a resource
+* [runpodctl stop](runpodctl_stop.md)	 - stop a resource
+* [runpodctl update](runpodctl_update.md)	 - update runpodctl
+* [runpodctl version](runpodctl_version.md)	 - runpodctl version
+

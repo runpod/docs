@@ -1,7 +1,6 @@
 ---
 title: "Version"
 ---
-
 ## runpodctl version
 
 runpodctl version
@@ -17,9 +16,10 @@ runpodctl version [flags]
 ### Options
 
 ```
--h, --help   help for version
+  -h, --help   help for version
 ```
 
 ### SEE ALSO
 
-- [runpodctl](runpodctl.md) - runpodctl for runpod.io
+* [runpodctl](runpodctl.md)	 - CLI for runpod.io
+
