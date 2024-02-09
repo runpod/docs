@@ -31,8 +31,8 @@ To install runpodctl on your local machine, run the appropriate command for your
   <TabItem value="windows" label="Windows">
 
     ```bash
-    wget https://github.com/runpod/runpodctl/releases/download/v1.10.0/runpodctl-win-amd -O runpodctl.exe
-    ```
+    wget https://github.com/runpod/runpodctl/releases/download/v1.12.3/runpodctl-windows-amd64.exe -O runpodctl.exe
+   ```
 
   </TabItem>
 </Tabs>
