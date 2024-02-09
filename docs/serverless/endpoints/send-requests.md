@@ -44,21 +44,28 @@ A POST request will be sent to your URL when the job is complete. This request w
 
 ### 📜 | Execution Policy
 
-By default, if a job remains `IN_PROGRESS` for longer than 24 hours, the worker that has that job will be terminated. If you know the upper limit (with some margin) on how long a job should take, you can prevent stale or dead workers from running excessively by setting the execution timeout policy.
+By default, if a job remains `IN_PROGRESS` for longer than 24 hours, the worker that has that job will be terminated.
+This default behavior ensures that resources are not indefinitely consumed by stale or dead workers. To fine-tune the management of job lifecycles and prevent excessive resource consumption, you can set both the execution timeout and TTL (Time-to-Live) policies.
 
-Setting this policy will limit how long a worker remains `IN_PROGRESS` before the worker is killed.
+- **Execution Timeout**: Limits how long a worker can remain `IN_PROGRESS` before being terminated.
+    This is particularly useful for avoiding indefinite job processing.
+- **TTL**: Defines the total lifespan of a job, from its creation to automatic termination, regardless of its state.
+    This ensures that jobs do not remain in the system indefinitely.
 
 ```json
 {
   "input": {},
-	"policy":{
-    	"executionTimeout": int # time in milliseconds
-  	}
+  "policy": {
+    "executionTimeout": int, // Time in milliseconds
+    "TTL": int // Time in milliseconds
+  }
 }
 ```
 
-_Minimum: 5000ms\
-Default: 86400000ms (24 hours)_
+- **Minimum Execution Timeout**: 5000ms (5 seconds)
+- **Default Execution Timeout**: 86400000ms (24 hours), aligning with the default TTL to automatically terminate jobs that exceed this duration.
+
+By configuring both the execution timeout and TTL policies, you can have more control over job execution and system resource management, ensuring efficient operation and preventing resource wastage.
 
 ### 💾 | S3-Compatible Storage
 
