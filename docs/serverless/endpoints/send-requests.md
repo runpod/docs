@@ -49,6 +49,7 @@ This default behavior ensures that resources are not indefinitely consumed by st
 
 - **Execution Timeout**: Limits how long a worker can remain `IN_PROGRESS` before being terminated.
     This is particularly useful for avoiding indefinite job processing.
+- **Low Priority** Sets the priority of the job to low. This can be useful for jobs that are not time-sensitive and can be processed when resources are available.
 - **TTL**: Defines the total lifespan of a job, from its creation to automatic termination, regardless of its state.
     This ensures that jobs do not remain in the system indefinitely.
 
@@ -57,6 +58,7 @@ This default behavior ensures that resources are not indefinitely consumed by st
   "input": {},
   "policy": {
     "executionTimeout": int, // Time in milliseconds
+    "lowPriority": bool, // Sets the priority of the job to low
     "ttl": int // Time in milliseconds
   }
 }
