@@ -4,7 +4,9 @@ title: "Maintenance and reliability"
 
 ## Maintenance
 
-Hosts must currently schedule maintenance at least one week in advance and are able to program flash maintenance in the case their server is unrented. Users will get email reminders of upcoming maintenance that will occur on their active pods. Please contact RunPod on Discord or Slack if you are scheduling maintenance on more than a few machines so that we are aware of any major impacts to our customers.
+Hosts must currently schedule maintenance at least one week in advance and are able to program flash maintenance in the case their server is unrented.
+Users will get email reminders of upcoming maintenance that will occur on their active pods.
+Please contact RunPod on Discord or Slack if you are scheduling maintenance on more than a few machines so that we are aware of any major impacts to our customers.
 
 Here are some things to keep in mind.
 
@@ -21,13 +23,11 @@ Reliability is currently calculated as follows:
 
 <!-- the $ is for math equations -->
 
-$( total minutes + small buffer ) / total minutes in interval$
+`( total minutes + small buffer ) / total minutes in interval`
 
 This means that if you have 30 minutes of network downtime on the first of the month, your reliability will be calculated as:
 
-<!-- the $ is for math equations -->
-
-$( 43200 - 30 + 10 ) / 43200 = 99.95%$
+`( 43200 - 30 + 10 ) / 43200 = 99.95%`
 
 Based on approximately 43200 minutes per month and a 10 minute buffer.
 We include the buffer because we do incur small single-minute uptime dings once in a while due to agent upgrades and such.
