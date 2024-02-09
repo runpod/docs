@@ -57,7 +57,7 @@ This default behavior ensures that resources are not indefinitely consumed by st
   "input": {},
   "policy": {
     "executionTimeout": int, // Time in milliseconds
-    "TTL": int // Time in milliseconds
+    "ttl": int // Time in milliseconds
   }
 }
 ```
