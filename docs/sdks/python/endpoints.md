@@ -63,12 +63,8 @@ endpoint = runpod.Endpoint("sdxl")  # Replace "sdxl" with your endpoint ID.
 
 try:
     run_request = endpoint.run_sync(
-        {
-            "input": {
-                "prompt": "a photo of a horse the size of a Boeing 787"
-            }
-        },
-        timeout=60  # Timeout in seconds.
+        {"input": {"prompt": "a photo of a horse the size of a Boeing 787"}},
+        timeout=60,  # Timeout in seconds.
     )
 
     print(run_request)
@@ -87,11 +83,7 @@ import os
 
 runpod.api_key = os.getenv("RUNPOD_API_KEY")
 log = runpod.RunPodLogger()
-input_payload = {
-    "input": {
-        "prompt": "Hello, World!"
-    }
-}
+input_payload = {"input": {"prompt": "Hello, World!"}}
 
 try:
     endpoint = runpod.Endpoint("n74gtin2lgmieh")
@@ -121,18 +113,16 @@ import aiohttp
 import os
 import runpod
 from runpod import AsyncioEndpoint, AsyncioJob
+
 # asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())  # For Windows users.
 
 
 runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
+
 async def main():
     async with aiohttp.ClientSession() as session:
-        payload = {
-            "input": {
-                "prompt": "Hello World"
-            }
-        }
+        payload = {"input": {"prompt": "Hello World"}}
         endpoint = AsyncioEndpoint("n74gtin2lgmieh", session)
         job: AsyncioJob = await endpoint.run(payload)
 
@@ -153,6 +143,7 @@ async def main():
             print("Job output:", output)
         else:
             print("Job did not complete successfully.")
+
 
 asyncio.run(main(), debug=True)
 ```

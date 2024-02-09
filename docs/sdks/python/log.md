@@ -26,19 +26,21 @@ runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
 log = runpod.RunPodLogger()
 
+
 def handler(job):
     try:
-        job_input = job['input']
-        log.info('Processing job input')
+        job_input = job["input"]
+        log.info("Processing job input")
 
-        name = job_input.get('name', 'World')
-        log.info('Processing completed successfully')
+        name = job_input.get("name", "World")
+        log.info("Processing completed successfully")
 
         return f"Hello, {name}!"
     except Exception as e:
         # Log the exception with an error level log
         log.error(f"An error occurred: {str(e)}")
         return "An error occurred during processing."
+
 
 runpod.serverless.start({"handler": handler})
 ```
