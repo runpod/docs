@@ -15,9 +15,7 @@ This guide provides an approach to get you up and running.
 Using virtual environments for Python project development is highly recommended.
 Virtual environments allow you to manage dependencies for different projects separately, avoiding conflicts between project requirements.
 
-It's recommend to use virtual environments when developing Python projects.
-
-To get started, install setup a virtual environment then install the SDK library.
+To get started, install setup a virtual environment then install the RunPod SDK library.
 
 <Tabs>
   <TabItem value="macos" label="macOS" default>
@@ -76,7 +74,7 @@ Now that you've installed the RunPod SDK, add your API key.
 
 ## Add your API key
 
-Set `api_key` and reference its variable directly in your Python application.
+Set `api_key` and reference its variable in your Python application.
 This authenticates your requests to the RunPod platform and allows you to access the RunPod API.
 
 ```python
@@ -91,6 +89,12 @@ runpod.api_key = os.getenv("RUNPOD_API_KEY")
 It's recommended to use environment variables to set your API key.
 You shouldn't load your API key directly into your code.
 
-For these examples, the API key is loaded from an environment variable called `RUNPOD_API_KEY`.
+For these examples, the API key loads from an environment variable called `RUNPOD_API_KEY`.
 
 :::
+
+For more information, see:
+
+- [APIs](/sdks/python/apis)
+- [Endpoints](/sdks/python/endpoints)
+- [Logging](/sdks/python/log)

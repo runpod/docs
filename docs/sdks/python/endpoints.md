@@ -5,25 +5,59 @@ title: Endpoints
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-This documentation provides detailed instructions on how to use the RunPod Python Language Library to interact with various endpoints.
-With this library, you can perform synchronous and asynchronous operations, stream data, and check the health status of endpoints.
+This documentation provides detailed instructions on how to use the RunPod Python SDK to interact with various endpoints.
+You can perform synchronous and asynchronous operations, stream data, and check the health status of endpoints.
 
 ## Prerequisites
 
 Before using the RunPod Python, ensure that you have:
 
-- Installed the RunPod Python package.
+- Installed the RunPod Python SDK.
 - Configured your API key.
 
-## Run Synchronously
+## Set your Endpoint Id
 
-To execute an endpoint synchronously and wait for the result, use the `run_sync` method. This method blocks the execution until the endpoint run is complete or until it times out.
+Pass your Endpoint Id on the `Endpoint` class.
 
 ```python
 import runpod
+import os
 
-# Set your global API key:
-# runpod.api_key = "YOUR_RUNPOD_API_KEY"
+runpod.api_key = os.getenv("RUNPOD_API_KEY")
+
+endpoint = runpod.Endpoint("YOUR_ENDPOINT_ID")
+```
+
+This allows all calls to pass through your Endpoint Id with a valid API key.
+
+## Run the Endpoint
+
+Run the Endpoint with the either the asynchronous `run` or synchronous `run_sync` method.
+
+Choosing between asynchronous and synchronous execution hinges on your task's needs and application design.
+
+- **Asynchronous methods**: Choose the asynchronous method for handling tasks efficiently, especially when immediate feedback isn't crucial.
+  They allow your application to stay responsive by running time-consuming operations in the background, ideal for:
+  - **Non-blocking calls**: Keep your application active while waiting on long processes.
+  - **Long-running operations**: Avoid timeouts on tasks over 30 seconds, letting your app's workflow continue smoothly.
+  - **Job tracking**: Get a Job Id to monitor task status, useful for complex or delayed-result operations.
+
+- **Synchronous methods**: Choose the synchronous method for these when your application requires immediate results from operations.
+  They're best for:
+  - **Immediate results**: Necessary for operations where quick outcomes are essential to continue with your app's logic.
+  - **Short operations**: Ideal for tasks under 30 seconds to prevent application delays.
+  - **Simplicity and control**: Provides a straightforward execution process, with timeout settings for better operational control.
+
+### Run Synchronously
+
+To execute an endpoint synchronously and wait for the result, use the `run_sync` method.
+This method blocks the execution until the endpoint run is complete or until it times out.
+
+```python
+import runpod
+import os
+
+runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
 endpoint = runpod.Endpoint("sdxl")  # Replace "sdxl" with your endpoint ID.
 
@@ -42,15 +76,16 @@ except TimeoutError:
     print("Job timed out.")
 ```
 
-## Run Asynchronously
+### Run Asynchronously
 
 For non-blocking operations, use the `run` method.
 This method allows you to start an endpoint run and then check its status or wait for its completion at a later time.
 
-````python
+```python
 import runpod
-# Set your global API key:
-# runpod.api_key = "YOUR_RUNPOD_API_KEY"
+import os
+
+runpod.api_key = os.getenv("RUNPOD_API_KEY")
 log = runpod.RunPodLogger()
 input_payload = {
     "input": {
@@ -74,22 +109,22 @@ try:
     log.info(f"Job output: {output}")
 except Exception as e:
     log.error(f"An error occurred: {e}")
+```
 
-## Async Job Requests
+### Async Job Requests
 
 Utilize the asynchronous capabilities of Python with `asyncio` for handling concurrent endpoint calls efficiently.
 
 ```python
 import asyncio
 import aiohttp
+import os
 import runpod
 from runpod import AsyncioEndpoint, AsyncioJob
 # asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())  # For Windows users.
 
 
-import asyncio
-import aiohttp
-from runpod import AsyncioEndpoint, AsyncioJob
+runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
 async def main():
     async with aiohttp.ClientSession() as session:
@@ -120,7 +155,7 @@ async def main():
             print("Job did not complete successfully.")
 
 asyncio.run(main(), debug=True)
-````
+```
 
 ## Health Check
 
@@ -128,19 +163,24 @@ Monitor the health of an endpoint by checking its status, including jobs complet
 
 <Tabs>
   <TabItem value="python" label="Python" default>
+
 ```python
 import runpod
 import json
+import os
+
+runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
 endpoint = runpod.Endpoint("gwp4kx5yd3nur1")
 
 endpoint_health = endpoint.health()
 
 print(json.dumps(endpoint_health, indent=2))
+```
 
-````
-  </TabItem>
+</TabItem>
   <TabItem value="output" label="Output">
+
 ```json
 {
   "jobs": {
@@ -158,7 +198,7 @@ print(json.dumps(endpoint_health, indent=2))
     "throttled": 0
   }
 }
-````
+```
 
 </TabItem>
 
@@ -170,6 +210,9 @@ For endpoints that support streaming output, use the `stream` method to receive 
 
 ```python
 import runpod
+import os
+
+runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
 endpoint = runpod.Endpoint("gwp4kx5yd3nur1")
 

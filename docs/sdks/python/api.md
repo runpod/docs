@@ -5,15 +5,19 @@ title: API
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-This document outlines the core functionalities provided by the RunPod API, including how to interact with endpoints, manage templates, create endpoints, and list available GPUs.
-These operations enable users to dynamically manage their computational resources within the RunPod environment.
+This document outlines the core functionalities provided by the RunPod API, including how to interact with Endpoints, manage Templates, and list available GPUs.
+These operations let you dynamically manage computational resources within the RunPod environment.
 
 ## Get Endpoints
 
-To retrieve a comprehensive list of all available endpoint configurations within RunPod, you can use the `get_endpoints()` function. This function returns a list of endpoint configurations, allowing you to understand what's available for use in your projects.
+To retrieve a comprehensive list of all available endpoint configurations within RunPod, you can use the `get_endpoints()` function.
+This function returns a list of endpoint configurations, allowing you to understand what's available for use in your projects.
 
 ```python
 import runpod
+import os
+
+runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
 # Fetching all available endpoints
 endpoints = runpod.get_endpoints()
@@ -24,10 +28,14 @@ print(endpoints)
 
 ## Create Template
 
-Templates in RunPod serve as predefined configurations for setting up environments efficiently. The `create_template()` function facilitates the creation of new templates by specifying a name and a Docker image.
+Templates in RunPod serve as predefined configurations for setting up environments efficiently.
+The `create_template()` function facilitates the creation of new templates by specifying a name and a Docker image.
 
 ```python
 import runpod
+import os
+
+runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
 try:
     # Creating a new template with a specified name and Docker image
@@ -44,13 +52,18 @@ except runpod.error.QueryError as err:
 
 ## Create Endpoint
 
-Creating a new endpoint is straightforward with the `create_endpoint()` function. This function requires specifying a `name` and a `template_id`. Additional configurations such as GPUs, number of Workers, and more can also be specified to tailor the endpoint to your specific needs.
+Creating a new endpoint with the `create_endpoint()` function.
+This function requires you to specify a `name` and a `template_id`.
+Additional configurations such as GPUs, number of Workers, and more can also be specified depending your requirements.
 
 <Tabs>
   <TabItem value="python" label="Python" default>
 
 ```python
 import runpod
+import os
+
+runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
 try:
     # Creating a template to use with the new endpoint
@@ -123,6 +136,9 @@ For understanding the computational resources available, the `get_gpus()` functi
 ```python
 import runpod
 import json
+import os
+
+runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
 # Fetching all available GPUs
 gpus = runpod.get_gpus()
@@ -164,6 +180,9 @@ This is useful when understanding the capabilities and costs associated with var
 ```python
 import runpod
 import json
+import os
+
+runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
 gpus = runpod.get_gpu("NVIDIA A100 80GB PCIe")
 
