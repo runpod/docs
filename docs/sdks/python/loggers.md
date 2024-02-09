@@ -51,12 +51,6 @@ RunPod provides a logging interface with types you're already familiar with.
 
 The following provides a list of log levels you can set inside your application.
 
-## Log Levels in RunPod
-
-RunPod offers a structured logging interface, simplifying application monitoring and debugging with intuitive log levels.
-
-### Log Levels Overview
-
 - `debug`: For in-depth troubleshooting. Use during development to track execution flow.
 - `info`: (default) Indicates normal operation. Confirms the application is running as expected.
 - `warn`: Alerts to potential issues. Signals unexpected but non-critical events.

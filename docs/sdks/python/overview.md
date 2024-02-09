@@ -97,4 +97,4 @@ For more information, see:
 
 - [APIs](/sdks/python/apis)
 - [Endpoints](/sdks/python/endpoints)
-- [Logging](/sdks/python/log)
+- [Loggers](/sdks/python/loggers)

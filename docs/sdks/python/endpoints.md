@@ -48,7 +48,7 @@ Choosing between asynchronous and synchronous execution hinges on your task's ne
   - **Short operations**: Ideal for tasks under 30 seconds to prevent application delays.
   - **Simplicity and control**: Provides a straightforward execution process, with timeout settings for better operational control.
 
-### Run Synchronously
+### Run synchronously
 
 To execute an endpoint synchronously and wait for the result, use the `run_sync` method.
 This method blocks the execution until the endpoint run is complete or until it times out.
@@ -72,10 +72,19 @@ except TimeoutError:
     print("Job timed out.")
 ```
 
-### Run Asynchronously
+### Run asynchronously
+
+Asynchronous execution allows for non-blocking operations, enabling your code to perform other tasks while waiting for an operation to complete.
+RunPod supports both standard asynchronous execution and advanced asynchronous programming with Python's [asyncio](https://docs.python.org/3/library/asyncio.html) framework.
+
+Depending on your application's needs, you can choose the approach that best suits your scenario.
 
 For non-blocking operations, use the `run` method.
 This method allows you to start an endpoint run and then check its status or wait for its completion at a later time.
+
+#### Asynchronous execution
+
+This executes a standard Python environment without requiring an asynchronous event loop.
 
 ```python
 import runpod
@@ -103,9 +112,11 @@ except Exception as e:
     log.error(f"An error occurred: {e}")
 ```
 
-### Async Job Requests
+#### Asynchronous execution with asyncio
 
-Utilize the asynchronous capabilities of Python with `asyncio` for handling concurrent endpoint calls efficiently.
+Use Python's `asyncio` library for handling concurrent Endpoint calls efficiently.
+This method embraces Python's asyncio framework for asynchronous programming, requiring functions to be defined with async and called with await.
+This approach is inherently non-blocking and is built to handle concurrency efficiently.
 
 ```python
 import asyncio
@@ -148,7 +159,7 @@ async def main():
 asyncio.run(main(), debug=True)
 ```
 
-## Health Check
+## Health check
 
 Monitor the health of an endpoint by checking its status, including jobs completed, failed, in progress, in queue, and retried, as well as the status of workers.
 

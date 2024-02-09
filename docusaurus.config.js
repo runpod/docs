@@ -4,7 +4,9 @@
 // There are various equivalent ways to declare your Docusaurus config.
 // See: https://docusaurus.io/docs/api/docusaurus-config
 import { injectSpeedInsights } from "@vercel/speed-insights";
-
+const {
+  remarkCodeHike,
+} = require("@code-hike/mdx");
 import path from "path";
 import { themes as prismThemes } from "prism-react-renderer";
 
@@ -42,6 +44,9 @@ const config = {
           // Remove this to remove the "edit this page" links.
           routeBasePath: "",
           editUrl: "https://github.com/runpod/docs/blob/main",
+          beforeDefaultRemarkPlugins: [
+            [remarkCodeHike, { theme: "nord" }],
+          ],
         },
         /*
         blog: {
@@ -55,6 +60,7 @@ const config = {
         theme: {
           customCss: [
             "./src/css/custom.css",
+            require.resolve("@code-hike/mdx/styles.css"),
           ],
         },
       }),
