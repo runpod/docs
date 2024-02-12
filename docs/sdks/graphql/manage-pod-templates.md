@@ -7,13 +7,13 @@ import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
 Requrired arguments:
+
 - `containerDiskInGb`
 - `dockerArgs`
 - `env`
 - `imageName`
 - `name`
 - `volumeInGb`
-
 
 All other arguments are optional.
 

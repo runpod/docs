@@ -38,7 +38,16 @@ Create a Python virtual environment with [venv](https://docs.python.org/3/librar
     ```
 
 </TabItem>
+  <TabItem value="linux" label="Linux">
 
+Create a Python virtual environment with [venv](https://docs.python.org/3/library/venv.html):
+
+    ```command
+    python3 -m venv env
+    source env/bin/activate
+    ```
+
+</TabItem>
 </Tabs>
 
 To install the SDK, run the following command from the terminal.
@@ -46,6 +55,10 @@ To install the SDK, run the following command from the terminal.
 ```command
 python -m pip install runpod
 ```
+
+<!--
+pip uninstall -y runpod
+-->
 
 You should have the RunPod SDK installed and ready to use.
 

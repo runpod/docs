@@ -22,8 +22,6 @@ In the following example, there are two logs levels being set.
 import runpod
 import os
 
-runpod.api_key = os.getenv("RUNPOD_API_KEY")
-
 log = runpod.RunPodLogger()
 
 

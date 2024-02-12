@@ -1,5 +1,7 @@
 ---
-title: API
+title: API Wrapper
+id: api
+sidebar_label: API
 ---
 
 import Tabs from '@theme/Tabs';

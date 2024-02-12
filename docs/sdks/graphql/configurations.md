@@ -41,7 +41,6 @@ When configuring your environment, certain arguments are essential to ensure the
 - **Type**: Integer
 - **Example**: `5` for a 5GB persistent volume.
 
-
 Ensure that these arguments are correctly specified in your configuration to avoid errors during deployment.
 
 Optional arguments may also be available, providing additional customization and flexibility for your setup.
