@@ -47,7 +47,7 @@ runpodctl create pods \
   --containerDiskSize 10 \
   --volumeSize 0 \
   --mem 1 \
-  --args "bash -c 'your-bash-command'
+  --args "bash -c 'your-bash-command'"
 ```
 
 </TabItem>
