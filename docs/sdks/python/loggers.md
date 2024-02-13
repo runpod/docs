@@ -5,7 +5,7 @@ title: Loggers
 Logging is essential for insight into your application's performance and health.
 It facilitates quick identification and resolution of issues, ensuring smooth operation.
 
-Because of this, RunPod provides a structured logging interface, simplifying application monitoring and debugging.
+Because of this, RunPod provides a structured logging interface, simplifying application monitoring and debugging, for your Handler code.
 
 To setup logs, instantiate the `RunPodLogger()` module.
 
