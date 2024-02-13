@@ -1,7 +1,6 @@
 ---
 title: "Remove"
 ---
-
 ## runpodctl remove
 
 remove a resource
@@ -13,11 +12,12 @@ remove a resource in runpod.io
 ### Options
 
 ```
--h, --help   help for remove
+  -h, --help   help for remove
 ```
 
 ### SEE ALSO
 
-- [runpodctl](runpodctl.md) - runpodctl for runpod.io
-- [runpodctl remove pod](runpodctl_remove_pod.md) - remove a pod
-- [runpodctl remove pods](runpodctl_remove_pods.md) - remove all pods using name
+* [runpodctl](runpodctl.md)	 - CLI for runpod.io
+* [runpodctl remove pod](runpodctl_remove_pod.md)	 - remove a pod
+* [runpodctl remove pods](runpodctl_remove_pods.md)	 - remove all pods using name
+

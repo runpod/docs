@@ -47,7 +47,7 @@ else:
 
 # 2. Move Markdown files
 print("Moving Markdown files...")
-source_dir = "runpodctl/doc/"
+source_dir = "runpodctl/docs/"
 target_dir = "docs/references/runpodctl/"
 os.makedirs(target_dir, exist_ok=True)
 for md_file in glob.glob(f"{source_dir}*.md"):

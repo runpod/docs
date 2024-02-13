@@ -1,7 +1,6 @@
 ---
 title: "Get"
 ---
-
 ## runpodctl get
 
 get resource
@@ -13,11 +12,12 @@ get resources for pods
 ### Options
 
 ```
--h, --help   help for get
+  -h, --help   help for get
 ```
 
 ### SEE ALSO
 
-- [runpodctl](runpodctl.md) - runpodctl for runpod.io
-- [runpodctl get cloud](runpodctl_get_cloud.md) - get all cloud gpus
-- [runpodctl get pod](runpodctl_get_pod.md) - get all pods
+* [runpodctl](runpodctl.md)	 - CLI for runpod.io
+* [runpodctl get cloud](runpodctl_get_cloud.md)	 - get all cloud gpus
+* [runpodctl get pod](runpodctl_get_pod.md)	 - get all pods
+
