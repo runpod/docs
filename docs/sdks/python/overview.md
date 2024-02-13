@@ -88,7 +88,7 @@ Now that you've installed the RunPod SDK, add your API key.
 ## Add your API key
 
 Set `api_key` and reference its variable in your Python application.
-This authenticates your requests to the RunPod platform and allows you to access the RunPod API.
+This authenticates your requests to the RunPod platform and allows you to access the [RunPod API](/sdks/python/apis).
 
 ```python
 import runpod
@@ -105,6 +105,8 @@ You shouldn't load your API key directly into your code.
 For these examples, the API key loads from an environment variable called `RUNPOD_API_KEY`.
 
 :::
+
+Now that you've have the RunPod Python SDK installed and configured, you can start using the RunPod platform.
 
 For more information, see:
 

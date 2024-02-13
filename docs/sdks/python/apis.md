@@ -1,7 +1,7 @@
 ---
 title: API Wrapper
-id: api
-sidebar_label: API
+id: apis
+sidebar_label: APIs
 ---
 
 import Tabs from '@theme/Tabs';
