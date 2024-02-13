@@ -6,7 +6,7 @@ sidebar_position: 2
 
 Once you have a Handler Function, the next step will be to package it into a Docker image that can be deployed as a scalable serverless worker. This is accomplished by defining a docker file to import everything required to run your handler. Example docker files are in the [repos of our runpod-workers](https://github.com/orgs/runpod-workers/repositories).
 
-_Unfamiliar with Docker? Check out their [overview page](https://docs.docker.com/get-started/overview/) or see out guide on [Containers](/category/containers)._
+_Unfamiliar with Docker? Check out Docker's [overview page](https://docs.docker.com/get-started/overview/) or see our guide on [Containers](/category/containers)._
 
 ## Docker File
 
