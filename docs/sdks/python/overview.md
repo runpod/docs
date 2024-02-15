@@ -6,13 +6,13 @@ sidebar_position: 1
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-Get started with setting up your Python projects using RunPod.
+Get started with setting up your RunPod projects using Python.
 Depending on the specific needs of your project, there are various ways to interact with the RunPod platform.
 This guide provides an approach to get you up and running.
 
 ## Install the RunPod SDK
 
-Using virtual environments for Python project development is highly recommended.
+Create a Python virtual environment to install the RunPod SDK library.
 Virtual environments allow you to manage dependencies for different projects separately, avoiding conflicts between project requirements.
 
 To get started, install setup a virtual environment then install the RunPod SDK library.
