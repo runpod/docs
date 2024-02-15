@@ -34,7 +34,7 @@ Using Docker images helps in various stages of software development, including t
 
 You must rebuild and push the container image, then edit your endpoint to use the new image each time you iterate on your code. Since development requires changing your code every time you need to troubleshoot a problem or add a feature, this workflow can be inconvenient.
 
-For a streamlined development workflow, check out [RunPod projects](/docs/projects/overview.md). When you're done with development, you can create a Dockerfile from your project to reduce initialization overhead in production.
+For a streamlined development workflow, check out [RunPod projects](/docs/projects/overview). When you're done with development, you can create a Dockerfile from your project to reduce initialization overhead in production.
 
 ### What is Docker Hub?
 
