@@ -43,15 +43,16 @@ For example, to start up to 10 Pods with the name `bulk-task` on 3070 and 3080 G
 runpodctl create pods \
   --name bulk-task \
   --gpuType "NVIDIA GeForce RTX 3070,NVIDIA GeForce RTX 3080" \
-  --imageName "runpod/your-image-name" \ 
-  --containerDiskSize 10 \ 
-  --volumeSize 0 \ 
+  --imageName "runpod/your-image-name" \
+  --containerDiskSize 10 \
+  --volumeSize 0 \
   --mem 1 \
---args "bash -c 'your-bash-command'
+  --args "bash -c 'your-bash-command'"
 ```
 
 </TabItem>
 </Tabs>
+
 ## Stop a Pod
 
 <Tabs groupId="interface">
@@ -63,29 +64,41 @@ runpodctl create pods \
 
 <TabItem value="cli" label="Command line">
     To stop a Pod, enter the following command.
+
     ```bash
     runpodctl stop pod $RUNPOD_POD_ID
     ```
 
-    You can also stop a Pod after a specific amount of time. For example, the following command sleeps for 2 hours, and then stops the Pod.
+</TabItem>
+
+</Tabs>
+
+### Stop a Pod after a specific time
+
+You can also stop a Pod after a specific amount of time.
+For example, the following command sleeps for 2 hours, and then stops the Pod.
 
       <Tabs>
         <TabItem value="ssh" label="SSH">
+
+          Use the following command to stop a Pod after 2 hours:
+
           ```bash
           sleep 2h; runpodctl stop pod $RUNPOD_POD_ID &
           ```
+          This command uses sleep to wait for 2 hours before executing the `runpodctl stop pod` command to stop the Pod.
+          The `&` at the end runs the command in the background, allowing you to continue using the SSH session.
         </TabItem>
         <TabItem value="web-terminal" label="Web terminal">
+
+          To stop a Pod after 2 hours using the web terminal, enter:
+
           ```bash
-          nohup bash -c "sleep 2h; runpodctl stop pod $RUNPOD_POD_ID" &          
+          nohup bash -c "sleep 2h; runpodctl stop pod $RUNPOD_POD_ID" &
           ```
           `nohup` ensures the process continues running if you close the web terminal window.
         </TabItem>
       </Tabs>
-
-</TabItem>
-
-</Tabs>
 
 :::warning
 

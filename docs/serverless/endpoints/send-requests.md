@@ -44,21 +44,26 @@ A POST request will be sent to your URL when the job is complete. This request w
 
 ### 📜 | Execution Policy
 
-By default, if a job remains `IN_PROGRESS` for longer than 24 hours, the worker that has that job will be terminated. If you know the upper limit (with some margin) on how long a job should take, you can prevent stale or dead workers from running excessively by setting the execution timeout policy.
+By default, if a job remains `IN_PROGRESS` for longer than 24 hours without completion, it's automatically terminated.
+This default behavior ensures that resources aren't indefinitely consumed by jobs that are unable to complete.
+To customize the management of job lifecycles and resource consumption, the following policies can be configured:
 
-Setting this policy will limit how long a worker remains `IN_PROGRESS` before the worker is killed.
+- **Execution Timeout**: Specifies the maximum duration a job can run before it's automatically terminated. This limit helps prevent jobs from running indefinitely and consuming resources unnecessarily.
+- **Low Priority**: When set, the job is marked as low priority. This option is ideal for non-time-sensitive tasks that don't require immediate execution. Low priority jobs won't trigger a scale-up of resources and only execute when higher priority jobs aren't pending. When the queue is empty, low priority jobs are executed.
+- **TTL (Time-to-Live)**: Defines the maximum time a job can remain in the queue before it's automatically terminated. This parameter ensures that jobs don't stay in the queue indefinitely.
 
 ```json
 {
   "input": {},
-	"policy":{
-    	"executionTimeout": int # time in milliseconds
-  	}
+  "policy": {
+    "executionTimeout": int, // Time in milliseconds. Must be greater than 5 seconds.
+    "lowPriority": bool, // Sets the job's priority to low. Default behavior escalates to high under certain conditions.
+    "ttl": int // Time in milliseconds. Must be greater than or equal to 10 seconds. Default is 24 hours. Maximum is one week.
+  }
 }
 ```
 
-_Minimum: 5000ms\
-Default: 86400000ms (24 hours)_
+By configuring both the execution timeout and TTL policies, you can have more control over job execution and system resource management, ensuring efficient operation and preventing resource wastage.
 
 ### 💾 | S3-Compatible Storage
 

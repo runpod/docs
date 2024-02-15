@@ -1,7 +1,6 @@
 ---
 title: "Config"
 ---
-
 ## runpodctl config
 
 CLI Config
@@ -17,11 +16,12 @@ runpodctl config [flags]
 ### Options
 
 ```
-    --apiKey string   runpod api key
-    --apiUrl string   runpod api url
--h, --help            help for config
+      --apiKey string   RunPod API key
+      --apiUrl string   RunPod API URL (default "https://api.runpod.io/graphql")
+  -h, --help            help for config
 ```
 
 ### SEE ALSO
 
-- [runpodctl](runpodctl.md) - runpodctl for runpod.io
+* [runpodctl](runpodctl.md)	 - CLI for runpod.io
+
