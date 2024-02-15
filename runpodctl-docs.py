@@ -1,4 +1,5 @@
 import os
+
 from helpers import install_steps
 
 """
@@ -15,9 +16,9 @@ function will run the command and return the output as a string
 checking for an existing Git module, moving Markdown files, editing Markdown files, and cleaning up.
 The script prints messages to indicate the progress and completion of each operation.
 """
-import subprocess
 import glob
 import re
+import subprocess
 
 
 # Function to run shell commands

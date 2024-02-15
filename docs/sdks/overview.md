@@ -7,24 +7,7 @@ sidebar_position: 1
 RunPod SDKs provide developers with tools to use the RunPod API for creating serverless functions and managing infrastructure.
 They enable custom logic integration, simplify deployments, and allow for programmatic infrastructure management.
 
-## Serverless Functions
-
-Serverless functions allow you to execute code in response to events without the need to manage server infrastructure.
-
-### Creating Serverless Functions
-
-With the RunPod SDKs, you can create serverless functions by writing custom handlers.
-
-These handlers define the logic executed when the function is invoked.
-
-1. **Set up environment**: Ensure the RunPod SDK is installed and configured in your development environment.
-2. **Write a Handler Function**: Define the logic you want to execute.
-   The handler function acts as the entry point for your serverless function.
-3. **Deploy the Function**: Use the RunPod SDK to deploy your serverless function.
-   This typically involves specifying the handler, runtime, and any dependencies.
-4. **Test the Function**: Invoke your function manually or through an event to test its behavior.
-
-### Interacting with Serverless Endpoints
+## Interacting with Serverless Endpoints
 
 Once deployed, serverless functions is exposed as an Endpoints, you can allow external applications to interact with them through HTTP requests.
 

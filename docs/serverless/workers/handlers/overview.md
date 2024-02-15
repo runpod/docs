@@ -9,6 +9,24 @@ The Handler Function is responsible for processing submitted inputs and generati
 
 Example Handler Functions can be found within the [repos of our runpod-workers](https://github.com/orgs/runpod-workers/repositories).
 
+## Handler Functions
+
+Handler Functions allow you to execute code in response to events without the need to manage server infrastructure.
+
+### Creating Handler Functions
+
+With the RunPod SDKs, you can create Handler Functions by writing custom handlers.
+
+These handlers define the logic executed when the function is invoked.
+
+1. **Set up environment**: Ensure the RunPod SDK is installed and configured in your development environment.
+2. **Write a Handler Function**: Define the logic you want to execute.
+   The handler function acts as the entry point for your serverless function.
+3. **Deploy the Function**: Use the RunPod SDK to deploy your serverless function.
+   This typically involves specifying the handler, runtime, and any dependencies.
+4. **Test the Function**: Invoke your function manually or through an event to test its behavior.
+
+
 ## Why use Handler Functions?
 
 Handler Functions offer a paradigm shift in how you approach backend code execution:

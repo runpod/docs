@@ -64,25 +64,62 @@ You should have the RunPod SDK installed and ready to use.
 
 ## Get RunPod SDK version
 
-To ensure you've setup your installation correctly, get the RunPod SDK version.
-Create a new file called `main.py`.
-Add the following to your Python file and execute the script.
+To ensure you've setup your RunPod SDK in Python, choose from one of the following methods to print the RunPod Python SDK version to your terminal.
 
-```python
-import runpod
+<Tabs>
+  <TabItem value="pip" label="Pip" default>
 
-version = runpod.version.get_version()
+    Run the following command using pip to get the RunPod SDK version.
+    
+    ```command
+    pip show runpod
+    ```
+    
+    You should see something similar to the following output.
+    
+    ```command
+    runpod==1.6.1
+    ```
 
-print(f"RunPod version number: {version}")
-```
+</TabItem>
+  <TabItem value="shell" label="Shell">
 
-You should see something similar to the following output.
+    Run the following command from your terminal to get the RunPod SDK version.
+    
+    ```command
+    python3 -c "import runpod; print(runpod.__version__)"
+    ```
+    
 
-```text
-RunPod version number: 1.X.0
-```
+</TabItem>
+  <TabItem value="python" label="Python">
+
+    To ensure you've setup your installation correctly, get the RunPod SDK version.
+    Create a new file called `main.py`.
+    Add the following to your Python file and execute the script.
+    
+    ```python
+    import runpod
+    
+    version = runpod.version.get_version()
+    
+    print(f"RunPod version number: {version}")
+    ```
+    
+    You should see something similar to the following output.
+    
+    ```text
+    RunPod version number: 1.X.0
+    ```
+
+</TabItem>
+</Tabs>
+
+
+
 
 You can find the latest version of the RunPod Python SDK on [GitHub](https://github.com/runpod/runpod-python/releases).
+
 Now that you've installed the RunPod SDK, add your API key.
 
 ## Add your API key
@@ -112,4 +149,3 @@ For more information, see:
 
 - [APIs](/sdks/python/apis)
 - [Endpoints](/sdks/python/endpoints)
-- [Loggers](/sdks/python/loggers)

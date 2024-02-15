@@ -91,7 +91,7 @@ import runpod
 import os
 
 runpod.api_key = os.getenv("RUNPOD_API_KEY")
-log = runpod.RunPodLogger()
+
 input_payload = {"input": {"prompt": "Hello, World!"}}
 
 try:
@@ -100,16 +100,16 @@ try:
 
     # Initial check without blocking, useful for quick tasks
     status = run_request.status()
-    log.info(f"Initial job status: {status}")
+    print(f"Initial job status: {status}")
 
     if status != "COMPLETED":
         # Polling with timeout for long-running tasks
         output = run_request.output(timeout=60)
     else:
         output = run_request.output()
-    log.info(f"Job output: {output}")
+    print(f"Job output: {output}")
 except Exception as e:
-    log.error(f"An error occurred: {e}")
+    print(f"An error occurred: {e}")
 ```
 
 #### Asynchronous execution with asyncio
