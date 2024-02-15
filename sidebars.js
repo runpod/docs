@@ -80,7 +80,7 @@ module.exports = {
         {
           "type": "link",
           "label": "GraphQL Spec",
-          "href": "https://graphql-spec.runpod.io"
+          "href": "https://graphql-spec.runpod.io",
         },
       ],
     },

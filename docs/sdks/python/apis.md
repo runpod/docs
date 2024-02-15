@@ -33,9 +33,13 @@ print(endpoints)
 Templates in RunPod serve as predefined configurations for setting up environments efficiently.
 The `create_template()` function facilitates the creation of new templates by specifying a name and a Docker image.
 
+<Tabs>
+  <TabItem value="python" label="Python" default>
+
 ```python
 import runpod
 import os
+import json
 
 runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
@@ -51,6 +55,27 @@ except runpod.error.QueryError as err:
     print(err)
     print(err.query)
 ```
+
+</TabItem>
+  <TabItem value="output" label="Output">
+
+```json
+{
+  "id": "n6m0htekvq",
+  "name": "test",
+  "imageName": "runpod/base:0.1.0",
+  "dockerArgs": "",
+  "containerDiskInGb": 10,
+  "volumeInGb": 0,
+  "volumeMountPath": "/workspace",
+  "ports": "",
+  "env": [],
+  "isServerless": false
+}
+```
+
+</TabItem>
+</Tabs>
 
 ## Create Endpoint
 

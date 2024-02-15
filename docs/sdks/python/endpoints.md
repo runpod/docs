@@ -86,6 +86,9 @@ This method allows you to start an endpoint run and then check its status or wai
 
 This executes a standard Python environment without requiring an asynchronous event loop.
 
+<Tabs>
+  <TabItem value="python" label="Python" default>
+
 ```python
 import runpod
 import os
@@ -112,11 +115,26 @@ except Exception as e:
     print(f"An error occurred: {e}")
 ```
 
+</TabItem>
+  <TabItem value="output" label="Output">
+
+```text
+Initial job status: IN_QUEUE
+Job output: {'input_tokens': 24, 'output_tokens': 16, 'text': ["Hello! How may I assist you today?\n"]}
+```
+
+</TabItem>
+
+</Tabs>
+
 #### Asynchronous execution with asyncio
 
 Use Python's `asyncio` library for handling concurrent Endpoint calls efficiently.
 This method embraces Python's asyncio framework for asynchronous programming, requiring functions to be defined with async and called with await.
 This approach is inherently non-blocking and is built to handle concurrency efficiently.
+
+<Tabs>
+  <TabItem value="python" label="Python" default>
 
 ```python
 import asyncio
@@ -133,31 +151,43 @@ runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
 async def main():
     async with aiohttp.ClientSession() as session:
-        payload = {"input": {"prompt": "Hello World"}}
-        endpoint = AsyncioEndpoint("n74gtin2lgmieh", session)
-        job: AsyncioJob = await endpoint.run(payload)
+        input_payload = {"prompt": "Hello, World!"}
+        endpoint = AsyncioEndpoint("va4k04wy48gk9a", session)
+        job: AsyncioJob = await endpoint.run(input_payload)
 
         # Polling job status
         while True:
             status = await job.status()
             print(f"Current job status: {status}")
             if status == "COMPLETED":
+                output = await job.output()
+                print("Job output:", output)
+                break  # Exit the loop once the job is completed.
+            elif status in ["FAILED"]:
+                print("Job failed or encountered an error.")
+
                 break
-            elif status == "FAILED":
-                print("Job failed.")
-                break
-            await asyncio.sleep(5)  # Wait for 5 seconds before polling again
-
-        # If job is complete, fetch the output
-        if status == "COMPLETED":
-            output = await job.output()
-            print("Job output:", output)
-        else:
-            print("Job did not complete successfully.")
+            else:
+                print("Job in queue or processing. Waiting 3 seconds...")
+                await asyncio.sleep(3)  # Wait for 3 seconds before polling again
 
 
-asyncio.run(main(), debug=True)
+asyncio.run(main())
 ```
+
+</TabItem>
+  <TabItem value="output" label="Output">
+
+```text
+Current job status: IN_QUEUE
+Job in queue or processing. Waiting 3 seconds...
+Current job status: COMPLETED
+Job output: {'input_tokens': 24, 'output_tokens': 16, 'text': ['Hello! How may I assist you today?\n']}
+```
+
+</TabItem>
+
+</Tabs>
 
 ## Health check
 

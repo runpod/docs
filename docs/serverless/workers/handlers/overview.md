@@ -26,7 +26,6 @@ These handlers define the logic executed when the function is invoked.
    This typically involves specifying the handler, runtime, and any dependencies.
 4. **Test the Function**: Invoke your function manually or through an event to test its behavior.
 
-
 ## Why use Handler Functions?
 
 Handler Functions offer a paradigm shift in how you approach backend code execution:

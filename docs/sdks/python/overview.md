@@ -70,13 +70,13 @@ To ensure you've setup your RunPod SDK in Python, choose from one of the followi
   <TabItem value="pip" label="Pip" default>
 
     Run the following command using pip to get the RunPod SDK version.
-    
+
     ```command
     pip show runpod
     ```
-    
+
     You should see something similar to the following output.
-    
+
     ```command
     runpod==1.6.1
     ```
@@ -85,11 +85,10 @@ To ensure you've setup your RunPod SDK in Python, choose from one of the followi
   <TabItem value="shell" label="Shell">
 
     Run the following command from your terminal to get the RunPod SDK version.
-    
+
     ```command
     python3 -c "import runpod; print(runpod.__version__)"
     ```
-    
 
 </TabItem>
   <TabItem value="python" label="Python">
@@ -97,26 +96,23 @@ To ensure you've setup your RunPod SDK in Python, choose from one of the followi
     To ensure you've setup your installation correctly, get the RunPod SDK version.
     Create a new file called `main.py`.
     Add the following to your Python file and execute the script.
-    
+
     ```python
     import runpod
-    
+
     version = runpod.version.get_version()
-    
+
     print(f"RunPod version number: {version}")
     ```
-    
+
     You should see something similar to the following output.
-    
+
     ```text
     RunPod version number: 1.X.0
     ```
 
 </TabItem>
 </Tabs>
-
-
-
 
 You can find the latest version of the RunPod Python SDK on [GitHub](https://github.com/runpod/runpod-python/releases).
 
