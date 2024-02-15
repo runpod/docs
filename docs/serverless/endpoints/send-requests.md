@@ -44,28 +44,24 @@ A POST request will be sent to your URL when the job is complete. This request w
 
 ### 📜 | Execution Policy
 
-By default, if a job remains `IN_PROGRESS` for longer than 24 hours, the worker that has that job will be terminated.
-This default behavior ensures that resources are not indefinitely consumed by stale or dead workers. To fine-tune the management of job lifecycles and prevent excessive resource consumption, you can set both the execution timeout and TTL (Time-to-Live) policies.
+By default, if a job remains `IN_PROGRESS` for longer than 24 hours without completion, it's automatically terminated.
+This default behavior ensures that resources aren't indefinitely consumed by jobs that are unable to complete.
+To customize the management of job lifecycles and resource consumption, the following policies can be configured:
 
-- **Execution Timeout**: Limits how long a worker can remain `IN_PROGRESS` before being terminated.
-    This is particularly useful for avoiding indefinite job processing.
-- **Low Priority** Sets the priority of the job to low. This can be useful for jobs that are not time-sensitive and can be processed when resources are available.
-- **TTL**: Defines the total lifespan of a job, from its creation to automatic termination, regardless of its state.
-    This ensures that jobs do not remain in the system indefinitely.
+- **Execution Timeout**: Specifies the maximum duration a job can run before it's automatically terminated. This limit helps prevent jobs from running indefinitely and consuming resources unnecessarily.
+- **Low Priority**: When set, the job is marked as low priority. This option is ideal for non-time-sensitive tasks that don't require immediate execution. Low priority jobs won't trigger a scale-up of resources and only execute when higher priority jobs aren't pending. When the queue is empty, low priority jobs are executed.
+- **TTL (Time-to-Live)**: Defines the maximum time a job can remain in the queue before it's automatically terminated. This parameter ensures that jobs don't stay in the queue indefinitely.
 
 ```json
 {
   "input": {},
   "policy": {
-    "executionTimeout": int, // Time in milliseconds
-    "lowPriority": bool, // Sets the priority of the job to low
-    "ttl": int // Time in milliseconds
+    "executionTimeout": int, // Time in milliseconds. Must be greater than 5 seconds.
+    "lowPriority": bool, // Sets the job's priority to low. Default behavior escalates to high under certain conditions.
+    "ttl": int // Time in milliseconds. Must be greater than or equal to 10 seconds. Default is 24 hours. Maximum is one week.
   }
 }
 ```
-
-- **Minimum Execution Timeout**: 5000ms (5 seconds)
-- **Default Execution Timeout**: 86400000ms (24 hours), aligning with the default TTL to automatically terminate jobs that exceed this duration.
 
 By configuring both the execution timeout and TTL policies, you can have more control over job execution and system resource management, ensuring efficient operation and preventing resource wastage.
 
