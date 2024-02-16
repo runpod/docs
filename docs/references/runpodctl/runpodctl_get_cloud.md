@@ -1,6 +1,7 @@
 ---
 title: "Get Cloud"
 ---
+
 ## runpodctl get cloud
 
 get all cloud gpus
@@ -16,15 +17,14 @@ runpodctl get cloud [gpuCount] [flags]
 ### Options
 
 ```
-  -c, --community   show listings from community cloud only
-      --disk int    minimum disk size in GB you need
-  -h, --help        help for cloud
-      --mem int     minimum sys memory size in GB you need
-  -s, --secure      show listings from secure cloud only
-      --vcpu int    minimum vCPUs you need
+-c, --community   show listings from community cloud only
+    --disk int    minimum disk size in GB you need
+-h, --help        help for cloud
+    --mem int     minimum sys memory size in GB you need
+-s, --secure      show listings from secure cloud only
+    --vcpu int    minimum vCPUs you need
 ```
 
 ### SEE ALSO
 
-* [runpodctl get](runpodctl_get.md)	 - get resource
-
+- [runpodctl get](runpodctl_get.md) - get resource

@@ -1,6 +1,7 @@
 ---
 title: "Project Deploy"
 ---
+
 ## runpodctl project deploy
 
 deploys your project as an endpoint
@@ -16,10 +17,9 @@ runpodctl project deploy [flags]
 ### Options
 
 ```
-  -h, --help   help for deploy
+-h, --help   help for deploy
 ```
 
 ### SEE ALSO
 
-* [runpodctl project](runpodctl_project.md)	 - Manage RunPod projects
-
+- [runpodctl project](runpodctl_project.md) - Manage RunPod projects

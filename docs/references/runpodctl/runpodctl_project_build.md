@@ -1,6 +1,7 @@
 ---
 title: "Project Build"
 ---
+
 ## runpodctl project build
 
 builds Dockerfile for current project
@@ -16,11 +17,10 @@ runpodctl project build [flags]
 ### Options
 
 ```
-  -h, --help          help for build
-      --include-env   include environment variables from runpod.toml in generated Dockerfile
+-h, --help          help for build
+    --include-env   include environment variables from runpod.toml in generated Dockerfile
 ```
 
 ### SEE ALSO
 
-* [runpodctl project](runpodctl_project.md)	 - Manage RunPod projects
-
+- [runpodctl project](runpodctl_project.md) - Manage RunPod projects

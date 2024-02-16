@@ -1,6 +1,7 @@
 ---
 title: "Start Pod"
 ---
+
 ## runpodctl start pod
 
 start a pod
@@ -16,11 +17,10 @@ runpodctl start pod [podId] [flags]
 ### Options
 
 ```
-      --bid float32   bid per gpu for spot price
-  -h, --help          help for pod
+    --bid float32   bid per gpu for spot price
+-h, --help          help for pod
 ```
 
 ### SEE ALSO
 
-* [runpodctl start](runpodctl_start.md)	 - start a resource
-
+- [runpodctl start](runpodctl_start.md) - start a resource
