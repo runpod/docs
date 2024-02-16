@@ -150,7 +150,7 @@ This endpoint provides detailed information about the job, including its current
 <Tabs>
   <TabItem value="curl" label="cURL" default>
 
-```curl
+```command
 curl https://api.runpod.ai/v2/{endpoint_id}/status/{job_id} \
     -H 'Authorization: Bearer ${API_KEY}'
 ```
@@ -186,7 +186,7 @@ This is particularly useful for tasks that involve continuous data processing or
 <Tabs>
   <TabItem value="curl" label="cURL" default>
 
-```curl
+```command
 curl https://api.runpod.ai/v2/{endpoint_id}/stream/{job_id} \
     -H 'Content-Type: application/json' \
     -H 'Authorization: Bearer Bearer ${API_KEY}'
