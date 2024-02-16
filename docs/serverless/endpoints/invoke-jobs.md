@@ -1,12 +1,19 @@
 ---
 title: Invoke a Job
+description: Run Endpoints in RunPod.
 sidebar_position: 2
+tags:
+  - endpoints
+  - jobs
+  - run
+  - invoke
 ---
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-This page provides instructions on how to invoke a job using the Runpod API.
+This page provides instructions on how to invoke a job using the Runpod Endpoint.
+Invoke jobs to run Endpoints the way you would interact with an API.
 For information on seeing how to send an input or a request, see [Send a request](/serverless/endpoints/send-requests).
 
 ## Asynchronous Endpoints
@@ -122,7 +129,7 @@ It is a useful tool for managing your job queue, especially in situations where 
 <Tabs>
   <TabItem value="curl" label="cURL" default>
 
-```command
+```bash
 curl -X POST https://api.runpod.ai/v2/{endpoint_id}/purge-queue \
     -H 'Content-Type: application/json' \
     -H 'Authorization: Bearer Bearer ${API_KEY}'
@@ -150,7 +157,7 @@ This endpoint provides detailed information about the job, including its current
 <Tabs>
   <TabItem value="curl" label="cURL" default>
 
-```command
+```bash
 curl https://api.runpod.ai/v2/{endpoint_id}/status/{job_id} \
     -H 'Authorization: Bearer ${API_KEY}'
 ```
@@ -186,7 +193,7 @@ This is particularly useful for tasks that involve continuous data processing or
 <Tabs>
   <TabItem value="curl" label="cURL" default>
 
-```command
+```bash
 curl https://api.runpod.ai/v2/{endpoint_id}/stream/{job_id} \
     -H 'Content-Type: application/json' \
     -H 'Authorization: Bearer Bearer ${API_KEY}'
