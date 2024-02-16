@@ -1,15 +1,27 @@
-# How to Set Up Ollama on a GPU Pod with RunPod: A Step-by-Step Tutorial
+---
+title: Set up Ollama on your GPU Pod
+description: Set up Ollama server and run LLMs with RunPod GPUs
+sidebar_position: 4
+---
 
 This tutorial will guide you through setting up [Ollama](https://ollama.com), a powerful AI model serving platform, on a GPU Pod using RunPod.
+Ollama makes it easy to run, create, and customize models.
 
-This setup enables you to deploy and interact with AI models efficiently, leveraging the GPU acceleration for enhanced performance.
+However, not everyone has access to the compute power needed to run these models.
+With RunPod, you can spin up and manage GPUs in the Cloud.
+RunPod offers templates with preinstalled libaries, which makes it quick to run Ollama.
+
+In the following tutorial, you'll set up a Pod on a GPU, install and serve the Ollama model, and interact with it on the CLI.
 
 ## Prerequisites
 
-- A RunPod account: Ensure you have access to RunPod and can create GPU Pods.
-- Basic familiarity with terminal commands and environment variables.
+The tutorial assumes you have a RunPod account with credits.
+No other prior knowledge is needed to complete this tutorial.
 
 ## Step 1: Start a PyTorch Template on RunPod
+
+You will create a new Pod with the PyTorch template.
+In this step, you will set overrides to configure Ollama.
 
 1. Log in to your [RunPod account](https://www.runpod.io/console/pods) and choose **+ GPU Pod**.
 2. Choose a GPU Pod like `A40`.
@@ -22,12 +34,14 @@ This setup enables you to deploy and interact with AI models efficiently, levera
 5. Select **Set Overrides**, **Continue**, then **Deploy**.
 
 This setting configures Ollama to listen on all network interfaces, enabling external access through the exposed port.
-
 For detailed instructions on setting environment variables, refer to the [Ollama FAQ documentation](https://github.com/ollama/ollama/blob/main/docs/faq.md#setting-environment-variables-on-linux).
 
 Once the Pod is up and running, you'll have access to a terminal within the RunPod interface.
 
 ## Step 2: Install Ollama
+
+Now that your Pod is running, you can login to the web terminal.
+The web terminal is a powerful way to interact with your Pod.
 
 1. Select **Connect** and choose **Start Web Terminal**.
 2. Make note of the **Username** and **Password**, then select **Connect to Web Terminal**.
@@ -41,13 +55,16 @@ Once the Pod is up and running, you'll have access to a terminal within the RunP
 This command fetches the Ollama installation script and executes it, setting up Ollama on your Pod.
 The `ollama serve` part starts the Ollama server, making it ready to serve AI models.
 
+Now that your Ollama server is running on your Pod, add a model.
+
 ## Step 3: Run an AI Model with Ollama
 
-To deploy and run an AI model using Ollama, open a new terminal in the Pod and execute:
+To run an AI model using Ollama, pass the model name to the `ollama run` command:
 
 ```bash
 ollama run [model name]
 # ollama run llama2
+# ollama run mistral
 ```
 
 Replace `[model name]` with the name of the AI model you wish to deploy.
@@ -60,18 +77,67 @@ You can begin interacting with the model directly from your web terminal.
 Optionally, you can set up an HTTP API request to interact with Ollama.
 This is covered in the next step.
 
-
 ## Step 4: Interact with Ollama via HTTP API
 
 With Ollama set up and running, you can now interact with it using HTTP API requests.
-For example, to list the local models available in Ollama, you can use the following GET request:
+In step 1.4, you configured Ollama to listen on all network interfaces.
+This means you can use your Pod as a server to receive requests.
+
+**Get a list of models**
+
+To list the local models available in Ollama, you can use the following GET request:
+
+<Tabs>
+  <TabItem value="curl" label="cURl" default>
 
 ```
-curl https://{POD_ID}-{INTERNAL_PORT}.proxy.runpod.net/api/tags
+curl https://{POD_ID}-11434.proxy.runpod.net/api/tags
 # curl https://cmko4ns22b84xo-11434.proxy.runpod.net/api/tags
 ```
 
-Replace `[your-pod-id]` with your actual Pod ID. Your Pod's Jupyter Lab URL, which includes the Pod ID, can be found in the RunPod interface.
+Replace `[your-pod-id]` with your actual Pod ID.
+</TabItem>
+<TabItem value="output" label="Output">
+
+```json
+{
+  "models": [
+    {
+      "name": "mistral:latest",
+      "model": "mistral:latest",
+      "modified_at": "2024-02-16T18:22:39.948000568Z",
+      "size": 4109865159,
+      "digest": "61e88e884507ba5e06c49b40e6226884b2a16e872382c2b44a42f2d119d804a5",
+      "details": {
+        "parent_model": "",
+        "format": "gguf",
+        "family": "llama",
+        "families": [
+          "llama"
+        ],
+        "parameter_size": "7B",
+        "quantization_level": "Q4_0"
+      }
+    }
+  ]
+}
+```
+
+</TabItem>
+</Tabs>
+
+**Make requests**
+
+To make a request against your Pod, you can use the Ollama interface with your Pod Id.
+
+```command
+curl -X POST https://{POD_ID}-11434.proxy.runpod.net/api/generate -d '{
+  "model": "mistral",
+  "prompt":"Here is a story about llamas eating grass"
+ }'
+```
+
+Replace `[your-pod-id]` with your actual Pod ID.
 
 For more information on constructing HTTP requests and other operations you can perform with the Ollama API, consult the [Ollama API documentation](https://github.com/ollama/ollama/blob/main/docs/api.md).
 
@@ -81,6 +147,5 @@ This tutorial provides a foundational understanding of setting up and using Olla
 
 **Port Configuration and documentation**: For further details on exposing ports and the link structure, refer to the [RunPod documentation](/pods/configuration/expose-ports).
 **Connect VSCode to RunPod**: For information on connecting VSCode to RunPod, refer to the [How to Connect VSCode To RunPod]([/pods/configuration/vscode](https://blog.runpod.io/how-to-connect-vscode-to-runpod/)).
-
 
 By following these steps, you can deploy AI models efficiently and interact with them through HTTP API requests, harnessing the power of GPU acceleration for your AI projects.
