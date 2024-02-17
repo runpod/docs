@@ -32,4 +32,3 @@ Dive deeper into what you can achieve with RunPod Endpoints through the followin
 - [Send Requests](/serverless/endpoints/send-requests): Discover how to communicate with your endpoints, including tips on structuring requests for optimal performance.
 - [Manage Endpoints](/serverless/endpoints/manage-endpoints): Find out how to manage your endpoints effectively, from deployment to scaling and monitoring.
 - [Endpoint Operations](/serverless/references/operations): Access a comprehensive list of operations supported by RunPod Endpoints, including detailed documentation and examples.
-
