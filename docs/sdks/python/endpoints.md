@@ -59,7 +59,7 @@ import os
 
 runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
-endpoint = runpod.Endpoint("sdxl")  # Replace "sdxl" with your endpoint ID.
+endpoint = runpod.Endpoint("YOUR_ENDPOINT_ID")
 
 try:
     run_request = endpoint.run_sync(
