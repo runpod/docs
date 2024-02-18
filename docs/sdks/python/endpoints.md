@@ -63,7 +63,11 @@ endpoint = runpod.Endpoint("sdxl")  # Replace "sdxl" with your endpoint ID.
 
 try:
     run_request = endpoint.run_sync(
-        {"input": {"prompt": "a photo of a horse the size of a Boeing 787"}},
+        {
+            "input": {
+                "prompt": "Hello, world!",
+            }
+        },
         timeout=60,  # Timeout in seconds.
     )
 
@@ -238,21 +242,23 @@ print(json.dumps(endpoint_health, indent=2))
 
 ## Streaming
 
-For endpoints that support streaming output, use the `stream` method to receive data as it becomes available.
+To enable streaming, your handler must support the `"return_aggregate_stream": True` option on the `start` method of your Handler.
+Once enabled, use the `stream` method to receive data as it becomes available.
+
+<Tabs>
+  <TabItem value="endpoint" label="Endpoint">
 
 ```python
 import runpod
-import os
 
 runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
-endpoint = runpod.Endpoint("gwp4kx5yd3nur1")
+endpoint = runpod.Endpoint("y8nqc2llx72yyy")
 
 run_request = endpoint.run(
     {
         "input": {
-            "mock_return": ["a", "b", "c", "d", "e", "f", "g"],
-            "mock_delay": 1,
+            "prompt": "Hello, world!",
         }
     }
 )
@@ -260,3 +266,127 @@ run_request = endpoint.run(
 for output in run_request.stream():
     print(output)
 ```
+
+</TabItem>
+  <TabItem value="handler" label="Handler" default>
+
+```python
+from time import sleep
+import runpod
+
+
+def handler(job):
+    job_input = job["input"]["prompt"]
+
+    for i in job_input:
+        sleep(1)  # sleep for 1 second for effect
+        yield i
+
+
+runpod.serverless.start(
+    {
+        "handler": handler,
+        "return_aggregate_stream": True,  # Ensures aggregated results are streamed back
+    }
+)
+```
+
+</TabItem>
+
+</Tabs>
+
+## Status
+
+Returns the status of the Job request.
+Set the `status()` function on the run request to return the status of the Job.
+
+<Tabs>
+  <TabItem value="python" label="Python" default>
+
+```python
+import runpod
+
+runpod.api_key = os.getenv("RUNPOD_API_KEY")
+
+input_payload = {"input": {"prompt": "Hello, World!"}}
+
+try:
+    endpoint = runpod.Endpoint("n74gtin2lgmieh")
+    run_request = endpoint.run(input_payload)
+
+    # Initial check without blocking, useful for quick tasks
+    status = run_request.status()
+    print(f"Initial job status: {status}")
+
+    if status != "COMPLETED":
+        # Polling with timeout for long-running tasks
+        output = run_request.output(timeout=60)
+    else:
+        output = run_request.output()
+    print(f"Job output: {output}")
+except Exception as e:
+    print(f"An error occurred: {e}")
+```
+
+</TabItem>
+  <TabItem value="output" label="Output">
+
+```text
+Initial job status: IN_QUEUE
+Job output: Hello, World!
+```
+
+</TabItem>
+</Tabs>
+
+## Timeout
+
+Use the `cancel()` function and the `timeout` argument to cancel the Job after a specified time.
+
+<Tabs>
+  <TabItem value="python" label="Python" default>
+
+```python
+from time import sleep
+import runpod
+
+runpod.api_key = os.getenv("RUNPOD_API_KEY")
+
+input_payload = {"input": {"prompt": "Hello, World!"}}
+
+endpoint = runpod.Endpoint("n74gtin2lgmieh")
+
+
+# Submit the job request
+run_request = endpoint.run(input_payload)
+
+# Retrieve and print the initial job status
+initial_status = run_request.status()
+print(f"Initial job status: {initial_status}")
+
+# Attempt to cancel the job after a specified timeout period (in seconds)
+# Note: This demonstrates an immediate cancellation for demonstration purposes.
+# Typically, you'd set the timeout based on expected job completion time.
+run_request.cancel(timeout=3)
+
+# Wait for the timeout period to ensure the cancellation takes effect
+sleep(3)
+print("Sleeping for 3 seconds to allow for job cancellation...")
+
+# Check and print the job status after the sleep period
+final_status = run_request.status()
+print(f"Final job status: {final_status}")
+```
+
+</TabItem>
+  <TabItem value="output" label="Output">
+
+```text
+Initial job status: IN_QUEUE
+Sleeping for 3 seconds to allow for job cancellation...
+Final job status: CANCELLED
+```
+
+</TabItem>
+
+</Tabs>
