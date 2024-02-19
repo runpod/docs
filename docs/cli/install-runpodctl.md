@@ -7,11 +7,11 @@ sidebar_position: 1
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-runpodctl is an [open-source command-line interface (CLI)](https://github.com/runpod/runpodctl). You can use runpodctl to work with Pods and RunPod projects. 
+runpodctl is an [open-source command-line interface (CLI)](https://github.com/runpod/runpodctl). You can use runpodctl to work with Pods and RunPod projects.
 
 When you create a Pod, it comes with runpodctl installed and configured with a Pod-scoped API key. You can also run runpodctl locally.
 
-To install runpodctl on your local machine, run the appropriate command for your operating system. 
+To install runpodctl on your local machine, run the appropriate command for your operating system.
 
 <Tabs>
   <TabItem value="mac" label="macOS" default>
@@ -20,21 +20,21 @@ To install runpodctl on your local machine, run the appropriate command for your
     wget -qO- cli.runpod.net | sudo bash
     ```
 
-  </TabItem>
+</TabItem>
   <TabItem value="linux" label="Linux">
 
     ```bash
     wget -qO- cli.runpod.net | sudo bash
     ```
 
-  </TabItem>
+</TabItem>
   <TabItem value="windows" label="Windows">
 
     ```bash
     wget https://github.com/runpod/runpodctl/releases/download/v1.12.3/runpodctl-windows-amd64.exe -O runpodctl.exe
-   ```
 
-  </TabItem>
+````
+</TabItem>
 </Tabs>
 
 :::tip 
@@ -61,9 +61,9 @@ Now that you've created an API key, run the following command to add it to runpo
 
 ```command
 runpodctl config --apiKey your-api-key
-``` 
+````
 
-You should see something similar to the following output: 
+You should see something similar to the following output:
 
 ```command
 saved apiKey into config file: /Users/runpod/.runpod/config.toml
@@ -74,7 +74,7 @@ Now that you've configured an API key, check that runpodctl installed successful
 
 ```command
 runpodctl version
-``` 
+```
 
 You should see which version is installed.
 

@@ -4,7 +4,10 @@ description: Set up Ollama server and run LLMs with RunPod GPUs
 sidebar_position: 4
 ---
 
-This tutorial will guide you through setting up [Ollama](https://ollama.com), a powerful AI model serving platform, on a GPU Pod using RunPod.
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+This tutorial will guide you through setting up [Ollama](https://ollama.com), a powerful platform serving large language model, on a GPU Pod using RunPod.
 Ollama makes it easy to run, create, and customize models.
 
 However, not everyone has access to the compute power needed to run these models.
@@ -71,11 +74,10 @@ Replace `[model name]` with the name of the AI model you wish to deploy.
 For a complete list of models, see the [Ollama Library](https://ollama.com/library).
 
 This command pulls the model and runs it, making it accessible for inference.
-
 You can begin interacting with the model directly from your web terminal.
 
 Optionally, you can set up an HTTP API request to interact with Ollama.
-This is covered in the next step.
+This is covered in the [next step](#step-4-interact-with-ollama-via-http-api).
 
 ## Step 4: Interact with Ollama via HTTP API
 
@@ -125,10 +127,11 @@ Replace `[your-pod-id]` with your actual Pod ID.
 
 </TabItem>
 </Tabs>
+Getting a list of avaialbe models is great, but how do you send an HTTP request to your Pod?
 
 **Make requests**
 
-To make a request against your Pod, you can use the Ollama interface with your Pod Id.
+To make an HTTP request against your Pod, you can use the Ollama interface with your Pod Id.
 
 ```command
 curl -X POST https://{POD_ID}-11434.proxy.runpod.net/api/generate -d '{
@@ -138,6 +141,8 @@ curl -X POST https://{POD_ID}-11434.proxy.runpod.net/api/generate -d '{
 ```
 
 Replace `[your-pod-id]` with your actual Pod ID.
+
+Because port `11434` is exposed, you can make requests to your Pod using the `curl` command.
 
 For more information on constructing HTTP requests and other operations you can perform with the Ollama API, consult the [Ollama API documentation](https://github.com/ollama/ollama/blob/main/docs/api.md).
 
