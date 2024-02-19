@@ -79,7 +79,7 @@ Full control over the account, ideal for administrators.
 
 ## Audit logs
 
-RunPod includes audit logs to help you understand what actions were created.
+RunPod includes audit logs to help you understand which actions were used.
 Go to the [Audit logs](https://www.runpod.io/console/user/audit-logs) settings.
 
 You can view and filter the audit logs by date range, user, resource, resource ID, and action.
