@@ -97,7 +97,7 @@ curl https://{POD_ID}-11434.proxy.runpod.net/api/tags
 # curl https://cmko4ns22b84xo-11434.proxy.runpod.net/api/tags
 ```
 
-Replace `[your-pod-id]` with your actual Pod ID.
+Replace `[your-pod-id]` with your actual Pod Id.
 </TabItem>
 <TabItem value="output" label="Output">
 
@@ -140,7 +140,7 @@ curl -X POST https://{POD_ID}-11434.proxy.runpod.net/api/generate -d '{
  }'
 ```
 
-Replace `[your-pod-id]` with your actual Pod ID.
+Replace `[your-pod-id]` with your actual Pod Id.
 
 Because port `11434` is exposed, you can make requests to your Pod using the `curl` command.
 
