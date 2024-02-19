@@ -76,3 +76,10 @@ Full control over the account, ideal for administrators.
 - Start, stop, and create Pods.
 - Modify account settings and user permissions.
 - Full control over all account resources and users.
+
+## Audit logs
+
+RunPod includes audit logs to help you understand what actions were created.
+Go to the [Audit logs](https://www.runpod.io/console/user/audit-logs) settings.
+
+You can view and filter the audit logs by date range, user, resource, resource ID, and action.
