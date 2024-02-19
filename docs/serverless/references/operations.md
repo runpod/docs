@@ -4,9 +4,9 @@ description: "Comprehensive guide on interacting with models using RunPod's API 
 sidebar_position: 2
 ---
 
-RunPod's endpoints facilitate submitting jobs and retrieving outputs.
+RunPod's Endpoints facilitate submitting jobs and retrieving outputs.
 
-To use these endpoints, you will need to have your endpoint ID.
+To use these Endpoints, you will need to have your Endpoint ID.
 The constructed URL will start with `https://api.runpod.ai/v2/{endpoint_id}/{operation}` followed by an operation.
 
 Operations available to all users are:
@@ -25,3 +25,5 @@ Operations available to all users are:
 - `/health`: Provides worker statistics and endpoint health.
   - Only accepts `GET` methods
 - `/purge-queue`: Clears all queued jobs, it will not cancel jobs in progress.
+
+To see how to run these Endpoint Operations, see [Invoke a Job](/serverless/endpoints/invoke-jobs).

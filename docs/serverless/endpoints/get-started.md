@@ -30,7 +30,7 @@ This example sends a response to the Endpoint using cURL; however, you can use a
 
 ```curl
 curl --request POST \
-     --url https://api.runpod.ai/v2/${YOUR_ENDPOINT}/runsync
+     --url https://api.runpod.ai/v2/${endpoint_id}/runsync
      --header "accept: application/json" \
      --header "authorization: ${YOUR_API_KEY}" \
      --header "content-type: application/json" \
@@ -49,7 +49,7 @@ curl --request POST \
 '
 ```
 
-Where `YOUR_ENDPOINT` is the name of your Endpoint and `YOUR_API_KEY` is your API Key.
+Where `endpoint_id` is the name of your Endpoint and `YOUR_API_KEY` is your API Key.
 
 :::note
 
@@ -59,9 +59,9 @@ Depending on any modifications you made to your Handler Function, you may need t
 
 ## Next steps
 
-Now that you have successfully launched an endpoint using our template, you can:
+Now that you have successfully launched an endpoint using a template, you can:
 
-- [Send requests to the Endpoint](/serverless/endpoints/overview)
+- [Invoke jobs](/serverless/endpoints/invoke-jobs)
 
 If the models provided aren't enough, you can write your own customize Function Handler:
 

@@ -30,6 +30,16 @@ endpoint = runpod.Endpoint("YOUR_ENDPOINT_ID")
 
 This allows all calls to pass through your Endpoint Id with a valid API key.
 
+
+In most situtaitons, you'll set a variable name `endpoint` on the `Endpoint` class.
+This allows you to use the following methods or instances variables from the `Endpoint` class:
+
+- [health](#health-check)
+- [purge_queue](#purge-queue)
+- [run_sync](#run-synchronously)
+- [run](#run-asynchronously)
+
+
 ## Run the Endpoint
 
 Run the Endpoint with the either the asynchronous `run` or synchronous `run_sync` method.
@@ -102,7 +112,7 @@ runpod.api_key = os.getenv("RUNPOD_API_KEY")
 input_payload = {"input": {"prompt": "Hello, World!"}}
 
 try:
-    endpoint = runpod.Endpoint("n74gtin2lgmieh")
+    endpoint = runpod.Endpoint("YOUR_ENDPOINT_ID")
     run_request = endpoint.run(input_payload)
 
     # Initial check without blocking, useful for quick tasks
@@ -156,7 +166,7 @@ runpod.api_key = os.getenv("RUNPOD_API_KEY")
 async def main():
     async with aiohttp.ClientSession() as session:
         input_payload = {"prompt": "Hello, World!"}
-        endpoint = AsyncioEndpoint("va4k04wy48gk9a", session)
+        endpoint = AsyncioEndpoint("YOUR_ENDPOINT_ID", session)
         job: AsyncioJob = await endpoint.run(input_payload)
 
         # Polling job status
@@ -176,7 +186,8 @@ async def main():
                 await asyncio.sleep(3)  # Wait for 3 seconds before polling again
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
 </TabItem>
@@ -253,7 +264,7 @@ import runpod
 
 runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
-endpoint = runpod.Endpoint("y8nqc2llx72yyy")
+endpoint = runpod.Endpoint("YOUR_ENDPOINT_ID")
 
 run_request = endpoint.run(
     {
@@ -311,7 +322,7 @@ runpod.api_key = os.getenv("RUNPOD_API_KEY")
 input_payload = {"input": {"prompt": "Hello, World!"}}
 
 try:
-    endpoint = runpod.Endpoint("n74gtin2lgmieh")
+    endpoint = runpod.Endpoint("YOUR_ENDPOINT_ID")
     run_request = endpoint.run(input_payload)
 
     # Initial check without blocking, useful for quick tasks
@@ -349,12 +360,13 @@ Use the `cancel()` function and the `timeout` argument to cancel the Job after a
 ```python
 from time import sleep
 import runpod
+import os
 
 runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
 input_payload = {"input": {"prompt": "Hello, World!"}}
 
-endpoint = runpod.Endpoint("n74gtin2lgmieh")
+endpoint = runpod.Endpoint("YOUR_ENDPOINT_ID")
 
 
 # Submit the job request
@@ -390,3 +402,21 @@ Final job status: CANCELLED
 </TabItem>
 
 </Tabs>
+
+## Purge queue
+
+You can purge all jobs from a queue by using the `purge_queue()` function.
+You can provide the `timeout` parameter to specify how long to wait for the server to respond before purging the queue.
+
+`purge_queue()` doesn't affect Jobs in progress.
+
+```python
+import runpod
+import os
+
+runpod.api_key = os.getenv("RUNPOD_API_KEY")
+
+endpoint = runpod.Endpoint("YOUR_ENDPOINT_ID")
+
+endpoint.purge_queue(timeout=3)
+```

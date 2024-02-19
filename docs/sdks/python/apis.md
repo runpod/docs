@@ -39,7 +39,6 @@ The `create_template()` function facilitates the creation of new templates by sp
 ```python
 import runpod
 import os
-import json
 
 runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
