@@ -24,8 +24,8 @@ All Pods come with `runpodctl` installed with a Pod-scoped API key, which makes 
 
 ## SDKs
 
-RunPod provides SDKs for Python and Go to for the RunPod API and serverless worker SDK.
+RunPod provides SDKs for [Python](/sdks/python/overview) and Go to for the RunPod API and serverless worker SDK.
 
 ## GraphQL
 
-You can use [GraphQL](/graphql/manage-pods) to manage your Pods, Serverless, and more.
+You can use [GraphQL](/sdks/graphql/manage-pods) to manage your Pods, Serverless, and more.

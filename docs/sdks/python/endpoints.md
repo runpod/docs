@@ -30,7 +30,6 @@ endpoint = runpod.Endpoint("YOUR_ENDPOINT_ID")
 
 This allows all calls to pass through your Endpoint Id with a valid API key.
 
-
 In most situtaitons, you'll set a variable name `endpoint` on the `Endpoint` class.
 This allows you to use the following methods or instances variables from the `Endpoint` class:
 
@@ -38,7 +37,6 @@ This allows you to use the following methods or instances variables from the `En
 - [purge_queue](#purge-queue)
 - [run_sync](#run-synchronously)
 - [run](#run-asynchronously)
-
 
 ## Run the Endpoint
 
