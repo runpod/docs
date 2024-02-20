@@ -36,14 +36,20 @@ def adjust_concurrency(current_concurrency):
     update_request_rate()  # Placeholder for request rate updates
 
     max_concurrency = 10  # Maximum allowable concurrency
-    min_concurrency = 1   # Minimum concurrency to maintain
+    min_concurrency = 1  # Minimum concurrency to maintain
     high_request_rate_threshold = 50  # Threshold for high request volume
 
     # Increase concurrency if under max limit and request rate is high
-    if request_rate > high_request_rate_threshold and current_concurrency < max_concurrency:
+    if (
+        request_rate > high_request_rate_threshold
+        and current_concurrency < max_concurrency
+    ):
         return current_concurrency + 1
     # Decrease concurrency if above min limit and request rate is low
-    elif request_rate <= high_request_rate_threshold and current_concurrency > min_concurrency:
+    elif (
+        request_rate <= high_request_rate_threshold
+        and current_concurrency > min_concurrency
+    ):
         return current_concurrency - 1
 
     return current_concurrency
@@ -54,10 +60,12 @@ def adjust_concurrency(current_concurrency):
 Start the serverless function with the defined handler and `concurrency_modifier` to enable dynamic concurrency adjustment.
 
 ```python
-runpod.serverless.start({
-    "handler": process_request,
-    "concurrency_modifier": adjust_concurrency,
-})
+runpod.serverless.start(
+    {
+        "handler": process_request,
+        "concurrency_modifier": adjust_concurrency,
+    }
+)
 ```
 
 ---
@@ -74,9 +82,11 @@ import random
 # Simulated Metrics
 request_rate = 0
 
+
 async def process_request(job):
     await asyncio.sleep(1)  # Simulate processing time
     return f"Processed: { job['input'] }"
+
 
 def adjust_concurrency(current_concurrency):
     """
@@ -89,11 +99,18 @@ def adjust_concurrency(current_concurrency):
     min_concurrency = 1
     high_request_rate_threshold = 50
 
-    if request_rate > high_request_rate_threshold and current_concurrency < max_concurrency:
+    if (
+        request_rate > high_request_rate_threshold
+        and current_concurrency < max_concurrency
+    ):
         return current_concurrency + 1
-    elif request_rate <= high_request_rate_threshold and current_concurrency > min_concurrency:
+    elif (
+        request_rate <= high_request_rate_threshold
+        and current_concurrency > min_concurrency
+    ):
         return current_concurrency - 1
     return current_concurrency
+
 
 def update_request_rate():
     """
@@ -102,11 +119,11 @@ def update_request_rate():
     global request_rate
     request_rate = random.randint(20, 100)
 
+
 # Start the serverless function with the handler and concurrency modifier
-runpod.serverless.start({
-    "handler": process_request,
-    "concurrency_modifier": adjust_concurrency
-})
+runpod.serverless.start(
+    {"handler": process_request, "concurrency_modifier": adjust_concurrency}
+)
 ```
 
 Using the `concurrency_modifier` in RunPod, serverless functions can efficiently handle multiple requests concurrently, optimizing resource usage and improving performance. This approach allows for scalable and responsive serverless applications.

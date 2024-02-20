@@ -14,7 +14,13 @@ import TabItem from '@theme/TabItem';
 
 This page provides instructions on how to invoke a job using the Runpod Endpoint.
 Invoke jobs to run Endpoints the way you would interact with an API.
-For information on seeing how to send an input or a request, see [Send a request](/serverless/endpoints/send-requests).
+
+The following guide demonstrates how to use cURL to interact with an Endpoint.
+You can also use the following SDK to interact with Endpoints programmatically:
+
+- [Python SDK](/sdks/python/endpoints)
+
+For information on sending requests, see [Send a request](/serverless/endpoints/send-requests).
 
 ## Asynchronous Endpoints
 

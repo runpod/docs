@@ -65,6 +65,7 @@ const config = {
         },
       }),
     ],
+    /*
     [
       "redocusaurus",
       {
@@ -84,6 +85,7 @@ const config = {
         },
       },
     ],
+      */
   ],
 
   themeConfig: {
