@@ -3,6 +3,8 @@ title: "Configurations"
 sidebar_position: 1
 ---
 
+For details on queries, mutations, fields, and inputs, see the [RunPod GraphQL Spec](https://graphql-spec.runpod.io/).
+
 When configuring your environment, certain arguments are essential to ensure the correct setup and operation. Below is a detailed overview of each required argument:
 
 ### `containerDiskInGb`
@@ -15,7 +17,7 @@ When configuring your environment, certain arguments are essential to ensure the
 
 - **Description**: If specified, overrides the [container start command](https://docs.docker.com/engine/reference/builder/#cmd). If this argument is not provided, it will rely on the start command provided in the docker image.
 - **Type**: String
-- **Example**: `"-p 8080:8080"` to expose port 8080.
+- **Example**: `python handler.py` to run the `handler.py` file in the current working directory.
 
 <!--
 Contains additional arguments that are passed directly to Docker when starting the container. This can include mount points, network settings, or any other Docker command-line arguments.
