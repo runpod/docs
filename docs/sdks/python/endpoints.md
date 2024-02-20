@@ -366,7 +366,7 @@ import runpod
 runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
 input_payload = {
-    "messages": [{"role": "user", "content": f"{tutorial}"}],
+    "messages": [{"role": "user", "content": f"Hello, World"}],
     "max_tokens": 2048,
     "use_openai_format": True,
 }
