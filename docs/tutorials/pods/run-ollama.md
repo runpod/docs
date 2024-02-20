@@ -151,6 +151,6 @@ For more information on constructing HTTP requests and other operations you can 
 This tutorial provides a foundational understanding of setting up and using Ollama on a GPU Pod with RunPod.
 
 - **Port Configuration and documentation**: For further details on exposing ports and the link structure, refer to the [RunPod documentation](/pods/configuration/expose-ports).
-- **Connect VSCode to RunPod**: For information on connecting VSCode to RunPod, refer to the [How to Connect VSCode To RunPod](/pods/configuration/vscode](https://blog.runpod.io/how-to-connect-vscode-to-runpod/).
+- **Connect VSCode to RunPod**: For information on connecting VSCode to RunPod, refer to the [How to Connect VSCode To RunPod](https://blog.runpod.io/how-to-connect-vscode-to-runpod/).
 
 By following these steps, you can deploy AI models efficiently and interact with them through HTTP API requests, harnessing the power of GPU acceleration for your AI projects.
