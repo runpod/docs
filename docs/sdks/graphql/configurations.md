@@ -17,8 +17,7 @@ When configuring your environment, certain arguments are essential to ensure the
 
 - **Description**: If specified, overrides the [container start command](https://docs.docker.com/engine/reference/builder/#cmd). If this argument is not provided, it will rely on the start command provided in the docker image.
 - **Type**: String
-- **Example**: `python handler.py` to run the `handler.py` file in the current working directory.
-
+- **Example**: `sleep infinity` to run the container in the background.
 <!--
 Contains additional arguments that are passed directly to Docker when starting the container. This can include mount points, network settings, or any other Docker command-line arguments.
 -->
