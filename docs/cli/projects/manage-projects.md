@@ -12,7 +12,7 @@ A RunPod project is a folder with everything you need to run a development sessi
 
 1. To create a new project, run the following command.
 
-```
+```command
 runpod project create
 ```
 
@@ -29,7 +29,7 @@ A development session is the active connection between your local environment an
 
 1. To start a development session, run the following command.
 
-```
+```command
 runpodctl project dev
 ```
 
@@ -49,11 +49,13 @@ When you deploy a project, RunPod creates a serverless endpoint with access to s
 
 To deploy a project, run the following command.
 
-```
+```command
 runpodctl project deploy
 ```
 
-You now have a serverless endpoint. To learn more, refer to [Endpoints](/docs/serverless/endpoints/).
+Your project is now deployed to a Serverless Endpoint.
+You can interact with this Endpoint like you would any other Serverless Endpoint.
+For more information, see [Endpoints](/serverless/endpoints/overview).
 
 ## Build a project
 
@@ -61,7 +63,7 @@ You have the option to build your project instead of deploying it as an endpoint
 
 To build a project, run the following command.
 
-```
+```command
 runpodctl project build
 ```
 
