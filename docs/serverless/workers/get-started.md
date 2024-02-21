@@ -53,7 +53,7 @@ cd worker-template
 3. Build the Docker image:
 
 ```command
-docker build --tag <username>/<repo>:<tag> .
+docker build --platform linux/amd64 --tag <username>/<repo>:<tag> .
 ```
 
 4. Push your container registry:
@@ -61,6 +61,15 @@ docker build --tag <username>/<repo>:<tag> .
 ```command
 docker push <username>/<repo>:<tag>
 ```
+
+:::note
+
+When building your docker image, you might need to specify the platform you are building for.
+This is important when you are building on a machine with a different architecture than the one you are deploying to.
+
+When building for RunPod providers use `--platform=linux/amd64`.
+
+:::
 
 Now that you've pushed your container registry, you're ready to deploy your Serverless Endpoint to RunPod.
 

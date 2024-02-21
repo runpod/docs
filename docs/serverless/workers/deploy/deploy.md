@@ -1,29 +1,30 @@
 ---
 title: "Package and deploy an image"
-description: "Packaged code that will be receive and execute API submitted requests."
+description: "Packaged code that receives and executes API submitted requests."
 sidebar_position: 2
 ---
 
-Once you have a Handler Function, the next step will be to package it into a Docker image that can be deployed as a scalable serverless worker. This is accomplished by defining a docker file to import everything required to run your handler. Example docker files are in the [repos of our runpod-workers](https://github.com/orgs/runpod-workers/repositories).
+Once you have a Handler Function, the next step is to package it into a Docker image that can be deployed as a scalable Serverless Worker.
+This is accomplished by defining a docker file to import everything required to run your handler. Example docker files are in the [runpod-workers](https://github.com/orgs/runpod-workers/repositories) repository on GitHub.
 
 _Unfamiliar with Docker? Check out Docker's [overview page](https://docs.docker.com/get-started/overview/) or see our guide on [Containers](/category/containers)._
 
-## Docker File
+## Docker file
 
 Let's say we have a directory that looks like the following:
 
 ```
 project_directory
-├── dockerfile
+├── Dockerfile
 ├── src
 │   └── handler.py
 └── builder
     └── requirements.txt
 ```
 
-Your dockerfile would look something like this:
+Your Dockerfile would look something like this:
 
-```Text Docker
+```text Docker
 from python:3.11.1-buster
 
 WORKDIR /
@@ -36,7 +37,9 @@ ADD handler.py .
 CMD [ "python", "-u", "/handler.py" ]
 ```
 
-> 🚧 If your handler requires external files such as model weights, be sure to cache them into your docker image. You are striving for a completly self contained worker that does not need to download or fetch external files to run.
+To build and push the image, review the steps in [Get started](/serverless/workers/get-started).
+
+> 🚧 If your handler requires external files such as model weights, be sure to cache them into your docker image. You are striving for a completely self-contained worker that doesn't need to download or fetch external files to run.
 
 ## Continuous integrations
 
