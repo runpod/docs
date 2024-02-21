@@ -351,7 +351,8 @@ Job output: Hello, World!
 ## Cancel
 
 You can cancel a Job request by using the `cancel()` function on the run request.
-You might want to cancel a Job because it is stuck `IN_QUEUE` or `IN_PROGRESS`, or because you no longer need the result.
+You might want to cancel a Job because it's stuck with a status of `IN_QUEUE` or `IN_PROGRESS`, or because you no longer need the result.
+
 The following pattern cancels a job given a human interaction, for example pressing `Ctrl+C` in the terminal.
 
 This sends a `SIGINT` signal to the running Job by catching the `KeyboardInterrupt` exception.
