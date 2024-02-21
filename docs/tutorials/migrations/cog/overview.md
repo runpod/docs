@@ -107,7 +107,6 @@ Once your endpoint is set up and deployed, you'll be able to start receiving req
 Congratulations, you have successfully migrated your Cog model from Replicate to RunPod and set up a serverless endpoint.
 As you continue to develop your models and applications, consider exploring additional features and capabilities offered by RunPod to further enhance your projects.
 
-
 Here are some resources to help you continue your journey:
 
 - [Learn more about RunPod serverless workers](/serverless/overview)
