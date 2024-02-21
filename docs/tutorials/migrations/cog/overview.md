@@ -14,6 +14,15 @@ In this tutorial, you'll go through the process of migrating a model deployed vi
 
 This guide assumes you are operating within a Linux terminal environment and have Docker installed on your system.
 
+:::note
+
+This method might occur a delay when working with RunPod Serverless Endpoints.
+This delay is due to the FastAPI server that is used to run the Cog model.
+
+To eliminate this delay, consider using [RunPod Handler](/serverless/workers/overview) functions in a future iteration.
+
+:::
+
 By following this streamlined process, you'll be able to simplify the migration and deployment of your Cog image.
 
 ### Prerequisites
@@ -97,6 +106,7 @@ Once your endpoint is set up and deployed, you'll be able to start receiving req
 
 Congratulations, you have successfully migrated your Cog model from Replicate to RunPod and set up a serverless endpoint.
 As you continue to develop your models and applications, consider exploring additional features and capabilities offered by RunPod to further enhance your projects.
+
 
 Here are some resources to help you continue your journey:
 
