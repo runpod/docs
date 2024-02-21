@@ -348,9 +348,82 @@ Job output: Hello, World!
 </TabItem>
 </Tabs>
 
-## Timeout
+## Cancel
+
+You can cancel a Job request by using the `cancel()` function on the run request.
+You might want to cancel a Job because it's stuck with a status of `IN_QUEUE` or `IN_PROGRESS`, or because you no longer need the result.
+
+The following pattern cancels a job given a human interaction, for example pressing `Ctrl+C` in the terminal.
+
+This sends a `SIGINT` signal to the running Job by catching the `KeyboardInterrupt` exception.
+
+<Tabs>
+  <TabItem value="python" label="Python" default>
+
+```python
+import time
+import runpod
+
+runpod.api_key = os.getenv("RUNPOD_API_KEY")
+
+input_payload = {
+    "messages": [{"role": "user", "content": f"Hello, World"}],
+    "max_tokens": 2048,
+    "use_openai_format": True,
+}
+
+try:
+    endpoint = runpod.Endpoint("YOUR_ENDPOINT_ID")
+    run_request = rp_endpoint.run(input_payload)
+
+    while True:
+        status = run_request.status()
+        print(f"Current job status: {status}")
+
+        if status == "COMPLETED":
+            output = run_request.output()
+            print("Job output:", output)
+
+            generated_text = (
+                output.get("choices", [{}])[0].get("message", {}).get("content")
+            )
+            print(generated_text)
+            break
+        elif status in ["FAILED", "ERROR"]:
+            print("Job failed to complete successfully.")
+            break
+        else:
+            time.sleep(10)
+except KeyboardInterrupt:  # Catch KeyboardInterrupt
+    print("KeyboardInterrupt detected. Canceling the job...")
+    if run_request:  # Check if a job is active
+        run_request.cancel()
+    print("Job canceled.")
+
+except Exception as e:
+    print(f"An error occurred: {e}")
+```
+
+</TabItem>
+  <TabItem value="output" label="Output">
+
+```json
+Current job status: IN_QUEUE
+Current job status: IN_PROGRESS
+KeyboardInterrupt detected. Canceling the job...
+Job canceled.
+```
+
+</TabItem>
+
+</Tabs>
+
+### Timeout
 
 Use the `cancel()` function and the `timeout` argument to cancel the Job after a specified time.
+
+In the previous `cancel()` example, the Job is canceled due to an external condition.
+In this example, you can cancel a running Job that has taken too long to complete.
 
 <Tabs>
   <TabItem value="python" label="Python" default>
