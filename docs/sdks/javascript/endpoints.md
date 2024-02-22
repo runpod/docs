@@ -208,6 +208,189 @@ Operation completed successfully.
 </TabItem>
 </Tabs>
 
+### Poll the status of an asynchronous run
+
+Uses `await endpoint.status(id)` to check the status of the operation repeatedly until it either completes or fails.
+After each check, the function waits for 5 seconds (or any other suitable duration you choose) before checking the status again, using the sleep function.
+This approach ensures your application remains responsive and doesn't overwhelm the Runpod endpoint with status requests.
+
+<Tabs>
+  <TabItem value="javascript" label="JavaScript" default>
+
+```javascript
+const { RUNPOD_API_KEY, ENDPOINT_ID } = process.env;
+import runpodSdk from "runpod-sdk";
+
+// Function to pause execution for a specified time
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function main() {
+  try {
+    const runpod = runpodSdk(RUNPOD_API_KEY);
+    const endpoint = runpod.endpoint(ENDPOINT_ID);
+    const result = await endpoint.run({
+      input: {
+        prompt: "Hello, World!",
+      },
+    });
+
+    const { id } = result;
+    if (!id) {
+      console.error("No ID returned from endpoint.run");
+      return;
+    }
+
+    // Poll the status of the operation until it completes or fails
+    let isComplete = false;
+    while (!isComplete) {
+      const status = await endpoint.status(id);
+      console.log(`Current status: ${status.status}`);
+
+      if (status.status === "COMPLETED" || status.status === "FAILED") {
+        isComplete = true; // Exit the loop
+        console.log(`Operation ${status.status.toLowerCase()}.`);
+
+        if (status.status === "COMPLETED") {
+          console.log("Output:", status.output);
+        } else {
+          console.error("Error details:", status.error);
+        }
+      } else {
+        await sleep(5000); // Adjust the delay as needed
+      }
+    }
+  } catch (error) {
+    console.error("An error occurred:", error);
+  }
+}
+
+main();
+```
+
+</TabItem>
+  <TabItem value="output" label="Output">
+
+```text
+Current status: IN_QUEUE
+Current status: IN_PROGRESS
+Current status: COMPLETED
+Operation completed.
+Hello, World!
+```
+
+</TabItem>
+</Tabs>
+
+## Stream
+
+Stream allows you to stream the output of an Endpoint run.
+To enable streaming, your handler must support the `"return_aggregate_stream": True` option on the `start` method of your Handler.
+Once enabled, use the `stream` method to receive data as it becomes available.
+
+<Tabs>
+  <TabItem value="javascript" label="JavaScript" default>
+
+```javascript
+const { RUNPOD_API_KEY, ENDPOINT_ID } = process.env;
+import runpodSdk from "runpod-sdk";
+
+async function main() {
+  const runpod = runpodSdk(RUNPOD_API_KEY);
+  const endpoint = runpod.endpoint(ENDPOINT_ID);
+  const result = await endpoint.run({
+    input: {
+      prompt: "Hello, World!",
+    },
+  });
+
+  console.log(result);
+
+  const { id } = result;
+  for await (const result of endpoint.stream(id)) {
+    console.log(`${JSON.stringify(result, null, 2)}`);
+  }
+  console.log("done streaming");
+}
+
+main();
+```
+
+</TabItem>
+  <TabItem value="output" label="Output">
+```json
+{ id: 'cb68890e-436f-4234-955d-001db6afe972-u1', status: 'IN_QUEUE' }
+{
+  "output": "H"
+}
+{
+  "output": "e"
+}
+{
+  "output": "l"
+}
+{
+  "output": "l"
+}
+{
+  "output": "o"
+}
+{
+  "output": ","
+}
+{
+  "output": " "
+}
+{
+  "output": "W"
+}
+{
+  "output": "o"
+}
+{
+  "output": "r"
+}
+{
+  "output": "l"
+}
+{
+  "output": "d"
+}
+{
+  "output": "!"
+}
+done streaming
+```
+
+</TabItem>
+
+<TabItem value="handler" label="Handler" default>
+
+You must define your handler to support the `"return_aggregate_stream": True` option on the `start` method.
+
+```python
+from time import sleep
+import runpod
+
+
+def handler(job):
+    job_input = job["input"]["prompt"]
+
+    for i in job_input:
+        sleep(1)  # sleep for 1 second for effect
+        yield i
+
+
+runpod.serverless.start(
+    {
+        "handler": handler,
+        "return_aggregate_stream": True,  # Ensures aggregated results are streamed back
+    }
+)
+```
+
+</TabItem>
+</Tabs>
+
 ## Health check
 
 Monitor the health of an endpoint by checking its status, including jobs completed, failed, in progress, in queue, and retried, as well as the status of workers.
