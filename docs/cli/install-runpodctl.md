@@ -62,7 +62,7 @@ Now that you've created an API key, run the following command to add it to runpo
 
 ```bash
 runpodctl config --apiKey your-api-key
-````
+```
 
 You should see something similar to the following output:
 
