@@ -1,6 +1,10 @@
 ---
 title: Overview
 sidebar_position: 1
+tags:
+  - node
+  - javascript
+  - typescript
 ---
 
 Get started with setting up your RunPod projects using JavaScript. Whether you're building web applications, server-side implementations, or automating tasks, the RunPod JavaScript SDK provides the tools you need.
@@ -15,11 +19,13 @@ Ensure you have Node.js and npm installed on your system before proceeding.
 To install the RunPod SDK, run the following npm command in your project directory.
 
 ```command
-npm i runpod-sdk
+npm install --save runpod-sdk
+# or
+yarn add runpod-sdk
 ```
 
 This command installs the `runpod-sdk` package and adds it to your project's `package.json` dependencies.
-For more details about the package, visit [npm package page](https://www.npmjs.com/package/runpod-sdk) or the [GitHub repository](https://github.com/runpod/js-sdk).
+For more details about the package, visit the [npm package page](https://www.npmjs.com/package/runpod-sdk) or the [GitHub repository](https://github.com/runpod/js-sdk).
 
 ## Add your API key
 

@@ -5,7 +5,7 @@ title: Endpoints
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-Interacting with RunPod's endpoints is a core feature of the SDK, enabling the execution of tasks and retrieval of results.
+Interacting with RunPod's endpoints is a core feature of the SDK, enabling the execution of tasks and the retrieval of results.
 This section covers the synchronous and asynchronous execution methods, along with checking the status of operations.
 
 ## Prerequisites
