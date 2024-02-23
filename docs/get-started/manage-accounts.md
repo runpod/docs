@@ -50,6 +50,7 @@ Limited access, primarily for account usage and existing pod connections.
 ### Billing role
 
 Specialized role focused on managing billing aspects.
+
 **Permissions**:
 
 - Access and manage billing information.
