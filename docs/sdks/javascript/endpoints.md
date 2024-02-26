@@ -34,8 +34,14 @@ This allows you to use the following methods or instances variables from the `En
 
 - [health](#health-check)
 - [purge_queue](#purge-queue)
-- [run_sync](#run-synchronously)
+- [runSync](#run-synchronously)
 - [run](#run-asynchronously)
+
+## Run the Endpoint
+
+Run the Endpoint with the either the asynchronous `run` or synchronous `runSync` method.
+
+Choosing between asynchronous and synchronous execution hinges on your task's needs and application design.
 
 ### Run synchronously
 
