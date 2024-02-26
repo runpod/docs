@@ -204,6 +204,16 @@ const config = {
         hideable: true,
       },
     },
+/*
+    announcementBar: {
+      id: "use-nvidia-a40",
+      content:
+        'Boost your projects with NVIDIA A40 GPUs now available in CA-MTL-1 and EU-SE-1. <a href="https://blog.runpod.io/maximizing-ai-efficiency-on-a-budget-the-unbeatable-value-of-nvidia-a40-and-a6000-gpus-for-fine-tuning-llms/">Enhance your computing power and efficiency</a>.',
+      backgroundColor: "#004a7f",
+      textColor: "#ffffff",
+      isCloseable: true,
+    },
+    */
   },
 
   scripts: [
