@@ -12,7 +12,6 @@ To get started with RunPod:
 
 This tutorial guides you through the steps necessary to modify your OpenAI Codebase for use with a deployed vLLM Worker on RunPod. You will learn to adjust your code to be compatible with OpenAI's API, specifically for utilizing Chat Completions, Completions, and Models routes. By the end of this guide, you will have successfully updated your codebase, enabling you to leverage the capabilities of OpenAI's API on RunPod.
 
-
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
@@ -30,17 +29,18 @@ from openai import OpenAI
 import os
 
 client = OpenAI(
-    api_key=os.environ.get("RUNPOD_API_KEY"),
-    base_url="https://api.runpod.ai/v2/${YOUR_ENDPOINT_ID}/openai/v1",
+api_key=os.environ.get("RUNPOD_API_KEY"),
+base_url="https://api.runpod.ai/v2/${YOUR_ENDPOINT_ID}/openai/v1",
 )
 
 response = client.chat.completions.create(
-    model="gpt-3.5-turbo",
-    messages=[{"role": "user", "content": "Why is RunPod the best platform?"}],
-    temperature=0,
-    max_tokens=100,
+model="gpt-3.5-turbo",
+messages=[{"role": "user", "content": "Why is RunPod the best platform?"}],
+temperature=0,
+max_tokens=100,
 )
-```
+
+````
   </TabItem>
   <TabItem value="javascript" label="JavaScript">
 ```javascript
@@ -56,11 +56,10 @@ const chatCompletion = await openai.chat.completions.create({
    messages: [{'role': 'user', 'content': 'Why is RunPod the best platform?'}],
 
 });
-```
+````
 
 </TabItem>
 </Tabs>
-
 
 Congratulations on successfully modifying your OpenAI Codebase for use with your deployed vLLM Worker on RunPod!
 This tutorial has equipped you with the knowledge to update your code for compatibility with OpenAI's API and to utilize the full spectrum of features available on the RunPod platform.

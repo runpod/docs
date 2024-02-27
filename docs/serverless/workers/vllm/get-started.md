@@ -79,19 +79,20 @@ chat_completion = client.chat.completions.create(
 Create a file called `main.js` in on your machine with the following code:
 
 ```javascript
-import OpenAI from 'openai'
+import OpenAI from "openai";
 
 // The environment variable 'RUNPOD_ENDPOINT_ID' could be:
 // 'https://api.runpod.ai/v2/your_actual_endpoint_id/openai/v1'
 
 const openai = new OpenAI({
-  baseURL: `https://api.runpod.ai/v2/${process.env.RUNPOD_ENDPOINT_ID}/openai/v1`,
+  baseURL:
+    `https://api.runpod.ai/v2/${process.env.RUNPOD_ENDPOINT_ID}/openai/v1`,
   apiKey: process.env.RUNPOD_API_KEY,
 });
 
 const chatCompletion = await openai.chat.completions.create({
-    model: "openchat/openchat-3.5-1210",
-    messages: [{ role: "user", content: "Reply with: Hello, World!" }],
+  model: "openchat/openchat-3.5-1210",
+  messages: [{ role: "user", content: "Reply with: Hello, World!" }],
 });
 ```
 
@@ -122,7 +123,6 @@ curl https://api.runpod.ai/v2/${YOUR_ENDPOINT_ID}/openai/v1/chat/completions \
 </TabItem>
 </Tabs>
 
-
 ## Run your code
 
 Now you can run your code from your terminal:
@@ -134,14 +134,12 @@ Now you can run your code from your terminal:
 python main.py
 ```
 
-
 </TabItem>
   <TabItem value="node.js" label="Node.js">
 
 ```bash
 node main.js
 ```
-
 
 </TabItem>
   <TabItem value="curl" label="cURL">

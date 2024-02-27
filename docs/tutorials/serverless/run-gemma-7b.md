@@ -19,8 +19,8 @@ The next section will guide you through setting up your Serverless Endpoint with
 
 ## Get started
 
-To begin, we'll deploy a vLLM Worker as a Serverless Endpoint. 
-RunPod simplifies the process of running large language models, offering an alternative to the more complex Docker and Kubernetes deployment methods. 
+To begin, we'll deploy a vLLM Worker as a Serverless Endpoint.
+RunPod simplifies the process of running large language models, offering an alternative to the more complex Docker and Kubernetes deployment methods.
 
 Follow these steps in the RunPod Serverless console to create your Endpoint.
 
@@ -40,18 +40,19 @@ Follow these steps in the RunPod Serverless console to create your Endpoint.
 
 Once the Endpoint has initialized, you can send a request to your [Endpoint](/serverless/endpoints/get-started).
 You've now successfully deployed your model, a significant milestone in utilizing Google's Gemma model.
- As we move forward, the next section will focus on interacting with your model.
+As we move forward, the next section will focus on interacting with your model.
 
 ## Interact with your model
 
 With the Endpoint up and running, it's time to leverage its capabilities by sending requests to interact with the model.
 This section demonstrates how to use OpenAI APIs to communicate with your model.
 
-In this example, you'll create a Python chat bot using the `OpenAI` library; however, you can use any programming language and any library that supports HTTP requests. 
+In this example, you'll create a Python chat bot using the `OpenAI` library; however, you can use any programming language and any library that supports HTTP requests.
 
 Here's how to get started:
 
 Use the `OpenAI` class to interact with the model. The `OpenAI` class takes the following parameters:
+
 - `base_url`: The base URL of the Serverless Endpoint.
 - `api_key`: Your RunPod API key.
 
@@ -69,7 +70,7 @@ client = OpenAI(
 
 Set your environment variables `RUNPOD_BASE_URL` and `RUNPOD_API_KEY` to your RunPod API key and base URL.
 Your `RUNPOD_BASE_URL` will be in the form of:
-    
+
 ```bash
 https://api.runpod.ai/v2/${YOUR_ENDPOINT_ID}/openai/v1
 ```
