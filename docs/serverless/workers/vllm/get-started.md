@@ -9,9 +9,9 @@ import TabItem from '@theme/TabItem';
 RunPod provides a simple way to run large language models (LLMs) as a Serverless Endpoint.
 vLLM Workers are a pre-build docker image that you can configure entirely within the RunPod UI.
 
-## Get started
+## Deploy the vLLM Worker
 
-This step will walk you through running the vLLM Worker as Serverless Endpoint to RunPod.
+This step walks you through running the vLLM Worker as Serverless Endpoint to RunPod.
 
 1. Login to the [RunPod Serverless console](https://www.runpod.io/console/serverless).
 2. Select **+ New Endpoint**.
@@ -21,7 +21,7 @@ This step will walk you through running the vLLM Worker as Serverless Endpoint t
    3. Configure the number of workers.
    4. (optional) Select **FlashBoot**.
    5. Enter the vLLM Worker image: `runpod/worker-vllm:latest`.
-   6. Specify enough storage for your model.
+   6. Select a [network storage volume](/serverless/endpoints/manage-endpoints#add-a-network-volume).
    7. Configure the environment variables:
       1. `MODEL_NAME`: (required) the large language model.
          1. For example: `openchat/openchat-3.5-1210`.
@@ -41,7 +41,7 @@ For a complete list of available environment variables, see the [vLLM Worker var
 This step walks you through sending a request to your Serverless Endpoint.
 The vLLM Worker can use any Hugging Face model and is compatible with OpenAI's API.
 
-For this example, we will use the `openchat/openchat-3.5-1210` model.
+For this example, use the `openchat/openchat-3.5-1210` model.
 
 ## Initialize your project
 

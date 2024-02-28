@@ -42,3 +42,14 @@ You can edit a running Endpoint in the Web interface after you've deployed it.
 You can force a configuration update by setting **Max Workers** to 0, selecting **Update**, then updating your max workers back to your needed value.
 
 :::
+
+## Add a Network Volume
+
+Network volumes are a way to share data between Workers: they are mounted to the same path on each Worker.
+For example, if a Worker contains a large-language model, you can use a network volume to share the model across all Workers.
+
+1. Navigate to [Serverless Endpoints](https://www.dev.runpod.io/console/serverless).
+2. Select the Endpoint you'd like to edit.
+3. Select **Edit Endpoint** and make your changes.
+4. Under **Advanced** choose **Select Network Volume**.
+5. Select the storage device and then choose **Update** to continue.

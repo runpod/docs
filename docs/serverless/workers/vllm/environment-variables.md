@@ -3,8 +3,7 @@ title: Environment variables
 sidebar_position: 4
 ---
 
-Environment variables are key to tailoring the configuration of your vLLM Worker.
-They enable precise control over model selection, access credentials, and operational parameters necessary for optimal worker performance.
+Environment variables configure your vLLM Worker by providing control over model selection, access credentials, and operational parameters necessary for optimal Worker performance.
 
 ## CUDA versions
 
@@ -16,18 +15,20 @@ When deploying, ensure to choose an appropriate CUDA version based on your needs
 | 11.8.0       | `runpod/worker-vllm:0.3.0-cuda11.8.0` | `runpod/worker-vllm:dev-cuda11.8.0` | Available on all RunPod Workers without additional selection needed.        |
 | 12.1.0       | `runpod/worker-vllm:0.3.0-cuda12.1.0` | `runpod/worker-vllm:dev-cuda12.1.0` | When creating an Endpoint, select CUDA Version 12.2 and 12.1 in the filter. |
 
-This table provides a quick reference to the image tags you should use based on the desired CUDA version and image stability (Stable or Development). Ensure to follow the selection note for CUDA 12.1.0 compatibility.
+This table provides a reference to the image tags you should use based on the desired CUDA version and image stability, stable or development.
+Ensure to follow the selection note for CUDA 12.1.0 compatibility.
 
 ## Environment variables
 
 :::note
 
-MODEL_NAME is a mandatory setting. All other configurations are optional but recommended for tailored operation.
+`MODEL_NAME` is a mandatory setting.
+All other configurations are optional but recommended for tailored operation.
 
-Boolean values are represented by 0 (False) and 1 (True).
+Boolean values are represented by `0` for false and `1` true.
 :::
 
-### LLM Settings
+### LLM settings
 
 Configure your vLLM Worker by setting environment variables as needed.
 For instance, `MODEL_NAME` might be `openchat/openchat-3.5-1210`, with `HF_TOKEN` set to your Hugging Face API token for accessing private models.
@@ -48,13 +49,13 @@ For instance, `MODEL_NAME` might be `openchat/openchat-3.5-1210`, with `HF_TOKEN
 
 ### Tokenizer settings
 
-Fine-tune how text is converted into tokens—a crucial step for model input preparation—with these settings.
+Fine-tune how text is converted into tokens with these settings.
 
-| Name                   | Default | Type/Choices                        | Description                                                                                       |
-| ---------------------- | ------- | ----------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `TOKENIZER_NAME`       | `None`  | `str`                               | Tokenizer repository to use a different tokenizer than the model's default.                       |
-| `TOKENIZER_REVISION`   | `None`  | `str`                               | Tokenizer revision to load.                                                                       |
-| `CUSTOM_CHAT_TEMPLATE` | `None`  | `str` of single-line jinja template | Custom chat jinja template. [More Info](https://huggingface.co/docs/transformers/chat_templating) |
+| Name                   | Default | Type/Choices                        | Description                                                                                                                       |
+| ---------------------- | ------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `TOKENIZER_NAME`       | `None`  | `str`                               | Tokenizer repository to use a different tokenizer than the model's default.                                                       |
+| `TOKENIZER_REVISION`   | `None`  | `str`                               | Tokenizer revision to load.                                                                                                       |
+| `CUSTOM_CHAT_TEMPLATE` | `None`  | `str` of single-line jinja template | Custom chat jinja template. For more information see, [chat templates](https://huggingface.co/docs/transformers/chat_templating). |
 
 ### System, GPU, and tensor parallelism (Multi-GPU) Settings
 
@@ -77,13 +78,13 @@ Control the batch size for streaming tokens, reducing HTTP request overhead and 
 | Name                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Default | Type/Choices | Description                                                                                               |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------------ | --------------------------------------------------------------------------------------------------------- |
 | `DEFAULT_BATCH_SIZE`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `50`    | `int`        | Default and Maximum batch size for token streaming to reduce HTTP calls.                                  |
-| `DEFAULT_MIN_BATCH_SIZE`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `1`     | `int`        | Batch size for the first request, which will be multiplied by the growth factor every subsequent request. |
+| `DEFAULT_MIN_BATCH_SIZE`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `1`     | `int`        | Batch size for the first request, which is multiplied by the growth factor every subsequent request. |
 | `DEFAULT_BATCH_SIZE_GROWTH_FACTOR`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `3`     | `float`      | Growth factor for dynamic batch size.                                                                     |
 | The way this works is that the first request will have a batch size of `DEFAULT_MIN_BATCH_SIZE`, and each subsequent request will have a batch size of `previous_batch_size * DEFAULT_BATCH_SIZE_GROWTH_FACTOR`. This will continue until the batch size reaches `DEFAULT_BATCH_SIZE`. E.g. for the default values, the batch sizes will be `1, 3, 9, 27, 50, 50, 50, ...`. You can also specify this per request, with inputs `max_batch_size`, `min_batch_size`, and `batch_size_growth_factor`. This has nothing to do with vLLM's internal batching, but rather the number of tokens sent in each HTTP request from the worker |         |              |                                                                                                           |
 
 ### OpenAI settings
 
-Configure compatibility with OpenAI's API, including output formatting and model naming, to ensure seamless integration and operation.
+Configure compatibility with OpenAI's API, including output formatting and model naming.
 
 | Name                                | Default     | Type/Choices     | Description                                                                                                                                                                       |
 | ----------------------------------- | ----------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -93,7 +94,7 @@ Configure compatibility with OpenAI's API, including output formatting and model
 
 ### Serverless settings
 
-Maximize the scalability and efficiency of your vLLM Worker in serverless environments with concurrency and logging settings, facilitating better resource management and operational insight.
+Maximize the scalability and efficiency of your vLLM Worker in serverless environments with concurrency and logging settings.
 
 | Name                   | Default | Type/Choices     | Description                                                                                                                                                                |
 | ---------------------- | ------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -102,5 +103,7 @@ Maximize the scalability and efficiency of your vLLM Worker in serverless enviro
 | `DISABLE_LOG_REQUESTS` | `1`     | boolean as `int` | Enables or disables vLLM request logging.                                                                                                                                  |
 
 :::tip
+
 For advanced model scenarios, such as using Mixtral 8x7B or quantized models, consider enabling `TRUST_REMOTE_CODE` to ensure compatibility and performance.
+
 :::
