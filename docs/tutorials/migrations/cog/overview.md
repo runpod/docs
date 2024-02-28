@@ -78,7 +78,7 @@ The `--tag` option allows you to specify a name and tag for your image, while th
 
 With your Docker image built and pushed, you're one step closer to deploying your Cog model on RunPod.
 
-## Create and deploy a Serverless Endpoint
+## Create and Deploy a Serverless Endpoint
 
 Now that your Docker image is ready, it's time to create and deploy a serverless endpoint on RunPod.
 This step will enable you to send requests to your new endpoint and use your Cog model in a serverless environment.

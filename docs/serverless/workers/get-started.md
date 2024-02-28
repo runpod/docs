@@ -73,7 +73,7 @@ When building for RunPod providers use `--platform=linux/amd64`.
 
 Now that you've pushed your container registry, you're ready to deploy your Serverless Endpoint to RunPod.
 
-## Deploy a serverless endpoint
+## Deploy a Serverless Endpoint
 
 This step will walk you through deploying a Serverless Endpoint to RunPod.
 You can refer to this walkthrough to deploy your own custom Docker image.
