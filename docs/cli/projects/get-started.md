@@ -4,12 +4,13 @@ sidebar_position: 2
 ---
 
 In this tutorial, we'll explore how to get the IP address of the machine your code is running on and deploy your code to the RunPod platform.
+You will get the IP address of your local machine, the development server, and the Serverless Endpoint's server.
 
 By the end, you'll have a solid understanding of how to set up a project environment, interact with your code, and deploy your code to a Serverless Endpoint on the RunPod platform.
 
-While this project is scopped to getting the IP address of the machine your code is running on, you can use the RunPod platform to deploy any code you want.
-For larger projects, bundling large packages to Docker image and making code changes requires multiple steps.
-With RunPod's development server, you can make changes to your code and test them in a live environment without having to rebuild a Docker image or redeploy your code to the RunPod platform.
+While this project is scoped to getting the IP address of the machine your code is running on, you can use the RunPod platform to deploy any code you want.
+For larger projects, bundling large packages a Docker image and making code changes requires multiple steps.
+With a RunPod development server, you can make changes to your code and test them in a live environment without having to rebuild a Docker image or redeploy your code to the RunPod platform.
 
 This tutorial takes advantage of making updates to your code and testing them in a live environment.
 
@@ -44,7 +45,7 @@ Select the **Hello World** project and follow the prompts on the screen.
 
 Next, you'll write the code to get the IP address of the machine your code is running on.
 
-We'll use `httpbin` to retrieve the IP address and test the code locally.
+Use `httpbin` to retrieve the IP address and test the code locally.
 
 Change directories to the project directory and open the `src/handler.py` file in your text editor.
 
@@ -53,7 +54,7 @@ cd my_ip
 ```
 
 The current code is boiler plate text.
-We want to replace the code with the following:
+Replace the code with the following:
 
 ```python
 import runpod
@@ -93,7 +94,8 @@ In the next step, you'll see how to deploy your code to the RunPod platform.
 
 ## Step 3. Run a development server
 
-Now let's run the code you've written. You'll start a development server using the RunPod CLI `project dev` command.
+Now let's run the code you've written.
+You'll start a development server using the RunPod CLI `project dev` command.
 
 RunPod provides a development server that allows you to quickly make changes to your code and test these changes in a live environment.
 You don't need to rebuild a Docker image or redeploy your code to the RunPod platform just because you made a small change or added a new dependency.
@@ -175,13 +177,14 @@ The previous command returns a response:
 }
 ```
 
-The output is the IP address of the Pod your code is running on.
+The output is the IP address of the Pod your code is running on and not your local machine.
+Even though you're executing code locally, you can see that it's running on a Pod.
 
 Now, what if you wanted this function to run as a Serverless Endpoint?
 Meaning, you didn't want to keep the Pod running all the time.
 You only wanted it to turn on when you sent a request to it.
 
-In the next step, you'll learn to deploy your code to the Serverless platform.
+In the next step, you'll learn to deploy your code to the Serverless platform and get the IP address of that machine.
 
 ## Step 5. Deploy your code
 
