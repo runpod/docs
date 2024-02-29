@@ -70,7 +70,7 @@ runpod.serverless.start({"handler": get_my_ip})
 
 This uses `httpbin` to get the IP address of the machine your code is running on.
 
-If you were to run this code locally, using the RunPod testing environment, you would get the IP address of your machine, for example:
+Run this code locally to get the IP address of your machine, for example:
 
 ```bash
 python3 src/handler.py --test_input '{"input": {"prompt": ""}}'
@@ -94,7 +94,7 @@ In the next step, you'll see how to deploy your code to the RunPod platform.
 
 ## Step 3. Run a development server
 
-Now let's run the code you've written.
+Now let's run the code you've written using RunPod's development server.
 You'll start a development server using the RunPod CLI `project dev` command.
 
 RunPod provides a development server that allows you to quickly make changes to your code and test these changes in a live environment.
@@ -109,7 +109,7 @@ runpodctl project dev
 This starts a development server on a Pod.
 The logs shows the status of your Pod as well as the port number your Pod is running on.
 
-The development server watches for changes in your code and automatically updates the Pod with changes to your code and files like, `requirements.txt`.
+The development server watches for changes in your code and automatically updates the Pod with changes to your code and files like `requirements.txt`.
 
 When the Pod is running you should see the following logs:
 
@@ -130,7 +130,7 @@ You can interact with this URL like you would any other Endpoint.
 In this step, you'll interact with your code by running a `curl` command to fetch the IP address from the development server.
 You'll learn how to include dependencies in your project and how to use the RunPod API to run your code.
 
-You might have noticed that the function to get an IP address uses a third-party dependency, `requests`.
+You might have noticed that the function to get an IP address uses a third-party dependency `requests`.
 This means by default it's not included in Python or the RunPod environment.
 
 To include this dependency, you need to add it to the `requirements.txt` file in the root of your project.
@@ -255,4 +255,6 @@ The output is the IP address of the Pod your code is running on.
 
 ## Conclusion
 
-In this tutorial, you've learned how to get the IP address of the machine your code is running on and deploy your code to the RunPod platform. You've also learned how to set up a project environment, run a development server, and interact with your code using the RunPod API. With this knowledge, you can now use this code as a Serverless Endpoint or continue developing your project, testing, and deploying it to the RunPod platform.
+In this tutorial, you've learned how to get the IP address of the machine your code is running on and deploy your code to the RunPod platform.
+You've also learned how to set up a project environment, run a development server, and interact with your code using the RunPod API.
+With this knowledge, you can now use this code as a Serverless Endpoint or continue developing your project, testing, and deploying it to the RunPod platform.
