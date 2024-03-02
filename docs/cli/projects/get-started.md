@@ -157,7 +157,7 @@ While the Pod is still running, create a new terminal session and run the follow
 
 ```bash
 curl -X 'POST' \
-  'https://lug43rcd07ug47-8080.proxy.runpod.net/runsync' \
+  'https://${YOUR_ENDPOINT}-8080.proxy.runpod.net/runsync' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -208,7 +208,7 @@ The following URLs are available:
     - https://api.runpod.ai/v2/${YOUR_ENDPOINT}/runsync
     - https://api.runpod.ai/v2/${YOUR_ENDPOINT}/run
     - https://api.runpod.ai/v2/${YOUR_ENDPOINT}/health
-```test
+```
 
 :::note
 
