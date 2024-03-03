@@ -6,23 +6,27 @@ sidebar_position: 1
 
 This page provides an overview for RunPod and its related features.
 
-**RunPod** is a cloud computing platform, primarily designed for AI and machine learning applications.
-RunPod's key offerings include Pods, Serverless compute, and AI APIs.
+**RunPod** is a cloud computing platform designed for AI, machine learning applications, and general compute.
+
+Execute your code utilizing both GPU and CPU resources through [Pods](/pods/overview), as well as [Serverless](/serverless/overview) computing options.
 
 ## What are Pods?
 
-**Pods** allows you to spin up GPU and CPU instances with containers.
-The Pods are a solution for users that need a server with a GPU to run a docker container on it.
-Pods are available in two different types: Secure Cloud and Community Cloud.
+**Pods** allows you to run your code on GPU and CPU instances with containers.
+
+Pods are available in two different types: [Secure Cloud and Community Cloud](references/faq/#secure-cloud-vs-community-cloud).
 The Secure Cloud runs in T3/T4 data centers providing high reliability and security, while the Community Cloud connects individual compute providers to consumers through a vetted, secure peer-to-peer system.
 
 ## What is Serverless?
 
 **Serverless** offers pay-per-second serverless GPU computing, bringing autoscaling to your production environment.
-The Serverless offering allows users to define a worker, create a REST API endpoint for it which will queue jobs and autoscale to fill demand.
+The Serverless offering allows users to define a Worker, create a REST API Endpoint for it which queue jobs and autoscales to fill demand.
 This service, part of our Secure Cloud offering, guarantees low cold-start times and stringent security measures.
 
-You can get stared with [Quick deploys](/serverless/quick-deploys) or for further customization, [build your own](/serverless/workers/overview).
+You can get started with:
+
+- [Quick deploys](/serverless/quick-deploys)
+- [Build your own](/serverless/workers/overview)
 
 ## What are AI APIs?
 
