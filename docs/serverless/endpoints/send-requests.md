@@ -52,9 +52,11 @@ This default behavior keeps a hanging request from draining your account credits
 
 To customize the management of job lifecycles and resource consumption, the following policies can be configured:
 
-- **Execution Timeout**: Specifies the maximum duration that a job can run before it's automatically terminated. This limit helps prevent jobs from running indefinitely and consuming resources. The default value is 600000 milliseconds (10 minutes). You can overwrite the default by specifying `executionTimeout` in the job input.
+- **Execution Timeout**: Specifies the maximum duration that a job can run before it's automatically terminated. This limit helps prevent jobs from running indefinitely and consuming resources. The default value is 600000 milliseconds (10 minutes). You can overwrite the value for a request by specifying `executionTimeout` in the job input.
 
 :::note
+
+Changing the **Execution Timeout** value through the web UI sets the value for all requests to an endpoint. You can still overwrite the value for individual requests with `executionTimeout` in the job input.
 
 :::
 
