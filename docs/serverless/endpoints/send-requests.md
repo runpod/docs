@@ -10,7 +10,7 @@ Let's start by constructing our request body to send to the endpoint.
 
 ## JSON Request Body
 
-You can make requests to your endpoint with JSON. Your request must include an `input` key containing a dictionary of inputs required for the job. For example, if your handler requires an input prompt, you might send in something like this:
+You can make requests to your endpoint with JSON. Your request must include a JSON object containing an `input` key. For example, if your handler requires an input prompt, you might send in something like this:
 
 ```json
 {
@@ -42,7 +42,7 @@ To see notifications for completed jobs, pass a URL in the top level of the requ
 
 Your webhook endpoint should respond with a `200` status to acknowledge the successful call. If the call is not successful, the request waits 10 seconds and sends the call again up to two more times.
 
-A POST request goes to your URL when the job is complete. This request contains the same information as fetching the results from the `/status/{job_id}` endpoint.
+A `POST` request goes to your URL when the job is complete. This request contains the same information as fetching the results from the `/status/{job_id}` endpoint.
 
 ### Execution Policies
 
@@ -52,7 +52,12 @@ This default behavior keeps a hanging request from draining your account credits
 
 To customize the management of job lifecycles and resource consumption, the following policies can be configured:
 
-- **Execution Timeout**: Specifies the maximum duration that a job can run before it's automatically terminated. This limit helps prevent jobs from running indefinitely and consuming resources. The default value is 600 seconds (10 minutes). You can overwrite the default by specifying `executionTimeout` in the job input.
+- **Execution Timeout**: Specifies the maximum duration that a job can run before it's automatically terminated. This limit helps prevent jobs from running indefinitely and consuming resources. The default value is 600000 milliseconds (10 minutes). You can overwrite the default by specifying `executionTimeout` in the job input.
+
+:::note
+
+:::
+
 - **Low Priority**: When true, the job does not trigger scaling up resources to execute. Instead, it executes when there are no pending higher priority jobs in the queue. Use this option for tasks that are not time-sensitive. 
 - **TTL (Time-to-Live)**: Defines the maximum time a job can remain in the queue before it's automatically terminated. This parameter ensures that jobs don't stay in the queue indefinitely.
 
@@ -60,7 +65,7 @@ To customize the management of job lifecycles and resource consumption, the foll
 {
   "input": {},
   "policy": {
-    "executionTimeout": int, // Time in milliseconds. Must be greater than 5 seconds.
+    "executionTimeout": int, // Time in milliseconds. Must be greater than 5 seconds. Default is 10 minutes.
     "lowPriority": bool, // Sets the job's priority to low. Default behavior escalates to high under certain conditions.
     "ttl": int // Time in milliseconds. Must be greater than or equal to 10 seconds. Default is 24 hours. Maximum is one week.
   }
