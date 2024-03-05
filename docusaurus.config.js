@@ -204,7 +204,7 @@ const config = {
         hideable: true,
       },
     },
-/*
+    /*
     announcementBar: {
       id: "use-nvidia-a40",
       content:
