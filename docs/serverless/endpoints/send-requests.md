@@ -4,7 +4,7 @@ description: "The method in which jobs are submitted and returned."
 sidebar_position: 4
 ---
 
-Before sending a job request, ensure you have deployed your custom endpoint. 
+Before sending a job request, ensure you have deployed your custom endpoint.
 
 Let's start by constructing our request body to send to the endpoint.
 
@@ -25,9 +25,10 @@ You can make requests to your endpoint with JSON. Your request must include a JS
 Along with an input key, you can include other top-level inputs to access different functions. If a key is passed in at the top level and not included in the body of your request, it will be discarded and unavailable to your handler.
 
 The following optional inputs are available to all endpoints regardless of the worker.
-* Webhooks
-* Execution policies
-* S3-compatible storage
+
+- Webhooks
+- Execution policies
+- S3-compatible storage
 
 ### Webhooks
 
@@ -60,7 +61,7 @@ Changing the **Execution Timeout** value through the web UI sets the value for a
 
 :::
 
-- **Low Priority**: When true, the job does not trigger scaling up resources to execute. Instead, it executes when there are no pending higher priority jobs in the queue. Use this option for tasks that are not time-sensitive. 
+- **Low Priority**: When true, the job does not trigger scaling up resources to execute. Instead, it executes when there are no pending higher priority jobs in the queue. Use this option for tasks that are not time-sensitive.
 - **TTL (Time-to-Live)**: Defines the maximum time a job can remain in the queue before it's automatically terminated. This parameter ensures that jobs don't stay in the queue indefinitely.
 
 ```json
@@ -96,6 +97,6 @@ The configuration only passes to the worker. It is not returned as part of the j
 
 :::note
 
-The serverless worker must contain logic that allows it to use this input. If you build a custom endpoint and request s3Config in the job input, your worker is ultimately responsible for using the information passed in to upload the output. 
+The serverless worker must contain logic that allows it to use this input. If you build a custom endpoint and request s3Config in the job input, your worker is ultimately responsible for using the information passed in to upload the output.
 
 :::
