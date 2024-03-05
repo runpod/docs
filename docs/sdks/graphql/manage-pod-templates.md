@@ -187,7 +187,7 @@ mutation {
   </TabItem>
 </Tabs>
 
-## Modify a Pod Template
+## Modify a Template
 
 ### Modify a GPU Pod Template
 
@@ -269,7 +269,7 @@ mutation {
   </TabItem>
 </Tabs>
 
-### Modify a Serverless Pod Template
+### Modify a Serverless Template
 
 <Tabs>
   <TabItem value="curl" label="cURL" default>
