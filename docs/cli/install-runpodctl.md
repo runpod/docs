@@ -7,7 +7,7 @@ sidebar_position: 1
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-runpodctl is an [open-source command-line interface (CLI)](https://github.com/runpod/runpodctl). You can use runpodctl to work with Pods and RunPod projects.
+runpodctl is an [open-source command-line interface (CLI)](https://github.com/runpod/runpodctl). You can use runpodctl to work with Pods and RunPod projects. It's the easiest way to develop a serverless AI endpoint.
 
 When you create a Pod, it comes with runpodctl installed and configured with a Pod-scoped API key. You can also run runpodctl locally.
 
@@ -17,7 +17,7 @@ To install runpodctl on your local machine, run the appropriate command for your
   <TabItem value="mac" label="macOS">
 
 ```bash
-wget -qO- cli.runpod.net | sudo bash
+brew install runpod/runpodctl/runpodctl
 ```
 
 </TabItem>
@@ -31,7 +31,7 @@ wget -qO- cli.runpod.net | sudo bash
   <TabItem value="windows" label="Windows">
 
 ```bash
-wget https://github.com/runpod/runpodctl/releases/download/v1.12.3/runpodctl-windows-amd64.exe -O runpodctl.exe
+wget https://github.com/runpod/runpodctl/releases/latest/download/runpodctl-windows-amd64.exe -O runpodctl.exe
 ```
 
 </TabItem>
