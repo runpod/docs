@@ -18,8 +18,6 @@ Choose the convention that works best for your use case.
 The `MODEL_NAME` environment variable is required for all requests.
 Use this value when making requests to the vLLM Worker.
 
-Model names in RunPod follow the `model:tag` format.
-
 For example `openchat/openchat-3.5-1210`, `mistral:latest`, `llama2:70b`.
 
 Generate a response for a given prompt with a provided model. This is a streaming endpoint, so there will be a series of responses. The final response object will include statistics and additional data from the request.
@@ -122,7 +120,7 @@ import os
 # Initialize the OpenAI Client with your RunPod API Key and Endpoint URL
 client = OpenAI(
     api_key=os.environ.get("RUNPOD_API_KEY"),
-    base_url="https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/openai/v1",
+    base_url=f"https://api.runpod.ai/v2/{RUNPOD_ENDPOINT_ID}/openai/v1",
 )
 ```
 

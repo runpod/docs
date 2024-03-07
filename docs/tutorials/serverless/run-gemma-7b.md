@@ -34,7 +34,7 @@ Follow these steps in the RunPod Serverless console to create your Endpoint.
    5. Enter the vLLM Worker image: `runpod/worker-vllm:latest`.
    6. Specify enough storage for your model.
    7. Add the following environment variables:
-      1. `MODEL_NAME`: `google/gemma-7b`.
+      1. `MODEL_NAME`: `google/gemma-7b-it`.
       2. `HF_TOKEN`: your Hugging Face API token for private models.
 4. Select **Deploy**.
 
@@ -72,10 +72,10 @@ Set your environment variables `RUNPOD_BASE_URL` and `RUNPOD_API_KEY` to your Ru
 Your `RUNPOD_BASE_URL` will be in the form of:
 
 ```bash
-https://api.runpod.ai/v2/${YOUR_ENDPOINT_ID}/openai/v1
+https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/openai/v1
 ```
 
-Where `${YOUR_ENDPOINT_ID}` is the ID of your Serverless Endpoint.
+Where `${RUNPOD_ENDPOINT_ID}` is the ID of your Serverless Endpoint.
 
 :::
 
@@ -101,7 +101,7 @@ def display_chat_history(messages):
 
 def get_assistant_response(messages):
     r = client.chat.completions.create(
-        model="google/gemma-7b",
+        model="google/gemma-7b-it",
         messages=[{"role": m["role"], "content": m["content"]} for m in messages],
         temperature=.7,
         top_p=.8,
