@@ -96,7 +96,7 @@ This step will walk you through deploying a Serverless Endpoint to RunPod.
 3. Provide the following:
    1. Endpoint name.
    2. Select a GPU.
-   3. Configure the number of workers.
+   3. Configure the number of Workers.
    4. (optional) Select **FlashBoot**.
    5. (optional) Select a template.
    6. Enter the name of your Docker image.

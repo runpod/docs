@@ -9,7 +9,11 @@ import TabItem from '@theme/TabItem';
 RunPod provides a simple way to run large language models (LLMs) as a Serverless Endpoint.
 vLLM Workers are pre-built Docker images that you can configure entirely within the RunPod UI.
 
-## Deploy the vLLM Worker
+## Deploy the vLLM Endpoint
+
+One of the advantages of deploying your model with the vLLM Worker is that you can deploy your model with minimal configuration.
+You don't need to write the logic to download your image, bundle it, and push it to a Docker registry.
+For most models, you just need to pass in the prebuilt vLLM Worker image name and the LLM model name, and the vLLM Worker takes care of the rest.
 
 This step walks you through running the vLLM Worker as Serverless Endpoint to RunPod.
 
@@ -18,10 +22,12 @@ This step walks you through running the vLLM Worker as Serverless Endpoint to Ru
 3. Provide the following:
    1. Endpoint name.
    2. Select a GPU.
-   3. Configure the number of workers.
+   3. Configure the number of Workers.
    4. (optional) Select **FlashBoot**.
-   5. Enter the vLLM Worker image: `runpod/worker-vllm:latest`.
-   6. Select a [network storage volume](/serverless/endpoints/manage-endpoints#add-a-network-volume).
+   5. Enter the vLLM RunPod Worker image name, which provides the compatible CUDA version:
+      - `runpod/worker-vllm:0.3.1-cuda11.8.0`
+      - `runpod/worker-vllm:latest-cuda12.1.0`
+   6. (optional) Select a [network storage volume](/serverless/endpoints/manage-endpoints#add-a-network-volume).
    7. Configure the environment variables:
       1. `MODEL_NAME`: (required) the large language model.
          1. For example: `openchat/openchat-3.5-1210`.
@@ -32,9 +38,14 @@ Once the Endpoint has initialized, you can send a request to your [Endpoint](/se
 
 :::note
 
+If selecting CUDA version 12.1.0 or greater, then filter for GPUs that support that version of CUDA by selecting the versions under the **Advanced** tab.
+
 For a complete list of available environment variables, see the [vLLM Worker variables](/serverless/workers/vllm/environment-variables).
 
 :::
+
+You've successfully deployed your vLLM Worker as Serverless Endpoint.
+You can start making requests to this Endpoint using the compatible OpenAI inputs.
 
 ## Send a request
 

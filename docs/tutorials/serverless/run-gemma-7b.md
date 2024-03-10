@@ -30,7 +30,7 @@ Follow these steps in the RunPod Serverless console to create your Endpoint.
 3. Provide the following:
    1. Endpoint name.
    2. Select a GPU.
-   3. Configure the number of workers.
+   3. Configure the number of Workers.
    4. (optional) Select **FlashBoot**.
    5. Enter the vLLM Worker image: `runpod/worker-vllm:latest`.
    6. Specify enough storage for your model.
