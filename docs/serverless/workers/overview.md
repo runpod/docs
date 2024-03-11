@@ -16,6 +16,6 @@ Workers run your code in the cloud.
 
 To start using RunPod Workers:
 
-1. **Write Your Function**: Code your Handler Functions in a supported language.
+1. **Write your function**: Code your Handler Functions in a supported language.
 2. **Deploy to RunPod**: Upload your Handler Functions to RunPod.
 3. **Integrate and Execute**: Use the provided Endpoint to integrate with your application.

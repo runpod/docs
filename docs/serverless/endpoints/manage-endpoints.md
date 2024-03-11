@@ -37,6 +37,15 @@ You can edit a running Endpoint in the Web interface after you've deployed it.
 3. Select **Edit Endpoint** and make your changes.
 4. Choose **Update**.
 
+## Set GPU prioritization an Endpoint
+
+When creating or modifying a Worker Endpoint, specify your GPU preferences in descending order of priority.
+
+This allows you to configure the desired GPU models for your Worker Endpoints.
+
+RunPod attempts to allocate your first choice if it's available.
+If your preferred GPU is not available, the system will automatically default to the next available GPU in your priority list.
+
 :::note
 
 You can force a configuration update by setting **Max Workers** to 0, selecting **Update**, then updating your max workers back to your needed value.
