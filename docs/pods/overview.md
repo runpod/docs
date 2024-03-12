@@ -12,6 +12,30 @@ When building an image for RunPod, use the flag `--platform linux/amd64,linux/ar
 
 :::
 
+### Understanding Pod components and configuration
+
+A Pod is a server container created by you to access the hardware, with a dynamically generated assigned identifier.
+For example, `2s56cp0pof1rmt` identifies the instance.
+
+A Pod comprises a container volume with the operating system and temporary storage, a disk volume for permanent storage, an Ubuntu Linux container, allocated vCPU and system RAM, optional GPUs or CPUs for specific workloads, a pre-configured template for easy software access, and a proxy connection for web access.
+
+Each Pod encompasses a variety of components:
+
+- A container volume that houses the operating system and temporary storage.
+  - This storage is volatile and will be lost if the Pod is halted or rebooted.
+- A disk volume for permanent storage, preserved for the duration of the Pod's lease, akin to a hard disk.
+  - This storage is persistent and will be available even if the Pod is halted or rebooted.
+- An Ubuntu Linux container, capable of running almost any software that can be executed on Ubuntu.
+- Assigned vCPU and system RAM dedicated to the container and any processes it runs.
+- Optional GPUs or CPUs, tailored for specific workloads like CUDA or AI/ML tasks, though not mandatory for starting the container.
+- A pre-configured template that automates the installation of software and settings upon Pod creation, offering straightforward, one-click access to various packages.
+- A proxy connection for web access, allowing connectivity to any open port on the container.
+  - For example, `https://[pod-id]-[port number].proxy.runpod.net`, or `https://2s56cp0pof1rmt-7860.proxy.runpod.net/`).
+
+To get started, see how to [Choose a Pod](/pods/choose-a-pod) then see the instructions on [Manage Pods](/pods/manage-pods).
+
+## Learn more
+
 You can jump straight to a running Pod by starting from a [template](/pods/templates/overview). For more customization, you can configure the following:
 
 - [GPU Type](/references/gpu-types) and Quantity
