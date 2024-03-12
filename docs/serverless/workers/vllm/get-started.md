@@ -26,7 +26,7 @@ This step walks you through running the vLLM Worker as Serverless Endpoint to Ru
    4. (optional) Select **FlashBoot**.
    5. Enter the vLLM RunPod Worker image name, which provides the compatible CUDA version:
       - `runpod/worker-vllm:0.3.1-cuda11.8.0`
-      - `runpod/worker-vllm:latest-cuda12.1.0`
+      - `runpod/worker-vllm:0.3.1-cuda12.1.0`
    6. (optional) Select a [network storage volume](/serverless/endpoints/manage-endpoints#add-a-network-volume).
    7. Configure the environment variables:
       1. `MODEL_NAME`: (required) the large language model.
@@ -83,6 +83,8 @@ chat_completion = client.chat.completions.create(
     model="openchat/openchat-3.5-1210",
     messages=[{"role": "user", "content": "Reply with: Hello, World!"}]
 )
+
+print(chat_completion)
 ```
 
 </TabItem>
@@ -106,6 +108,8 @@ const chatCompletion = await openai.chat.completions.create({
   model: "openchat/openchat-3.5-1210",
   messages: [{ role: "user", content: "Reply with: Hello, World!" }],
 });
+
+console.log(chatCompletion);
 ```
 
 </TabItem>
