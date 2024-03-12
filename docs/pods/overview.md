@@ -14,7 +14,7 @@ When building an image for RunPod, use the flag `--platform linux/amd64,linux/ar
 
 ### Understanding Pod components and configuration
 
-A Pod is a server container created by you to access the hardware, with an dynamically generated assigned identifier.
+A Pod is a server container created by you to access the hardware, with a dynamically generated assigned identifier.
 For example, `2s56cp0pof1rmt` identifies the instance.
 
 A Pod comprises a container volume with the operating system and temporary storage, a disk volume for permanent storage, an Ubuntu Linux container, allocated vCPU and system RAM, optional GPUs or CPUs for specific workloads, a pre-configured template for easy software access, and a proxy connection for web access.
