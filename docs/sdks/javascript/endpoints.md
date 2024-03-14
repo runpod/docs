@@ -10,16 +10,16 @@ This section covers the synchronous and asynchronous execution methods, along wi
 
 ## Prerequisites
 
-Before using the RunPod Python, ensure that you have:
+Before using the RunPod JavaScript, ensure that you have:
 
-- Installed the RunPod Python SDK.
+- Installed the RunPod JavaScript SDK.
 - Configured your API key.
 
 ## Set your Endpoint Id
 
 Set your RunPod API key and your Endpoint Id as environment variables.
 
-```python
+```javascript
 const { RUNPOD_API_KEY, ENDPOINT_ID } = process.env;
 import runpodSdk from "runpod-sdk";
 
