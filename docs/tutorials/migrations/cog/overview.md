@@ -78,19 +78,19 @@ The `--tag` option allows you to specify a name and tag for your image, while th
 
 With your Docker image built and pushed, you're one step closer to deploying your Cog model on RunPod.
 
-## Create and deploy a Serverless Endpoint
+## Create and Deploy a Serverless Endpoint
 
 Now that your Docker image is ready, it's time to create and deploy a serverless endpoint on RunPod.
 This step will enable you to send requests to your new endpoint and use your Cog model in a serverless environment.
 
 To create and deploy a serverless endpoint on RunPod:
 
-1. Login to the [RunPod Serverless console](https://www.runpod.io/console/serverless).
+1. Log in to the [RunPod Serverless console](https://www.runpod.io/console/serverless).
 2. Select **+ New Endpoint**.
 3. Provide the following:
    1. Endpoint name.
    2. Select a GPU.
-   3. Configure the number of workers.
+   3. Configure the number of Workers.
    4. (optional) Select **FlashBoot**.
    5. (optional) Select a template.
    6. Enter the name of your Docker image.
