@@ -43,7 +43,7 @@ Once the Pod is up and running, you'll have access to a terminal within the RunP
 
 ## Step 2: Install Ollama
 
-Now that your Pod is running, you can login to the web terminal.
+Now that your Pod is running, you can Log in to the web terminal.
 The web terminal is a powerful way to interact with your Pod.
 
 1. Select **Connect** and choose **Start Web Terminal**.

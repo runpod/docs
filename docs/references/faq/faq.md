@@ -161,7 +161,7 @@ If the host machine loses power, it will attempt to start your Pod again when it
 
 ### What if my Pod loses internet connectivity?
 
-The host machine will continue to run your Pod to the best of its ability, even if it is not connected to the internet. If your job requires internet connectivity, then it will not function. You will not be charged if the host loses internet connectivity, even if it continues to run your job. You may, of course, request that your Pod exit while the host is offline, and it will exit your Pod when it regains network connectivity.
+The host machine continues to run your Pod to the best of its ability, even if it is not connected to the internet. If your job requires internet connectivity, then it will not function. You will not be charged if the host loses internet connectivity, even if it continues to run your job. You may, of course, request that your Pod exit while the host is offline, and it will exit your Pod when it regains network connectivity.
 
 ### What if it says that my spending limit has been exceeded?
 
