@@ -9,6 +9,8 @@ import TabItem from '@theme/TabItem';
 RunPod provides a simple way to run large language models (LLMs) as a Serverless Endpoint.
 vLLM Workers are pre-built Docker images that you can configure entirely within the RunPod UI.
 
+You will learn to deploy an OpenAI compatible Endpoint with vLLM inference engine on RunPod.
+
 ## Deploy the vLLM Endpoint
 
 One of the advantages of deploying your model with the vLLM Worker is that you can deploy your model with minimal configuration.
