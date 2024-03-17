@@ -175,9 +175,6 @@ We implement a spending limit for newer accounts that will grow over time. This 
 
 Sure, do! Take a look at our [legal page](https://www.runpod.io/legal).
 
-
-Here's how I would integrate the GDPR compliance information into the FAQ section in a question and answer format:
-
 ## GDPR Compliance
 
 ### Is RunPod compliant with GDPR for data processed in Europe?
