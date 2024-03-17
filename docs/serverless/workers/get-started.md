@@ -78,7 +78,7 @@ Now that you've pushed your container registry, you're ready to deploy your Serv
 This step will walk you through deploying a Serverless Endpoint to RunPod.
 You can refer to this walkthrough to deploy your own custom Docker image.
 
-1. Login to the [RunPod Serverless console](https://www.runpod.io/console/serverless).
+1. Log in to the [RunPod Serverless console](https://www.runpod.io/console/serverless).
 2. Select **+ New Endpoint**.
 3. Provide the following:
    1. Endpoint name.

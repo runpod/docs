@@ -85,7 +85,7 @@ This step will enable you to send requests to your new endpoint and use your Cog
 
 To create and deploy a serverless endpoint on RunPod:
 
-1. Login to the [RunPod Serverless console](https://www.runpod.io/console/serverless).
+1. Log in to the [RunPod Serverless console](https://www.runpod.io/console/serverless).
 2. Select **+ New Endpoint**.
 3. Provide the following:
    1. Endpoint name.

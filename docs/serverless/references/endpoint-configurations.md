@@ -8,7 +8,7 @@ The following are configurable settings within an Endpoint.
 ## Endpoint Name
 
 Create a name you'd like to use for the Endpoint configuration.
-The resulting Endpoint is assigned a random ID to be used when making calls.
+The resulting Endpoint is assigned a random ID to be used for making calls.
 
 The name is only visible to you.
 

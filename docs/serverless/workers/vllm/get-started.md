@@ -15,9 +15,9 @@ One of the advantages of deploying your model with the vLLM Worker is that you c
 You don't need to write the logic to download your image, bundle it, and push it to a Docker registry.
 For most models, you just need to pass in the prebuilt vLLM Worker image name and the LLM model name, and the vLLM Worker takes care of the rest.
 
-This step walks you through running the vLLM Worker as Serverless Endpoint to RunPod.
+This step walks you through running the vLLM Worker on a Serverless Endpoint deploying to RunPod.
 
-1. Login to the [RunPod Serverless console](https://www.runpod.io/console/serverless).
+1. Log in to the [RunPod Serverless console](https://www.runpod.io/console/serverless).
 2. Select **+ New Endpoint**.
 3. Provide the following:
    1. Endpoint name.
@@ -34,11 +34,11 @@ This step walks you through running the vLLM Worker as Serverless Endpoint to Ru
       2. `HF_TOKEN`: (optional) your Hugging Face API token for private models.
 4. Select **Deploy**.
 
-Once the Endpoint has initialized, you can send a request to your [Endpoint](/serverless/endpoints/get-started).
+Once the Endpoint initializes, you can send a request to your [Endpoint](/serverless/endpoints/get-started).
 
 :::note
 
-If selecting CUDA version 12.1.0 or greater, then filter for GPUs that support that version of CUDA by selecting the versions under the **Advanced** tab.
+To use CUDA version 12.1.0 or greater, filter for GPUs that support that version of CUDA by selecting the versions under the **Advanced** tab.
 
 For a complete list of available environment variables, see the [vLLM Worker variables](/serverless/workers/vllm/environment-variables).
 
@@ -55,7 +55,7 @@ If you have the OpenAI library installed, you can continue using it with the vLL
 
 For this example, use the `openchat/openchat-3.5-1210` model.
 
-## Initialize your project
+### Initialize your project
 
 Choose your programming language and add the following code to your file.
 
@@ -75,7 +75,7 @@ import os
 endpoint_id = os.environ.get("RUNPOD_ENDPOINT_ID")
 
 client = OpenAI(
-    base_url = f"https://api.runpod.ai/v2/{endpoint_id}/openai/v1"
+    base_url = f"https://api.runpod.ai/v2/{endpoint_id}/openai/v1",
     api_key=os.environ.get("RUNPOD_API_KEY"),
 )
 
@@ -139,7 +139,7 @@ curl https://api.runpod.ai/v2/${YOUR_ENDPOINT_ID}/openai/v1/chat/completions \
 </TabItem>
 </Tabs>
 
-## Run your code
+### Run your code
 
 Now run your code from the terminal:
 
@@ -209,3 +209,5 @@ The output is as follows:
   }
 }
 ```
+
+You've successfully sent a request to your Serverless Endpoint and received a response.

@@ -25,7 +25,7 @@ RunPod simplifies the process of running large language models, offering an alte
 
 Follow these steps in the RunPod Serverless console to create your Endpoint.
 
-1. Login to the [RunPod Serverless console](https://www.runpod.io/console/serverless).
+1. Log in to the [RunPod Serverless console](https://www.runpod.io/console/serverless).
 2. Select **+ New Endpoint**.
 3. Provide the following:
    1. Endpoint name.
@@ -39,7 +39,7 @@ Follow these steps in the RunPod Serverless console to create your Endpoint.
       2. `HF_TOKEN`: your Hugging Face API token for private models.
 4. Select **Deploy**.
 
-Once the Endpoint has initialized, you can send a request to your [Endpoint](/serverless/endpoints/get-started).
+Once the Endpoint initializes, you can send a request to your [Endpoint](/serverless/endpoints/get-started).
 You've now successfully deployed your model, a significant milestone in utilizing Google's Gemma model.
 As we move forward, the next section will focus on interacting with your model.
 

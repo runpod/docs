@@ -91,7 +91,7 @@ This will include the GPU and the storage needed for your Worker.
 
 This step will walk you through deploying a Serverless Endpoint to RunPod.
 
-1. Login to the [RunPod Serverless console](https://www.runpod.io/console/serverless).
+1. Log in to the [RunPod Serverless console](https://www.runpod.io/console/serverless).
 2. Select **+ New Endpoint**.
 3. Provide the following:
    1. Endpoint name.

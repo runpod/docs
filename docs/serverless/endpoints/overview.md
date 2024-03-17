@@ -9,7 +9,7 @@ Whether you're processing large data sets, requiring immediate results, or sched
 
 ### Key features
 
-- **Asynchronous and synchronous Jobs:** Choose the execution mode that best fits your workflow, whether it's a task that runs in the background or one that delivers immediate results.
+- **Asynchronous and synchronous jobs:** Choose the execution mode that best fits your workflow, whether it's a task that runs in the background or one that delivers immediate results.
 - **Serverless Workers:** Deploy your computational tasks without worrying about server management, enjoying the benefits of a fully managed infrastructure.
 - **Scalability and flexibility:** Easily scale your operations up or down based on demand, with the flexibility to handle various computational loads.
 
@@ -22,7 +22,7 @@ You can find your API key in the [user settings section](https://www.runpod.io/c
 
 :::note
 
-**Privacy and Security:** RunPod prioritizes your data's privacy and security.
+**Privacy and security:** RunPod prioritizes your data's privacy and security.
 Inputs and outputs are retained for a maximum of 30 minutes for asynchronous requests and 1 minute for synchronous requests to protect your information.
 
 :::
