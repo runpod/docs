@@ -19,12 +19,16 @@ For example, `2s56cp0pof1rmt` identifies the instance.
 
 A Pod comprises a container volume with the operating system and temporary storage, a disk volume for permanent storage, an Ubuntu Linux container, allocated vCPU and system RAM, optional GPUs or CPUs for specific workloads, a pre-configured template for easy software access, and a proxy connection for web access.
 
+Here's a revised version with the storage types presented in a clearer, more concise, and consistent format:
+
 Each Pod encompasses a variety of components:
 
 - A container volume that houses the operating system and temporary storage.
   - This storage is volatile and will be lost if the Pod is halted or rebooted.
 - A disk volume for permanent storage, preserved for the duration of the Pod's lease, akin to a hard disk.
   - This storage is persistent and will be available even if the Pod is halted or rebooted.
+- Network storage, similar to a volume but can be moved between machines.
+  - When using network storage, you can only delete the Pod.
 - An Ubuntu Linux container, capable of running almost any software that can be executed on Ubuntu.
 - Assigned vCPU and system RAM dedicated to the container and any processes it runs.
 - Optional GPUs or CPUs, tailored for specific workloads like CUDA or AI/ML tasks, though not mandatory for starting the container.
