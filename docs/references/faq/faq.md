@@ -174,3 +174,20 @@ We implement a spending limit for newer accounts that will grow over time. This 
 ### Do you have some legal stuff I can look at?
 
 Sure, do! Take a look at our [legal page](https://www.runpod.io/legal).
+
+
+Here's how I would integrate the GDPR compliance information into the FAQ section in a question and answer format:
+
+## GDPR Compliance
+
+### Is RunPod compliant with GDPR for data processed in Europe?
+
+Yes, RunPod is fully compliant with the General Data Protection Regulation (GDPR) requirements for any data processed within our European data center regions.
+
+### What measures does RunPod take to ensure GDPR compliance?
+
+For servers hosted in GDPR-compliant regions like the European Union, we ensure:
+
+- All personal data from EU individuals never leaves the European Economic Area during processing and storage.
+- We have technical and organizational measures in place to protect the privacy rights of Europeans as per GDPR.
+- We follow GDPR principles like data minimization, purpose limitation, storage limitation, integrity and confidentiality.
