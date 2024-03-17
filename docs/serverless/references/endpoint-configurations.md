@@ -121,3 +121,17 @@ A100s are about 2-3x faster than A5000s and also allow double the VRAM with very
 Want access to different flavors? [Let us know](https://www.runpod.io/contact) and we can look at expanding our offerings!
 
 </details>
+
+
+## CUDA version selection
+
+You have the ability to select the allowed CUDA versions for your workloads.
+The CUDA version selection determines the compatible GPU types that will be used to execute your serverless tasks.
+
+Specifically, the CUDA version selection works as follows:
+
+- You can choose one or more CUDA versions that your workload is compatible with or requires.
+- RunPod will then match your workload to available GPU instances that have the selected CUDA versions installed.
+- This ensures that your serverless tasks run on GPU hardware that meets the CUDA version requirements.
+
+For example, if you select CUDA 11.6, your serverless tasks will be scheduled to run on GPU instances that have CUDA 11.6 or a compatible version installed. This allows you to target specific CUDA versions based on your workload's dependencies or performance requirements.
