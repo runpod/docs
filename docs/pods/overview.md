@@ -19,8 +19,6 @@ For example, `2s56cp0pof1rmt` identifies the instance.
 
 A Pod comprises a container volume with the operating system and temporary storage, a disk volume for permanent storage, an Ubuntu Linux container, allocated vCPU and system RAM, optional GPUs or CPUs for specific workloads, a pre-configured template for easy software access, and a proxy connection for web access.
 
-Here's a revised version with the storage types presented in a clearer, more concise, and consistent format:
-
 Each Pod encompasses a variety of components:
 
 - A container volume that houses the operating system and temporary storage.
