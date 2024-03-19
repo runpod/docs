@@ -15,9 +15,7 @@ Before you begin, ensure that you have the following:
 - Go installed on your machine (version 1.16 or later)
 - A RunPod account with an API key and endpoint ID
 
-
 ## Install the RunPod SDK
-
 
 Before integrating RunPod into your project, you'll need to install the SDK.
 

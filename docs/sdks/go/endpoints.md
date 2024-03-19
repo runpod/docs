@@ -479,7 +479,6 @@ func main() {
 	dt, _ := json.Marshal(output)
 	fmt.Printf("output:%s\n", dt)
 }
-
 ```
 
 </TabItem>
