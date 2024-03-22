@@ -17,7 +17,7 @@ Operations available to all users are:
   - Job availability: Job results are accessible for 30 minutes after completion
 - `/runsync`: Synchronous endpoint for shorter running jobs, returning immediate results.
   - Payload capacity: 20 MB
-  - Rate limit: 2000 per second
+  - Rate limit: 2000 requests every 10 seconds.
   - Job availability: Job results are accessible for 60 seconds after completion
 - `/stream/{job_id}`: For streaming results from generator-type handlers.
 - `/status/{job_id}`: To check the job status and retrieve outputs upon completion.
