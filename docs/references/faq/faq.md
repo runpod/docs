@@ -174,3 +174,37 @@ We implement a spending limit for newer accounts that will grow over time. This 
 ### Do you have some legal stuff I can look at?
 
 Sure, do! Take a look at our [legal page](https://www.runpod.io/legal).
+
+## GDPR Compliance
+
+At Runpod, we take data protection and privacy seriously.
+We have implemented robust policies, procedures, and technical measures to ensure compliance with the GDPR requirements.
+
+### Is RunPod compliant with GDPR for data processed in Europe?
+
+Yes, RunPod is fully compliant with the General Data Protection Regulation (GDPR) requirements for any data processed within our European data center regions.
+
+### What measures does RunPod take to ensure GDPR compliance?
+
+For servers hosted in GDPR-compliant regions like the European Union, we ensure:
+
+- **Data processing procedures**: We have established clear procedures for the collection,
+storage, processing, and deletion of personal data, ensuring transparency and accountability in
+our data processing activities.
+- **Data protection measures**: We have implemented appropriate technical and organizational
+measures to safeguard personal data against unauthorized access, disclosure, alteration, and
+destruction.
+- **Consent mechanisms**: We obtain and record consent from individuals for the processing of
+their personal data in accordance with GDPR requirements, and we provide mechanisms for
+individuals to withdraw consent if desired.
+- **Rights of data subjects**: We facilitate the rights of data subjects under the GDPR, including
+the right to access, rectify, erase, or restrict the processing of their personal data, and we handle
+data subject requests promptly and efficiently.
+- **Data transfer mechanisms**: We ensure lawful and secure transfer of personal data outside the
+EU, where applicable, in compliance with GDPR requirements, utilizing appropriate mechanisms
+such as adequacy decisions, standard contractual clauses, or binding corporate rules.
+- **Compliance monitoring**: We regularly monitor and review our GDPR compliance to ensure
+ongoing effectiveness and adherence to regulatory requirements, conducting data protection
+impact assessments and internal audits as needed.
+
+For any inquiries or concerns regarding our GDPR compliance or our data protection practices, reach out to our team through email at [support@runpod.io](mailto:support@runpod.io).
