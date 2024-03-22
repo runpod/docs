@@ -25,6 +25,8 @@ Each Pod encompasses a variety of components:
   - This storage is volatile and will be lost if the Pod is halted or rebooted.
 - A disk volume for permanent storage, preserved for the duration of the Pod's lease, akin to a hard disk.
   - This storage is persistent and will be available even if the Pod is halted or rebooted.
+- Network storage, similar to a volume but can be moved between machines.
+  - When using network storage, you can only delete the Pod.
 - An Ubuntu Linux container, capable of running almost any software that can be executed on Ubuntu.
 - Assigned vCPU and system RAM dedicated to the container and any processes it runs.
 - Optional GPUs or CPUs, tailored for specific workloads like CUDA or AI/ML tasks, though not mandatory for starting the container.
