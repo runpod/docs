@@ -122,7 +122,6 @@ Want access to different flavors? [Let us know](https://www.runpod.io/contact) a
 
 </details>
 
-
 ## CUDA version selection
 
 You have the ability to select the allowed CUDA versions for your workloads.
