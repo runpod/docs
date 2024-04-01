@@ -43,7 +43,3 @@ Serverless GPU is a pay-per-second serverless GPU computing solution. It is desi
 ## Template
 
 A RunPod template is a Docker container image paired with a configuration.
-
-## Throttling
-
-Throttling is how RunPod allocates your serverless compute resources to ensure minimal cold start time.
