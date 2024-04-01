@@ -14,7 +14,7 @@ The name is only visible to you.
 
 ## GPU Selection
 
-Select one or more GPUs you want your Endpoint to run on.
+Select one or more GPUs that you want your Endpoint to run on. RunPod matches you with GPUs in the order that you select them, so the first GPU type that you select is prioritized, then the second, and so on. Selecting multiple GPU types can help you get a worker more quickly, especially if your first selection is an in-demand GPU.
 
 ## Active (Min) Workers
 
@@ -29,7 +29,7 @@ You will incur the cost of any active workers you have set regardless if they ar
 
 ## Max Workers
 
-This will establish a ceiling or upper limit to the number of active workers your endpoint will have running at any given point.
+Set an upper limit on the number of active workers your endpoint has running at any given point. Setting a value for max workers that is too low can lead to [throttling](/references/glossary#throttling). If you consistently see throttled workers, increase your max workers to five or more.
 
 Default: 3
 
