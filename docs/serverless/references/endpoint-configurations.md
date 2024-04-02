@@ -29,7 +29,7 @@ You will incur the cost of any active workers you have set regardless if they ar
 
 ## Max Workers
 
-Set an upper limit on the number of active workers your endpoint has running at any given point. Setting a value for max workers that is too low can lead to [throttling](/glossary#throttling). If you consistently see throttled workers, increase your max workers to five or more.
+Set an upper limit on the number of active workers your endpoint has running at any given point. Setting a value for max workers that is too low can lead to [throttled workers](/glossary##throttled-worker). If you consistently see throttled workers, increase your max workers to five or more.
 
 Default: 3
 
