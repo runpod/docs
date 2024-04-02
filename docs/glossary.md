@@ -44,6 +44,6 @@ Serverless GPU is a pay-per-second serverless GPU computing solution. It is desi
 
 A RunPod template is a Docker container image paired with a configuration.
 
-## Throttling
+## Throttled Worker
 
-Throttling is how RunPod allocates your serverless compute resources to ensure minimal cold start time.
+RunPod proactively caches Workers to minimize cold start time. If your GPU selections are not available at the time your Worker starts up, the Worker is throttled until resources are available.
