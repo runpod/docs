@@ -81,8 +81,9 @@ Additional controls to help you control where your endpoint is deployed and how 
 
 ### Data Centers
 
-Control which datacenters you would like your workers deployed and cached.
-By default all datacenters are selected.
+Control which data centers can deploy and cache your workers. Allowing multiple data centers can help you get a worker more quickly.
+
+Default: all data centers
 
 ### Select Network Volume
 
