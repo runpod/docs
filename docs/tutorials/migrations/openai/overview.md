@@ -68,4 +68,4 @@ This tutorial has equipped you with the knowledge to update your code for compat
 
 - [Explore more tutorials on RunPod](/tutorials/introduction/overview)
 - [Learn more about OpenAI's API](https://platform.openai.com/docs/)
-- [Deploy your own vLLM Worker on RunPod](https://docs.runpod.ai/en/latest/deployment/)
+- [Deploy your own vLLM Worker on RunPod](https://www.runpod.io/console/serverless)
