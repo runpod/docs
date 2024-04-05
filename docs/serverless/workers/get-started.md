@@ -81,14 +81,14 @@ You can refer to this walkthrough to deploy your own custom Docker image.
 1. Log in to the [RunPod Serverless console](https://www.runpod.io/console/serverless).
 2. Select **+ New Endpoint**.
 3. Provide the following:
-   1. Endpoint name.
-   2. Select a GPU.
-   3. Configure the number of Workers.
-   4. (optional) Select **FlashBoot**.
-   5. (optional) Select a template.
-   6. Enter the name of your Docker image.
+   3.1 Endpoint name.
+   3.2 Select a GPU.
+   3.3 Configure the number of Workers.
+   3.4 (optional) Select **FlashBoot**.
+   3.5 (optional) Select a template.
+   3.6 Enter the name of your Docker image.
       - For example `<username>/<repo>:<tag>`.
    7. Specify enough memory for your Docker image.
-4. Select **Deploy**.
+4. Click on **Deploy** to proceed.
 
 Now, let's send a request to your [Endpoint](/serverless/endpoints/get-started).
