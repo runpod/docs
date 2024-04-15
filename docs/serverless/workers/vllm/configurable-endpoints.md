@@ -12,12 +12,12 @@ Focus on selecting their desired model and customizing the template parameters, 
 
 ## Deploy an LLM
 
-1. Select **Explore** and then choose **vLLM Endpoint** to deploy any large language models.
+1. Select **Explore** and then choose **vLLM** to deploy any large language models.
 2. In the vLLM deploy modal, enter the following:
    1. (optional) Enter a template.
-   2. Enter your Hugging Face LLM.
-   3. (optional) Enter your hugging face token.
-   4. Select a CUDA version.
+   2. Enter your Hugging Face LLM repository name.
+   3. (optional) Enter your Hugging Face token.
+   4. Review the CUDA version.
 3. Select **Next** and review the configurations for the **vLLM parameters** page.
 4. Select **Next** and review the Endpoint parameters page.
    1. Prioritize your **Worker Configuration** by selecting the order GPUs you want your Workers to use.
