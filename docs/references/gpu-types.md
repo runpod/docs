@@ -7,7 +7,7 @@ The following list contains all GPU types available on RunPod.
 For more information, see [GPU pricing](https://www.runpod.io/gpu-instance/pricing).
 
 <!--
-Table last generated: 2024-04-11
+Table last generated: 2024-04-18
 -->
 
 | GPU ID                             | Display Name     | Memory (GB) |
@@ -40,3 +40,4 @@ Table last generated: 2024-04-11
 | NVIDIA RTX A6000                   | RTX A6000        | 48          |
 | Tesla V100-PCIE-16GB               | Tesla V100       | 16          |
 | Tesla V100-FHHL-16GB               | V100 FHHL        | 16          |
+| Tesla V100-SXM2-16GB               | V100 SXM2        | 16          |
