@@ -27,7 +27,6 @@ Focus on selecting their desired model and customizing the template parameters, 
       2. Review the **Environment Variables**.
 5. Select **Deploy**.
 
-
 Your LLM is now deployed to an Endpoint.
 You can now use the API to interact with your model.
 
