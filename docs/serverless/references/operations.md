@@ -26,4 +26,4 @@ Operations available to all users are:
   - Only accepts `GET` methods
 - `/purge-queue`: Clears all queued jobs, it will not cancel jobs in progress.
 
-To see how to run these Endpoint Operations, see [Invoke a Job](/serverless/endpoints/invoke-jobs).
+To see how to run these Endpoint Operations, see [Invoke a Job](/serverless/endpoints/job-operations).
