@@ -6,8 +6,13 @@ description: Learn to fine tune LLMs.
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-Training a large language model (LLM) can be a complex process, but Axolotl makes it easier by providing a streamlined workflow.
-Combining Axolotl's simplicity with RunPod's GPUs gives you the power to train an LLM on a GPU.
+[axolotl](https://github.com/OpenAccess-AI-Collective/axolotl) is a tool that simplifies the process of training large language models (LLMs). 
+It provides a streamlined workflow that makes it easier to fine-tune AI models on various configurations and architectures. 
+When combined with RunPod's GPU resources, Axolotl enables you to harness the power needed to efficiently train LLMs.
+
+In addition to its user-friendly interface, Axolotl offers a comprehensive set of YAML examples covering a wide range of LLM families, such as LLaMA2, Gemma, LLaMA3, and Jamba. 
+These examples serve as valuable references, helping users understand the role of each parameter and guiding them in making appropriate adjustments for their specific use cases. 
+It is highly recommended to explore [these examples](https://github.com/OpenAccess-AI-Collective/axolotl/tree/main/examples) to gain a deeper understanding of the fine-tuning process and optimize the model's performance according to your requirements.
 
 In this tutorial, we'll walk through the steps of training an LLM using Axolotl on RunPod and uploading your model to Hugging Face.
 
@@ -30,7 +35,7 @@ You also specify a Docker image like `winglian/axolotl-cloud:main-latest` that y
 
 Now that you have your Pod set up and running, connect to it over secure SSH.
 
-1. Wait for the Pod to startup, then connect to it using secure SSH.
+2. Wait for the Pod to startup, then connect to it using secure SSH.
    1. On your Pod page, select **Connect**.
    2. Copy the secure SSH string and paste it into your terminal on your machine.
     ```bash
@@ -45,20 +50,20 @@ The Web UI terminal shouldn't be relied on for long-running processes, as it wil
 
 :::
 
-Once the Pod is deployed and you're connected via SSH, you're ready to start preparing your dataset.
+With the Pod deployed and connected via SSH, we're ready to move on to preparing our dataset.
 
 ### Preparing the dataset
 
 The dataset you provide to your LLM is crucial, as it's the data your model will learn from during fine-tuning.
 You can make your own dataset that will then be used to fine-tune your own model, or you can use a pre-made one.
 
-You can either use a [local dataset](#using-a-local-dataset) or one [stored on Hugging Face](#using-a-hugging-face-dataset).
+To continue, use either a [local dataset](#using-a-local-dataset) or one [stored on Hugging Face](#using-a-hugging-face-dataset).
 
 #### Using a local dataset
 
 To use a local dataset, you'll need to transfer it to your RunPod instance.
 You can do this using RunPod CLI to securely transfer files from your local machine to the one hosted by RunPod.
-All Pods automatically come with `runpodctl` installed with a pod-scoped API key.
+All Pods automatically come with `runpodctl` installed with a Pod-scoped API key.
 **To send a file**
 
 <Tabs>
@@ -83,8 +88,6 @@ runpodctl receive 8338-galileo-collect-fidel
 
   </TabItem>
 </Tabs>
-
-
 
 
 
@@ -114,12 +117,14 @@ data.jsonl 100% |████████████████████| (
   </TabItem>
 </Tabs>
 
-Now update your RunPod machine's requirement and preprocessed your data.
+Once the local dataset is transferred to your RunPod machine, we can proceed to updating requirements and preprocessing the data.
 
 #### Using a Hugging Face dataset
 
 If your dataset is stored on Hugging Face, you can specify its path in the `lora.yaml` configuration file under the `datasets` key.
 Axolotl will automatically download the dataset during the preprocessing step.
+
+Review the [configuration file](https://github.com/OpenAccess-AI-Collective/axolotl/blob/main/docs/config.qmd) in detail and make any adjustments to your file as needed.
 
 Now update your RunPod machine's requirement and preprocess your data.
 
@@ -145,6 +150,8 @@ python -m axolotl.cli.preprocess examples/openllama-3b/lora.yml
 
 This step converts your dataset into a format that Axolotl can use for training.
 
+Having updated the requirements and preprocessed the data, we're now ready to fine-tune the LLM.
+
 ### Fine-tuning the LLM
 
 With your environment set up and data preprocessed, you're ready to start fine-tuning the LLM.
@@ -156,10 +163,10 @@ accelerate launch -m axolotl.cli.train examples/openllama-3b/lora.yml
 ```
 
 This will start the training process using the settings specified in your `lora.yml` file.
-
 The training time will depend on factors like your model size, dataset size, and GPU type.
-
 Be prepared to wait a while, especially for larger models and datasets.
+
+Once training is complete, we can move on to testing our fine-tuned model through inference.
 
 ### Inference
 
@@ -170,7 +177,6 @@ accelerate launch -m axolotl.cli.inference examples/openllama-3b/lora.yml --lora
 ```
 
 This will allow you to interact with your model and see how it performs on new prompts.
-
 If you're satisfied with your model's performance, you can merge the LoRA weights with the base model using the `merge_lora` script. 
 
 ### Merge the model
@@ -203,3 +209,12 @@ huggingface-cli repo create your_model_name --type model
 ```command
 huggingface-cli upload your_model_name path_to_your_model
 ```
+
+With our model uploaded to Hugging Face, we've successfully completed the fine-tuning process and made our work available for others to use and build upon.
+
+## Conclusion
+
+By following these steps and leveraging the power of Axolotl and RunPod, you can efficiently fine-tune LLMs to suit your specific use cases. 
+The combination of Axolotl's user-friendly interface and RunPod's GPU resources makes the process more accessible and streamlined.
+Remember to explore the provided YAML examples to gain a deeper understanding of the various parameters and make appropriate adjustments for your own projects. 
+With practice and experimentation, you can unlock the full potential of fine-tuned LLMs and create powerful, customized AI models.
