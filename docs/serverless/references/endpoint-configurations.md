@@ -18,7 +18,7 @@ Select one or more GPUs that you want your Endpoint to run on. RunPod matches yo
 
 ## Active (Min) Workers
 
-Setting this amount to 1 will result in "always on" workers.
+Setting this amount to one will result in "always on" workers.
 This will allow you to have a worker ready to respond to job requests without incurring any cold start delay.
 
 :::note
@@ -29,7 +29,9 @@ You will incur the cost of any active workers you have set regardless if they ar
 
 ## Max Workers
 
-Set an upper limit on the number of active workers your endpoint has running at any given point. Setting a value for max workers that is too low can lead to [throttled workers](/glossary##throttled-worker). If you consistently see throttled workers, increase your max workers to five or more.
+Set an upper limit on the number of active workers your endpoint has running at any given point.
+Setting a value for max workers that is too low can lead to [throttled workers](/glossary##throttled-worker).
+If you consistently see throttled workers, increase your max workers to five or more.
 
 Default: 3
 
@@ -42,9 +44,11 @@ How to configure Max Workers
 You can also configure a max worker count. This is the top limit of what RunPod will attempt to auto-scale for you. Use this to cap your concurrent request count and also limit your cost ceiling.
 
 :::note
+
 We currently base your caching coefficient by this number, so an endpoint with higher max worker count will also receive a higher priority when caching workers.
 
-This is partially why we limit new accounts to a relatively low max concurrency at the account level. If you want to get this number raised, you generally will need to have a higher history of spending, or commit to a relatively high spend per month.
+This is partially why we limit new accounts to a relatively low max concurrency at the account level.
+If you want to get this number raised, you generally will need to have a higher history of spending, or commit to a relatively high spend per month.
 
 You should generally aim to set your max worker count to be 20% higher than you expect your max concurrency to be.
 
@@ -58,7 +62,7 @@ The number of GPUs you would like assigned to your worker.
 
 :::note
 
-Currently only available for 48GB GPUs.
+Currently only available for 48 GB GPUs.
 
 :::
 

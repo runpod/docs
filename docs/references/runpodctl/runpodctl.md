@@ -4,7 +4,7 @@ title: "runpodctl"
 
 You can use RunPod's CLI [runpodctl](https://github.com/runpod/runpodctl) to manage Pods.
 
-The runpodctl is a tool for managing your GPU pods on RunPod.
+The runpodctl is a tool for managing your Pods on RunPod.
 All Pods come with `runpodctl` installed with a Pod-scoped API key, which makes managing your Pods easier through the command line.
 
 Choose one of the following methods to install the RunPod CLI.

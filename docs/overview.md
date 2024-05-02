@@ -19,7 +19,7 @@ The Secure Cloud runs in T3/T4 data centers providing high reliability and secur
 
 ## What is Serverless?
 
-**Serverless** offers pay-per-second serverless GPU computing, bringing autoscaling to your production environment.
+**Serverless** offers pay-per-second serverless computing, bringing autoscaling to your production environment.
 The Serverless offering allows users to define a Worker, create a REST API Endpoint for it which queue jobs and autoscales to fill demand.
 This service, part of our Secure Cloud offering, guarantees low cold-start times and stringent security measures.
 
