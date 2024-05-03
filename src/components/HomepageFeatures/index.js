@@ -32,16 +32,15 @@ const FeatureList = [
     ),
   },
   {
-    title: "AI APIs",
+    title: "vLLM",
     Svg: require("@site/static/img/home_3.svg").default,
-    url: "/ai-apis",
+    url: "/serverless/workers/vllm/overview",
     description: (
       <>
-        <a href="ai-apis">
-          <b>AI APIs</b>
+        <a href="/serverless/workers/vllm/overview">
+          <b>vLLM Workers</b>
         </a>{" "}
-        are scalable and managed services tailored for various applications like Dreambooth and Stable Diffusion,
-        ensuring efficient handling of diverse workloads.
+        are blazingly fast OpenAI-compatible serverless endpoints for any LLM.
       </>
     ),
   },

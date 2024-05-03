@@ -28,11 +28,6 @@ You can get started with:
 - [Quick deploys](/serverless/quick-deploys)
 - [Build your own](/serverless/workers/overview)
 
-## What are AI APIs?
-
-**AI APIs** are fully managed and Endpoints of some of the most popular AI models.
-They are designed for a variety of applications including Dreambooth, Stable Diffusion, Whisper, and more.
-
 ## CLI
 
 Additionally, RunPod has developed a Command Line Interface (CLI) tool designed specifically for quickly developing and deploying custom endpoints on the RunPod serverless platform.

@@ -1,6 +1,6 @@
 ---
-title: Invoke a Job
-description: Run Endpoints in RunPod.
+title: Job operations
+description: Learn about job operations with RunPod.
 sidebar_position: 2
 tags:
   - endpoints
@@ -12,8 +12,8 @@ tags:
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-This page provides instructions on how to invoke a job using the Runpod Endpoint.
-Invoke jobs to run Endpoints the way you would interact with an API.
+This page provides instructions on job operations using the Runpod Endpoint.
+You can invoke a job to run Endpoints the way you would interact with an API, get a status of a job, purge your job queue, and more with operations.
 
 The following guide demonstrates how to use cURL to interact with an Endpoint.
 You can also use the following SDK to interact with Endpoints programmatically:

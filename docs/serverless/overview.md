@@ -45,7 +45,7 @@ https://api.runpod.ai/v2/{endpoint_id}/{operation}
 - `operation`: The operation to perform on the Serverless Endpoint.
   - Valid options: `run` | `runsync` | `status` | `cancel` | `health` | `purge-queue`
 
-For more information, see [Invoke jobs](/serverless/endpoints/invoke-jobs).
+For more information, see [Invoke jobs](/serverless/endpoints/job-operations).
 
 <!--
 ### Endpoints
