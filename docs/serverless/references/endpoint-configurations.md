@@ -14,7 +14,7 @@ The name is only visible to you.
 
 ## GPU Selection
 
-Select one or more GPUs you want your Endpoint to run on.
+Select one or more GPUs that you want your Endpoint to run on. RunPod matches you with GPUs in the order that you select them, so the first GPU type that you select is prioritized, then the second, and so on. Selecting multiple GPU types can help you get a worker more quickly, especially if your first selection is an in-demand GPU.
 
 ## Active (Min) Workers
 
@@ -29,7 +29,7 @@ You will incur the cost of any active workers you have set regardless if they ar
 
 ## Max Workers
 
-This will establish a ceiling or upper limit to the number of active workers your endpoint will have running at any given point.
+Set an upper limit on the number of active workers your endpoint has running at any given point. Setting a value for max workers that is too low can lead to [throttled workers](/glossary##throttled-worker). If you consistently see throttled workers, increase your max workers to five or more.
 
 Default: 3
 
@@ -81,8 +81,9 @@ Additional controls to help you control where your endpoint is deployed and how 
 
 ### Data Centers
 
-Control which datacenters you would like your workers deployed and cached.
-By default all datacenters are selected.
+Control which data centers can deploy and cache your workers. Allowing multiple data centers can help you get a worker more quickly.
+
+Default: all data centers
 
 ### Select Network Volume
 
@@ -121,3 +122,16 @@ A100s are about 2-3x faster than A5000s and also allow double the VRAM with very
 Want access to different flavors? [Let us know](https://www.runpod.io/contact) and we can look at expanding our offerings!
 
 </details>
+
+## CUDA version selection
+
+You have the ability to select the allowed CUDA versions for your workloads.
+The CUDA version selection determines the compatible GPU types that will be used to execute your serverless tasks.
+
+Specifically, the CUDA version selection works as follows:
+
+- You can choose one or more CUDA versions that your workload is compatible with or requires.
+- RunPod will then match your workload to available GPU instances that have the selected CUDA versions installed.
+- This ensures that your serverless tasks run on GPU hardware that meets the CUDA version requirements.
+
+For example, if you select CUDA 11.6, your serverless tasks will be scheduled to run on GPU instances that have CUDA 11.6 or a compatible version installed. This allows you to target specific CUDA versions based on your workload's dependencies or performance requirements.
