@@ -8,7 +8,7 @@ To get started with RunPod:
 
 - [Create a RunPod account](/get-started/manage-accounts)
 - [Add funds](/get-started/billing-information)
-- [Use the RunPod SDK](#setting-up-your-project) to build and connect with your Serverless Endpoints
+- [Use the RunPod SDK](/serverless/overview) to build and connect with your Serverless Endpoints
 
 In this tutorial, you'll go through the process of migrating a model deployed via replicate.com or utilizing the Cog framework to a RunPod serverless worker.
 
