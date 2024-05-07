@@ -32,7 +32,7 @@ Follow these steps in the RunPod Serverless console to create your Endpoint.
    2. Select a GPU.
    3. Configure the number of Workers.
    4. (optional) Select **FlashBoot**.
-   5. Enter the vLLM Worker image: `runpod/worker-vllm:latest`.
+   5. Enter the vLLM Worker image: `runpod/worker-vllm:stable-cuda11.8.0` or `runpod/worker-vllm:stable-cuda12.1.0`.
    6. Specify enough storage for your model.
    7. Add the following environment variables:
       1. `MODEL_NAME`: `google/gemma-7b-it`.
