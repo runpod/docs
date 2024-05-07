@@ -18,7 +18,7 @@ When deploying, ensure you choose an appropriate CUDA version based on your need
 This table provides a reference to the image tags you should use based on the desired CUDA veersion and image stability, stable or development.
 Ensure you follow the selection note for CUDA 12.1.0 compatibility.
 
-#### Environment Variables
+## Environment variables
 
 :::note
 
