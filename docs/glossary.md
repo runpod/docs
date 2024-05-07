@@ -30,7 +30,7 @@ RunPod is a cloud computing platform primarily designed for AI and machine learn
 ## SDKs
 
 RunPod provides several Software Development Kits (SDKs) you can use to interact with the RunPod platform.
-These SDKs enable you to create serverless functions, manage infrastructure, and interact with AI APIs.
+These SDKs enable you to create serverless functions, manage infrastructure, and interact with APIs.
 
 ## Secure Cloud
 

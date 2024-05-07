@@ -21,7 +21,7 @@ RunPod's vLLM Serverless Endpoint Worker are a highly optimized solution for lev
 
 ## Compatible models
 
-You can deploy most [models from HuggingFace](https://huggingface.co/models?other=LLM).
+You can deploy most [models from Hugging Face](https://huggingface.co/models?other=LLM).
 For a full list of supported models architectures, see [Compatible model architectures](https://github.com/runpod-workers/worker-vllm/blob/main/README.md#compatible-model-architectures).
 
 ## Getting started
@@ -36,7 +36,9 @@ For detailed guidance on setting up, configuring, and deploying your vLLM Server
 
 ### Deployment options
 
-- **Pre-Built docker image**: (recommended) Leverage pre-configured Docker image for hassle-free deployment. Ideal for users seeking a quick and straightforward setup process
+- **RunPod console**: (recommended) Use RunPod's Web UI to quickly deploy the OpenAI compatable LLM with the vLLM Worker.
+
+- **Pre-Built docker image**: Leverage pre-configured Docker image for hassle-free deployment. Ideal for users seeking a quick and straightforward setup process
 
 - **Custom docker image**: For advanced users, customize and build your Docker image with the model baked in, offering greater control over the deployment process.
 
