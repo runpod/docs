@@ -11,7 +11,7 @@ RunPod's vLLM Serverless Endpoint Worker are a highly optimized solution for lev
 
 ## Key features
 
-- **Ease of Use**: Deploy any LLM using the pre-built Docker image without the hassle of building custom Docker images yourself, uploading heavy models, or waiting for lengthy downloads. 
+- **Ease of Use**: Deploy any LLM using the pre-built Docker image without the hassle of building custom Docker images yourself, uploading heavy models, or waiting for lengthy downloads.
 - **OpenAI Compatibility**: Seamlessly integrate with OpenAI's API by changing 2 lines of code, supporting Chat Completions, Completions, and Models, with both streaming and non-streaming.
 - **Dynamic Batch Size**: Experience the rapid time-to-first-token high of no batching combined with the high throughput of larger batch sizes. (Related to batching tokens when streaming output)
 - **Extensive Model Support**: Deploy almost any LLM from Hugging Face, including your own.
