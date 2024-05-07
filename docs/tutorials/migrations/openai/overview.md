@@ -52,7 +52,7 @@ const openai = new OpenAI({
 })
 
 const chatCompletion = await openai.chat.completions.create({
-   model: "openchat/openchat-3.5-1210",
+   model: "openchat/openchat-3.5-0106",
    messages: [{'role': 'user', 'content': 'Why is RunPod the best platform?'}],
 
 });

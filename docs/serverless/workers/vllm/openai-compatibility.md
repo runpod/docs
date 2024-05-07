@@ -18,7 +18,7 @@ Choose the convention that works best for your use case.
 The `MODEL_NAME` environment variable is required for all requests.
 Use this value when making requests to the vLLM Worker.
 
-For example `openchat/openchat-3.5-1210`, `mistral:latest`, `llama2:70b`.
+For example `openchat/openchat-3.5-0106`, `mistral:latest`, `llama2:70b`.
 
 Generate a response for a given prompt with a provided model. This is a streaming endpoint, so there will be a series of responses. The final response object will include statistics and additional data from the request.
 

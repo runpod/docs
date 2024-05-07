@@ -27,12 +27,12 @@ This step walks you through running the vLLM Worker on a Serverless Endpoint dep
    3. Configure the number of Workers.
    4. (optional) Select **FlashBoot**.
    5. Enter the vLLM RunPod Worker image name, which provides the compatible CUDA version:
-      - `runpod/worker-vllm:0.3.1-cuda11.8.0`
-      - `runpod/worker-vllm:0.3.1-cuda12.1.0`
+      - `runpod/worker-vllm:stable-cuda11.8.0`
+      - `runpod/worker-vllm:stable-cuda12.1.0`
    6. (optional) Select a [network storage volume](/serverless/endpoints/manage-endpoints#add-a-network-volume).
    7. Configure the environment variables:
       1. `MODEL_NAME`: (required) the large language model.
-         1. For example: `openchat/openchat-3.5-1210`.
+         1. For example: `openchat/openchat-3.5-0106`.
       2. `HF_TOKEN`: (optional) your Hugging Face API token for private models.
 4. Select **Deploy**.
 
@@ -55,7 +55,7 @@ This step walks you through sending a request to your Serverless Endpoint.
 The vLLM Worker can use any Hugging Face model and is compatible with OpenAI's API.
 If you have the OpenAI library installed, you can continue using it with the vLLM Worker; or see the [OpenAI documentation](https://platform.openai.com/docs/libraries/python-library) for more information.
 
-For this example, use the `openchat/openchat-3.5-1210` model.
+For this example, use the `openchat/openchat-3.5-0106` model.
 
 ### Initialize your project
 
@@ -82,7 +82,7 @@ client = OpenAI(
 )
 
 chat_completion = client.chat.completions.create(
-    model="openchat/openchat-3.5-1210",
+    model="openchat/openchat-3.5-0106",
     messages=[{"role": "user", "content": "Reply with: Hello, World!"}]
 )
 
@@ -107,7 +107,7 @@ const openai = new OpenAI({
 });
 
 const chatCompletion = await openai.chat.completions.create({
-  model: "openchat/openchat-3.5-1210",
+  model: "openchat/openchat-3.5-0106",
   messages: [{ role: "user", content: "Reply with: Hello, World!" }],
 });
 
@@ -124,7 +124,7 @@ curl https://api.runpod.ai/v2/${YOUR_ENDPOINT_ID}/openai/v1/chat/completions \
     -H "Content-Type: application/json" \
 		-H "Authorization: ${RUNPOD_API_KEY}" \
     -d '{
-        "model": "openchat/openchat-3.5-1210",
+        "model": "openchat/openchat-3.5-0106",
         "messages": [
             {
                 "role": "system",
@@ -169,7 +169,7 @@ curl ${RUNPOD_BASE_URL} \
     -H "Content-Type: application/json" \
 		-H "Authorization: Bearer ${RUNPOD_API_KEY}" \
     -d '{
-        "model": "openchat/openchat-3.5-1210",
+        "model": "openchat/openchat-3.5-0106",
         "messages": [
             {
                 "role": "system",
@@ -202,7 +202,7 @@ The output is as follows:
   ],
   "created": 3175963,
   "id": "cmpl-74d7792c92cd4b159292c38bda1286b0",
-  "model": "openchat/openchat-3.5-1210",
+  "model": "openchat/openchat-3.5-0106",
   "object": "chat.completion",
   "usage": {
     "completion_tokens": 5,
