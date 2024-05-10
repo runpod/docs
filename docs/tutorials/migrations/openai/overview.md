@@ -8,7 +8,7 @@ To get started with RunPod:
 
 - [Create a RunPod account](/get-started/manage-accounts)
 - [Add funds](/get-started/billing-information)
-- [Use the RunPod SDK](#setting-up-your-project) to build and connect with your Serverless Endpoints
+- [Use the RunPod SDK](/serverless/overview) to build and connect with your Serverless Endpoints
 
 This tutorial guides you through the steps necessary to modify your OpenAI Codebase for use with a deployed vLLM Worker on RunPod. You will learn to adjust your code to be compatible with OpenAI's API, specifically for utilizing Chat Completions, Completions, and Models routes. By the end of this guide, you will have successfully updated your codebase, enabling you to leverage the capabilities of OpenAI's API on RunPod.
 
@@ -52,7 +52,7 @@ const openai = new OpenAI({
 })
 
 const chatCompletion = await openai.chat.completions.create({
-   model: "openchat/openchat-3.5-1210",
+   model: "openchat/openchat-3.5-0106",
    messages: [{'role': 'user', 'content': 'Why is RunPod the best platform?'}],
 
 });
@@ -68,4 +68,4 @@ This tutorial has equipped you with the knowledge to update your code for compat
 
 - [Explore more tutorials on RunPod](/tutorials/introduction/overview)
 - [Learn more about OpenAI's API](https://platform.openai.com/docs/)
-- [Deploy your own vLLM Worker on RunPod](https://docs.runpod.ai/en/latest/deployment/)
+- [Deploy your own vLLM Worker on RunPod](https://www.runpod.io/console/serverless)

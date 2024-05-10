@@ -7,13 +7,12 @@ The following list contains all GPU types available on RunPod.
 For more information, see [GPU pricing](https://www.runpod.io/gpu-instance/pricing).
 
 <!--
-Table last generated: 2024-03-26
+Table last generated: 2024-04-18
 -->
 
 | GPU ID                             | Display Name     | Memory (GB) |
 | ---------------------------------- | ---------------- | ----------- |
 | NVIDIA A100 80GB PCIe              | A100 80GB        | 80          |
-| NVIDIA A100-SXM4-40GB              | A100 SXM 40GB    | 40          |
 | NVIDIA A100-SXM4-80GB              | A100 SXM 80GB    | 80          |
 | NVIDIA A30                         | A30              | 24          |
 | NVIDIA A40                         | A40              | 48          |
@@ -42,4 +41,3 @@ Table last generated: 2024-03-26
 | Tesla V100-PCIE-16GB               | Tesla V100       | 16          |
 | Tesla V100-FHHL-16GB               | V100 FHHL        | 16          |
 | Tesla V100-SXM2-16GB               | V100 SXM2        | 16          |
-| Tesla V100-SXM2-32GB               | V100 SXM2 32GB   | 32          |

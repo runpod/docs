@@ -12,8 +12,6 @@ You can use the following methods:
 - Quick Deploy: Quick deploys are pre-built custom endpoints of the most popular AI models.
 - Handler Functions: Bring your own functions and run in the cloud.
 
-If you'd like to use pre-built endpoints of some of the most popular AI models, see [AI APIs](/ai-apis).
-
 ## Why RunPod Serverless?
 
 You should choose RunPod Serverless instances for the following reasons:
@@ -45,7 +43,7 @@ https://api.runpod.ai/v2/{endpoint_id}/{operation}
 - `operation`: The operation to perform on the Serverless Endpoint.
   - Valid options: `run` | `runsync` | `status` | `cancel` | `health` | `purge-queue`
 
-For more information, see [Invoke jobs](/serverless/endpoints/invoke-jobs).
+For more information, see [Invoke jobs](/serverless/endpoints/job-operations).
 
 <!--
 ### Endpoints
