@@ -3,11 +3,13 @@ title: Connect to a Pod
 sidebar_position: 4
 ---
 
-You can connect to a Pod through various methods, depending on your requirements and preferences.
+You can connect to a Pod through various methods, depending on your requirements, preferences, and templates used.
 
 ## SSH terminal
 
 Connecting to a Pod using an SSH terminal is a secure and reliable method, suitable for long-running processes and critical tasks.
+
+Every Pod contains the ability to connect through SSH.
 
 To do this, you need to have an SSH client installed on your local machine.
 
@@ -33,6 +35,12 @@ Replace the placeholders with the following:
 You now have a secure SSH terminal to your Pod.
 
 ## Web terminal
+
+:::note
+
+Depending on your Pod's template will provide the ability to connect to the web terminal.
+
+:::
 
 The web terminal is a convenient, web-based terminal for quickly connecting to your Pod and running commands.
 
