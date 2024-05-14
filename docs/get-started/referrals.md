@@ -70,3 +70,5 @@ The Template Program allows users to earn a percentage of the money spent by use
 ## Support
 
 If you have any questions or need assistance with the referral or template programs, [please contact](https://contact.runpod.io/hc/en-us/requests/new) the RunPod support team.
+
+RunPod allows referrers to keep the earnings made before activation once they meet the eligibility criteria and are accepted into the program.
