@@ -78,8 +78,83 @@ If `test-filename` is omitted, the Test Runner Action attempts to look for a tes
 
 You can find a working example in the [Worker Template repository](https://github.com/runpod-workers/worker-template/tree/main/.github).
 
+Here's an updated version of the docs section with the additional information from the thread:
+
 ## Other considerations
 
-While we do not impose a limit on the docker image size your container registry might have, be sure to review any limitations they may have. Ideally, you want to keep your final docker image as small as possible and only container the absolute minimum to run your handler.
+### Docker Image Size
 
-We also highly recommend the use of tags for docker images and not relying on the default `:latest` tag label, this will make version tracking and releasing updates significantly easier.
+While we do not impose a limit on the docker image size your container registry might have, be sure to review any limitations they may have. 
+Ideally, you want to keep your final docker image as small as possible and only contain the absolute minimum required to run your handler.
+
+### Versioning and Tagging
+We highly recommend the use of tags for docker images and not relying on the default `:latest` tag. 
+This will make version tracking and releasing updates significantly easier. Consider using semantic versioning (e.g., v1.0.0, v1.0.1) or a deterministic naming scheme like a Git commit hash for your image tags.
+
+### Automated Deployments with GitHub Actions
+
+You can automate the deployment of your serverless endpoints using GitHub Actions.
+Here's a basic workflow:
+
+1. Set up a GitHub Action that builds and publishes a new version of your Docker image to a container registry whenever changes are pushed to your repository.
+2. In the same GitHub Action, make a request to the RunPod API to update the container image field of your serverless template with the newly published image tag.
+3. RunPod will then trigger a new release of your serverless endpoint using the updated image.
+
+Here's a simple example of updating the container image using curl:
+
+```bash
+curl --request POST \
+    --header 'content-type: application/json' \
+    --url 'https://api.runpod.dev/graphql?api_key=<YOUR_RUNPOD_API_KEY>' \
+    --data '{"query":"mutation Mutation($input: UpdateEndpointTemplateInput) {\n  updateEndpointTemplate(input: $input) {\n    id\n    templateId\n    template {\n      imageName\n    }\n  }\n}","variables":{"input":{"endpointId":"yourEndpointId","templateId":"newTemplateId"}}}''
+```
+
+you can call the code like this:
+
+Call the helper function to construct the object to in the righ format for Save Template format.
+```code
+  //template names have uniqueness constraint unlike endpoint names
+  const templateName =
+    (templateConfig?.name ?? defaultTemplateConfig.name) + " " + randomUUID().slice(0, 8)
+  const createTemplateResp = await createTemplate({
+    containerRegistryAuthId: CONTAINER_REGISTRY_AUTH_ID, //dockerhub creds for image if it's private
+    ...defaultTemplateConfig, //start with default values
+    ...(templateConfig ?? {}), //any overridden values
+    imageName: imageTag, // your new docker image tag
+    name: templateName, //template names must be unique so override default with name of your choice
+  })
+```
+
+This is the object used to contsturt 
+
+```code
+  mutation saveTemplate($input: SaveTemplateInput) {
+    saveTemplate(input: $input) {
+      advancedStart
+      containerDiskInGb
+      dockerArgs
+      env {
+        key
+        value
+      }
+      id
+      imageName
+      name
+      ports
+      readme
+      startJupyter
+      startScript
+      startSsh
+      volumeInGb
+      volumeMountPath
+    }
+  }
+```
+
+
+For a complete example, see here:
+
+https://github.com/runpod/test-runner/blob/55cdf37e7cc3a2272c2f2fefc760dc262f469b80/test-runner.js#L66
+
+
+Replace `<YOUR_RUNPOD_API_KEY>` with your RunPod API key, `myregistry.azurecr.io/myimage:v1.0.1` with your newly published image tag, and `<YOUR_TEMPLATE_ID>` with the ID of the serverless template you want to update.
