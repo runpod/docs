@@ -29,7 +29,7 @@ You also specify a Docker image like `winglian/axolotl-cloud:main-latest` that y
 1. Login to [RunPod](https://www.runpod.io/console/console/home) and deploy your Pod.
     1. Select **Deploy**.
     2. Select a GPU instance.
-    3. Specify the `winglian/axolotl-cloud:main-latest` as your Template image.
+    3. Specify the `winglian/axolotl-cloud:main-latest` image as your Template image.
     4. Select your GPU count.
     5. Select **Deploy**.
 
@@ -131,6 +131,18 @@ Now update your RunPod machine's requirement and preprocess your data.
 ### Updating requirements and preprocessing data
 
 Before you can start training, you'll need to install the necessary dependencies and preprocess our dataset.
+
+:::note
+
+In some cases, your Pod will not contain the Axolotl repository.
+To add the required repository, run the following commands and then continue with the tutorial:
+
+```command
+git clone https://github.com/OpenAccess-AI-Collective/axolotl
+cd axolotl
+```
+
+:::
 
 1. Install the required packages by running the following commands:
 
