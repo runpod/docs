@@ -61,7 +61,7 @@ Depending on any modifications you made to your Handler Function, you may need t
 
 Now that you have successfully launched an endpoint using a template, you can:
 
-- [Invoke jobs](/serverless/endpoints/invoke-jobs)
+- [Invoke jobs](/serverless/endpoints/job-operations)
 
 If the models provided aren't enough, you can write your own customize Function Handler:
 
