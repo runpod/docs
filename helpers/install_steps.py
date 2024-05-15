@@ -11,42 +11,40 @@ Choose one of the following methods to install the RunPod CLI.
 **ARM**
 
 ```bash
-wget --quiet --show-progress https://github.com/runpod/runpodctl/releases/download/v1.10.0/runpodctl-darwin-arm -O runpodctl && chmod +x runpodctl && sudo mv runpodctl /usr/local/bin/runpodctl
+wget --quiet --show-progress https://github.com/runpod/runpodctl/releases/download/v1.14.3/runpodctl-darwin-arm64 -O runpodctl && chmod +x runpodctl && sudo mv runpodctl /usr/local/bin/runpodctl
 ```
-
 
 **AMD**
 
 ```bash
-wget --quiet --show-progress https://github.com/runpod/runpodctl/releases/download/v1.10.0/runpodctl-darwin-amd -O runpodctl && chmod +x runpodctl && sudo mv runpodctl /usr/local/bin/runpodctl
+wget --quiet --show-progress https://github.com/runpod/runpodctl/releases/download/v1.14.3/runpodctl-darwin-amd64 -O runpodctl && chmod +x runpodctl && sudo mv runpodctl /usr/local/bin/runpodctl
 ```
 
 ### Linux
 
 ```bash
-wget --quiet --show-progress https://github.com/Run-Pod/runpodctl/releases/download/v1.10.0/runpodctl-linux-amd -O runpodctl && chmod +x runpodctl && sudo cp runpodctl /usr/bin/runpodctl
+wget --quiet --show-progress https://github.com/Run-Pod/runpodctl/releases/download/v1.14.3/runpodctl-linux-amd -O runpodctl && chmod +x runpodctl && sudo cp runpodctl /usr/bin/runpodctl
 ```
 
 ### Windows (powershell)
 
 ```bash
-wget https://github.com/runpod/runpodctl/releases/download/v1.10.0/runpodctl-win-amd -O runpodctl.exe
+wget https://github.com/runpod/runpodctl/releases/download/v1.14.3/runpodctl-win-amd -O runpodctl.exe
 ```
 
 ### Google Collab
 
 ```bash
-!wget --quiet --show-progress https://github.com/Run-Pod/runpodctl/releases/download/v1.10.0/runpodctl-linux-amd -O runpodctl
+!wget --quiet --show-progress https://github.com/Run-Pod/runpodctl/releases/download/v1.14.3/runpodctl-linux-amd -O runpodctl
 !chmod +x runpodctl
 !cp runpodctl /usr/bin/runpodctl
 ```
 
-###  Jupyter notebook
+### Jupyter notebook
 
 ```bash
-!wget --quiet --show-progress https://github.com/Run-Pod/runpodctl/releases/download/v1.10.0/runpodctl-linux-amd -O runpodctl
+!wget --quiet --show-progress https://github.com/Run-Pod/runpodctl/releases/download/v1.14.3/runpodctl-linux-amd -O runpodctl
 !chmod +x runpodctl
 !cp runpodctl /usr/bin/runpodctl
 ```
-
 """
