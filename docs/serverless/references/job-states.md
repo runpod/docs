@@ -1,7 +1,7 @@
 ---
 title: "Job states"
 id: "job-states"
-description: "Learn about the different states a serverless job can be in during its lifecycle."
+description: "Understand the various states of a job in RunPod's Handler Functions, including IN_QUEUE, IN_PROGRESS, COMPLETED, FAILED, CANCELLED, and TIMED_OUT, to effectively manage job flow and troubleshoot issues."
 sidebar_position: 5
 ---
 

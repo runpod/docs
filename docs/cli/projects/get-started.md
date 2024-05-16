@@ -1,6 +1,7 @@
 ---
 title: Get started
 sidebar_position: 2
+description: "Get the IP address of your machine and deploy your code to the RunPod platform with this step-by-step tutorial. Learn how to set up a project environment, run a development server, and interact with your code using the RunPod API."
 ---
 
 In this tutorial, we'll explore how to get the IP address of the machine your code is running on and deploy your code to the RunPod platform.

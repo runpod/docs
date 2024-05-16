@@ -1,6 +1,7 @@
 ---
 title: Overview
 sidebar_position: 1
+description: "Deploy and manage serverless workers with RunPod Endpoints, featuring asynchronous and synchronous operations, scalability, and flexibility for modern computing tasks."
 ---
 
 RunPod Endpoints serve as the gateway to deploying and managing your Serverless Workers.

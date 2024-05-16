@@ -1,6 +1,7 @@
 ---
 title: Containers overview
 sidebar_position: 1
+description: "Discover the world of containerization with Docker, a platform for isolated environments that package applications, frameworks, and libraries into self-contained containers for consistent and reliable deployment across diverse computing environments."
 ---
 
 ## What are containers?

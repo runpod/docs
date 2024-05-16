@@ -1,7 +1,7 @@
 ---
 title: Persist data outside of containers
 sidebar_position: 2
-description: Learn to persist data outside of containers.
+description: "Learn how to persist data outside of containers by creating named volumes, mounting volumes to data directories, and accessing persisted data from multiple container runs and removals in Docker."
 ---
 
 In the previous step, you created a Dockerfile and executed a command. Now, you'll learn how to persist data outside of containers.

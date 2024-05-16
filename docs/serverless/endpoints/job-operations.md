@@ -1,12 +1,7 @@
 ---
 title: Job operations
-description: Learn about job operations with RunPod.
+description: "Learn how to use the Runpod Endpoint to manage job operations, including running, checking status, purging queues, and streaming results, with cURL and SDK examples."
 sidebar_position: 2
-tags:
-  - endpoints
-  - jobs
-  - run
-  - invoke
 ---
 
 import Tabs from '@theme/Tabs';

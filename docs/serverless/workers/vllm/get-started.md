@@ -1,6 +1,7 @@
 ---
 title: Get started
 sidebar_position: 2
+description: "Deploy a Serverless Endpoint for large language models (LLMs) with RunPod, a simple and efficient way to run vLLM Workers with minimal configuration."
 ---
 
 import Tabs from '@theme/Tabs';

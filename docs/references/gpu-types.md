@@ -1,5 +1,6 @@
 ---
 title: GPU types
+description: Discover the comprehensive list of GPUs available on RunPod, featuring NVIDIA and Tesla models with varying memory capacities, including A100, H100, L4, and more.
 ---
 
 The following list contains all GPU types available on RunPod.

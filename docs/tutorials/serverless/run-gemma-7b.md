@@ -1,8 +1,7 @@
 ---
 title: Run Google's Gemma model
 sidebar_position: 5
-description: Run Google's Gemma model using RunPod's vLLM Worker, guiding you to set up a Serverless Endpoint with a gated large language model (LLM).
-
+description: "Learn how to deploy Google's Gemma model on RunPod's vLLM Worker and create a Serverless Endpoint, then interact with the model using OpenAI APIs and Python."
 ---
 
 This tutorial walks you through running Google's Gemma model using RunPod's vLLM Worker.

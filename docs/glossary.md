@@ -1,6 +1,7 @@
 ---
 title: Glossary
 sidebar_position: 1
+description: RunPod is a cloud computing platform for AI and machine learning applications, offering GPU and CPU instances, serverless computing, and SDKs for seamless integration.
 ---
 
 ## Community Cloud

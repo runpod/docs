@@ -2,6 +2,7 @@
 title: Migrate Your Banana Text to RunPod
 sidebar_label: Migrate texts
 draft: true
+description: "Streamline the migration of Docker-based AI models and applications from Banana Dev to RunPod with this comprehensive tutorial, covering the transfer of AI models, Vllm Worker image setup, and command execution for seamless transition."
 ---
 
 Migrating your AI models and applications from one cloud service to another can often present a challenge, especially when the two platforms operate differently. This tutorial aims to streamline the process of moving from Banana Dev to RunPod, focusing on transferring Docker-based applications and AI models. Whether you're shifting due to preferences in service offerings, pricing, or performance, this guide will help you through the transition smoothly.

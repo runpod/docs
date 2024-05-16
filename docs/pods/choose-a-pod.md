@@ -1,6 +1,6 @@
 ---
 title: Choose a Pod
-description: Learn what goes into choosing a Pod based on your needs.
+description: "Choose the right Pod instance for your RunPod deployment by considering VRAM, RAM, vCPU, and storage, both Temporary and Persistent, to ensure optimal performance and efficiency."
 sidebar_position: 3
 ---
 
