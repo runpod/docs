@@ -6,19 +6,11 @@ description: Learn to set up and run an Ollama server on RunPod CPU for inferenc
 In this guide, you will learn how to run an Ollama server on your RunPod CPU for inference.
 By the end of this tutorial, you will have a fully functioning Ollama server ready to handle requests.
 
-## Prerequisites
-
-To complete this tutorial, you will need:
-
-- A RunPod account with access to CPU resources.
-- Basic knowledge of JSON and server management.
-- Familiarity with using web UIs for server configuration.
-
 ## Setting Up Your Endpoint
 
 To begin, you need to set up a new endpoint on RunPod.
 
-1. Log in to your RunPod account.
+1. Log in to your [RunPod account](https://www.runpod.io/console/console/home).
 2. Navigate to the **Serverless** section and select **New Endpoint**.
 3. Choose **CPU** and provide a name for your Endpoint.
 4. Configure your Worker settings according to your needs.
