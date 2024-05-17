@@ -1,5 +1,6 @@
 ---
 title: Endpoints
+description: "Learn how to interact with RunPod's endpoints using the JavaScript SDK, including synchronous and asynchronous execution methods, status checks, and job cancellation. Discover how to set timeouts, execute policies, and purge queues."
 ---
 
 import Tabs from '@theme/Tabs';

@@ -1,6 +1,7 @@
 ---
 title: Overview
 sidebar_position: 1
+description: "Deploy a highly optimized vLLM Worker as a serverless endpoint, leveraging Hugging Face LLMs and OpenAI's API with ease, featuring ease of use, open compatibility, dynamic batch size, and customization options for a scalable and cost-effective solution."
 ---
 
 Use the `runpod/worker-vllm:latest` image to deploy a vLLM Worker.

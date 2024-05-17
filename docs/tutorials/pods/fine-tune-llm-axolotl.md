@@ -1,6 +1,6 @@
 ---
 title: Fine tune an LLM with Axolotl on RunPod
-description: Learn to fine tune LLMs.
+description: "Learn how to fine-tune large language models with Axolotl on RunPod, a streamlined workflow for configuring and training AI models with GPU resources, and explore examples for LLaMA2, Gemma, LLaMA3, and Jamba."
 ---
 
 import Tabs from '@theme/Tabs';

@@ -1,6 +1,7 @@
 ---
 title: Get started
 sidebar_position: 2
+description: "Learn how to test your deployed Endpoint with a sample request, view the response, and send requests using cURL or an HTTP client, then customize your Handler Function for more control over your API."
 ---
 
 Now that your Endpoint is deployed, send a test.

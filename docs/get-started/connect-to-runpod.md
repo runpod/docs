@@ -1,6 +1,6 @@
 ---
 title: Connect to RunPod
-description: There are many ways to interact with RunPod.
+description: "Interact with RunPod through multiple interfaces: web, CLI, and SDKs. Access the web interface at runpod.io/console/login, use the CLI runpodctl for management and development, or leverage SDKs for GraphQL, JavaScript, and Python programming languages."
 sidebar_position: 5
 ---
 

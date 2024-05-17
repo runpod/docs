@@ -1,6 +1,6 @@
 ---
 title: "Savings plans"
-description: "Cost savings for Your RunPod deployments."
+description: "Maximize your RunPod experience with Savings Plans, a cost-saving feature that offers upfront discounts on uninterrupted instances, flexible savings, instant activation, easy management, and clear visibility."
 sidebar_position: 9
 ---
 

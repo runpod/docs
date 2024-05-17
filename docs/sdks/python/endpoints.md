@@ -1,5 +1,6 @@
 ---
 title: Endpoints
+description: "Learn how to use the RunPod Python SDK to interact with various endpoints, perform synchronous and asynchronous operations, stream data, and check endpoint health. Discover how to set your Endpoint Id, run jobs, and cancel or purge queues with this comprehensive guide."
 ---
 
 import Tabs from '@theme/Tabs';

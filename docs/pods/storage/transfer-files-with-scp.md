@@ -1,6 +1,7 @@
 ---
 title: "Transfer files with SCP"
 sidebar_position: 9
+description: "Transfer files to and from your Pod using SCP and rsync commands. Prerequisites include a Linux or WSL instance, SSH configured, and rsync installed. Follow syntax guides for secure file transfer and option flags for customization."
 ---
 
 Learn to transfer files to and from RunPod with Secure Copy Protocol (SCP). 

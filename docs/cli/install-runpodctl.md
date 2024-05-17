@@ -1,6 +1,6 @@
 ---
 title: Installing runpodctl
-description: "Install the command line interface for RunPod and run your first command."
+description: "Get started with runpodctl, an open-source CLI, to work with Pods and RunPod projects. Install and configure the tool, then verify the installation and API key setup to start using runpodctl."
 sidebar_position: 1
 ---
 

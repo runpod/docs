@@ -1,6 +1,6 @@
 ---
 title: Manage Pods
-description: Manage your Pod.
+description: "Learn how to start, stop, and manage Pods with RunPod, including creating and terminating Pods, and using the command line interface to manage your Pods."
 id: manage-pods
 sidebar_position: 3
 ---

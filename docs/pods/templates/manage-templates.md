@@ -1,6 +1,6 @@
 ---
 title: Manage Pod Templates
-description: Manage Pod Templates.
+description: "Discover and create custom templates for your pods, define environment variables, and use RunPod's API to launch and manage your applications with ease."
 sidebar_position: 3
 ---
 

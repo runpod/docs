@@ -1,6 +1,6 @@
 ---
 title: Overview
-description: Learn about Pods.
+description: "Run containers as Pods with a container registry, featuring compatible architectures, Ubuntu Linux, and persistent storage, with customizable options for GPU type, system disk size, and more."
 sidebar_position: 1
 ---
 

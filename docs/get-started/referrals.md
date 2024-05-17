@@ -1,6 +1,7 @@
 ---
 title: Referral programs
 sidebar_position: 5
+description: "Learn how to earn additional revenue with RunPod's referral programs and template program, offering credits for referring users and template creators."
 ---
 
 RunPod offers two referral programs and a template program that allow users to earn additional revenue in the form of RunPod Credits.

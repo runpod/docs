@@ -2,6 +2,7 @@
 title: Quick Deploys
 id: quick-deploys
 sidebar_position: 2
+description: "Quickly deploy custom Endpoints of popular models with minimal configuration through the web interface, following a simple 5-step process. Customize your deployments and utilize CI/CD features with RunPod's GitHub repositories and Handler Functions."
 ---
 
 Quick Deploys lets you deploy custom Endpoints of popular models with minimal configuration.

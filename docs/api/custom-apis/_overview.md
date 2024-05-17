@@ -1,7 +1,7 @@
 ---
 title: "Overview"
 slug: "overview"
-description: "Custom API overview."
+description: "Create custom APIs for specific use cases with RunPod's serverless support. Bring your own container image and let us handle scaling and other aspects. Convert templates to API endpoints and invoke APIs using the 'run' endpoint, with asynchronous results tracked through the 'status' endpoint."
 sidebar_position: 1
 ---
 
