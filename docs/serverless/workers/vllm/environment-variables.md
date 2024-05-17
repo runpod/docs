@@ -1,6 +1,7 @@
 ---
 title: Environment variables
 sidebar_position: 4
+description: "Configure your vLLM Worker with environment variables to control model selection, access credentials, and operational parameters for optimal performance. This guide provides a reference for CUDA versions, image tags, and environment variable settings for model-specific configurations."
 ---
 
 Environment variables configure your vLLM Worker by providing control over model selection, access credentials, and operational parameters necessary for optimal Worker performance.

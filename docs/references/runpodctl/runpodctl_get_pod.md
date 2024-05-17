@@ -1,7 +1,6 @@
 ---
 title: "Get Pod"
 ---
-
 ## runpodctl get pod
 
 get all pods
@@ -17,10 +16,11 @@ runpodctl get pod [podId] [flags]
 ### Options
 
 ```
--a, --allfields   include all fields in output
--h, --help        help for pod
+  -a, --allfields   include all fields in output
+  -h, --help        help for pod
 ```
 
 ### SEE ALSO
 
-- [runpodctl get](runpodctl_get.md) - get resource
+* [runpodctl get](runpodctl_get.md)	 - get resource
+

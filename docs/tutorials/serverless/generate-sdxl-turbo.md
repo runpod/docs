@@ -1,6 +1,6 @@
 ---
 title: Generate images with SDXL Turbo
-description: Learn to generate images with SDXL with a frontend web app.
+description: "Learn how to build a web application using RunPod's Serverless Workers and SDXL Turbo from Stability AI, a fast text-to-image model, and send requests to an Endpoint to generate images from text-based inputs."
 sidebar_position: 2
 ---
 

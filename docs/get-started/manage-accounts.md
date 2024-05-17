@@ -1,6 +1,7 @@
 ---
 title: Manage accounts
 sidebar_position: 1
+description: "Create an account or get invited by a team member to use RunPod, then convert personal to team account or invite others to join, with various role options including Basic, Billing, Dev, and Admin for customized access and permissions."
 ---
 
 You will need to create an account or get invited by a team member to use RunPod.

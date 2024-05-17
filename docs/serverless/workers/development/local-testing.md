@@ -1,6 +1,7 @@
 ---
 title: Test locally
 sidebar_position: 1
+description: "Test your Handler Function with custom inputs and launch a local test server with Python, allowing you to send requests and simulate deployment scenarios."
 ---
 
 As you develop your Handler Function, you will, of course, want to test it with inputs formatted similarly to what you will be sending in once deployed as a worker. The quickest way to run a test is to pass in your input as an argument when calling your handler file. Assuming your handler function is inside of a file called `your_handler.py` and your input is `{"input": {"prompt": "The quick brown fox jumps"}}` you would call your file like so:

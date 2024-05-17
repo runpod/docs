@@ -2,6 +2,7 @@
 title: API Wrapper
 id: apis
 sidebar_label: APIs
+description: "Learn how to manage computational resources with the RunPod API, including endpoint configurations, template creation, and GPU management, to optimize your project's performance."
 ---
 
 import Tabs from '@theme/Tabs';

@@ -1,5 +1,6 @@
 ---
 title: "Video resources"
+description: "Explore comprehensive video tutorials on RunPod, covering topics like image generation, text-to-image, and Linux commands, including StableDiffusion, DeepFloyd, ControlNet, Automatic111, and more, with step-by-step instructions and expert guidance."
 ---
 
 ## RunPod Usage

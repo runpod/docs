@@ -1,6 +1,6 @@
 ---
 title: "Manage Endpoints"
-description: "You can create, delete, and edit Endpoints."
+description: "Learn to create, edit, and manage Serverless Endpoints, including adding network volumes and setting GPU prioritization, with step-by-step guides and tutorials."
 sidebar_position: 10
 ---
 

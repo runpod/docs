@@ -1,6 +1,6 @@
 ---
 title: Access Logs
-description: Learn about logging.
+description: "Get insights into your pods' activities with logs, including container logs and system logs, detailing console output, formation, and status updates, accessible through the Pods dashboard's Logs button."
 sidebar_position: 5
 ---
 

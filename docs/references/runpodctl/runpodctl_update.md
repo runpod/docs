@@ -1,7 +1,6 @@
 ---
 title: "Update"
 ---
-
 ## runpodctl update
 
 update runpodctl
@@ -17,9 +16,10 @@ runpodctl update [flags]
 ### Options
 
 ```
--h, --help   help for update
+  -h, --help   help for update
 ```
 
 ### SEE ALSO
 
-- [runpodctl](runpodctl.md) - CLI for runpod.io
+* [runpodctl](runpodctl.md)	 - CLI for runpod.io
+

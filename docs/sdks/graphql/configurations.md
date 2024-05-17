@@ -1,6 +1,7 @@
 ---
 title: "Configurations"
 sidebar_position: 1
+description: "Configure your environment with essential arguments: containerDiskInGb, dockerArgs, env, imageName, name, and volumeInGb, to ensure correct setup and operation of your container."
 ---
 
 For details on queries, mutations, fields, and inputs, see the [RunPod GraphQL Spec](https://graphql-spec.runpod.io/).

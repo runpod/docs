@@ -1,6 +1,6 @@
 ---
 title: Overview
-description: Learn about RunPod projects.
+description: "Streamline your development process with RunPod's Dockerless workflow, enabling you to deploy and manage endpoints without Docker or container image management, perfect for rapid prototyping and testing."
 sidebar_position: 1
 ---
 

@@ -1,6 +1,7 @@
 ---
 title: Dockerfile
 sidebar_position: 2
+description: "Learn how to create a Dockerfile to customize a Docker image and use an entrypoint script to run a command when the container starts, making it a reusable and executable unit for deploying and sharing applications."
 ---
 
 In the previous step, you ran a command that prints the container's uptime.

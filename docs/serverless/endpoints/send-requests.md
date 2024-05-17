@@ -1,6 +1,6 @@
 ---
 title: "Send a request"
-description: "The method in which jobs are submitted and returned."
+description: "Learn how to construct a JSON request body to send to your custom endpoint, including optional inputs for webhooks, execution policies, and S3-compatible storage, to optimize job execution and resource management."
 sidebar_position: 4
 ---
 
