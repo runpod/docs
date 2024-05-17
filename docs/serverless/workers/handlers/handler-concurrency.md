@@ -1,5 +1,6 @@
 ---
 title: Concurrent Handlers
+description: "RunPod's concurrency functionality enables efficient task handling through asynchronous requests, allowing a single worker to manage multiple tasks concurrently. The concurrency_modifier configures the worker's concurrency level to optimize resource consumption and performance."
 ---
 
 RunPod supports asynchronous functions for request handling, enabling a single worker to manage multiple tasks concurrently through non-blocking operations. This capability allows for efficient task switching and resource utilization.

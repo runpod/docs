@@ -1,6 +1,6 @@
 ---
 title: "Overview"
-description: "The function responsible for processing requests."
+description: "Create and deploy serverless Handler Functions with RunPod, processing submitted inputs and generating output without managing server infrastructure, ideal for efficient, cost-effective, and rapid deployment of code."
 sidebar_position: 1
 hidden: false
 ---

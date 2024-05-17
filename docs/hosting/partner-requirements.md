@@ -1,6 +1,6 @@
 ---
 title: "Requirements"
-description: "Minimal Eligibility Requirements"
+description: "Meet the minimum requirements for a secure and scalable AI cloud infrastructure: Ubuntu Server 22.04 LTS, remote SSH access, Nvidia drivers, CUDA Toolkit, and more."
 ---
 
 The following requirements are minimal and are subject to change.

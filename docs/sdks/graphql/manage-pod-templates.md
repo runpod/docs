@@ -1,6 +1,7 @@
 ---
 title: "Manage Templates"
 sidebar_position: 3
+description: Create, modify, and delete templates in RunPod using GraphQL API with various parameters for container disk size, Docker arguments, environment variables, and more.
 ---
 
 import Tabs from '@theme/Tabs';

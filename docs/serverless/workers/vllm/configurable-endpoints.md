@@ -1,6 +1,6 @@
 ---
 title: Configurable Endpoints
-description: Focus on selecting their desired model and customizing the template parameters, while vLLM takes care of the low-level details of model loading, hardware configuration, and execution.
+description: "Deploy large language models with ease using RunPod's Configurable Endpoints feature, leveraging vLLM to simplify model loading, hardware configuration, and execution, allowing you to focus on model selection and customization."
 ---
 
 RunPod's Configurable Endpoints feature leverages vLLM to enable the deployment of any large language model.

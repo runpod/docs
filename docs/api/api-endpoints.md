@@ -1,6 +1,6 @@
 ---
 title: "API Endpoints"
-description: "Interact with your favorite models without managing the pods yourself."
+description: "Unlock the power of RunPod's API Endpoints, manage models without managing pods, and retrieve results via the status endpoint within 30 minutes for privacy protection; rate limits enforced per user."
 sidebar_position: 1
 ---
 

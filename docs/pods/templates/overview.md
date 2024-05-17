@@ -1,6 +1,6 @@
 ---
 title: Overview
-description: Learn about Templates.
+description: "Docker templates: pre-configured images with customizable settings for deploying Pods, environment variables, and port management, with options for official, community, and custom templates."
 sidebar_position: 2
 ---
 

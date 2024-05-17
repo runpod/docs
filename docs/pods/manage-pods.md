@@ -1,6 +1,6 @@
 ---
 title: Manage Pods
-description: Manage your Pod.
+description: "Learn how to start, stop, and manage Pods with RunPod, including creating and terminating Pods, and using the command line interface to manage your Pods."
 id: manage-pods
 sidebar_position: 3
 ---
@@ -102,7 +102,8 @@ For example, the following command sleeps for 2 hours, and then stops the Pod.
 
 :::warning
 
-You are charged for storing idle Pods. If you do not need to store your Pod, be sure to terminate it next.
+You are charged for storing idle Pods.
+If you do not need to store your Pod, be sure to terminate it next.
 
 :::
 
@@ -110,7 +111,8 @@ You are charged for storing idle Pods. If you do not need to store your Pod, be 
 
 :::danger
 
-Terminating a Pod permanently deletes all data outside your [network volume](/pods/storage/create-network-volumes). Be sure you've saved any data you want to access again.
+Terminating a Pod permanently deletes all data outside your [network volume](/pods/storage/create-network-volumes).
+Be sure you've saved any data you want to access again.
 
 :::
 

@@ -1,7 +1,7 @@
 ---
 title: Overview
 sidebar_position: 1
-description: Migrating from Banana to RunPod? Checkout our migration page to get started.
+description: "Quickly migrate from Banana to RunPod with Docker, leveraging a bridge between the two environments for a seamless transition. Utilize a Dockerfile to encapsulate your environment and deploy existing projects to RunPod with minimal adjustments."
 ---
 
 import Tabs from '@theme/Tabs';

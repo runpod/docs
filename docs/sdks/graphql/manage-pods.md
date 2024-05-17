@@ -1,6 +1,7 @@
 ---
 title: "Manage Pods"
 sidebar_position: 2
+description: "Manage and deploy high-performance computing resources with RunPod's API, including authentication, GraphQL queries, and management of pods, GPUs, and storage."
 ---
 
 import Tabs from '@theme/Tabs';

@@ -1,6 +1,7 @@
 ---
 title: "Additional controls"
 sidebar_position: 6
+description: "Send progress updates during job execution using the runpod.serverless.progress_update function, and refresh workers for long-running or complex jobs by returning a dictionary with a 'refresh_worker' flag in your handler."
 ---
 
 ## Update progress
