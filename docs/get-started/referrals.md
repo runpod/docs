@@ -67,7 +67,6 @@ The Template Program allows users to earn a percentage of the money spent by use
 2. Locate your unique referral link. For example `https://runpod.io?ref=5t99c9je`.
 3. Share your referral link with potential users.
 
-
 ## Support
 
 If you have any questions or need assistance with the referral or template programs, [please contact](https://contact.runpod.io/hc/en-us/requests/new) the RunPod support team.

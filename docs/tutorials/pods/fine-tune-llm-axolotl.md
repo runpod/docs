@@ -6,12 +6,12 @@ description: "Learn how to fine-tune large language models with Axolotl on RunPo
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-[axolotl](https://github.com/OpenAccess-AI-Collective/axolotl) is a tool that simplifies the process of training large language models (LLMs). 
-It provides a streamlined workflow that makes it easier to fine-tune AI models on various configurations and architectures. 
+[axolotl](https://github.com/OpenAccess-AI-Collective/axolotl) is a tool that simplifies the process of training large language models (LLMs).
+It provides a streamlined workflow that makes it easier to fine-tune AI models on various configurations and architectures.
 When combined with RunPod's GPU resources, Axolotl enables you to harness the power needed to efficiently train LLMs.
 
-In addition to its user-friendly interface, Axolotl offers a comprehensive set of YAML examples covering a wide range of LLM families, such as LLaMA2, Gemma, LLaMA3, and Jamba. 
-These examples serve as valuable references, helping users understand the role of each parameter and guiding them in making appropriate adjustments for their specific use cases. 
+In addition to its user-friendly interface, Axolotl offers a comprehensive set of YAML examples covering a wide range of LLM families, such as LLaMA2, Gemma, LLaMA3, and Jamba.
+These examples serve as valuable references, helping users understand the role of each parameter and guiding them in making appropriate adjustments for their specific use cases.
 It is highly recommended to explore [these examples](https://github.com/OpenAccess-AI-Collective/axolotl/tree/main/examples) to gain a deeper understanding of the fine-tuning process and optimize the model's performance according to your requirements.
 
 In this tutorial, we'll walk through the steps of training an LLM using Axolotl on RunPod and uploading your model to Hugging Face.
@@ -21,27 +21,26 @@ In this tutorial, we'll walk through the steps of training an LLM using Axolotl 
 Fine-tuning a large language model (LLM) can take up a lot of compute power.
 Because of this, we recommend fine-tuning using RunPod's GPUs.
 
-
 To do this, you'll need to create a Pod, specify a container, then you can begin training.
 A Pod is an instance on a GPU or multiple GPUs that you can use to run your training job.
 You also specify a Docker image like `winglian/axolotl-cloud:main-latest` that you want installed on your Pod.
 
 1. Login to [RunPod](https://www.runpod.io/console/console/home) and deploy your Pod.
-    1. Select **Deploy**.
-    2. Select a GPU instance.
-    3. Specify the `winglian/axolotl-cloud:main-latest` image as your Template image.
-    4. Select your GPU count.
-    5. Select **Deploy**.
+   1. Select **Deploy**.
+   2. Select a GPU instance.
+   3. Specify the `winglian/axolotl-cloud:main-latest` image as your Template image.
+   4. Select your GPU count.
+   5. Select **Deploy**.
 
 Now that you have your Pod set up and running, connect to it over secure SSH.
 
 2. Wait for the Pod to startup, then connect to it using secure SSH.
    1. On your Pod page, select **Connect**.
    2. Copy the secure SSH string and paste it into your terminal on your machine.
-    ```bash
-    ssh <username>@<pod-ip-address> -p <ssh-port> -i <path-to-ssh-key>  string
-    ```
-    Follow the on-screen prompts to SSH into your Pod.
+   ```bash
+   ssh <username>@<pod-ip-address> -p <ssh-port> -i <path-to-ssh-key>  string
+   ```
+   Follow the on-screen prompts to SSH into your Pod.
 
 :::note
 
@@ -75,7 +74,7 @@ Run the following on the computer that has the file you want to send, enter the 
 runpodctl send data.jsonl
 ```
 
-  </TabItem>
+</TabItem>
   <TabItem value="output" label="output">
 
 ```bash
@@ -86,10 +85,8 @@ On the other computer run
 runpodctl receive 8338-galileo-collect-fidel
 ```
 
-  </TabItem>
+</TabItem>
 </Tabs>
-
-
 
 **To receive a file**
 
@@ -102,7 +99,7 @@ The following is an example of a command you'd run on your RunPod machine.
 runpodctl receive 8338-galileo-collect-fidel
 ```
 
-  </TabItem>
+</TabItem>
   <TabItem value="output" label="output">
 
 The following is an example of an output.
@@ -114,7 +111,7 @@ Receiving (<-149.36.0.243:8692)
 data.jsonl 100% |████████████████████| ( 5/ 5B, 0.040 kB/s)
 ```
 
-  </TabItem>
+</TabItem>
 </Tabs>
 
 Once the local dataset is transferred to your RunPod machine, we can proceed to updating requirements and preprocessing the data.
@@ -152,7 +149,7 @@ pip3 install -e '.[flash-attn,deepspeed]'
 ```
 
 2. Update the `lora.yml` configuration file with your dataset path and other training settings.
-You can use any of the examples in the `examples` folder as a starting point.
+   You can use any of the examples in the `examples` folder as a starting point.
 3. Preprocess your dataset by running:
 
 ```command
@@ -189,7 +186,7 @@ accelerate launch -m axolotl.cli.inference examples/openllama-3b/lora.yml --lora
 ```
 
 This will allow you to interact with your model and see how it performs on new prompts.
-If you're satisfied with your model's performance, you can merge the LoRA weights with the base model using the `merge_lora` script. 
+If you're satisfied with your model's performance, you can merge the LoRA weights with the base model using the `merge_lora` script.
 
 ### Merge the model
 
@@ -204,20 +201,24 @@ python3 -m axolotl.cli.merge_lora examples/openllama-3b/lora.yml \
 
 This creates a standalone model that doesn't require LoRA layers for inference.
 
-
 ### Upload the model to Hugging Face
 
-Finally, you can share your fine-tuned model with others by uploading it to Hugging Face. 
+Finally, you can share your fine-tuned model with others by uploading it to Hugging Face.
 
 1. Login to Hugging Face through the CLI:
+
 ```command
 huggingface-cli login
 ```
+
 2. Create a new model repository on Hugging Face using `huggingface-cli`.
+
 ```command
 huggingface-cli repo create your_model_name --type model
 ```
+
 3. Then, use the `huggingface-cli upload` command to upload your merged model to the repository.
+
 ```command
 huggingface-cli upload your_model_name path_to_your_model
 ```
@@ -226,7 +227,7 @@ With our model uploaded to Hugging Face, we've successfully completed the fine-t
 
 ## Conclusion
 
-By following these steps and leveraging the power of Axolotl and RunPod, you can efficiently fine-tune LLMs to suit your specific use cases. 
+By following these steps and leveraging the power of Axolotl and RunPod, you can efficiently fine-tune LLMs to suit your specific use cases.
 The combination of Axolotl's user-friendly interface and RunPod's GPU resources makes the process more accessible and streamlined.
-Remember to explore the provided YAML examples to gain a deeper understanding of the various parameters and make appropriate adjustments for your own projects. 
+Remember to explore the provided YAML examples to gain a deeper understanding of the various parameters and make appropriate adjustments for your own projects.
 With practice and experimentation, you can unlock the full potential of fine-tuned LLMs and create powerful, customized AI models.

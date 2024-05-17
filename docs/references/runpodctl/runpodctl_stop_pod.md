@@ -1,6 +1,7 @@
 ---
 title: "Stop Pod"
 ---
+
 ## runpodctl stop pod
 
 stop a pod
@@ -16,10 +17,9 @@ runpodctl stop pod [podId] [flags]
 ### Options
 
 ```
-  -h, --help   help for pod
+-h, --help   help for pod
 ```
 
 ### SEE ALSO
 
-* [runpodctl stop](runpodctl_stop.md)	 - stop a resource
-
+- [runpodctl stop](runpodctl_stop.md) - stop a resource
