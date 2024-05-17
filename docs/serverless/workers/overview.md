@@ -1,6 +1,7 @@
 ---
 title: Overview
 sidebar_position: 1
+description: "RunPod is a cloud-based platform for managed function execution, offering fully managed infrastructure, automatic scaling, flexible language support, and seamless integration, allowing developers to focus on code and deploy it easily."
 ---
 
 Workers run your code in the cloud.

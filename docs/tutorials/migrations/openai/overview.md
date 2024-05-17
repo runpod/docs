@@ -1,7 +1,7 @@
 ---
 title: Overview
 sidebar_position: 1
-description: Migrating from OpenAI to RunPod? Checkout our migration page to get started.
+description: "Get started with RunPod: create an account, add funds, and use the SDK to integrate with your Serverless Endpoints. This tutorial guides you through modifying your OpenAI codebase for use with a deployed vLLM Worker on RunPod."
 ---
 
 To get started with RunPod:

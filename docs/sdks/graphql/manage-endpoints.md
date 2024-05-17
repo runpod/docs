@@ -1,6 +1,6 @@
 ---
 title: "Manage Endpoints"
-description: "Create a new Serverless endpoint, or modify/delete existing ones."
+description: "Create, modify, or delete serverless endpoints using GraphQL queries and mutations with RunPod API, specifying GPU IDs, template IDs, and other endpoint settings."
 ---
 
 import Tabs from '@theme/Tabs';

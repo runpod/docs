@@ -1,6 +1,6 @@
 ---
 title: Expose ports
-description: Learn to expose your ports.
+description: "Exposing ports on your pod to the outside world: Learn how to expose ports via RunPod's Proxy or TCP Public IP, and discover the benefits and limitations of each method, including symmetrical port mapping requests."
 sidebar_position: 8
 ---
 

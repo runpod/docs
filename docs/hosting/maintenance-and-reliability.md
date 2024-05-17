@@ -1,5 +1,6 @@
 ---
 title: "Maintenance and reliability"
+description: "Schedule maintenance with at least one-week notice to minimize disruptions. Automated reminders sent to users. RunPod aims for 99.99% uptime, calculating reliability with a 10-minute buffer and rolling 30-day window. Excessive maintenance may result in penalties."
 ---
 
 ## Maintenance

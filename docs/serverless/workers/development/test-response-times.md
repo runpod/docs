@@ -1,7 +1,7 @@
 ---
 title: Test response time
 sidebar_label: Test response time
-description: Learn to test to test your API response time.
+description: "Discover the right API for your use case by testing different price points and resource allocations. Optimize your tasks for cost-effectiveness and speed by choosing the best GPU pool for your needs."
 ---
 
 When setting up an API, you have several options available at different price points and resource allocations. You can select a single option if you would prefer to only use one price point, or select a preference order between the pools that will allocate your requests accordingly.

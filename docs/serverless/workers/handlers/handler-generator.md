@@ -1,6 +1,6 @@
 ---
 title: "Generator Handler"
-description: "A handler that can stream fractional results."
+description: "RunPod offers real-time streaming for Language Model tasks, providing users with instant updates on job outputs. Two types of generator functions are supported, including regular and async generators, with the option to enable aggregate streaming for seamless access to results."
 sidebar_position: 2
 ---
 

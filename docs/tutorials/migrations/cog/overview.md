@@ -1,7 +1,7 @@
 ---
 title: Overview
 sidebar_position: 1
-description: Migrating from Cog to RunPod? Checkout our migration page to get started.
+description: "Migrate your Cog model from Replicate.com to RunPod by following this step-by-step guide, covering setup, model identification, Docker image building, and serverless endpoint creation."
 ---
 
 To get started with RunPod:
