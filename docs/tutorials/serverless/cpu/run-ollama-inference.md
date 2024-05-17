@@ -6,7 +6,13 @@ description: Learn to set up and run an Ollama server on RunPod CPU for inferenc
 In this guide, you will learn how to run an Ollama server on your RunPod CPU for inference.
 By the end of this tutorial, you will have a fully functioning Ollama server ready to handle requests.
 
-## Setting Up Your Endpoint
+## Setting up your Endpoint
+
+:::note
+
+Use a Network volume to attach to your Worker so that it can cache the LLM and decrease cold start times.
+
+:::
 
 To begin, you need to set up a new endpoint on RunPod.
 
@@ -17,11 +23,12 @@ To begin, you need to set up a new endpoint on RunPod.
 5. In the **Container Image** field, enter the `pooyaharatian/runpod-ollama:0.0.7` container image.
 6. In the **Container Start Command** field, specify the Ollama supported model, such as `orca-mini`.
 7. Allocate sufficient container disk space for your model. Typically, 20 GB should suffice for most models.
+8. (optional) In **Enviroment Variables** set a new key to `OLLAMA_MODELS` and its value to `/runpod-volume`. This will allow the model to be stored to your attached volume.
 8. Click **Deploy** to initiate the setup.
 
 Your model will start downloading. Once the Worker is ready, proceed to the next step.
 
-## Sending a Run Request
+## Sending a Run request
 
 After your endpoint is deployed and the model is downloaded, you can send a run request to test the setup.
 
