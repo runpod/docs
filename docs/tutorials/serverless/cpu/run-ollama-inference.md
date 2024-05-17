@@ -16,7 +16,7 @@ To begin, you need to set up a new endpoint on RunPod.
 4. Configure your Worker settings according to your needs.
 5. In the **Container Image** field, enter the `pooyaharatian/runpod-ollama:0.0.7` container image.
 6. In the **Container Start Command** field, specify the Ollama supported model, such as `orca-mini`.
-7. Allocate sufficient container disk space for your model. Typically, 30 GB should suffice for most models.
+7. Allocate sufficient container disk space for your model. Typically, 20 GB should suffice for most models.
 8. Click **Deploy** to initiate the setup.
 
 Your model will start downloading. Once the Worker is ready, proceed to the next step.
