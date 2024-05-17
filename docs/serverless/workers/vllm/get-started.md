@@ -7,9 +7,8 @@ description: "Deploy a Serverless Endpoint for large language models (LLMs) with
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-
-RunPod provides a simple way to run large language models (LLMs) as Serverless Endpoints. 
-vLLM Workers are pre-built Docker images that you can configure entirely within the RunPod UI. 
+RunPod provides a simple way to run large language models (LLMs) as Serverless Endpoints.
+vLLM Workers are pre-built Docker images that you can configure entirely within the RunPod UI.
 This tutorial will guide you through deploying an OpenAI compatible Endpoint with a vLLM inference engine on RunPod.
 
 ## Prerequisites
@@ -47,7 +46,7 @@ On the **Endpoint parameters** page, configure your deployment:
 3. Update the Container Disk size if needed.
 4. Select **Deploy**.
 
-Once the Endpoint initializes, you can send requests to your [Endpoint](/serverless/endpoints/get-started). 
+Once the Endpoint initializes, you can send requests to your [Endpoint](/serverless/endpoints/get-started).
 Continue to the [Send a request](#send-a-request) section.
 
 ## Deploy using the Worker image
@@ -72,7 +71,7 @@ Follow these steps to run the vLLM Worker on a Serverless Endpoint:
      - `HF_TOKEN`: (Optional) Your Hugging Face API token for private models
 4. Select **Deploy**.
 
-Once the Endpoint initializes, you can send requests to your [Endpoint](/serverless/endpoints/get-started). 
+Once the Endpoint initializes, you can send requests to your [Endpoint](/serverless/endpoints/get-started).
 Continue to the [Send a request](#send-a-request) section.
 
 For a complete list of available environment variables, see the [vLLM Worker variables](/serverless/workers/vllm/environment-variables).
@@ -81,12 +80,12 @@ For a complete list of available environment variables, see the [vLLM Worker var
 
 This section walks you through sending a request to your Serverless Endpoint.
 The vLLM Worker can use any Hugging Face model and is compatible with OpenAI's API.
-If you have the OpenAI library installed, you can continue using it with the vLLM Worker. 
+If you have the OpenAI library installed, you can continue using it with the vLLM Worker.
 See the [OpenAI documentation](https://platform.openai.com/docs/libraries/) for more information.
 
 ### Initialize your project
 
-Choose your programming language and add the following code to your file. 
+Choose your programming language and add the following code to your file.
 Set the `RUNPOD_ENDPOINT_ID` and `RUNPOD_API_KEY` environment variables with your Endpoint ID and API Key.
 
 <Tabs>
@@ -129,7 +128,8 @@ Create a file called `main.js` with the following code:
 import OpenAI from "openai";
 
 const openai = new OpenAI({
-  baseURL: `https://api.runpod.ai/v2/${process.env.RUNPOD_ENDPOINT_ID}/openai/v1`,
+  baseURL:
+    `https://api.runpod.ai/v2/${process.env.RUNPOD_ENDPOINT_ID}/openai/v1`,
   apiKey: process.env.RUNPOD_API_KEY,
 });
 

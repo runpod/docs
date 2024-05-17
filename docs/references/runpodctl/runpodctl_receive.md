@@ -1,6 +1,7 @@
 ---
 title: "Receive"
 ---
+
 ## runpodctl receive
 
 receive file(s), or folder
@@ -16,10 +17,9 @@ runpodctl receive [code] [flags]
 ### Options
 
 ```
-  -h, --help   help for receive
+-h, --help   help for receive
 ```
 
 ### SEE ALSO
 
-* [runpodctl](runpodctl.md)	 - CLI for runpod.io
-
+- [runpodctl](runpodctl.md) - CLI for runpod.io

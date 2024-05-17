@@ -1,6 +1,7 @@
 ---
 title: "Ssh List Keys"
 ---
+
 ## runpodctl ssh list-keys
 
 List all SSH keys
@@ -16,10 +17,9 @@ runpodctl ssh list-keys [flags]
 ### Options
 
 ```
-  -h, --help   help for list-keys
+-h, --help   help for list-keys
 ```
 
 ### SEE ALSO
 
-* [runpodctl ssh](runpodctl_ssh.md)	 - SSH keys and commands
-
+- [runpodctl ssh](runpodctl_ssh.md) - SSH keys and commands

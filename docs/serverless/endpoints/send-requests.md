@@ -57,7 +57,7 @@ To customize the management of job lifecycles and resource consumption, the foll
 
 :::note
 
-Changing the **Execution Timeout** value through the Web UI sets the value for all requests to an Endpoint. 
+Changing the **Execution Timeout** value through the Web UI sets the value for all requests to an Endpoint.
 You can still overwrite the value for individual requests with `executionTimeout` in the job input.
 
 :::

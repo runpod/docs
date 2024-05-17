@@ -31,7 +31,7 @@ It functions similarly to a hard disk, allowing you to store data that needs to 
 
 ## Network storage
 
-Network storage is a type of storage that is similar to a disk volume but offers the flexibility to be moved between different machines. 
+Network storage is a type of storage that is similar to a disk volume but offers the flexibility to be moved between different machines.
 It provides a way to store and access data across multiple Pods or instances.
 
 **Key characteristics:**
