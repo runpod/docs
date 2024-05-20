@@ -1,6 +1,7 @@
 ---
 title: "Get started"
 sidebar_position: 2
+description: Master the art of building Docker images, deploying Serverless endpoints, and sending requests with this comprehensive guide, covering prerequisites, RunPod setup, and deployment steps.
 ---
 
 ## Overview
@@ -82,7 +83,7 @@ You can refer to this walkthrough to deploy your own custom Docker image.
 2. Select **+ New Endpoint**.
 3. Provide the following:
    1. Endpoint name.
-   2. Select a GPU.
+   2. Select your GPU configuration.
    3. Configure the number of Workers.
    4. (optional) Select **FlashBoot**.
    5. (optional) Select a template.

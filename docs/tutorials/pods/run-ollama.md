@@ -1,6 +1,6 @@
 ---
 title: Set up Ollama on your GPU Pod
-description: Set up Ollama server and run LLMs with RunPod GPUs
+description: "Learn how to set up Ollama, a powerful language model, on a GPU Pod using RunPod, and interact with it through HTTP API requests, allowing you to harness the power of GPU acceleration for your AI projects."
 sidebar_position: 4
 ---
 

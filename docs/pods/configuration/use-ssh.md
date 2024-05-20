@@ -1,6 +1,7 @@
 ---
 title: "Use SSH"
 sidebar_position: 9
+description: "Set up secure SSH access to RunPod using public/private key pairs, ensuring compatibility with ed25519 keys, and troubleshoot common issues like incorrect key copying and file path errors."
 ---
 
 The basic terminal SSH access that RunPod exposes is not a full SSH connection and, therefore, does not support commands like SCP. If you want to have full SSH capabilities, then you will need to rent an instance that has public IP support and run a full SSH daemon in your Pod.

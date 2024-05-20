@@ -1,6 +1,6 @@
 ---
 title: "FAQ"
-description: "General questions about RunPod and its services."
+description: "RunPod offers two cloud computing services: Secure Cloud and Community Cloud. Secure Cloud provides high-reliability, while Community Cloud offers peer-to-peer GPU computing. On-Demand Pods run continuously, while Spot Pods use spare compute capacity."
 ---
 
 ## Secure Cloud vs Community Cloud

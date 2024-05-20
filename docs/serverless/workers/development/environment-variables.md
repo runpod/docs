@@ -1,5 +1,6 @@
 ---
 title: Use environment variables
+description: "Learn how to use environment variables in RunPod Handler Functions to securely manage S3 bucket credentials and operations, including uploading images and setting necessary environment variables."
 ---
 
 Incorporating environment variables into your Handler Functions is a key aspect of managing external resources like S3 buckets.

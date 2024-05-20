@@ -1,6 +1,6 @@
 ---
 title: Run Fooocus in Jupyter Notebook
-description: Run Fooocus in Jupyter Notebook.
+description: "Learn how to run Fooocus, an open-source image generating model, in a Jupyter Notebook and launch the Gradio-based interface in under 5 minutes, with minimal requirements of 4GB Nvidia GPU memory and 8GB system memory."
 sidebar_position: 3
 ---
 

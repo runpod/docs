@@ -1,13 +1,16 @@
 ---
 title: Overview
 sidebar_position: 1
+description: "Deploy a highly optimized vLLM Worker as a serverless endpoint, leveraging Hugging Face LLMs and OpenAI's API with ease, featuring ease of use, open compatibility, dynamic batch size, and customization options for a scalable and cost-effective solution."
 ---
 
-Use the `runpod/worker-vllm:latest` image to deploy a vLLM Worker.
+Use the `runpod/worker-vllm:stable-cuda11.8.0` or `runpod/worker-vllm:stable-cuda12.1.0` image to deploy a vLLM Worker.
 The vLLM Worker can use most Hugging Face LLMs and is compatible with OpenAI's API, by specifying the `MODEL_NAME` parameter.
 You can also use RunPod's [`input` request format](/serverless/endpoints/send-requests).
 
 RunPod's vLLM Serverless Endpoint Worker are a highly optimized solution for leveraging the power of various LLMs.
+
+For more information, see the [vLLM Worker](https://github.com/runpod-workers/worker-vllm) repository.
 
 ## Key features
 
@@ -36,9 +39,9 @@ For detailed guidance on setting up, configuring, and deploying your vLLM Server
 
 ### Deployment options
 
-- **RunPod console**: (recommended) Use RunPod's Web UI to quickly deploy the OpenAI compatable LLM with the vLLM Worker.
+- **[Configurable Endpoints](/serverless/workers/vllm/get-started#deploy-using-the-web-ui)**: (recommended) Use RunPod's Web UI to quickly deploy the OpenAI compatable LLM with the vLLM Worker.
 
-- **Pre-Built docker image**: Leverage pre-configured Docker image for hassle-free deployment. Ideal for users seeking a quick and straightforward setup process
+- **[Pre-Built docker image](/serverless/workers/vllm/get-started#deploy-using-the-worker-image)**: Leverage pre-configured Docker image for hassle-free deployment. Ideal for users seeking a quick and straightforward setup process
 
 - **Custom docker image**: For advanced users, customize and build your Docker image with the model baked in, offering greater control over the deployment process.
 
@@ -52,5 +55,6 @@ For more information on creating a custom docker image, see [Build Docker Image 
 ## Next steps
 
 - [Get started](/serverless/workers/vllm/get-started): Learn how to deploy a vLLM Worker as a Serverless Endpoint, with detailed guides on configuration and sending requests.
+- [Configurable Endpoints](/serverless/workers/vllm/configurable-endpoints): Select your Hugging Face model and vLLM takes care of the low-level details of model loading, hardware configuration, and execution.
 - [Environment variables](/serverless/workers/vllm/environment-variables): Explore the environment variables available for the vLLM Worker, including detailed documentation and examples.
 - [Run Gemma 7b](/tutorials/serverless/run-gemma-7b): Walk through deploying Google's Gemma model using RunPod's vLLM Worker, guiding you to set up a Serverless Endpoint with a gated large language model (LLM).

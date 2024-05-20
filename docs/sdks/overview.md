@@ -1,6 +1,6 @@
 ---
 title: Overview
-description: Overview of the SDKs
+description: "Unlock serverless functionality with RunPod SDKs, enabling developers to create custom logic, simplify deployments, and programatically manage infrastructure, including Pods, Templates, and Endpoints."
 sidebar_position: 1
 ---
 

@@ -1,6 +1,7 @@
 ---
 title: OpenAI compatibility
 sidebar_position: 3
+description: "Discover the vLLM Worker, a cloud-based AI model that integrates with OpenAI's API for seamless interaction. With its streaming and non-streaming capabilities, it's ideal for chatbots, conversational AI, and natural language processing applications."
 ---
 
 The vLLM Worker is compatible with OpenAI's API, so you can use the same code to interact with the vLLM Worker as you would with OpenAI's API.

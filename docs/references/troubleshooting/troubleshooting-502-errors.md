@@ -1,6 +1,7 @@
 ---
 title: "502 Errors"
 id: "troubleshooting-502-errors"
+description: "Troubleshoot 502 errors in your deployed pod by checking GPU attachment, pod logs, and official template instructions to resolve issues and enable seamless access."
 ---
 
 502 errors can occur when users attempt to access a program running on a specific port of a deployed pod and the program isn't running or has encountered an error. This document provides guidance to help you troubleshoot this error.

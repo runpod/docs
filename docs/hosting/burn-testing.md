@@ -1,5 +1,6 @@
 ---
 title: "Burn Testing"
+description: "Before listing a machine on the RunPod platform, thoroughly test it with a burn test, verifying memory, CPU, and disk capabilities, and ensure compatibility with popular templates by self-renting the machine after verifying its performance."
 ---
 
 Machines should be thoroughly tested before they are listed on the RunPod platform.

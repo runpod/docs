@@ -1,6 +1,6 @@
 ---
 title: "Create a network volume"
-description: "Create a network volume."
+description: "Create a network volume in Secure Cloud to access high-performance storage and flexibility for multiple pods, with options for data center selection, naming, and size allocation, and enjoy cost-effective storage solutions with robust infrastructure and NVME SSDs."
 sidebar_position: 9
 ---
 
