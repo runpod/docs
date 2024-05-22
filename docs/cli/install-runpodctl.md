@@ -17,7 +17,7 @@ To install runpodctl on your local machine, run the appropriate command for your
   <TabItem value="mac" label="macOS">
 
 ```bash
-wget -qO- cli.runpod.net | sudo bash
+brew install runpod/runpodctl/runpodctl
 ```
 
 </TabItem>
