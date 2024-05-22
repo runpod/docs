@@ -27,11 +27,11 @@ If you want better control over what gets done at pod start, you can modify the 
 For example, the default docker command is:
 
 ```bash
-bash -c `/start.sh`
+bash -c '/start.sh'
 ```
 
 If you wanted to run something before `start.sh`, you can put an extra command there.
 
 ```bash
-bash -c `apt update && apt install vim -y && /start.sh`
+bash -c 'apt update && apt install vim -y && /start.sh'
 ```
