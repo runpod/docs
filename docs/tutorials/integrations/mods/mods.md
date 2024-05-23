@@ -13,9 +13,9 @@ It sends the input text to a language model (LLM) and prints out the generated r
 Optionally, you can ask the LLM to format the response as Markdown.
 This allows you to "question" the output of a command, making it a powerful tool for interactive exploration and analysis. Additionally, Mods can work with standard input or an individually supplied argument prompt.
 
-## Getting Started with Mods and SkyPilot
+## Getting Started
 
-To start using Mods with SkyPilot, follow these step-by-step instructions:
+To start using Mods, follow these step-by-step instructions:
 
 1. **Obtain Your API Key**:
    - Visit the [RunPod Settings](https://www.runpod.io/console/user/settings) page to retrieve your API key.

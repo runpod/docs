@@ -220,6 +220,11 @@ const config = {
       async: true,
       defer: true,
     },
+    {
+      src: "/scripts/fullstory.js",
+      async: true,
+      defer: true,
+    },
   ],
   plugins: [],
 };
