@@ -1,6 +1,6 @@
 ---
 title: "Requirements"
-description: "Meet the minimum requirements for a secure and scalable AI cloud infrastructure: Ubuntu Server 22.04 LTS, remote SSH access, Nvidia drivers, CUDA Toolkit, and more."
+description: "Meet the minimum requirements for scalable AI cloud infrastructure: Ubuntu Server 22.04 LTS, remote SSH access, Nvidia drivers, CUDA Toolkit, and more."
 ---
 
 The following requirements are minimal and are subject to change.
@@ -15,7 +15,7 @@ The following requirements are minimal and are subject to change.
 
 - Ubuntu Server 22.04 LTS
   - Use the same file as 22.04, but select HWE during install.
-  - That way, Kernel 6.5.0-15 is installed (please replace by any more recent production version if available).
+  - That way, Kernel 6.5 is installed (please replace by any more recent production version if available).
 
 ### BIOS
 
@@ -24,7 +24,7 @@ The following requirements are minimal and are subject to change.
 
 ### Drivers
 
-- Nvidia drivers 550.54.15 (please replace by any more recent production version if available).
+- Nvidia drivers 550.XX.XX (please replace by any more recent production version if available).
   - Never use beta or new feature branch drivers except if you have been instructed otherwise.
 - CUDA 12.4 (please replace by any more recent production version if available).
 - Nvidia Persistence should be activated for GPUs of 48 GB or more.
@@ -34,6 +34,7 @@ The following requirements are minimal and are subject to change.
 - Nvidia Fabric Manager needs to be installed, activated, running, and tested.
   - Mandatory: Fabric Manager version = Nvidia drivers version = Kernel drivers headers.
   - A p2p bandwidth test should be passed.
+- ECC should be activated for system memory.
 - CUDA Toolkit, Nvidia NSCQ and Nvidia DCGM need to be installed.
 - Ensure the topology of the NVLINK switch is right by leveraging nvidia-smi and dcgmi.
   - Ensure the SXM is performing well leveraging the dcgmi diagnostic tool.
@@ -49,6 +50,7 @@ The following requirements are minimal and are subject to change.
 
 - **Option 1**: At least 100 GPUs in total, each with a minimum of 12 GB VRAM.
 - **Option 2**: At least 32 GPUs in total, each with a minimum of 80 GB of VRAM.
+- **Option 3**: For Secure Cloud eligibility, 500x GPUs are required at minimum.
 
 We also require 2 GPU per server at minimum.
 8x configuration is recommended.
@@ -56,33 +58,37 @@ We also require 2 GPU per server at minimum.
 ### CPU
 
 - Minimum of 4 Physical CPU Cores per GPU + 2 for system operations.
-- You should prioritize CPU core clock as fast as possible over more providing more cores.
+- You must prioritize CPU core clock as fast as possible over more providing more cores. Base core clock must be above 3.0 GHz.
 - For example, a 24-cores CPU clocking at 5.0 GHz is preferred to a 128-cores CPU clocking at 3.0 GHz for a 4x GPU configuration.
-- Genoa CPU are often a good option for these reasons.
+- Genoa CPU are often a good option for these reasons. The F version is preferred, and is needed for AMD Milan systems.
 
 ### Bus Bandwidth
 
 - Minimum banwitdh per GPU is PCIe 3.0 x16 for 8 GB | 10 GB | 12 GB | 16 GB GPUs.
 - Minimum banwitdh per GPU is PCIe 4.0 x16 for 20 GB | 24 GB | 32 GB | 40 GB | 48 GB | 80 GB GPUs.
-- PCIe 5.0 x16 is recommended for 80 GB GPUs.
+- Minimum banwitdh per GPU is PCIe 5.0 x16 for Hopper and Blackwell GPUs.
 
 ### Memory
 
-- Your RAM should at minimum equals your total VRAM of all GPUs + 12 GB for system operations.
-  - 1024 GB+ of RAM recommended for 8x 80 GB VRAM GPU configurations.
-  - 512 GB+ of RAM recommended for 8x 24 GB VRAM GPU configurations.
-  - 256 GB+ of RAM recommended for 8x 16 GB VRAM GPU configurations.
+- Your RAM should at minimum equals between 1.5 times to 2 times your total VRAM of all GPUs + 12 GB for system operations.
+  - 1536 GB+ of RAM recommended for 8x 80 GB VRAM GPU configurations.
+  - 1024 GB+ of RAM recommended for 8x 48 GB VRAM GPU configurations.
+  -  512 GB+ of RAM recommended for 8x 24 GB VRAM GPU configurations.
+  -  256 GB+ of RAM recommended for 8x 16 GB VRAM GPU configurations.
 - DDR4 minimum. DDR5 is recommended.
 - Memory should be ECC compatible.
 
 ### Storage
 
 - Absolute minimum of 1 TB+ of NVME space per GPU for each server (excluding the OS drives). Recommended storage is 2 TB+ of NVME space per GPU for 24 GB and 48 GB GPU, and is 4 TB+ of NVME space per GPU for 80 GB GPUs.
-  - We recommend 2 smaller NVME disk in RAID 1 for the operating system (2x 500 GB or 2x 1 TB is fine).
-  - For the data drives, keep one larger NVME unpartitioned and unformatted.
-    If several data drives are provided, you need to create a LVM volume for those.
-    For higher number of drives, Raid 10 is the ideal scenario.
-    When installing RunPod, you will have to mention that LVM or Raid volume.
+  - 32TB+ recommended for 8x 80 GB VRAM GPU configurations.
+  - 16TB+ recommended for 8x 48 GB VRAM GPU configurations.
+  -  8TB+ recommended for all others VRAM configurations.
+- We recommend 2 smaller NVME disk in RAID 1 for the operating system (2x 500 GB or 2x 1 TB is fine).
+- For the data drives, keep one larger NVME unpartitioned and unformatted.
+  - If several data drives are provided, you need to create a LVM volume for those.
+  - For higher number of drives, Raid 10 is the ideal scenario.
+  - When installing RunPod, you will have to mention that LVM or Raid volume.
 - A read/write speed of 3,000 mbps is required.
   - PCIe 5.0 x4 NVME SSD are an asset for 80 GB and newer 48 GPUs.
 - Ability to deploy network storage clusters if needed.
@@ -99,9 +105,9 @@ We also require 2 GPU per server at minimum.
 - Minimum interconnect speed of 25 gbps between servers.
   - Recommended interconnect speed of 50 gbps between servers.
   - Recommended interconnect speed of 200 gbps between servers for 80 GB GPUs.
-  - A100 HGX SXM4 80 GB and H100 HGX SXM5 80 GB see higher demand if on high-speed InfiniBand that are 1200 gbps to 3600 gbps.
+  - A100 HGX SXM4 80 GB and H100 HGX SXM5 80 GB see higher demand if on high-speed InfiniBand that are 1600 gbps to 3200 gbps.
 
-### Compliance
+## Compliance
 
 - Abide by Tier III+ Datacenter Standards.
 - Robust Uninterruptible Power Supply and backup generators.
