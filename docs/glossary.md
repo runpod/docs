@@ -18,7 +18,12 @@ An Endpoint refers to a specific URL where your serverless applications or servi
 
 ## GPU Instance
 
-GPU Instance is a container-based GPU instance that you can deploy. These instances spin up in seconds using both public and private repositories. They are available in two different types: Secure Cloud and Community Cloud.
+GPU Instance is a container-based GPU instance that you can deploy.
+These instances spin up in seconds using both public and private repositories.
+They are available in two different types: 
+
+- Secure Cloud
+- Community Cloud
 
 ## Handler
 
@@ -37,9 +42,15 @@ These SDKs enable you to create serverless functions, manage infrastructure, and
 
 GPU instances that run in T3/T4 data centers, providing high reliability and security.
 
+## Serverless CPU
+
+Serverless CPU is a pay-per-second serverless CPU computing solution.
+It is designed to bring autoscaling to your production environment, meaning it can dynamically adjust computational resources based on your application's needs.
+
 ## Serverless GPU
 
-Serverless GPU is a pay-per-second serverless GPU computing solution. It is designed to bring autoscaling to your production environment, meaning it can dynamically adjust computational resources based on your application's needs.
+Serverless GPU is a pay-per-second serverless GPU computing solution.
+It is designed to bring autoscaling to your production environment, meaning it can dynamically adjust computational resources based on your application's needs.
 
 ## Serverless CPU
 
