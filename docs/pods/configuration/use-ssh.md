@@ -1,6 +1,7 @@
 ---
 title: "Use SSH"
 sidebar_position: 9
+description: "Set up secure SSH access to RunPod using public/private key pairs, ensuring compatibility with ed25519 keys, and troubleshoot common issues like incorrect key copying and file path errors."
 ---
 
 The basic terminal SSH access that RunPod exposes is not a full SSH connection and, therefore, does not support commands like SCP. If you want to have full SSH capabilities, then you will need to rent an instance that has public IP support and run a full SSH daemon in your Pod.
@@ -57,3 +58,9 @@ If you're being prompted for a password when you attempt to connect, something i
 - Attempting to use a private key that other users on the machine have permissions for:
 
 ![](/img/docs/7a5cf85-image.png)
+
+- Incorrect Private Key being used locally in SSH config file.
+There should be a config file on your local machine in your ~/.ssh folder. You want to ensure that the IdentityFile in the config file points to the private key of the public key you used to make this connection. If you are not pointing to the correct private key in the config file, when you make a connection request using your public key, you will get a mismatch and be prompted for a password. Once the correct private key is set in your config file, you can connect without a password.
+
+![private-key-fix](https://github.com/runpod/docs/assets/19496114/1f3db241-72a1-4d29-be36-ea5bab945b0a)
+

@@ -1,6 +1,7 @@
 ---
 title: Glossary
 sidebar_position: 1
+description: RunPod is a cloud computing platform for AI and machine learning applications, offering GPU and CPU instances, serverless computing, and SDKs for seamless integration.
 ---
 
 ## Community Cloud
@@ -35,7 +36,7 @@ RunPod is a cloud computing platform primarily designed for AI and machine learn
 ## SDKs
 
 RunPod provides several Software Development Kits (SDKs) you can use to interact with the RunPod platform.
-These SDKs enable you to create serverless functions, manage infrastructure, and interact with AI APIs.
+These SDKs enable you to create serverless functions, manage infrastructure, and interact with APIs.
 
 ## Secure Cloud
 
@@ -50,6 +51,10 @@ It is designed to bring autoscaling to your production environment, meaning it c
 
 Serverless GPU is a pay-per-second serverless GPU computing solution.
 It is designed to bring autoscaling to your production environment, meaning it can dynamically adjust computational resources based on your application's needs.
+
+## Serverless CPU
+
+Serverless CPU is a pay-per-second serverless CPU computing solution. It is designed to bring autoscaling to your production environment, meaning it can dynamically adjust computational resources based on your application's needs.
 
 ## Template
 

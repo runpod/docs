@@ -1,6 +1,6 @@
 ---
 title: Export data
-description: Learn to export your Pod's data.
+description: Export RunPod data to various cloud providers, including Amazon S3, Google Cloud Storage, Microsoft Azure Blob Storage, Backblaze B2 Cloud Storage, and Dropbox, with secure key and access token management.
 sidebar_position: 6
 ---
 

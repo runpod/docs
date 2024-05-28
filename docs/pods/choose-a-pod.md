@@ -1,6 +1,6 @@
 ---
 title: Choose a Pod
-description: Learn what goes into choosing a Pod based on your needs.
+description: "Choose the right Pod instance for your RunPod deployment by considering VRAM, RAM, vCPU, and storage, both Temporary and Persistent, to ensure optimal performance and efficiency."
 sidebar_position: 3
 ---
 
@@ -36,7 +36,7 @@ The type and power of the GPU directly affect your project's processing capabili
 
 The GPU in your Pod plays a vital role in processing complex algorithms, particularly in areas like data science, video processing, and machine learning. A more powerful GPU can significantly speed up computations and enable more complex tasks.
 
-### Selection Criteria
+### Selection criteria
 
 - **Task Requirements**: Assess the intensity and nature of the GPU tasks in your project.
 - **Compatibility**: Ensure the GPU is compatible with your software and frameworks.
@@ -50,7 +50,7 @@ VRAM (Video RAM) is crucial for tasks that require heavy graphical processing an
 
 VRAM is essential for intensive tasks. It serves as the memory for the GPU, allowing it to store and access data quickly. More VRAM can handle larger textures and more complex graphics, which is crucial for high-resolution displays and advanced 3D rendering.
 
-### Selection Criteria
+### Selection criteria
 
 - **Graphics Intensity**: More VRAM is needed for graphically intensive tasks such as 3D rendering, gaming, or AI model training that involves large datasets.
 - **Parallel Processing Needs**: Tasks that require simultaneous processing of multiple data streams benefit from more VRAM.
@@ -64,7 +64,7 @@ Adequate storage, both temporary and persistent, ensures smooth operation and da
 
 Disk size, including both temporary and persistent storage, is critical for data storage, caching, and ensuring that your project has the necessary space for its operations.
 
-### Selection Criteria
+### Selection criteria
 
 - **Data Volume**: Estimate the amount of data your project will generate and process.
 - **Speed Requirements**: Faster disk speeds can improve overall system performance.

@@ -1,6 +1,6 @@
 ---
 title: Billing information
-description: Get started by setting up your team, inviting users, and managing payment.
+description: "Learn about RunPod's billing and payment methods, including credit cards, crypto payments, and business invoicing options, with guidance on common issues and troubleshooting tips."
 sidebar_position: 2
 ---
 

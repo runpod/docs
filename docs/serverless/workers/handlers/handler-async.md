@@ -2,6 +2,7 @@
 title: "Asynchronous Handler"
 id: "handler-async"
 sidebar_position: 3
+description: "RunPod supports asynchronous handlers in Python, enabling efficient handling of tasks with non-blocking operations, such as processing large datasets, API interactions, or I/O-bound operations, boosting efficiency, scalability, and flexibility."
 ---
 
 RunPod supports the use of asynchronous handlers, enabling efficient handling of tasks that benefit from non-blocking operations. This feature is particularly useful for tasks like processing large datasets, interacting with APIs, or handling I/O-bound operations.

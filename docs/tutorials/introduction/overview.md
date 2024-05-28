@@ -1,6 +1,7 @@
 ---
 title: Overview
 sidebar_position: 1
+description: "Learn how to build and deploy applications on the RunPod platform with this set of tutorials, covering tools, technologies, and deployment methods, including Containers, Docker, and Serverless implementation."
 ---
 
 This set of tutorials is meant to provide a deeper understanding of the tools that surround the RunPod platform.

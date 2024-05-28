@@ -119,12 +119,6 @@ const config = {
           collapsed: false,
           label: "Tutorials",
         },
-        {
-          position: "left",
-          href: "https://doc.runpod.io/reference/runpod-apis",
-          collapsed: false,
-          label: "AI APIs",
-        },
 
         { href: "https://blog.runpod.io", label: "Blog", position: "left" },
         {
@@ -147,10 +141,6 @@ const config = {
             {
               label: "Tutorials",
               to: "/tutorials/introduction/overview",
-            },
-            {
-              label: "AI APIs",
-              to: "https://doc.runpod.io/reference/runpod-apis",
             },
           ],
         },
@@ -227,6 +217,11 @@ const config = {
     },
     {
       src: "https://scripts.simpleanalyticscdn.com/latest.js",
+      async: true,
+      defer: true,
+    },
+    {
+      src: "/scripts/fullstory.js",
       async: true,
       defer: true,
     },

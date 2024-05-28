@@ -1,26 +1,30 @@
 ---
 title: Overview
 sidebar_position: 1
+description: "Deploy a highly optimized vLLM Worker as a serverless endpoint, leveraging Hugging Face LLMs and OpenAI's API with ease, featuring ease of use, open compatibility, dynamic batch size, and customization options for a scalable and cost-effective solution."
 ---
 
-Use the `runpod/worker-vllm:latest` image to deploy a vLLM Worker.
+Use the `runpod/worker-vllm:stable-cuda11.8.0` or `runpod/worker-vllm:stable-cuda12.1.0` image to deploy a vLLM Worker.
 The vLLM Worker can use most Hugging Face LLMs and is compatible with OpenAI's API, by specifying the `MODEL_NAME` parameter.
 You can also use RunPod's [`input` request format](/serverless/endpoints/send-requests).
 
 RunPod's vLLM Serverless Endpoint Worker are a highly optimized solution for leveraging the power of various LLMs.
 
+For more information, see the [vLLM Worker](https://github.com/runpod-workers/worker-vllm) repository.
+
 ## Key features
 
-- **Ease of Use**: Deploy any model using the `runpod/worker-vllm:latest` Docker image without the hassle of building custom Docker images, uploading heavy models, or waiting for lengthy downloads.
-- **OpenAI Compatibility**: Seamlessly integrate with OpenAI's API by adjusting only a few lines of code, supporting routes like Chat Completions, Completions, and Models, both in streaming and non-streaming modes.
-- **Dynamic Batch Size**: Experience rapid time-to-first-token responses with dynamic batch sizes, balancing performance and efficiency throughout your request.
-- **Extensive Model Support**: From Gemma and DeepSeek MoE to OLMo, along with FP8 KV Cache support and Multi-LoRA readiness, expand your capabilities with a wide array of models and settings.
-- **Customization**: Tailor your deployment with custom chat templates, tokenization settings, and system configurations to fit your specific needs.
-- **Efficiency**: Utilize environment variables to fine-tune LLM settings, tokenizer options, system configurations, and more, ensuring optimal performance and resource utilization.
+- **Ease of Use**: Deploy any LLM using the pre-built Docker image without the hassle of building custom Docker images yourself, uploading heavy models, or waiting for lengthy downloads.
+- **OpenAI Compatibility**: Seamlessly integrate with OpenAI's API by changing 2 lines of code, supporting Chat Completions, Completions, and Models, with both streaming and non-streaming.
+- **Dynamic Batch Size**: Experience the rapid time-to-first-token high of no batching combined with the high throughput of larger batch sizes. (Related to batching tokens when streaming output)
+- **Extensive Model Support**: Deploy almost any LLM from Hugging Face, including your own.
+- **Customization**: Have full control over the configuration of every aspect of your deployment, from the model settings, to tokenizer options, to system configurations, and much more, all done through environment variables.
+- **Speed**: Experience the speed of the vLLM Engine.
+- **Serverless Scalability and Cost-Effectiveness**: Scale your deployment to handle any number of requests and only pay for active usage.
 
 ## Compatible models
 
-You can deploy most [models from HuggingFace](https://huggingface.co/models?other=LLM).
+You can deploy most [models from Hugging Face](https://huggingface.co/models?other=LLM).
 For a full list of supported models architectures, see [Compatible model architectures](https://github.com/runpod-workers/worker-vllm/blob/main/README.md#compatible-model-architectures).
 
 ## Getting started
@@ -35,7 +39,9 @@ For detailed guidance on setting up, configuring, and deploying your vLLM Server
 
 ### Deployment options
 
-- **Pre-Built docker image**: (recommended) Leverage pre-configured Docker image for hassle-free deployment. Ideal for users seeking a quick and straightforward setup process
+- **[Configurable Endpoints](/serverless/workers/vllm/get-started#deploy-using-the-web-ui)**: (recommended) Use RunPod's Web UI to quickly deploy the OpenAI compatable LLM with the vLLM Worker.
+
+- **[Pre-Built docker image](/serverless/workers/vllm/get-started#deploy-using-the-worker-image)**: Leverage pre-configured Docker image for hassle-free deployment. Ideal for users seeking a quick and straightforward setup process
 
 - **Custom docker image**: For advanced users, customize and build your Docker image with the model baked in, offering greater control over the deployment process.
 
@@ -49,5 +55,6 @@ For more information on creating a custom docker image, see [Build Docker Image 
 ## Next steps
 
 - [Get started](/serverless/workers/vllm/get-started): Learn how to deploy a vLLM Worker as a Serverless Endpoint, with detailed guides on configuration and sending requests.
+- [Configurable Endpoints](/serverless/workers/vllm/configurable-endpoints): Select your Hugging Face model and vLLM takes care of the low-level details of model loading, hardware configuration, and execution.
 - [Environment variables](/serverless/workers/vllm/environment-variables): Explore the environment variables available for the vLLM Worker, including detailed documentation and examples.
 - [Run Gemma 7b](/tutorials/serverless/run-gemma-7b): Walk through deploying Google's Gemma model using RunPod's vLLM Worker, guiding you to set up a Serverless Endpoint with a gated large language model (LLM).

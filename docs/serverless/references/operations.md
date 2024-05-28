@@ -1,6 +1,6 @@
 ---
 title: "Endpoint operations"
-description: "Comprehensive guide on interacting with models using RunPod's API Endpoints without managing the pods yourself."
+description: "RunPod's Endpoints enable job submission and output retrieval, using a constructed URL starting with https://api.runpod.ai/v2/{endpoint_id}/{operation}. Operations include job submission, synchronous execution, job status checking, and more."
 sidebar_position: 2
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: Secrets
-description: Learn to manage Secrets in your Pods.
+description: "Manage sensitive data with RunPod Secrets, encrypted strings for storing passwords, API keys, and more, via the Web interface or API, with options to create, modify, view, and delete Secrets for secure use in Pods and templates."
 sidebar_position: 4
 ---
 

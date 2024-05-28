@@ -1,6 +1,6 @@
 ---
 title: Overview
-description: Learn how to host your own GPUs on RunPod.io.
+description: "RunPod offers GPU hosting opportunities through proprietary servers and community collaboration, with a 24% service fee, minimum bid pricing, and KYC verification for trusted hosts with at least 20 GPUs, offering customized dashboard management and revenue insights."
 sidebar_position: 1
 ---
 

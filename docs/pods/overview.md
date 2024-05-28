@@ -1,14 +1,15 @@
 ---
 title: Overview
-description: Learn about Pods.
+description: "Run containers as Pods with a container registry, featuring compatible architectures, Ubuntu Linux, and persistent storage, with customizable options for GPU type, system disk size, and more."
 sidebar_position: 1
 ---
 
-Pods are running container instances. You can pull an instance from a container registry such as Docker Hub, GitHub Container Registry, Amazon Elastic Container Registry, or another compatible registry.
+Pods are running container instances.
+You can pull an instance from a container registry such as Docker Hub, GitHub Container Registry, Amazon Elastic Container Registry, or another compatible registry.
 
 :::note
 
-When building an image for RunPod, use the flag `--platform linux/amd64,linux/arm64` to ensure your image is compatible with the platform.
+When building an image for RunPod on a Mac (Apple Silicon), use the flag `--platform linux/amd64` to ensure your image is compatible with the platform. This flag is necessary because RunPod currently only supports the `linux/amd64` architecture.
 
 :::
 
@@ -40,7 +41,7 @@ To get started, see how to [Choose a Pod](/pods/choose-a-pod) then see the instr
 
 You can jump straight to a running Pod by starting from a [template](/pods/templates/overview). For more customization, you can configure the following:
 
-- [GPU Type](/references/gpu-types) and Quantity
+- [GPU Type](/references/gpu-types) and quantity
 - System Disk Size
 - Start Command
 - [Environment Variables](/pods/references/environment-variables)

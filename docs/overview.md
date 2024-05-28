@@ -1,6 +1,6 @@
 ---
 title: Overview
-description: Learn about RunPod and its related features.
+description: "RunPod is a cloud computing platform for AI, machine learning, and general compute, offering GPU and CPU resources, serverless computing, and a Command Line Interface for easy deployment and development."
 sidebar_position: 1
 ---
 
@@ -27,11 +27,6 @@ You can get started with:
 
 - [Quick deploys](/serverless/quick-deploys)
 - [Build your own](/serverless/workers/overview)
-
-## What are AI APIs?
-
-**AI APIs** are fully managed and Endpoints of some of the most popular AI models.
-They are designed for a variety of applications including Dreambooth, Stable Diffusion, Whisper, and more.
 
 ## CLI
 

@@ -1,14 +1,14 @@
 ---
 title: Overview
 sidebar_position: 1
-description: Migrating from Cog to RunPod? Checkout our migration page to get started.
+description: "Migrate your Cog model from Replicate.com to RunPod by following this step-by-step guide, covering setup, model identification, Docker image building, and serverless endpoint creation."
 ---
 
 To get started with RunPod:
 
 - [Create a RunPod account](/get-started/manage-accounts)
 - [Add funds](/get-started/billing-information)
-- [Use the RunPod SDK](#setting-up-your-project) to build and connect with your Serverless Endpoints
+- [Use the RunPod SDK](/serverless/overview) to build and connect with your Serverless Endpoints
 
 In this tutorial, you'll go through the process of migrating a model deployed via replicate.com or utilizing the Cog framework to a RunPod serverless worker.
 

@@ -1,5 +1,6 @@
 ---
 title: Manage Payment Card Declines
+description: "RunPod helps global clients with card declines due to international transactions being flagged as potential fraud. Follow steps to minimize interruptions: keep a balanced account, contact the issuing bank, and consider account risk profiles."
 ---
 
 RunPod is a US-based organization that serves clients all across the world. However, credit card processors have in general keyed into international transactions as a potential vector for fraud and tend to apply more stringent standards for blocking transactions. If your card is declined, don't panic! To minimize potential interruptions to your service, you'll want to follow these steps.

@@ -1,6 +1,6 @@
 ---
 title: Overview
-description: An overview to Serverless computing for AI inference and training.
+description: "Scale machine learning workloads with RunPod Serverless, offering flexible GPU computing for AI inference, training, and general compute, with pay-per-second pricing and fast deployment options for custom endpoints and handler functions."
 sidebar_position: 1
 ---
 

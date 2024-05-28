@@ -1,6 +1,6 @@
 ---
 title: Installing runpodctl
-description: "Install the command line interface for RunPod and run your first command."
+description: "Get started with runpodctl, an open-source CLI, to work with Pods and RunPod projects. Install and configure the tool, then verify the installation and API key setup to start using runpodctl."
 sidebar_position: 1
 ---
 
@@ -17,7 +17,7 @@ To install runpodctl on your local machine, run the appropriate command for your
   <TabItem value="mac" label="macOS">
 
 ```bash
-wget -qO- cli.runpod.net | sudo bash
+brew install runpod/runpodctl/runpodctl
 ```
 
 </TabItem>
@@ -36,12 +36,6 @@ wget https://github.com/runpod/runpodctl/releases/download/v1.12.3/runpodctl-win
 
 </TabItem>
 </Tabs>
-
-:::tip
-
-If you see an error similar to `command not found: wget`, make sure you have [GNU wget](https://www.gnu.org/software/wget/) installed.
-
-:::
 
 ## Configuring runpodctl
 
