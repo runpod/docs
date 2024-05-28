@@ -37,12 +37,6 @@ wget https://github.com/runpod/runpodctl/releases/download/v1.12.3/runpodctl-win
 </TabItem>
 </Tabs>
 
-:::tip
-
-If you see an error similar to `command not found: wget`, make sure you have [GNU wget](https://www.gnu.org/software/wget/) installed.
-
-:::
-
 ## Configuring runpodctl
 
 Before you can use runpodctl, you must configure an API key. To create a new API key, complete the following steps:
