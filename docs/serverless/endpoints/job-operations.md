@@ -160,7 +160,7 @@ It is a useful tool for managing your job queue, especially in situations where 
 ```bash
 curl -X POST https://api.runpod.ai/v2/{endpoint_id}/purge-queue \
     -H 'Content-Type: application/json' \
-    -H 'Authorization: Bearer Bearer ${API_KEY}'
+    -H 'Authorization: Bearer ${API_KEY}'
 ```
 
     </TabItem>
@@ -224,7 +224,7 @@ This is particularly useful for tasks that involve continuous data processing or
 ```bash
 curl https://api.runpod.ai/v2/{endpoint_id}/stream/{job_id} \
     -H 'Content-Type: application/json' \
-    -H 'Authorization: Bearer Bearer ${API_KEY}'
+    -H 'Authorization: Bearer ${API_KEY}'
 ```
 
     </TabItem>
