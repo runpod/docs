@@ -121,9 +121,9 @@ curl --request GET \
 </TabItem>
 </Tabs>
 
-## Cancel job
+## Cancel Job
 
-To cancel a job, specify the `cancel` parameter with the endpoint ID and the job ID.
+To cancel a job in progress, specify the `cancel` parameter with the endpoint ID and the job ID.
 
 <Tabs>
   <TabItem value="curl" label="cURL" default>
