@@ -121,6 +121,33 @@ curl --request GET \
 </TabItem>
 </Tabs>
 
+## Cancel job
+
+To cancel a job, specify the `cancel` parameter with the endpoint ID and the job ID.
+
+<Tabs>
+  <TabItem value="curl" label="cURL" default>
+
+```bash
+curl -X POST https://api.runpod.ai/v2/{endpoint_id}/cancel/{job_id} \
+    -H 'Content-Type: application/json' \
+    -H 'Authorization: Bearer ${API_KEY}'
+```
+
+    </TabItem>
+
+<TabItem value="output" label="Output">
+
+```json
+{
+  "id":"724907fe-7bcc-4e42-998d-52cb93e1421f-u1",
+  "status":"CANCELLED"
+}
+```
+
+</TabItem>
+</Tabs>
+
 ## Purge Queue Endpoint
 
 The `/purge-queue` endpoint allows you to clear all jobs that are currently in the queue.
