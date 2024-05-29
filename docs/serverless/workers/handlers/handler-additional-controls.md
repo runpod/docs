@@ -33,7 +33,7 @@ def your_handler(job):
     return {"refresh_worker": True, "job_results": "can be anything"}
 ```
 
-Your handler must return a dictionary that contains the refresh_worker; this flag will be removed before the remaining job output is returned.
+Your handler must return a dictionary that contains the `refresh_worker`; this flag will be removed before the remaining job output is returned.
 
 :::note
 
