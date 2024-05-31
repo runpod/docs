@@ -225,7 +225,17 @@ const config = {
       async: true,
       defer: true,
     },
+    {
+      src: "https://unpkg.com/@antonz/codapi@0.19.0/dist/snippet.js",
+      defer: true,
+  },
+
   ],
+  stylesheets: [
+    {
+        href: "https://unpkg.com/@antonz/codapi@0.19.0/dist/snippet.css",
+    },
+],
   plugins: [],
 };
 
