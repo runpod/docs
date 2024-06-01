@@ -6,7 +6,7 @@ sidebar_position: 2
 
 RunPod's Endpoints facilitate submitting jobs and retrieving outputs.
 
-To use these Endpoints, you will need to have your Endpoint ID.
+To use these Endpoints, you will need to have your Endpoint Id.
 The constructed URL will start with `https://api.runpod.ai/v2/{endpoint_id}/{operation}` followed by an operation.
 
 Operations available to all users are:

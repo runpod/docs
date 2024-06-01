@@ -5,14 +5,14 @@ title: Endpoints
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-Interacting with RunPod's endpoints is a core feature of the SDK, enabling the execution of tasks and the retrieval of results.
+Interacting with RunPod's Endpoints is a core feature of the SDK, enabling the execution of tasks and the retrieval of results.
 This section covers the synchronous and asynchronous execution methods, along with checking the status of operations.
 
 ## Prerequisites
 
 Before using the RunPod Go SDK, ensure that you have:
 
-- Installed the RunPod Go SDK.
+- [Installed the RunPod Go SDK](/sdks/go/overview#install).
 - Configured your API key.
 
 ## Set your Endpoint Id
@@ -20,22 +20,30 @@ Before using the RunPod Go SDK, ensure that you have:
 Set your RunPod API key and your Endpoint Id as environment variables.
 
 ```go
-import (
-    "os"
+package main
 
-    "github.com/runpod/go-sdk/pkg/config"
-    "github.com/runpod/go-sdk/pkg/rpEndpoint"
-    "github.com/runpod/go-sdk/pkg/sdk"
+import (
+	"log"
+	"os"
+
+	"github.com/runpod/go-sdk/pkg/sdk"
+	"github.com.runpod/go-sdk/pkg/sdk/config"
+	rpEndpoint "github.com/runpod/go-sdk/pkg/sdk/endpoint"
 )
 
 func main() {
-    endpoint, err := rpEndpoint.New(
-        &config.Config{ApiKey: sdk.String(os.Getenv("RP_API_KEY"))},
-        &rpEndpoint.Option{EndpointId: sdk.String(os.Getenv("RP_ENDPOINT_ID"))},
-    )
-    if err != nil {
-        panic(err)
-    }
+	// Retrieve the API key and base URL from environment variables
+	apiKey := os.Getenv("RUNPOD_API_KEY")
+	baseURL := os.Getenv("RUNPOD_BASE_URL")
+
+	// Check if environment variables are set
+	if apiKey == "" {
+		log.Fatalf("Environment variable RUNPOD_API_KEY is not set")
+	}
+	if baseURL == "" {
+		log.Fatalf("Environment variable RUNPOD_BASE_URL is not set")
+	}
+
 
     // Use the endpoint object
     // ...
@@ -44,21 +52,25 @@ func main() {
 
 This allows all calls to pass through your Endpoint Id with a valid API key.
 
-In most situations, you'll set a variable name `endpoint` on the `Endpoint` class.
-This allows you to use the following methods or instances variables from the `Endpoint` class:
+The following are actions you use on the
 
-- [health](#health-check)
-- [purge_queue](#purge-queue)
-- [runSync](#run-synchronously)
-- [run](#run-asynchronously)
+- [RunSync](#run-sync)
+- [Run](#run-async)
+- [Stream](#stream)
+- [Health](#health-check)
+- [Status](#status)
+- [Cancel](#cancel)
+- [Purge Queue](#purge-queue)
 
-## Run the Endpoint
+Here is the revised documentation based on the Go Sample:
 
-Run the Endpoint with the either the asynchronous `run` or synchronous `runSync` method.
+## Run the Endpoint {#run}
+
+Run the Endpoint using either the asynchronous `run` or synchronous `runSync` method.
 
 Choosing between asynchronous and synchronous execution hinges on your task's needs and application design.
 
-### Run synchronously
+### Run synchronously {#run-sync}
 
 To execute an endpoint synchronously and wait for the result, use the `runSync` method on your endpoint.
 This method blocks the execution until the endpoint run is complete or until it times out.
@@ -72,31 +84,40 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"os"
 
 	"github.com/runpod/go-sdk/pkg/sdk"
-	"github.com/runpod/go-sdk/pkg/sdk/config"
+	"github.com.runpod/go-sdk/pkg/sdk/config"
 	rpEndpoint "github.com/runpod/go-sdk/pkg/sdk/endpoint"
 )
 
 func main() {
+	apiKey := os.Getenv("RUNPOD_API_KEY")
+	baseURL := os.Getenv("RUNPOD_BASE_URL")
 
 	endpoint, err := rpEndpoint.New(
-		&config.Config{ApiKey: sdk.String("XBFH94HD274LQ93IZ9ITIDQHQZ02YHCX7IV08DCZ")},
-		&rpEndpoint.Option{EndpointId: sdk.String("azl59qv3r6e182")},
+		&config.Config{ApiKey: &apiKey},
+		&rpEndpoint.Option{EndpointId: &baseURL},
 	)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Failed to create endpoint: %v", err)
 	}
+
 	jobInput := rpEndpoint.RunSyncInput{
 		JobInput: &rpEndpoint.JobInput{
-			Input: map[string]interface{}{"mock_delay": 10},
+			Input: map[string]interface{}{
+				"prompt": "Hello World",
+			},
 		},
 		Timeout: sdk.Int(120),
 	}
+
 	output, err := endpoint.RunSync(&jobInput)
 	if err != nil {
 		panic(err)
 	}
+
 	data, _ := json.Marshal(output)
 	fmt.Printf("output: %s\n", data)
 }
@@ -107,21 +128,26 @@ func main() {
 
 ```json
 {
-  delayTime: 18,
-  executionTime: 36595,
-  id: 'sync-d050a3f6-791a-4aff-857a-66c759db4a06-u1',
-  output: [ { choices: [Array], usage: [Object] } ],
-  status: 'COMPLETED',
-  started: true,
-  completed: true,
-  succeeded: true
+  "delayTime": 18,
+  "executionTime": 36595,
+  "id": "sync-d050a3f6-791a-4aff-857a-66c759db4a06-u1",
+  "output": [
+    {
+      "choices": [],
+      "usage": {}
+    }
+  ],
+  "status": "COMPLETED",
+  "started": true,
+  "completed": true,
+  "succeeded": true
 }
 ```
 
 </TabItem>
 </Tabs>
 
-## Run asynchronously
+## Run asynchronously {#run-async}
 
 Asynchronous execution allows for non-blocking operations, enabling your code to perform other tasks while waiting for an operation to complete.
 
@@ -137,6 +163,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"os"
 
 	"github.com/runpod/go-sdk/pkg/sdk"
 	"github.com/runpod/go-sdk/pkg/sdk/config"
@@ -144,24 +172,31 @@ import (
 )
 
 func main() {
+	apiKey := os.Getenv("RUNPOD_API_KEY")
+	baseURL := os.Getenv("RUNPOD_BASE_URL")
 
 	endpoint, err := rpEndpoint.New(
-		&config.Config{ApiKey: sdk.String("XBFH94HD274LQ93IZ9ITIDQHQZ02YHCX7IV08DCZ")},
-		&rpEndpoint.Option{EndpointId: sdk.String("azl59qv3r6e182")},
+		&config.Config{ApiKey: &apiKey},
+		&rpEndpoint.Option{EndpointId: &baseURL},
 	)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Failed to create endpoint: %v", err)
 	}
+
 	jobInput := rpEndpoint.RunInput{
 		JobInput: &rpEndpoint.JobInput{
-			Input: map[string]interface{}{"mock_delay": 95},
+			Input: map[string]interface{}{
+				"mock_delay": 95,
+			},
 		},
 		RequestTimeout: sdk.Int(120),
 	}
+
 	output, err := endpoint.Run(&jobInput)
 	if err != nil {
 		panic(err)
 	}
+
 	data, _ := json.Marshal(output)
 	fmt.Printf("output: %s\n", data)
 }
@@ -188,70 +223,98 @@ The following example shows how to get the results of an asynchronous run.
   <TabItem value="go" label="Go" default>
 
 ```go
-// Code examples will be added here
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"time"
+
+	"github.com/runpod/go-sdk/pkg/sdk"
+	"github.com/runpod/go-sdk/pkg/sdk/config"
+	rpEndpoint "github.com/runpod/go-sdk/pkg/sdk/endpoint"
+)
+
+func main() {
+	apiKey := os.Getenv("RUNPOD_API_KEY")
+	baseURL := os.Getenv("RUNPOD_BASE_URL")
+
+	endpoint, err := rpEndpoint.New(
+		&config.Config{ApiKey: &apiKey},
+		&rpEndpoint.Option{EndpointId: &baseURL},
+	)
+	if err != nil {
+		log.Fatalf("Failed to create endpoint: %v", err)
+	}
+
+	// Initiate the asynchronous run
+	jobInput := rpEndpoint.RunInput{
+		JobInput: &rpEndpoint.JobInput{
+			Input: map[string]interface{}{"mock_delay": 95},
+		},
+		RequestTimeout: sdk.Int(120),
+	}
+	runOutput, err := endpoint.Run(&jobInput)
+	if err != nil {
+		log.Fatalf("Failed to initiate the run: %v", err)
+	}
+
+	// Extract the ID from the run output
+	runID := *runOutput.Id
+	fmt.Printf("Run ID: %s\n", runID)
+
+	// Prepare the input for status polling
+	statusInput := rpEndpoint.StatusInput{
+		Id: sdk.String(runID),
+	}
+
+	// Poll the status until it completes or fails
+	var statusOutput *rpEndpoint.StatusOutput
+	for {
+		statusOutput, err = endpoint.Status(&statusInput)
+		if err != nil {
+			log.Printf("Error checking status: %v", err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		statusJSON, _ := json.Marshal(statusOutput)
+		fmt.Printf("Status: %s\n", statusJSON)
+
+		if *statusOutput.Status == "COMPLETED" || *statusOutput.Status == "FAILED" {
+			break
+		}
+
+		time.Sleep(5 * time.Second)
+	}
+
+	// Retrieve the final result (assuming it's available in the status output)
+	if *statusOutput.Status == "COMPLETED" {
+		fmt.Println("Run completed successfully!")
+		// Handle the completed run's output if needed
+	} else {
+		fmt.Println("Run failed!")
+		// Handle the failed run if needed
+	}
+}
 ```
 
 </TabItem>
   <TabItem value="output" label="Output">
 
 ```json
-run response
-{ id: 'c671a352-78e6-4eba-b2c8-2ea537c00897-u1', status: 'IN_QUEUE' }
-status response
-{
-  delayTime: 19,
-  id: 'c671a352-78e6-4eba-b2c8-2ea537c00897-u1',
-  status: 'IN_PROGRESS',
-  started: true,
-  completed: false,
-  succeeded: false
-}
-status response
-{
-  delayTime: 19,
-  executionTime: 539,
-  id: 'c671a352-78e6-4eba-b2c8-2ea537c00897-u1',
-  output: [ { choices: [Array], usage: [Object] } ],
-  status: 'COMPLETED',
-  started: true,
-  completed: true,
-  succeeded: true
-}
-Operation completed successfully.
-[ { choices: [ [Object] ], usage: { input: 5, output: 16 } } ]
+Run ID: 353b1e99-2f35-43a8-8a8b-001d59df8aa1-u1
+Status: {"id":"353b1e99-2f35-43a8-8a8b-001d59df8aa1-u1","status":"IN_QUEUE"}
+Status: {"delayTime":536,"executionTime":239,"id":"353b1e99-2f35-43a8-8a8b-001d59df8aa1-u1","output":"69.30.85.167","status":"COMPLETED"}
+Run completed successfully!
 ```
 
 </TabItem>
 </Tabs>
 
-### Poll the status of an asynchronous run
-
-Uses `await endpoint.status(id)` to check the status of the operation repeatedly until it either completes or fails.
-After each check, the function waits for 5 seconds (or any other suitable duration you choose) before checking the status again, using the sleep function.
-This approach ensures your application remains responsive and doesn't overwhelm the Runpod endpoint with status requests.
-
-<Tabs>
-  <TabItem value="go" label="Go" default>
-
-```go
-// Code examples will be added here
-```
-
-</TabItem>
-  <TabItem value="output" label="Output">
-
-```text
-Current status: IN_QUEUE
-Current status: IN_PROGRESS
-Current status: COMPLETED
-Operation completed.
-Hello, World!
-```
-
-</TabItem>
-</Tabs>
-
-## Stream
+## Stream {#stream}
 
 Stream allows you to stream the output of an Endpoint run.
 To enable streaming, your handler must support the `"return_aggregate_stream": True` option on the `start` method of your Handler.
@@ -267,16 +330,18 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/runpod/go-sdk/pkg/sdk"
 	"github.com/runpod/go-sdk/pkg/sdk/config"
 	rpEndpoint "github.com/runpod/go-sdk/pkg/sdk/endpoint"
 )
 
 func main() {
 
+	apiKey := os.Getenv("RUNPOD_API_KEY")
+	baseURL := os.Getenv("RUNPOD_BASE_URL")
+
 	endpoint, err := rpEndpoint.New(
-		&config.Config{ApiKey: sdk.String("XBFH94HD274LQ93IZ9ITIDQHQZ02YHCX7IV08DCZ")},
-		&rpEndpoint.Option{EndpointId: sdk.String("azl59qv3r6e182")},
+		&config.Config{ApiKey: &apiKey},
+		&rpEndpoint.Option{EndpointId: &baseURL},
 	)
 	if err != nil {
 		panic(err)
@@ -285,21 +350,7 @@ func main() {
 	request, err := endpoint.Run(&rpEndpoint.RunInput{
 		JobInput: &rpEndpoint.JobInput{
 			Input: map[string]interface{}{
-				"mock_return": []string{
-					"value1",
-					"value2",
-					"value3",
-					"value4",
-					"value5",
-					"value6",
-					"value7",
-					"value8",
-					"value9",
-					"value10",
-				},
-				"mock_delay": 10,
-				"mock_error": false,
-				"mock_crash": false,
+				"prompt": "Hello World",
 			},
 		},
 	})
@@ -307,7 +358,7 @@ func main() {
 		panic(err)
 	}
 
-	streamChan := make(chan rpEndpoint.StreamOutput, 100)
+	streamChan := make(chan rpEndpoint.StreamResult, 100)
 
 	err = endpoint.Stream(&rpEndpoint.StreamInput{Id: request.Id}, streamChan)
 	if err != nil {
@@ -413,7 +464,42 @@ Monitor the health of an endpoint by checking its status, including jobs complet
   <TabItem value="go" label="Go" default>
 
 ```go
-// Code examples will be added here
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/runpod/go-sdk/pkg/sdk"
+	"github.com/runpod/go-sdk/pkg/sdk/config"
+	rpEndpoint "github.com/runpod/go-sdk/pkg/sdk/endpoint"
+)
+
+func main() {
+
+	apiKey := os.Getenv("RUNPOD_API_KEY")
+	baseURL := os.Getenv("RUNPOD_BASE_URL")
+
+	endpoint, err := rpEndpoint.New(
+		&config.Config{ApiKey: &apiKey},
+		&rpEndpoint.Option{EndpointId: &baseURL},
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	healthInput := rpEndpoint.StatusInput{
+		Id: sdk.String("20aad8ef-9c86-4fcd-a349-579ce38e8bfd-u1"),
+	}
+	output, err := endpoint.Status(&healthInput)
+	if err != nil {
+		panic(err)
+	}
+
+	healthData, _ := json.Marshal(output)
+	fmt.Printf("health output: %s\n", healthData)
+
+}
 ```
 
 </TabItem>
@@ -454,6 +540,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"os"
 
 	"github.com/runpod/go-sdk/pkg/sdk"
 	"github.com/runpod/go-sdk/pkg/sdk/config"
@@ -462,15 +550,18 @@ import (
 
 func main() {
 
+	apiKey := os.Getenv("RUNPOD_API_KEY")
+	baseURL := os.Getenv("RUNPOD_BASE_URL")
+
 	endpoint, err := rpEndpoint.New(
-		&config.Config{ApiKey: sdk.String("API_KEY")},
-		&rpEndpoint.Option{EndpointId: sdk.String("ENDPOINT_ID")},
+		&config.Config{ApiKey: &apiKey},
+		&rpEndpoint.Option{EndpointId: &baseURL},
 	)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Failed to create endpoint: %v", err)
 	}
 	input := rpEndpoint.StatusInput{
-		Id: sdk.String("30edb8b9-2b8d-4977-af7a-85fd91f51a12-u1"),
+		Id: sdk.String("5efff030-686c-4179-85bb-31b9bf97b944-u1"),
 	}
 	output, err := endpoint.Status(&input)
 	if err != nil {
@@ -479,7 +570,6 @@ func main() {
 	dt, _ := json.Marshal(output)
 	fmt.Printf("output:%s\n", dt)
 }
-
 ```
 
 </TabItem>
@@ -508,7 +598,42 @@ You might want to cancel a Job because it's stuck with a status of `IN_QUEUE` or
   <TabItem value="go" label="Go" default>
 
 ```go
-// Code examples will be added here
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/runpod/go-sdk/pkg/sdk"
+	"github.com/runpod/go-sdk/pkg/sdk/config"
+	rpEndpoint "github.com/runpod/go-sdk/pkg/sdk/endpoint"
+)
+
+func main() {
+
+	apiKey := os.Getenv("RUNPOD_API_KEY")
+	baseURL := os.Getenv("RUNPOD_BASE_URL")
+
+	endpoint, err := rpEndpoint.New(
+		&config.Config{ApiKey: &apiKey},
+		&rpEndpoint.Option{EndpointId: &baseURL},
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	cancelInput := rpEndpoint.CancelInput{
+		Id: sdk.String("00edfd03-8094-46da-82e3-ea47dd9566dc-u1"),
+	}
+	output, err := endpoint.Cancel(&cancelInput)
+	if err != nil {
+		panic(err)
+	}
+
+	healthData, _ := json.Marshal(output)
+	fmt.Printf("health output: %s\n", healthData)
+
+}
 ```
 
 </TabItem>
@@ -526,14 +651,51 @@ You might want to cancel a Job because it's stuck with a status of `IN_QUEUE` or
 
 ### Timeout
 
-To set a timeout on a run, pass a timeout value to the `run` method.
-Time is measured in milliseconds.
+You can set the maximum time to wait for a response from the endpoint using the `RequestTimeout` field in the `RunInput` struct.
 
 <Tabs>
   <TabItem value="go" label="Go" default>
 
 ```go
-// Code examples will be added here
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/runpod/go-sdk/pkg/sdk"
+	"github.com/runpod/go-sdk/pkg/sdk/config"
+	rpEndpoint "github.com/runpod/go-sdk/pkg/sdk/endpoint"
+)
+
+func main() {
+	apiKey := os.Getenv("RUNPOD_API_KEY")
+	baseURL := os.Getenv("RUNPOD_BASE_URL")
+
+	endpoint, err := rpEndpoint.New(
+		&config.Config{ApiKey: &apiKey},
+		&rpEndpoint.Option{EndpointId: &baseURL},
+	)
+	if err != nil {
+		log.Fatalf("Failed to create endpoint: %v", err)
+	}
+
+	jobInput := rpEndpoint.RunInput{
+		JobInput: &rpEndpoint.JobInput{
+			Input: map[string]interface{}
+		RequestTimeout: sdk.Int(120),
+	}
+
+	output, err := endpoint.Run(&jobInput)
+	if err != nil {
+		panic(err)
+	}
+
+	data, _ := json.Marshal(output)
+	fmt.Printf("output: %s\n", data)
+}
 ```
 
 </TabItem>
@@ -551,13 +713,55 @@ Time is measured in milliseconds.
 
 ### Execution policy
 
-You can set the maximum time to wait for a response from the endpoint in the `policy` parameter.
+You can specify the TTL (Time-to-Live) and ExecutionTimeout values for the job using the `Input` map of the `JobInput` struct.
 
 <Tabs>
   <TabItem value="go" label="Go" default>
 
 ```go
-// Code examples will be added here
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/runpod/go-sdk/pkg/sdk"
+	"github.com/runpod/go-sdk/pkg/sdk/config"
+	rpEndpoint "github.com/runpod/go-sdk/pkg/sdk/endpoint"
+)
+
+func main() {
+	apiKey := os.Getenv("RUNPOD_API_KEY")
+	baseURL := os.Getenv("RUNPOD_BASE_URL")
+
+	endpoint, err := rpEndpoint.New(
+		&config.Config{ApiKey: &apiKey},
+		&rpEndpoint.Option{EndpointId: &baseURL},
+	)
+	if err != nil {
+		log.Fatalf("Failed to create endpoint: %v", err)
+	}
+
+	jobInput := rpEndpoint.RunInput{
+		JobInput: &rpEndpoint.JobInput{
+			Input: map[string]interface{}{
+				"ttl":               3600, // Set the TTL value, e.g., 3600 seconds (1 hour)
+				"execution_timeout": 300,  // Set the ExecutionTimeout value, e.g., 300 seconds (5 minutes)
+			},
+		},
+		RequestTimeout: sdk.Int(120),
+	}
+
+	output, err := endpoint.Run(&jobInput)
+	if err != nil {
+		panic(err)
+	}
+
+	data, _ := json.Marshal(output)
+	fmt.Printf("output: %s\n", data)
+}
 ```
 
 </TabItem>
@@ -575,29 +779,62 @@ You can set the maximum time to wait for a response from the endpoint in the `po
 
 For more information, see [Execution policy](/serverless/endpoints/send-requests#execution-policy).
 
-## Purge queue
+## Purge Queue
 
-You can purge all jobs from a queue by using the `purgeQueue()` function.
+Create an instance of the `PurgeQueueInput` struct and set the desired values.
+Call the `PurgeQueue` method of the Endpoint with the `PurgeQueueInput` instance.
 
-`purgeQueue()` doesn't affect Jobs in progress.
+`PurgeQueue()` doesn't affect Jobs in progress.
 
 <Tabs>
   <TabItem value="go" label="Go" default>
 
 ```go
-// Code examples will be added here
+package main
+
+import (
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/runpod/go-sdk/pkg/sdk"
+	"github.com/runpod/go-sdk/pkg/sdk/config"
+	rpEndpoint "github.com/runpod/go-sdk/pkg/sdk/endpoint"
+)
+
+func main() {
+	apiKey := os.Getenv("RUNPOD_API_KEY")
+	baseURL := os.Getenv("RUNPOD_BASE_URL")
+
+	endpoint, err := rpEndpoint.New(
+		&config.Config{ApiKey: &apiKey},
+		&rpEndpoint.Option{EndpointId: &baseURL},
+	)
+	if err != nil {
+		log.Fatalf("Failed to create endpoint: %v", err)
+	}
+
+	purgeQueueInput := rpEndpoint.PurgeQueueInput{
+		RequestTimeout: sdk.Int(5), // Set the request timeout to 5 seconds
+	}
+
+	purgeQueueOutput, err := endpoint.PurgeQueue(&purgeQueueInput)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("Status: %s\n", *purgeQueueOutput.Status)
+	fmt.Printf("Removed: %d\n", *purgeQueueOutput.Removed)
+}
 ```
 
 </TabItem>
   <TabItem value="output" label="Output">
 
 ```json
-{
-  "removed": 1,
-  "status": "completed"
-}
+Status: completed
+Removed: 1
 ```
 
 </TabItem>
 </Tabs>
-```

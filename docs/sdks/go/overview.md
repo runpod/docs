@@ -5,7 +5,8 @@ tags:
   - go
 ---
 
-Get started with setting up your RunPod projects using Go. Whether you're building web applications, server-side implementations, or automating tasks, the RunPod Go SDK provides the tools you need.
+Get started with setting up your RunPod projects using Go.
+Whether you're building web applications, server-side implementations, or automating tasks, the RunPod Go SDK provides the tools you need.
 This guide outlines the steps to get your development environment ready and integrate RunPod into your Go projects.
 
 ## Prerequisites
@@ -13,11 +14,9 @@ This guide outlines the steps to get your development environment ready and inte
 Before you begin, ensure that you have the following:
 
 - Go installed on your machine (version 1.16 or later)
-- A RunPod account with an API key and endpoint ID
+- A RunPod account with an API key and Endpoint Id
 
-
-## Install the RunPod SDK
-
+## Install the RunPod SDK {#install}
 
 Before integrating RunPod into your project, you'll need to install the SDK.
 
@@ -28,6 +27,11 @@ go get github.com/runpod/go-sdk
 ```
 
 This command installs the `runpod-sdk` package.
+Then run the following command to install the dependcies:
+
+```command
+go mod tidy
+```
 
 For more details about the package, visit the [Go package page](https://pkg.go.dev/github.com/runpod/go-sdk/pkg/sdk) or the [GitHub repository](https://github.com/runpod/go-sdk).
 
@@ -40,8 +44,8 @@ Below is a basic example of how to initialize and use the RunPod SDK in your Go 
 ```go
 func main() {
     endpoint, err := rpEndpoint.New(
-        &config.Config{ApiKey: sdk.String(os.Getenv("RP_API_KEY"))},
-        &rpEndpoint.Option{EndpointId: sdk.String(os.Getenv("RP_ENDPOINT_ID"))},
+        &config.Config{ApiKey: sdk.String(os.Getenv("RUNPOD_API_KEY"))},
+        &rpEndpoint.Option{EndpointId: sdk.String(os.Getenv("RUNPOD_BASE_URL"))},
     )
     if err != nil {
         panic(err)
@@ -65,7 +69,7 @@ Use environment variables or secure secrets management solutions to handle sensi
 
 :::
 
-For further information, see the following:
+For more information, see the following:
 
 - [RunPod SDK Go Package](https://pkg.go.dev/github.com/runpod/go-sdk/pkg/sdk)
 - [RunPod GitHub Repository](https://github.com/runpod/go-sdk)
