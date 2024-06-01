@@ -1,12 +1,13 @@
 ---
 title: Use environment variables
+description: "Learn how to use environment variables in RunPod Handler Functions to securely manage S3 bucket credentials and operations, including uploading images and setting necessary environment variables."
 ---
 
 Incorporating environment variables into your Handler Functions is a key aspect of managing external resources like S3 buckets.
 
-This section focuses on how to use environment variables to facilitate the uploading of images sto an S3 bucket using RunPod Handler Functions.
+This section focuses on how to use environment variables to facilitate the uploading of images to an S3 bucket using RunPod Handler Functions.
 
-This will go through the process of writing Python code for the uploading and setting the necessary environment variables in the Web interface.
+You will go through the process of writing Python code for the uploading and setting the necessary environment variables in the Web interface.
 
 ## Prerequistes
 
@@ -48,11 +49,13 @@ Using environment variables securely passes the necessary credentials and config
    - `BUCKET_ENDPOINT_URL`
    - `BUCKET_ACCESS_KEY_ID`
    - `BUCKET_SECRET_ACCESS_KEY`
-     Ensure that your `BUCKET_ENDPOINT_URL` includes the bucket name (e.g., `https://your-bucket-name.nyc3.digitaloceanspaces.com`, `https://your-bucket-name.nyc3.digitaloceanspaces.com`).
 
-## Testing Your API
+Ensure that your `BUCKET_ENDPOINT_URL` includes the bucket name.
+For example: `https://your-bucket-name.nyc3.digitaloceanspaces.com` | `https://your-bucket-name.nyc3.digitaloceanspaces.com`
 
-Finally, let's test the serverless function to confirm that it successfully uploads images to your S3 bucket:
+## Testing your API
+
+Finally, test the serverless function to confirm that it successfully uploads images to your S3 bucket:
 
 1. **Making a Request**:
    Make a POST request to your API endpoint with the necessary headers and input data. Remember, the input must be a JSON item:
@@ -92,4 +95,5 @@ Finally, let's test the serverless function to confirm that it successfully uplo
    }
    ```
 
-By following these steps, you can effectively use environment variables to manage S3 bucket credentials and operations within your RunPod Handler Functions. This approach ensures secure, scalable, and efficient handling of external resources in your serverless applications.
+By following these steps, you can effectively use environment variables to manage S3 bucket credentials and operations within your RunPod Handler Functions.
+This approach ensures secure, scalable, and efficient handling of external resources in your serverless applications.

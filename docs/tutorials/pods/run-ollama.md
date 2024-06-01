@@ -1,6 +1,6 @@
 ---
 title: Set up Ollama on your GPU Pod
-description: Set up Ollama server and run LLMs with RunPod GPUs
+description: "Learn how to set up Ollama, a powerful language model, on a GPU Pod using RunPod, and interact with it through HTTP API requests, allowing you to harness the power of GPU acceleration for your AI projects."
 sidebar_position: 4
 ---
 
@@ -43,7 +43,7 @@ Once the Pod is up and running, you'll have access to a terminal within the RunP
 
 ## Step 2: Install Ollama
 
-Now that your Pod is running, you can login to the web terminal.
+Now that your Pod is running, you can Log in to the web terminal.
 The web terminal is a powerful way to interact with your Pod.
 
 1. Select **Connect** and choose **Start Web Terminal**.

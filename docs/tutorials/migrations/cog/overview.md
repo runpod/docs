@@ -1,14 +1,14 @@
 ---
 title: Overview
 sidebar_position: 1
-description: Migrating from Cog to RunPod? Checkout our migration page to get started.
+description: "Migrate your Cog model from Replicate.com to RunPod by following this step-by-step guide, covering setup, model identification, Docker image building, and serverless endpoint creation."
 ---
 
 To get started with RunPod:
 
 - [Create a RunPod account](/get-started/manage-accounts)
 - [Add funds](/get-started/billing-information)
-- [Use the RunPod SDK](#setting-up-your-project) to build and connect with your Serverless Endpoints
+- [Use the RunPod SDK](/serverless/overview) to build and connect with your Serverless Endpoints
 
 In this tutorial, you'll go through the process of migrating a model deployed via replicate.com or utilizing the Cog framework to a RunPod serverless worker.
 
@@ -78,19 +78,19 @@ The `--tag` option allows you to specify a name and tag for your image, while th
 
 With your Docker image built and pushed, you're one step closer to deploying your Cog model on RunPod.
 
-## Create and deploy a Serverless Endpoint
+## Create and Deploy a Serverless Endpoint
 
 Now that your Docker image is ready, it's time to create and deploy a serverless endpoint on RunPod.
 This step will enable you to send requests to your new endpoint and use your Cog model in a serverless environment.
 
 To create and deploy a serverless endpoint on RunPod:
 
-1. Login to the [RunPod Serverless console](https://www.runpod.io/console/serverless).
+1. Log in to the [RunPod Serverless console](https://www.runpod.io/console/serverless).
 2. Select **+ New Endpoint**.
 3. Provide the following:
    1. Endpoint name.
    2. Select a GPU.
-   3. Configure the number of workers.
+   3. Configure the number of Workers.
    4. (optional) Select **FlashBoot**.
    5. (optional) Select a template.
    6. Enter the name of your Docker image.

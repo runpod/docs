@@ -1,13 +1,13 @@
 ---
 title: "Overview"
-description: "The function responsible for processing requests."
+description: "Create and deploy serverless Handler Functions with RunPod, processing submitted inputs and generating output without managing server infrastructure, ideal for efficient, cost-effective, and rapid deployment of code."
 sidebar_position: 1
 hidden: false
 ---
 
-The Handler Function is responsible for processing submitted inputs and generating the resulting output. When developing your Handler Function, you can do so locally on your PC or remotely on a RunPod GPU instance.
+The Handler Function is responsible for processing submitted inputs and generating the resulting output. When developing your Handler Function, you can do so locally on your PC or remotely on a Serverless instance.
 
-Example Handler Functions can be found within the [repos of our runpod-workers](https://github.com/orgs/runpod-workers/repositories).
+Examples can be found within the [repos of our runpod-workers](https://github.com/orgs/runpod-workers/repositories).
 
 ## Handler Functions
 
@@ -68,11 +68,12 @@ def handler(job):
 runpod.serverless.start({"handler": handler})  # Required.
 ```
 
-You must return something as output when your worker is done processing the job. This can directly be the output, or it can be links to cloud storage where the artifacts are saved. Keep in mind that the input and output payloads are limited to 2MB each
+You must return something as output when your worker is done processing the job. This can directly be the output, or it can be links to cloud storage where the artifacts are saved. Keep in mind that the input and output payloads are limited to 2 MB each
 
 :::note
 
 Keep setup processes and functions outside of your handler function. For example, if you are running models make sure they are loaded into VRAM prior to calling `serverless.start` with your handler function.
+
 :::
 
 ### Development and deployment

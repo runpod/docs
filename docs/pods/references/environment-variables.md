@@ -1,6 +1,6 @@
 ---
 title: Pod environment variables
-description: Explore Pod environment variables.
+description: "Configure and manage your pods with these essential environment variables, including pod ID, API key, host name, GPU and CPU count, public IP, SSH port, data center ID, volume ID, CUDA version, current working directory, PyTorch version, and public SSH key."
 sidebar_position: 4
 ---
 

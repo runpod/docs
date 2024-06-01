@@ -4,10 +4,11 @@ slug: "using-your-api-copy"
 excerpt: "Okay! Now you have everything set up, but how do you use it?"
 hidden: false
 metadata: 
-  image: []
-  robots: "index"
+image: []
+robots: "index"
 createdAt: "Thu Jul 27 2023 10:39:12 GMT+0000 (Coordinated Universal Time)"
 updatedAt: "Fri Oct 27 2023 13:53:56 GMT+0000 (Coordinated Universal Time)"
+description: "Invoke the RunPod API using the 'run' endpoint, which offers synchronous and asynchronous run mechanisms, and track job status using the 'status' endpoint."
 ---
 
 Once everything above is configured, you will be able to invoke your API using the "run" endpoint on your API dashboard. Our services are currently asynchronous, so you must use the "status" endpoint to get the status/results of each run using the ID present in the run response payload. You can also pass in a webhook URL when invoking "run" within the JSON body.

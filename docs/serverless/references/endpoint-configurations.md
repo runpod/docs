@@ -1,6 +1,7 @@
 ---
 title: "Endpoint configurations"
 sidebar_position: 1
+description: Configure your Endpoint settings to optimize performance and cost, including GPU selection, worker count, idle timeout, and advanced options like data centers, network volumes, and scaling strategies.
 ---
 
 The following are configurable settings within an Endpoint.
@@ -8,17 +9,17 @@ The following are configurable settings within an Endpoint.
 ## Endpoint Name
 
 Create a name you'd like to use for the Endpoint configuration.
-The resulting endpoint will be assigned a random ID to be used when making calls.
+The resulting Endpoint is assigned a random ID to be used for making calls.
 
 The name is only visible to you.
 
 ## GPU Selection
 
-Select one or more GPUs you want your Endpoint to run on.
+Select one or more GPUs that you want your Endpoint to run on. RunPod matches you with GPUs in the order that you select them, so the first GPU type that you select is prioritized, then the second, and so on. Selecting multiple GPU types can help you get a worker more quickly, especially if your first selection is an in-demand GPU.
 
 ## Active (Min) Workers
 
-Setting this amount to 1 will result in "always on" workers.
+Setting this amount to one will result in "always on" workers.
 This will allow you to have a worker ready to respond to job requests without incurring any cold start delay.
 
 :::note
@@ -29,7 +30,9 @@ You will incur the cost of any active workers you have set regardless if they ar
 
 ## Max Workers
 
-This will establish a ceiling or upper limit to the number of active workers your endpoint will have running at any given point.
+Set an upper limit on the number of active workers your endpoint has running at any given point.
+Setting a value for max workers that is too low can lead to [throttled workers](/glossary#throttled-worker).
+If you consistently see throttled workers, increase your max workers to five or more.
 
 Default: 3
 
@@ -42,9 +45,11 @@ How to configure Max Workers
 You can also configure a max worker count. This is the top limit of what RunPod will attempt to auto-scale for you. Use this to cap your concurrent request count and also limit your cost ceiling.
 
 :::note
+
 We currently base your caching coefficient by this number, so an endpoint with higher max worker count will also receive a higher priority when caching workers.
 
-This is partially why we limit new accounts to a relatively low max concurrency at the account level. If you want to get this number raised, you generally will need to have a higher history of spending, or commit to a relatively high spend per month.
+This is partially why we limit new accounts to a relatively low max concurrency at the account level.
+If you want to get this number raised, you generally will need to have a higher history of spending, or commit to a relatively high spend per month.
 
 You should generally aim to set your max worker count to be 20% higher than you expect your max concurrency to be.
 
@@ -58,7 +63,7 @@ The number of GPUs you would like assigned to your worker.
 
 :::note
 
-Currently only available for 48GB GPUs.
+Currently only available for 48 GB GPUs.
 
 :::
 
@@ -81,8 +86,9 @@ Additional controls to help you control where your endpoint is deployed and how 
 
 ### Data Centers
 
-Control which datacenters you would like your workers deployed and cached.
-By default all datacenters are selected.
+Control which data centers can deploy and cache your workers. Allowing multiple data centers can help you get a worker more quickly.
+
+Default: all data centers
 
 ### Select Network Volume
 
@@ -121,3 +127,16 @@ A100s are about 2-3x faster than A5000s and also allow double the VRAM with very
 Want access to different flavors? [Let us know](https://www.runpod.io/contact) and we can look at expanding our offerings!
 
 </details>
+
+## CUDA version selection
+
+You have the ability to select the allowed CUDA versions for your workloads.
+The CUDA version selection determines the compatible GPU types that will be used to execute your serverless tasks.
+
+Specifically, the CUDA version selection works as follows:
+
+- You can choose one or more CUDA versions that your workload is compatible with or requires.
+- RunPod will then match your workload to available GPU instances that have the selected CUDA versions installed.
+- This ensures that your serverless tasks run on GPU hardware that meets the CUDA version requirements.
+
+For example, if you select CUDA 11.6, your serverless tasks will be scheduled to run on GPU instances that have CUDA 11.6 or a compatible version installed. This allows you to target specific CUDA versions based on your workload's dependencies or performance requirements.

@@ -1,6 +1,6 @@
 ---
 title: Run your first Fast Stable Diffusion with Jupyter Notebook
-description: Run your first Fast Stable Diffusion with Jupyter Notebook.
+description: "Deploy a Jupyter Notebook to RunPod and generate your first image with Stable Diffusion in just 20 minutes, requiring Hugging Face user access token, RunPod infrastructure, and basic familiarity with the platform."
 sidebar_position: 2
 ---
 

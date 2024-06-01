@@ -1,19 +1,14 @@
 ---
-title: Invoke a Job
-description: Run Endpoints in RunPod.
+title: Job operations
+description: "Learn how to use the Runpod Endpoint to manage job operations, including running, checking status, purging queues, and streaming results, with cURL and SDK examples."
 sidebar_position: 2
-tags:
-  - endpoints
-  - jobs
-  - run
-  - invoke
 ---
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-This page provides instructions on how to invoke a job using the Runpod Endpoint.
-Invoke jobs to run Endpoints the way you would interact with an API.
+This page provides instructions on job operations using the Runpod Endpoint.
+You can invoke a job to run Endpoints the way you would interact with an API, get a status of a job, purge your job queue, and more with operations.
 
 The following guide demonstrates how to use cURL to interact with an Endpoint.
 You can also use the following SDK to interact with Endpoints programmatically:
@@ -126,6 +121,33 @@ curl --request GET \
 </TabItem>
 </Tabs>
 
+## Cancel Job
+
+To cancel a job in progress, specify the `cancel` parameter with the endpoint ID and the job ID.
+
+<Tabs>
+  <TabItem value="curl" label="cURL" default>
+
+```bash
+curl -X POST https://api.runpod.ai/v2/{endpoint_id}/cancel/{job_id} \
+    -H 'Content-Type: application/json' \
+    -H 'Authorization: Bearer ${API_KEY}'
+```
+
+    </TabItem>
+
+<TabItem value="output" label="Output">
+
+```json
+{
+  "id": "724907fe-7bcc-4e42-998d-52cb93e1421f-u1",
+  "status": "CANCELLED"
+}
+```
+
+</TabItem>
+</Tabs>
+
 ## Purge Queue Endpoint
 
 The `/purge-queue` endpoint allows you to clear all jobs that are currently in the queue.
@@ -138,7 +160,7 @@ It is a useful tool for managing your job queue, especially in situations where 
 ```bash
 curl -X POST https://api.runpod.ai/v2/{endpoint_id}/purge-queue \
     -H 'Content-Type: application/json' \
-    -H 'Authorization: Bearer Bearer ${API_KEY}'
+    -H 'Authorization: Bearer ${API_KEY}'
 ```
 
     </TabItem>
@@ -202,7 +224,7 @@ This is particularly useful for tasks that involve continuous data processing or
 ```bash
 curl https://api.runpod.ai/v2/{endpoint_id}/stream/{job_id} \
     -H 'Content-Type: application/json' \
-    -H 'Authorization: Bearer Bearer ${API_KEY}'
+    -H 'Authorization: Bearer ${API_KEY}'
 ```
 
     </TabItem>

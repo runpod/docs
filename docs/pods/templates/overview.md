@@ -1,6 +1,6 @@
 ---
 title: Overview
-description: Learn about Templates.
+description: "Docker templates: pre-configured images with customizable settings for deploying Pods, environment variables, and port management, with options for official, community, and custom templates."
 sidebar_position: 2
 ---
 
@@ -27,11 +27,11 @@ If you want better control over what gets done at pod start, you can modify the 
 For example, the default docker command is:
 
 ```bash
-bash -c `/start.sh`
+bash -c '/start.sh'
 ```
 
 If you wanted to run something before `start.sh`, you can put an extra command there.
 
 ```bash
-bash -c `apt update && apt install vim -y && /start.sh`
+bash -c 'apt update && apt install vim -y && /start.sh'
 ```

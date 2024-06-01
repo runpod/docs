@@ -1,18 +1,17 @@
 ---
 title: Overview
-description: An overview to Serverless GPU computing for AI inference and training.
+description: "Scale machine learning workloads with RunPod Serverless, offering flexible GPU computing for AI inference, training, and general compute, with pay-per-second pricing and fast deployment options for custom endpoints and handler functions."
 sidebar_position: 1
 ---
 
-RunPod offers Serverless GPU computing for AI inference, training, and general compute, allowing users to pay by the second for their compute usage.
+RunPod offers Serverless GPU and CPU computing for AI inference, training, and general compute, allowing users to pay by the second for their compute usage.
 This flexible platform is designed to scale dynamically, meeting the computational needs of AI workloads from the smallest to the largest scales.
 
 You can use the following methods:
 
 - Quick Deploy: Quick deploys are pre-built custom endpoints of the most popular AI models.
 - Handler Functions: Bring your own functions and run in the cloud.
-
-If you'd like to use pre-built endpoints of some of the most popular AI models, see [AI APIs](/ai-apis).
+- vLLM Endpoint: Specify a Hugging Face model and run in the cloud.
 
 ## Why RunPod Serverless?
 
@@ -26,7 +25,9 @@ You should choose RunPod Serverless instances for the following reasons:
 - **Metrics and Debugging:** Transparency is vital in debugging. RunPod provides access to GPU, CPU, Memory, and other metrics to help users understand their computational workloads. Full debugging capabilities for workers through logs and SSH are also available, with a web terminal for even easier access.
 - **Webhooks:** Users can leverage webhooks to get data output as soon as a request is done. Data is pushed directly to the user's Webhook API, providing instant access to results.
 
-RunPod Serverless GPUs are not just for AI Inference and Training. They're also great for a variety of other use cases. Feel free to use them for tasks like rendering, molecular dynamics, or any other computational task that suits your fancy.
+RunPod Serverless are not just for AI Inference and Training.
+They're also great for a variety of other use cases.
+Feel free to use them for tasks like rendering, molecular dynamics, or any other computational task that suits your needs.
 
 ## How to interact with RunPod Serverless?
 
@@ -45,7 +46,7 @@ https://api.runpod.ai/v2/{endpoint_id}/{operation}
 - `operation`: The operation to perform on the Serverless Endpoint.
   - Valid options: `run` | `runsync` | `status` | `cancel` | `health` | `purge-queue`
 
-For more information, see [Invoke jobs](/serverless/endpoints/invoke-jobs).
+For more information, see [Invoke jobs](/serverless/endpoints/job-operations).
 
 <!--
 ### Endpoints

@@ -1,5 +1,6 @@
 ---
 title: Loggers
+description: "Enable efficient application monitoring and debugging with RunPod's structured logging interface, simplifying issue identification and resolution, and ensuring smooth operation."
 ---
 
 Logging is essential for insight into your application's performance and health.

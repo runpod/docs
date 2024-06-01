@@ -1,11 +1,19 @@
 ---
 title: "Package and deploy an image"
-description: "Packaged code that receives and executes API submitted requests."
+description: "Package your Handler Function into a Docker image for scalable Serverless Worker deployment, leveraging Dockerfiles and Configurable Endpoints for efficient deployment. Learn how to build, push, and integrate your image for continuous integration and testing."
 sidebar_position: 2
 ---
 
 Once you have a Handler Function, the next step is to package it into a Docker image that can be deployed as a scalable Serverless Worker.
 This is accomplished by defining a docker file to import everything required to run your handler. Example docker files are in the [runpod-workers](https://github.com/orgs/runpod-workers/repositories) repository on GitHub.
+
+:::note
+
+For deploying large language models (LLMs), you can use the [Configurable Endpoints](/serverless/workers/vllm/configurable-endpoints) feature instead of working directly with Docker.
+
+Configurable Endpoints simplify the deployment process by allowing you to select a pre-configured template and customize it according to your needs.
+
+:::
 
 _Unfamiliar with Docker? Check out Docker's [overview page](https://docs.docker.com/get-started/overview/) or see our guide on [Containers](/category/containers)._
 

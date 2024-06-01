@@ -1,6 +1,7 @@
 ---
 title: Get started
 sidebar_position: 2
+description: "Learn how to test your deployed Endpoint with a sample request, view the response, and send requests using cURL or an HTTP client, then customize your Handler Function for more control over your API."
 ---
 
 Now that your Endpoint is deployed, send a test.
@@ -61,7 +62,7 @@ Depending on any modifications you made to your Handler Function, you may need t
 
 Now that you have successfully launched an endpoint using a template, you can:
 
-- [Invoke jobs](/serverless/endpoints/invoke-jobs)
+- [Invoke jobs](/serverless/endpoints/job-operations)
 
 If the models provided aren't enough, you can write your own customize Function Handler:
 

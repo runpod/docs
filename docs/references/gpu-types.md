@@ -7,19 +7,21 @@ The following list contains all GPU types available on RunPod.
 For more information, see [GPU pricing](https://www.runpod.io/gpu-instance/pricing).
 
 <!--
-Table last generated: 2024-02-20
+Table last generated: 2024-05-30
 -->
 
 | GPU ID                             | Display Name     | Memory (GB) |
 | ---------------------------------- | ---------------- | ----------- |
-| NVIDIA A100 80GB PCIe              | A100 80GB        | 80          |
-| NVIDIA A100-SXM4-80GB              | A100 SXM 80GB    | 80          |
+| NVIDIA A100 80GB PCIe              | A100 PCIe        | 80          |
+| NVIDIA A100-SXM4-80GB              | A100 SXM         | 80          |
 | NVIDIA A30                         | A30              | 24          |
 | NVIDIA A40                         | A40              | 48          |
-| NVIDIA H100 PCIe                   | H100 80GB PCIe   | 80          |
-| NVIDIA H100 80GB HBM3              | H100 80GB SXM5   | 80          |
+| NVIDIA H100 PCIe                   | H100 PCIe        | 80          |
+| NVIDIA H100 80GB HBM3              | H100 SXM         | 80          |
 | NVIDIA L4                          | L4               | 24          |
 | NVIDIA L40                         | L40              | 48          |
+| NVIDIA L40S                        | L40S             | 48          |
+| AMD Instinct MI300X OAM            | MI300X           | 192         |
 | NVIDIA GeForce RTX 3070            | RTX 3070         | 8           |
 | NVIDIA GeForce RTX 3080            | RTX 3080         | 10          |
 | NVIDIA GeForce RTX 3080 Ti         | RTX 3080 Ti      | 12          |

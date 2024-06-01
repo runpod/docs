@@ -1,6 +1,6 @@
 ---
 title: Generate images with SDXL Turbo
-description: Learn to generate images with SDXL with a frontend web app.
+description: "Learn how to build a web application using RunPod's Serverless Workers and SDXL Turbo from Stability AI, a fast text-to-image model, and send requests to an Endpoint to generate images from text-based inputs."
 sidebar_position: 2
 ---
 
@@ -91,12 +91,12 @@ This will include the GPU and the storage needed for your Worker.
 
 This step will walk you through deploying a Serverless Endpoint to RunPod.
 
-1. Login to the [RunPod Serverless console](https://www.runpod.io/console/serverless).
+1. Log in to the [RunPod Serverless console](https://www.runpod.io/console/serverless).
 2. Select **+ New Endpoint**.
 3. Provide the following:
    1. Endpoint name.
    2. Select a GPU.
-   3. Configure the number of workers.
+   3. Configure the number of Workers.
    4. (optional) Select **FlashBoot**.
    5. (optional) Select a template.
    6. Enter the name of your Docker image.

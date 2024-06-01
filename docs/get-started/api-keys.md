@@ -1,6 +1,6 @@
 ---
 title: API keys
-description: "Learn to manage API keys for your account and team."
+description: "Generate API keys with Read and Write or Read permission to authenticate requests to RunPod. Create and revoke keys from the console under Settings > API Keys."
 sidebar_position: 4
 ---
 

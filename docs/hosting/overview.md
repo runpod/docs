@@ -1,21 +1,21 @@
 ---
 title: Overview
-description: Learn how to host your own GPUs on RunPod.io.
+description: "RunPod offers GPU hosting opportunities through proprietary servers and community collaboration, with a 24% service fee, minimum bid pricing, and KYC verification for trusted hosts with at least 20 GPUs, offering customized dashboard management and revenue insights."
 sidebar_position: 1
 ---
 
-## RunPod GPU Hosting Opportunity
+## RunPod GPU hosting opportunity
 
-RunPod offers our clients a diverse range of GPUs, made possible through our proprietary servers and collaboration with trusted community members.
+RunPod offers a diverse range of GPUs, made possible through proprietary servers and collaboration with trusted community members.
 If you're interested in integrating your hardware into the RunPod ecosystem, follow the steps below.
 
-## How to Join as a Host:
+## How to join as a host
 
 1. Check Eligibility: Make sure you adhere to our [minimum requirements](/hosting/partner-requirements).
 2. Connect with us: Currently, we onboard hosts through a manual vetting process.
    If you have high-quality machines that satisfy our hosting requirements, and at least 20 GPUs in total, please fill out [this form](https://share.hsforms.com/1GYpMeNlSQc6n11toAlgNngecykq).
 
-## Additional Hosting Information:
+## Additional hosting information
 
 - Service Fee: RunPod charges a 24% service fee. This encompasses:
   - Approximately 4% for Stripe payment fees.

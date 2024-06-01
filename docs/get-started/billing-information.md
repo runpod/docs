@@ -1,6 +1,6 @@
 ---
 title: Billing information
-description: Get started by setting up your team, inviting users, and managing payment.
+description: "Learn about RunPod's billing and payment methods, including credit cards, crypto payments, and business invoicing options, with guidance on common issues and troubleshooting tips."
 sidebar_position: 2
 ---
 
@@ -26,19 +26,3 @@ RunPod accepts several payment methods for funding your account:
 <!-- [source](https://blog.runpod.io/how-to-manage-funding-your-runpod-account#invoicing) -->
 
 If you're having trouble with your card payments, you can contact [RunPod support](https://www.runpod.io/contact) for assistance.
-
-<!-- [source](https://docs.runpod.io/docs/manage-payment-card-declines)
--->
-<!--
-### View invoicing
-
-### Charges
-
-### Limits
-
-## Usage statistics
-
-### Monitor GPU usage
-
-### Understand metrics
--->

@@ -1,6 +1,6 @@
 ---
 title: Overview
-description: Learn about RunPod and its related features.
+description: "RunPod is a cloud computing platform for AI, machine learning, and general compute, offering GPU and CPU resources, serverless computing, and a Command Line Interface for easy deployment and development."
 sidebar_position: 1
 ---
 
@@ -19,7 +19,7 @@ The Secure Cloud runs in T3/T4 data centers providing high reliability and secur
 
 ## What is Serverless?
 
-**Serverless** offers pay-per-second serverless GPU computing, bringing autoscaling to your production environment.
+**Serverless** offers pay-per-second serverless computing, bringing autoscaling to your production environment.
 The Serverless offering allows users to define a Worker, create a REST API Endpoint for it which queue jobs and autoscales to fill demand.
 This service, part of our Secure Cloud offering, guarantees low cold-start times and stringent security measures.
 
@@ -27,11 +27,6 @@ You can get started with:
 
 - [Quick deploys](/serverless/quick-deploys)
 - [Build your own](/serverless/workers/overview)
-
-## What are AI APIs?
-
-**AI APIs** are fully managed and Endpoints of some of the most popular AI models.
-They are designed for a variety of applications including Dreambooth, Stable Diffusion, Whisper, and more.
 
 ## CLI
 

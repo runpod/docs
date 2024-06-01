@@ -119,12 +119,6 @@ const config = {
           collapsed: false,
           label: "Tutorials",
         },
-        {
-          position: "left",
-          href: "https://doc.runpod.io/reference/runpod-apis",
-          collapsed: false,
-          label: "AI APIs",
-        },
 
         { href: "https://blog.runpod.io", label: "Blog", position: "left" },
         {
@@ -147,10 +141,6 @@ const config = {
             {
               label: "Tutorials",
               to: "/tutorials/introduction/overview",
-            },
-            {
-              label: "AI APIs",
-              to: "https://doc.runpod.io/reference/runpod-apis",
             },
           ],
         },
@@ -204,16 +194,15 @@ const config = {
         hideable: true,
       },
     },
-    /*
+
     announcementBar: {
-      id: "use-nvidia-a40",
+      id: "ollama-cpu",
       content:
-        "Boost your projects with NVIDIA A40 GPUs now available in CA-MTL-1 and EU-SE-1. <a href=\"https://blog.runpod.io/maximizing-ai-efficiency-on-a-budget-the-unbeatable-value-of-nvidia-a40-and-a6000-gpus-for-fine-tuning-llms/\">Enhance your computing power and efficiency</a>.",
+        "Checkout our new Serverless CPU by running <a href=\"https://docs.runpod.io/tutorials/serverless/cpu/run-ollama-inference/\">inference with Ollama</a>.",
       backgroundColor: "#004a7f",
       textColor: "#ffffff",
       isCloseable: true,
     },
-    */
   },
 
   scripts: [
@@ -227,6 +216,11 @@ const config = {
     },
     {
       src: "https://scripts.simpleanalyticscdn.com/latest.js",
+      async: true,
+      defer: true,
+    },
+    {
+      src: "/scripts/fullstory.js",
       async: true,
       defer: true,
     },

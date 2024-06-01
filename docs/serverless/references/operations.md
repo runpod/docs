@@ -1,6 +1,6 @@
 ---
 title: "Endpoint operations"
-description: "Comprehensive guide on interacting with models using RunPod's API Endpoints without managing the pods yourself."
+description: "RunPod's Endpoints enable job submission and output retrieval, using a constructed URL starting with https://api.runpod.ai/v2/{endpoint_id}/{operation}. Operations include job submission, synchronous execution, job status checking, and more."
 sidebar_position: 2
 ---
 
@@ -17,7 +17,7 @@ Operations available to all users are:
   - Job availability: Job results are accessible for 30 minutes after completion
 - `/runsync`: Synchronous endpoint for shorter running jobs, returning immediate results.
   - Payload capacity: 20 MB
-  - Rate limit: 2000 per second
+  - Rate limit: 2000 requests every 10 seconds
   - Job availability: Job results are accessible for 60 seconds after completion
 - `/stream/{job_id}`: For streaming results from generator-type handlers.
 - `/status/{job_id}`: To check the job status and retrieve outputs upon completion.
@@ -26,4 +26,4 @@ Operations available to all users are:
   - Only accepts `GET` methods
 - `/purge-queue`: Clears all queued jobs, it will not cancel jobs in progress.
 
-To see how to run these Endpoint Operations, see [Invoke a Job](/serverless/endpoints/invoke-jobs).
+To see how to run these Endpoint Operations, see [Invoke a Job](/serverless/endpoints/job-operations).
