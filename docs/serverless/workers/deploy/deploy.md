@@ -5,7 +5,7 @@ sidebar_position: 2
 ---
 
 Once you have a Handler Function, the next step is to package it into a Docker image that can be deployed as a scalable Serverless Worker.
-This is accomplished by defining a docker file to import everything required to run your handler. Example docker files are in the [runpod-workers](https://github.com/orgs/runpod-workers/repositories) repository on GitHub.
+This is accomplished by defining a Docker file to import everything required to run your handler. Example Docker files are in the [runpod-workers](https://github.com/orgs/runpod-workers/repositories) repository on GitHub.
 
 :::note
 
@@ -78,8 +78,40 @@ If `test-filename` is omitted, the Test Runner Action attempts to look for a tes
 
 You can find a working example in the [Worker Template repository](https://github.com/runpod-workers/worker-template/tree/main/.github).
 
+## Using Docker tags
+
+We also highly recommend the use of tags for Docker images and not relying on the default `:latest` tag label, this will make version tracking and releasing updates significantly easier.
+
+### Docker Image Versioning
+
+To ensure consistent and reliable versioning of Docker images, we highly recommend using SHA tags instead of relying on the default `:latest` tag. 
+
+Using SHA tags offers several benefits:
+
+- **Version Control:** SHA tags provide a unique identifier for each image version, making it easier to track changes and updates.
+- **Reproducibility:** By using SHA tags, you can ensure that the same image version is used across different environments, reducing the risk of inconsistencies.
+- **Security:** SHA tags help prevent accidental overwrites and ensure that you are using the intended image version.
+
+### Using SHA Tags
+
+To pull a Docker image using its SHA tag, use the following command:
+
+```bash
+docker pull <image_name>@<sha256:hash>
+```
+
+For example:
+
+```bash
+docker pull myapp@sha256:4d3d4b3c5a5c2b3a5a5c3b2a5a4d2b3a2b3c5a3b2a5d2b3a3b4c3d3b5c3d4a3
+```
+
+### Best Practices
+
+- Avoid using the `:latest` tag, as it can lead to unpredictable behavior and make it difficult to track which version of the image is being used.
+- Use semantic versioning (e.g., `v1.0.0`, `v1.1.0`) along with SHA tags to provide clear and meaningful version identifiers.
+- Document the SHA tags used for each deployment to ensure easy rollback and version management.
+
 ## Other considerations
 
-While we do not impose a limit on the docker image size your container registry might have, be sure to review any limitations they may have. Ideally, you want to keep your final docker image as small as possible and only container the absolute minimum to run your handler.
-
-We also highly recommend the use of tags for docker images and not relying on the default `:latest` tag label, this will make version tracking and releasing updates significantly easier.
+While we do not impose a limit on the Docker image size your container registry might have, be sure to review any limitations they may have. Ideally, you want to keep your final Docker image as small as possible and only container the absolute minimum to run your handler.
