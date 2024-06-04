@@ -32,7 +32,9 @@ if response.status_code == 200:
     new_df = pd.DataFrame(cpus)
 
     # Writing to a markdown file
-    file_path = os.path.join(os.path.dirname(__file__), "../docs/references/cpu-types.md")
+    file_path = os.path.join(
+        os.path.dirname(__file__), "../docs/references/cpu-types.md"
+    )
 
     # Check if the file already exists
     if os.path.exists(file_path):
@@ -42,15 +44,15 @@ if response.status_code == 200:
         # Find where the table ends
         table_end_index = 0
         for i, line in enumerate(lines):
-            if line.strip() == '' and i > 0:
+            if line.strip() == "" and i > 0:
                 table_end_index = i
                 break
 
         # Extract the current table
-        current_table = ''.join(lines[:table_end_index])
+        current_table = "".join(lines[:table_end_index])
 
         # Convert the current table to a DataFrame
-        current_df = pd.read_csv(io.StringIO(current_table), sep='|').iloc[:, 1:-1]
+        current_df = pd.read_csv(io.StringIO(current_table), sep="|").iloc[:, 1:-1]
 
         # Append the new data to the current table
         updated_df = pd.concat([current_df, new_df], ignore_index=True)
@@ -60,10 +62,12 @@ if response.status_code == 200:
         updated_df = new_df
 
     # Sort the DataFrame alphabetically by displayName
-    updated_df = updated_df.sort_values(by='displayName').reset_index(drop=True)
+    updated_df = updated_df.sort_values(by="displayName").reset_index(drop=True)
 
     # Convert the updated DataFrame to markdown table format
-    updated_table = tabulate(updated_df, headers='keys', tablefmt='pipe', showindex=False)
+    updated_table = tabulate(
+        updated_df, headers="keys", tablefmt="pipe", showindex=False
+    )
 
     with open(file_path, "w") as file:
         # Write the headers and table

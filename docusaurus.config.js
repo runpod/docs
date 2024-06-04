@@ -203,7 +203,6 @@ const config = {
       textColor: "#ffffff",
       isCloseable: true,
     },
-
   },
 
   scripts: [

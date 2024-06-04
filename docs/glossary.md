@@ -20,7 +20,7 @@ An Endpoint refers to a specific URL where your serverless applications or servi
 
 GPU Instance is a container-based GPU instance that you can deploy.
 These instances spin up in seconds using both public and private repositories.
-They are available in two different types: 
+They are available in two different types:
 
 - Secure Cloud
 - Community Cloud

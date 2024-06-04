@@ -10,7 +10,6 @@ Learn how to start, stop, and manage Pods with RunPod, including creating and te
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-
 ### Prerequisites
 
 If you are using the [RunPod CLI](/cli/install-runpodctl), you'll need to set your API key in the configuration.
@@ -18,6 +17,7 @@ If you are using the [RunPod CLI](/cli/install-runpodctl), you'll need to set yo
 ```bash
 runpodctl config --apiKey $RUNPOD_API_KEY
 ```
+
 Replace `$RUNPOD_API_KEY` with your RunPod API key.
 
 Once your API key is set, you can manage your infrastructure.
@@ -30,15 +30,14 @@ If you're not sure which Pod meets your needs, see [Choose a Pod](/pods/choose-a
 
 <TabItem value="web-ui" label="Web" default>
 
-  1. Navigate to [Pods](https://www.dev.runpod.io/console/pods) and select **+ Deploy**.
-  2. Choose between **GPU** and **CPU**.
-  3. Customize your an instance by setting up the following:
-      1. (optional) Specify a Network volume.
-      2. Select an instance type. For example, **A40**.
-      3. (optional) Provide a template. For example, **RunPod Pytorch**. 
-      4. (GPU only) Specify your compute count.
-  4. Review your configuration and select **Deploy On-Demand**.
-
+1. Navigate to [Pods](https://www.dev.runpod.io/console/pods) and select **+ Deploy**.
+2. Choose between **GPU** and **CPU**.
+3. Customize your an instance by setting up the following:
+   1. (optional) Specify a Network volume.
+   2. Select an instance type. For example, **A40**.
+   3. (optional) Provide a template. For example, **RunPod Pytorch**.
+   4. (GPU only) Specify your compute count.
+4. Review your configuration and select **Deploy On-Demand**.
 
 </TabItem>
 
@@ -61,8 +60,8 @@ runpodctl create pods \
 
 :::tip
 
-RunPod supports custom [templates](/pods/templates/overview) that allow you to specify your own Dockerfile. 
-By creating a Dockerfile, you can build a [custom Docker image](/tutorials/introduction/containers/overview) with your specific dependencies and configurations. 
+RunPod supports custom [templates](/pods/templates/overview) that allow you to specify your own Dockerfile.
+By creating a Dockerfile, you can build a [custom Docker image](/tutorials/introduction/containers/overview) with your specific dependencies and configurations.
 This ensures that your applications are reliable and portable across different environments.
 
 :::
@@ -123,7 +122,6 @@ If you do not need to store your Pod, be sure to terminate it next.
 
 :::
 
-
 ## Start a Pod
 
 You can resume a pod that has been stopped.
@@ -132,12 +130,12 @@ You can resume a pod that has been stopped.
 
 <TabItem value="web-ui" label="Web" default>
 
-  1. Navigate to the **Pods** page.
-  2. Select your Pod you want to resume.
-  3. Select **Start**.
+1. Navigate to the **Pods** page.
+2. Select your Pod you want to resume.
+3. Select **Start**.
 
 Your Pod will resume.
-  
+
 </TabItem>
 
 <TabItem value="cli" label="Command line">
@@ -149,7 +147,6 @@ runpodctl start pod $RUNPOD_POD_ID
 
 </TabItem>
 </Tabs>
-
 
 ## Terminate a Pod
 
@@ -173,6 +170,7 @@ Be sure you've saved any data you want to access again.
 <TabItem value="cli" label="Command line">
 
 To remove a single Pod, enter the following command.
+
 ```bash
 runpodctl remove pod $RUNPOD_POD_ID
 ```

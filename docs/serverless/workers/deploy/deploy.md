@@ -84,7 +84,7 @@ We also highly recommend the use of tags for Docker images and not relying on th
 
 ### Docker Image Versioning
 
-To ensure consistent and reliable versioning of Docker images, we highly recommend using SHA tags instead of relying on the default `:latest` tag. 
+To ensure consistent and reliable versioning of Docker images, we highly recommend using SHA tags instead of relying on the default `:latest` tag.
 
 Using SHA tags offers several benefits:
 
