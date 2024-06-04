@@ -7,7 +7,7 @@ The following list contains all GPU types available on RunPod.
 For more information, see [GPU pricing](https://www.runpod.io/gpu-instance/pricing).
 
 <!--
-Table last generated: 2024-05-30
+Table last generated: 2024-06-04
 -->
 
 | GPU ID                             | Display Name     | Memory (GB) |
@@ -16,6 +16,7 @@ Table last generated: 2024-05-30
 | NVIDIA A100-SXM4-80GB              | A100 SXM         | 80          |
 | NVIDIA A30                         | A30              | 24          |
 | NVIDIA A40                         | A40              | 48          |
+| NVIDIA H100 NVL                    | H100 NVL         | 94          |
 | NVIDIA H100 PCIe                   | H100 PCIe        | 80          |
 | NVIDIA H100 80GB HBM3              | H100 SXM         | 80          |
 | NVIDIA L4                          | L4               | 24          |
@@ -32,6 +33,7 @@ Table last generated: 2024-05-30
 | NVIDIA GeForce RTX 4070 Ti         | RTX 4070 Ti      | 12          |
 | NVIDIA GeForce RTX 4080            | RTX 4080         | 16          |
 | NVIDIA GeForce RTX 4090            | RTX 4090         | 24          |
+| NVIDIA RTX 5000 Ada Generation     | RTX 5000 Ada     | 32          |
 | NVIDIA RTX 6000 Ada Generation     | RTX 6000 Ada     | 48          |
 | NVIDIA RTX A2000                   | RTX A2000        | 6           |
 | NVIDIA RTX A4000                   | RTX A4000        | 16          |

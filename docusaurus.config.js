@@ -225,7 +225,16 @@ const config = {
       defer: true,
     },
   ],
-  plugins: [],
+  plugins: [
+    [
+      "@twilio-labs/docusaurus-plugin-datadog-rum",
+      {
+        applicationId: "b6a63b50-6563-417f-9e03-510cc8e5ffa2",
+        clientToken: "pub300ef2add5584a8b4291bbc2da0e3c28",
+        service: "runpod-docs"
+      },
+    ],
+  ],
 };
 
 export default config;

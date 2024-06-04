@@ -5,7 +5,7 @@ title: Serverless CPU types
 The following list contains all CPU types available on RunPod.
 
 <!--
-Table last generated: 2024-05-28
+Table last generated: 2024-06-04
 -->
 
 | displayName                                     | cores | threadsPerCore |
@@ -212,9 +212,11 @@ Table last generated: 2024-05-28
 | Intel(R) Xeon(R) Gold 6448Y                     |    32 |              2 |
 | Intel(R) Xeon(R) Platinum 8160 CPU @ 2.10GHz    |    24 |              2 |
 | Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz   |    26 |              2 |
+| Intel(R) Xeon(R) Platinum 8173M CPU @ 2.00GHz   |    28 |              2 |
 | Intel(R) Xeon(R) Platinum 8176M CPU @ 2.10GHz   |    28 |              2 |
 | Intel(R) Xeon(R) Platinum 8180 CPU @ 2.50GHz    |    28 |              2 |
 | Intel(R) Xeon(R) Platinum 8352Y CPU @ 2.20GHz   |    32 |              2 |
+| Intel(R) Xeon(R) Platinum 8452Y                 |    36 |              2 |
 | Intel(R) Xeon(R) Platinum 8468                  |    48 |              2 |
 | Intel(R) Xeon(R) Platinum 8470                  |    52 |              2 |
 | Intel(R) Xeon(R) Platinum 8480+                 |    56 |              2 |
