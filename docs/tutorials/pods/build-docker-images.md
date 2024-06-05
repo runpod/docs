@@ -1,16 +1,17 @@
 ---
-title:  Build Docker Images on Runpod Using Bazel
+title:  Build Docker Images on Runpod with Bazel
 ---
 
-# Build Docker Images on RunPod Using Bazel
 
-RunPod's GPU Pods use custom Docker images to run your code.
-This means you can't directly spin up your own Docker instance or build Docker containers on a GPU Pod.
+# Build Docker Images on RunPod with Bazel
+
+RunPod's GPU Pods use custom Docker images to run your code. 
+This means you can't directly spin up your own Docker instance or build Docker containers on a GPU Pod. 
 Tools like Docker Compose are also unavailable.
 
 This limitation can be frustrating when you need to create custom Docker images for your RunPod templates.
 
-Fortunately, many use cases can be addressed by creating a custom template with the desired Docker image.
+Fortunately, many use cases can be addressed by creating a custom template with the desired Docker image. 
 
 In this tutorial, you'll learn how to use the [Bazel](https://bazel.build) build tool to build and push Docker images from inside a RunPod container.
 
@@ -25,6 +26,7 @@ Before you begin this guide you'll need the following:
 
 ## Create a Pod
 
+
 1. Navigate to [Pods](https://www.dev.runpod.io/console/pods) and select **+ Deploy**.
 2. Choose between **GPU** and **CPU**.
 3. Customize your an instance by setting up the following:
@@ -36,6 +38,7 @@ Before you begin this guide you'll need the following:
 
 For more information, see [Manage Pods](/pods/manage-pods#start-a-pod).
 
+
 Wait for the Pod to spin up then connect to your Pod through the Web Terminal:
 
 1. Select **Connect**.
@@ -44,7 +47,7 @@ Wait for the Pod to spin up then connect to your Pod through the Web Terminal:
 
 Now you can clone the example GitHub repository
 
-## Clone the example GitHub repository
+## Clone the example GitHub repository  
 
 Clone the example code repository that demonstrates building Docker images with Bazel:
 
@@ -70,16 +73,15 @@ curl -fsSL https://get.docker.com -o get-docker.sh && sudo sh get-docker.sh
 
 Log in to Docker using an access token:
 
-1. Go to https://hub.docker.com/settings/security and click "New Access Token".
+1. Go to https://hub.docker.com/settings/security and click "New Access Token". 
 2. Enter a description like "Runpod Token" and select "Read/Write" permissions.
 3. Click "Generate" and copy the token that appears.
 4. In the terminal, run:
 
-```command
-docker login -u <your-username>
+```command 
+docker login -u <your-username> 
 ```
-
-When prompted, paste in the access token you copied instead of your password.
+When prompted, paste in the access token you copied instead of your password. 
 
 Install Bazel via the Bazelisk version manager:
 
@@ -89,7 +91,7 @@ chmod +x bazelisk-linux-amd64
 sudo cp ./bazelisk-linux-amd64 /usr/local/bin/bazel
 ```
 
-## Configure the Bazel Build
+## Configure the Bazel Build 
 
 First, install nano if it’s not already installed and open the `BUILD.bazel` file for editing:
 
@@ -112,7 +114,7 @@ oci_push(
 
 ## Build and Push the Docker Image
 
-Run the bazel command to build the Docker image and push it to your Docker Hub account:
+Run the bazel command to build the Docker image and push it to your Docker Hub account:  
 
 ```command
 bazel run //:push_custom_image
@@ -124,11 +126,6 @@ You can now reference this custom image in your own Runpod templates.
 
 ## Conclusion
 
-In this tutorial, you used Bazel as an alternative way to build Docker images from inside Runpod containers and push them to Docker Hub. The key steps are:
-
-1. Pulling an existing base image by digest
-2. Adding custom files as a new layer
-3. Pushing the image to a registry
-
-Now you can create custom Docker images for your own use.
-The techniques shown here can be extended to build more complex images as needed.
+In this tutorial, you learned how to use Bazel to build and push Docker images from inside RunPod containers. 
+By following the steps outlined, you can now create and utilize custom Docker images for your RunPod templates. 
+The techniques demonstrated can be further expanded to build more complex images, providing a flexible solution for your containerization needs on RunPod.
