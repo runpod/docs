@@ -4,11 +4,11 @@ description: "RunPod is a cloud computing platform for AI, machine learning, and
 sidebar_position: 1
 ---
 
-This page provides an overview for RunPod and its related features.
-
 **RunPod** is a cloud computing platform designed for AI, machine learning applications, and general compute.
 
 Execute your code utilizing both GPU and CPU resources through [Pods](/pods/overview), as well as [Serverless](/serverless/overview) computing options.
+
+Get started today, but [signing up for an account.](https://www.runpod.io/console/signup)
 
 ## What are Pods?
 
@@ -25,8 +25,8 @@ This service, part of our Secure Cloud offering, guarantees low cold-start times
 
 You can get started with:
 
-- [Quick deploys](/serverless/quick-deploys)
-- [Build your own](/serverless/workers/overview)
+- [Build your own Worker image](/serverless/workers/overview)
+- [Use any LLM with the vLLM worker](/serverless/workers/vllm/overview)
 
 ## CLI
 
