@@ -11,4 +11,4 @@ While the documentation around the introduction section gives a holistic view an
 
 - If you are looking for an understanding of Containers and Docker, see [Container overview](/tutorials/introduction/containers/overview).
 - If you are looking to run your first Pod with RunPod, see [Run your first Fast Stable Diffusion with Jupyter Notebook](/tutorials/pods/run-your-first).
-- For Serverless implementation, see [Run your first serverless endpoint with Stable Diffusion](/tutorials/serverless/run-your-first).
+- For Serverless implementation, see [Run your first serverless endpoint with Stable Diffusion](/tutorials/serverless/gpu/run-your-first).

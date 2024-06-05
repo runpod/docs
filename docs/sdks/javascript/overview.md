@@ -52,7 +52,7 @@ Use environment variables or secure secrets management solutions to handle sensi
 
 :::
 
-For further information, see the following:
+For more information, see the following:
 
 - [RunPod SDK npm Package](https://www.npmjs.com/package/runpod-sdk)
 - [RunPod GitHub Repository](https://github.com/runpod/js-sdk)

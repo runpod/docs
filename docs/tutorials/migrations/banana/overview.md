@@ -122,7 +122,7 @@ gh repo clone runpod-workers/worker-template
 Now that you've got a basic RunPod Worker template created:
 
 - Continue reading to see how you'd migrate from Banana to RunPod
-- See [Generate SDXL Turbo](/tutorials/serverless/generate-sdxl-turbo) for a general approach on deploying your first Serverless Endpoint with RunPod.
+- See [Generate SDXL Turbo](/tutorials/serverless/gpu/generate-sdxl-turbo) for a general approach on deploying your first Serverless Endpoint with RunPod.
 
 ## Project structure
 

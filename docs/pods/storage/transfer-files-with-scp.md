@@ -9,7 +9,7 @@ Learn to transfer files to and from RunPod with Secure Copy Protocol (SCP).
 ## Prerequisites
 
 - Make sure your Pod is configured to use real SSH.
-  For more information, see [use SSH](/docs/pods/configuration/use-ssh).
+  For more information, see [use SSH](/pods/configuration/use-ssh).
 
 - If you intend to use rsync, make sure it's installed on both your local machine and your Pod with `apt install rsync`.
 
