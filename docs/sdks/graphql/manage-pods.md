@@ -157,7 +157,6 @@ mutation {
   </TabItem>
 </Tabs>
 
-Sure, here is the documentation for starting an on-demand pod with allowed CUDA versions:
 
 ### Filter by Allowed CUDA Versions
 
