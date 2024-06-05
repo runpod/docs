@@ -27,8 +27,8 @@ runpod.serverless.start({"handler": handler})
 
 ## Refresh Worker
 
-When completing long-running job requests or complicated requests that involve a lot of reading and writing files, starting with a fresh worker can be beneficial each time. 
-A flag can be returned with the resulting job output to stop and refresh the used worker. 
+When completing long-running job requests or complicated requests that involve a lot of reading and writing files, starting with a fresh worker can be beneficial each time.
+A flag can be returned with the resulting job output to stop and refresh the used worker.
 
 This behavior is achieved by doing the following within your worker:
 
@@ -63,7 +63,8 @@ runpod.serverless.start(
     }
 )
 ```
-  </TabItem>
+
+</TabItem>
   <TabItem value="async" label="Asynchronous">
 
 ```python
@@ -92,10 +93,8 @@ runpod.serverless.start(
 )
 ```
 
-  </TabItem>
+</TabItem>
 </Tabs>
-
-
 
 Your handler must return a dictionary that contains the `refresh_worker`: this flag will be removed before the remaining job output is returned.
 

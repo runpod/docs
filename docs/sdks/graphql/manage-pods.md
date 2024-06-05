@@ -157,6 +157,72 @@ mutation {
   </TabItem>
 </Tabs>
 
+Sure, here is the documentation for starting an on-demand pod with allowed CUDA versions:
+
+### Filter by Allowed CUDA Versions
+
+You can pass in the `allowedCudaVersions` as a list of CUDA versions that you want to allow for the GPU in the pod. 
+
+This helps in specifying the compatible CUDA versions for your GPU setup.
+
+<Tabs>
+  <TabItem value="curl" label="cURL" default>
+
+```curl
+curl --request POST \
+  --header 'content-type: application/json' \
+  --url 'https://api.runpod.io/graphql?api_key=${YOUR_API_KEY}' \
+  --data '{
+    "query": "mutation { podResume( input: { podId: \"inzk6tzuz833h5\", gpuCount: 1, allowedCudaVersions: [\"12.0\", \"12.1\", \"12.2\", \"12.3\"] } ) { id desiredStatus imageName env machineId machine { podHostId } } }"
+  }'
+```
+
+  </TabItem>
+  <TabItem value="graphql" label="GraphQL">
+
+```graphql
+mutation {
+  podResume(input: {
+    podId: "inzk6tzuz833h5",
+    gpuCount: 1,
+    allowedCudaVersions: ["12.0", "12.1", "12.2", "12.3"]
+  }) {
+    id
+    desiredStatus
+    imageName
+    env
+    machineId
+    machine {
+      podHostId
+    }
+  }
+}
+```
+
+  </TabItem>
+  <TabItem value="output" label="Output">
+
+```json
+{
+  "data": {
+    "podResume": {
+      "id": "inzk6tzuz833h5",
+      "desiredStatus": "RUNNING",
+      "imageName": "runpod/tensorflow",
+      "env": [
+        { "key": "JUPYTER_PASSWORD", "value": "ywm4c9r15j1x6gfrds5n" }
+      ],
+      "machineId": "hpvdausak8xb",
+      "machine": {
+        "podHostId": "inzk6tzuz833h5-64410065"
+      }
+    }
+  }
+}
+```
+
+  </TabItem>
+</Tabs>
 ## Start Pods
 
 ### Start On-Demand Pod
@@ -255,6 +321,81 @@ mutation {
 }
 ```
   </TabItem>
+</Tabs>
+
+### Filter by CUDA Version
+
+You can pass in the `allowedCudaVersions` as a list of CUDA versions that you want to allow for the GPU in the pod.
+
+This helps in specifying the compatible CUDA versions for your GPU setup.
+
+<Tabs>
+  <TabItem value="curl" label="cURL" default>
+
+```curl
+curl --request POST \
+  --header 'content-type: application/json' \
+  --url 'https://api.runpod.io/graphql?api_key=${YOUR_API_KEY}' \
+  --data '{
+    "query": "mutation { podRentInterruptable( input: { bidPerGpu: 0.2, cloudType: SECURE, gpuCount: 1, volumeInGb: 40, containerDiskInGb: 40, minVcpuCount: 2, minMemoryInGb: 15, gpuTypeId: \"NVIDIA RTX A6000\", name: \"RunPod Pytorch\", imageName: \"runpod/pytorch\", dockerArgs: \"\", ports: \"8888/http\", volumeMountPath: \"/workspace\", env: [{ key: \"JUPYTER_PASSWORD\", value: \"vunw9ybnzqwpia2795p2\" }], allowedCudaVersions: [\"12.0\", \"12.1\", \"12.2\", \"12.3\"] } ) { id imageName env machineId machine { podHostId } } }"
+  }'
+```
+
+</TabItem>
+  <TabItem value="graphql" label="GraphQL">
+
+```graphql
+mutation {
+  podRentInterruptable(input: {
+    bidPerGpu: 0.2,
+    cloudType: SECURE,
+    gpuCount: 1,
+    volumeInGb: 40,
+    containerDiskInGb: 40,
+    minVcpuCount: 2,
+    minMemoryInGb: 15,
+    gpuTypeId: "NVIDIA RTX A6000",
+    name: "RunPod Pytorch",
+    imageName: "runpod/pytorch",
+    dockerArgs: "",
+    ports: "8888/http",
+    volumeMountPath: "/workspace",
+    env: [{ key: "JUPYTER_PASSWORD", value: "vunw9ybnzqwpia2795p2" }],
+    allowedCudaVersions: ["12.0", "12.1", "12.2", "12.3"]
+  }) {
+    id
+    imageName
+    env
+    machineId
+    machine {
+      podHostId
+    }
+  }
+}
+```
+
+</TabItem>
+  <TabItem value="output" label="Output">
+
+```json
+{
+  "data": {
+    "podRentInterruptable": {
+      "id": "your_pod_id",
+      "imageName": "runpod/pytorch",
+      "env": [
+        { "key": "JUPYTER_PASSWORD", "value": "vunw9ybnzqwpia2795p2" }
+      ],
+      "machineId": "your_machine_id",
+      "machine": {
+        "podHostId": "your_pod_host_id"
+      }
+    }
+  }
+}
+```
+
+</TabItem>
 </Tabs>
 
 ## Stop Pods
