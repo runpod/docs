@@ -4,20 +4,6 @@ import styles from "./styles.module.css";
 
 const FeatureList = [
   {
-    title: "Pods",
-    Svg: require("@site/static/img/home_1.svg").default,
-    url: "/pods/overview", // Add URL here
-    description: (
-      <>
-        <a href="/pods/overview">
-          <b>Pods</b>
-        </a>{" "}
-        offer fast deployment of container-based GPU instances, with Secure Cloud for high reliability and security, and
-        Community Cloud for a secure peer-to-peer network.
-      </>
-    ),
-  },
-  {
     title: "Serverless",
     Svg: require("@site/static/img/home_2.svg").default,
     url: "/serverless/overview", // Add URL here
@@ -28,6 +14,20 @@ const FeatureList = [
         </a>{" "}
         service provides pay-per-second serverless computing with autoscaling, quick start times, and robust security in
         its Secure Cloud.
+      </>
+    ),
+  },
+  {
+    title: "Pods",
+    Svg: require("@site/static/img/home_1.svg").default,
+    url: "/pods/overview", // Add URL here
+    description: (
+      <>
+        <a href="/pods/overview">
+          <b>Pods</b>
+        </a>{" "}
+        offer fast deployment of container-based GPU instances, with Secure Cloud for high reliability and security, and
+        Community Cloud for a secure peer-to-peer network.
       </>
     ),
   },
