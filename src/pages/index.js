@@ -18,10 +18,16 @@ function HomepageHeader() {
         <p className="hero__subtitle">{siteConfig.tagline}</p>
         <div className={styles.buttons}>
           <Link
-            className="button button--secondary button--lg"
+            className={clsx("button button--secondary button--lg", styles.customButton)}
             to="/get-started/manage-accounts"
           >
             Get started with RunPod
+          </Link>
+          <Link
+            className={clsx("button button--secondary button--lg", styles.customButton)}
+            to="https://www.runpod.io/console/signup"
+          >
+            Sign Up
           </Link>
         </div>
       </div>
