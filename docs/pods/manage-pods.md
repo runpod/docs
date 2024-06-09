@@ -30,7 +30,7 @@ If you're not sure which Pod meets your needs, see [Choose a Pod](/pods/choose-a
 
 <TabItem value="web-ui" label="Web" default>
 
-1. Navigate to [Pods](https://www.dev.runpod.io/console/pods) and select **+ Deploy**.
+1. Navigate to [Pods](https://www.runpod.io/console/pods) and select **+ Deploy**.
 2. Choose between **GPU** and **CPU**.
 3. Customize your an instance by setting up the following:
    1. (optional) Specify a Network volume.

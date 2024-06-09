@@ -18,13 +18,15 @@ With this virtualization, you can use your own Docker image as a base image and,
 
 To get started, create a CPU instance:
 
-1. Navigate to [Pods](https://www.dev.runpod.io/console/pods) and select **+ Deploy**.
+1. Navigate to [Pods](https://www.runpod.io/console/pods) and select **+ Deploy**.
 2. Select your **CPU** type.
 3. Customize your instance by setting up the following:
    1. (recommended) Specify a Network volume.
    2. Select an instance type. For example, **32 vCPU with 256 GB of RAM**.
    3. (optional) Provide a template. For example, **runpod/base:0.5.1-cpu**.
 4. Review your configuration and select **Deploy On-Demand**.
+
+For more information, see [Manage Pods](/pods/manage-pods#start-a-pod).
 
 ## Install Docker
 
