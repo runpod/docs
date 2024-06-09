@@ -8,14 +8,14 @@ In the previous step, you created a Dockerfile and executed a command. Now, you'
 
 :::note
 
-This walk through teach you how to persist data outside of container.
+This walkthrough teaches you how to persist data outside of container.
 RunPod has the same concept used for attaching a Network Volume to your Pod.
 
 Consult the documentation on [attaching a Network Volume to your Pod](/pods/storage/create-network-volumes).
 
 :::
 
-## Why persist data outside of a container?
+## Why persist data outside a container?
 
 The key goal is to have data persist across multiple container runs and removals.
 
@@ -30,8 +30,8 @@ docker run busybox date > file.txt
 Would only write the date to `file.txt` temporarily inside that container. As soon as the container shuts down, that file and data is destroyed.
 This isn't great when you're training data and want your information to persist past your LLM training.
 
-Because of this, we need to persist data outside of the container.
-Let's take a look at a workflow you can use to persist data outside of a container.
+Because of this, we need to persist data outside the container.
+Let's take a look at a workflow you can use to persist data outside a container.
 
 ---
 
@@ -80,7 +80,7 @@ docker run -v date-volume:/data my-image
 ```
 
 This runs a container from my-image and mounts the `date-volume` Docker volume to the /data directory in the container.
-Anything written to `/data` inside the container will now be written to the `date-volume` on the host instead of the container's ephemeral filesystem.
+Anything written to `/data` inside the container will now be written to the `date-volume` on the host instead of the container's ephemeral file system.
 This allows the data to persist.
 Once the container exits, the date output file is safely stored on the host volume.
 
@@ -100,6 +100,6 @@ This runs a new busybox container and also mounts the `date-volume`.
 :::note
 
 Remember, this is a general tutorial on Docker.
-These concepts will help give you a better understanding on working with RunPod.
+These concepts will help give you a better understanding of working with RunPod.
 
 :::
