@@ -89,6 +89,10 @@ module.exports = {
   // Sidebar for "Tutorials"
   tutorialsSidebar: [
     {
+      type: "doc",
+      id: "tutorials/overview",
+    },
+    {
       type: "category",
       label: "Introduction",
       items: [
