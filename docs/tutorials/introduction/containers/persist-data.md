@@ -1,10 +1,11 @@
 ---
 title: Persist data outside of containers
 sidebar_position: 2
-description: "Learn how to persist data outside of containers by creating named volumes, mounting volumes to data directories, and accessing persisted data from multiple container runs and removals in Docker."
+description: Learn how to persist data outside of containers by creating named volumes, mounting volumes to data directories, and accessing persisted data from multiple container runs and removals in Docker.
 ---
 
-In the previous step, you created a Dockerfile and executed a command. Now, you'll learn how to persist data outside of containers.
+In the [previous step](/tutorials/introduction/containers/create-dockerfiles), you created a Dockerfile and executed a command.
+Now, you'll learn how to persist data outside of containers.
 
 :::note
 
@@ -15,7 +16,7 @@ Consult the documentation on [attaching a Network Volume to your Pod](/pods/stor
 
 :::
 
-## Why persist data outside of a container?
+## Why persist data outside a container?
 
 The key goal is to have data persist across multiple container runs and removals.
 
@@ -50,7 +51,7 @@ Next, we'll modify our Dockerfile to write the date output to a file rather than
 ```dockerfile
 FROM busybox
 WORKDIR /data
-RUN touch current_date.txt 
+RUN touch current_date.txt
 COPY entrypoint.sh /
 RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
