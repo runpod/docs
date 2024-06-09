@@ -110,7 +110,7 @@ RunPod CLI allows you to manage your computing pods effectively. Below are some 
   runpodctl stop pod {podId}
   ```
 
-For a comprehensive list of commands, refer to the [RunPod CLI reference documentation](/references/runpodctl/runpodctl).
+For a comprehensive list of commands, refer to the [RunPod CLI reference documentation](/references/runpodctl).
 
 ### Data Transfer
 

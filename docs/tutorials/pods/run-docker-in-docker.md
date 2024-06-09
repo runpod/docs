@@ -7,7 +7,7 @@ title: Run Docker in Docker on RunPod CPU Instances
 This tutorial applies only to RunPod's CPU offering. 
 It is not possible to run Docker inside of a GPU at this time.
 
-For information on building Docker images on GPUs, see [Build Docker Images with Bazel](tutorials/pods/build-docker-images).
+For information on building Docker images on GPUs, see [Build Docker Images with Bazel](/tutorials/pods/build-docker-images).
 
 :::
 
