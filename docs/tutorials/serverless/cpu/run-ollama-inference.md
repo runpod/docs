@@ -3,14 +3,17 @@ title: Run an Ollama Server on a RunPod CPU
 description: Learn to set up and run an Ollama server on RunPod CPU for inference with this step-by-step tutorial.
 ---
 
-In this guide, you will learn how to run an Ollama server on your RunPod CPU for inference.
+
+In this guide, you will learn how to run an Ollama server on your RunPod CPU for inference. 
+Although this tutorial focuses on CPU compute, you can also select a GPU type and follow the same steps. 
 By the end of this tutorial, you will have a fully functioning Ollama server ready to handle requests.
 
 ## Setting up your Endpoint
 
 :::note
 
-Use a Network volume to attach to your Worker so that it can cache the LLM and decrease cold start times. If you do not use a network volume, the Worker will have to download the model every time it spins back up, leading to increased latency and resource consumption.
+Use a [Network volume](/pods/storage/create-network-volumes) to attach to your Worker so that it can cache the LLM and decrease cold start times. 
+If you do not use a network volume, the Worker will have to download the model every time it spins back up, leading to increased latency and resource consumption.
 
 :::
 
