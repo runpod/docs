@@ -157,10 +157,9 @@ mutation {
   </TabItem>
 </Tabs>
 
-
 ### Filter by Allowed CUDA Versions
 
-You can pass in the `allowedCudaVersions` as a list of CUDA versions that you want to allow for the GPU in the pod. 
+You can pass in the `allowedCudaVersions` as a list of CUDA versions that you want to allow for the GPU in the pod.
 
 This helps in specifying the compatible CUDA versions for your GPU setup.
 
@@ -176,7 +175,7 @@ curl --request POST \
   }'
 ```
 
-  </TabItem>
+</TabItem>
   <TabItem value="graphql" label="GraphQL">
 
 ```graphql
@@ -198,7 +197,7 @@ mutation {
 }
 ```
 
-  </TabItem>
+</TabItem>
   <TabItem value="output" label="Output">
 
 ```json
@@ -220,7 +219,7 @@ mutation {
 }
 ```
 
-  </TabItem>
+</TabItem>
 </Tabs>
 ## Start Pods
 

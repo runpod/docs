@@ -4,7 +4,7 @@ description: "RunPod is a cloud computing platform for AI, machine learning, and
 sidebar_position: 1
 ---
 
-**RunPod** is a cloud computing platform designed for AI, machine learning applications, and general computing needs. 
+**RunPod** is a cloud computing platform designed for AI, machine learning applications, and general computing needs.
 
 Leverage our platform to execute your code using both GPU and CPU resources through our [Pods](/pods/overview) and [Serverless](/serverless/overview) computing options.
 
@@ -12,15 +12,15 @@ Start today by [signing up for an account](https://www.runpod.io/console/signup)
 
 ## What are Pods?
 
-**Pods** allow you to run your code on GPU and CPU instances using containers. 
+**Pods** allow you to run your code on GPU and CPU instances using containers.
 
 Pods are available in two types: [Secure Cloud and Community Cloud](references/faq/#secure-cloud-vs-community-cloud). Secure Cloud operates in T3/T4 data centers, providing high reliability and security. Community Cloud connects individual compute providers to consumers through a vetted, secure peer-to-peer system.
 
 ## What is Serverless?
 
-**Serverless** offers pay-per-second serverless computing with autoscaling capabilities for your production environment. 
+**Serverless** offers pay-per-second serverless computing with autoscaling capabilities for your production environment.
 
-Define a Worker, create a REST API Endpoint for it, queue jobs, and enjoy autoscaling to meet demand. 
+Define a Worker, create a REST API Endpoint for it, queue jobs, and enjoy autoscaling to meet demand.
 This service, part of our Secure Cloud offering, ensures low cold-start times and robust security measures.
 
 Get started with:

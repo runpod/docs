@@ -3,8 +3,7 @@ title: Projects
 sidebar_position: 1
 ---
 
-
-A RunPod project is a structured environment that allows you to develop, test, and deploy applications and endpoints on RunPod's cloud infrastructure. 
+A RunPod project is a structured environment that allows you to develop, test, and deploy applications and endpoints on RunPod's cloud infrastructure.
 It encapsulates all the necessary files, dependencies, and configurations needed to run a development session on a Pod, making it easier to manage and maintain your codebase.
 
 ## Why Use RunPod Projects?
@@ -20,7 +19,6 @@ By leveraging RunPod's infrastructure, projects can scale effortlessly. You can 
 - Simplified Deployment
 
 Deploying a project on RunPod is straightforward. With a single command, you can turn your project into a serverless endpoint, making it accessible over the internet. This reduces the time and effort required to go from development to production.
-
 
 - Local vs. Cloud Environment
 

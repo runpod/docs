@@ -4,7 +4,7 @@ title: Run Docker in Docker on RunPod CPU Instances
 
 :::note
 
-This tutorial applies only to RunPod's CPU offering. 
+This tutorial applies only to RunPod's CPU offering.
 It is not possible to run Docker inside of a GPU at this time.
 
 For information on building Docker images on GPUs, see [Build Docker Images with Bazel](/tutorials/pods/build-docker-images).
@@ -30,7 +30,7 @@ For more information, see [Manage Pods](/pods/manage-pods#start-a-pod).
 
 ## Install Docker
 
-You can install Docker using one of the following methods. 
+You can install Docker using one of the following methods.
 Ensure you have root privileges.
 
 ### From the Docker Install Script
@@ -87,6 +87,5 @@ docker run hello-world
 
 If the container runs successfully and outputs a welcome message from Docker, you have successfully set up Docker in Docker on a RunPod CPU instance.
 
-
-You now have Docker running inside a Docker container on a RunPod CPU instance. 
+You now have Docker running inside a Docker container on a RunPod CPU instance.
 This setup allows you to manage and run additional containers as needed, leveraging the flexibility and power of Docker within a virtualized environment provided by RunPod.
