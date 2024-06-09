@@ -69,6 +69,12 @@ For the purposes of using Docker with RunPod, you should ensure your build comma
 
 ## Volumes
 
+:::note
+
+When working with a Docker and RunPod, see how to [attach a Network Volume](/pods/storage/create-network-volumes).
+
+:::
+
 `docker volume create` - Creates a persisted and managed volume that can outlive containers.
 `docker run -v` - Mounts a volume into a specific container to allow persisting data past container lifecycle.
 
