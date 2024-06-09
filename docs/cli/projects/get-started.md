@@ -24,7 +24,7 @@ Before we begin, you'll need the following:
 - RunPod CLI
 - Python 3.8 or later
 
-## Step 1. Set up the project environment
+## Set up the project environment
 
 In this first step, you'll set up your project environment using the RunPod CLI.
 
@@ -42,7 +42,7 @@ runpodctl project create
 
 Select the **Hello World** project and follow the prompts on the screen.
 
-## Step 2. Write the code
+## Write the code
 
 Next, you'll write the code to get the IP address of the machine your code is running on.
 
@@ -93,7 +93,7 @@ This testing environment works for smaller projects, but for larger projects, yo
 
 In the next step, you'll see how to deploy your code to the RunPod platform.
 
-## Step 3. Run a development server
+## Run a development server
 
 Now let's run the code you've written using RunPod's development server.
 You'll start a development server using the RunPod CLI `project dev` command.
@@ -126,7 +126,7 @@ The `[lug43rcd07ug47]` is your Worker Id.
 The `https://lug43rcd07ug47-8080.proxy.runpod.net` is the URL to access your Pod with the 8080 port exposed.
 You can interact with this URL like you would any other Endpoint.
 
-## Step 4. Interact with your code
+## Interact with your code
 
 In this step, you'll interact with your code by running a `curl` command to fetch the IP address from the development server.
 You'll learn how to include dependencies in your project and how to use the RunPod API to run your code.
@@ -187,7 +187,7 @@ You only wanted it to turn on when you sent a request to it.
 
 In the next step, you'll learn to deploy your code to the Serverless platform and get the IP address of that machine.
 
-## Step 5. Deploy your code
+## Deploy your code
 
 Now that you've tested your code in the development environment, you'll deploy it to the RunPod platform using the RunPod CLI `project deploy` command.
 This will make your code available as a [Serverless Endpoint](/serverless/endpoints/overview).
@@ -218,7 +218,7 @@ You may notice that the logs show the Pod being created and then the Endpoint be
 
 :::
 
-## Step 6. Interact with your Endpoint
+## Interact with your Endpoint
 
 Finally, you'll interact with your Endpoint by running a `curl` command to fetch the IP address from the deployed Serverless function.
 You'll see how your code runs as expected and tested in the development environment.
