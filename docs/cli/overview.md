@@ -70,7 +70,7 @@ wget https://github.com/runpod/runpodctl/releases/latest/download/runpodctl-wind
 Before using RunPod CLI, configure your API key, which can be obtained from your [RunPod account](https://runpod.io/console/user/settings).
 
 ```bash
-runpodctl config --apiKey={key}
+runpodctl config --apiKey your-api-key
 ```
 
 ## Key Features
