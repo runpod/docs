@@ -43,7 +43,7 @@ RunPod aims to make cloud computing accessible and affordable for everyone, with
 
 For general inquiries, browse our documentation or reach out to us on [Discord](https://discord.gg/cUpRmau42V), our support chat, or by [email](mailto:support@runpod.io). More information is available on our [contact page](https://www.runpod.io/contact).
 
-## Where to Go Next?
+## Where to go next?
 
 Learn more about RunPod by:
 
