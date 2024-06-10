@@ -37,7 +37,7 @@ For more informaiton, see the following:
 - [GitHub](https://github.com/runpod/runpodctl)
 - [Reference documentation](/references/runpodctl)
 
-### Our Mission
+### Our mission
 
 RunPod aims to make cloud computing accessible and affordable for everyone, without compromising on features, usability, or experience. We empower individuals and enterprises with cutting-edge technology to unlock the potential of AI and cloud computing.
 
