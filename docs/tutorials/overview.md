@@ -11,7 +11,7 @@ Learn how to build and deploy applications on the RunPod platform with this set 
 
 Explore how to run and deploy AI applications using RunPod's Serverless platform.
 
-### GPU
+### GPUs
 
 - [Generate images with SDXL Turbo](/tutorials/serverless/gpu/generate-sdxl-turbo): Learn how to build a web application using RunPod's Serverless Workers and SDXL Turbo from Stability AI, a fast text-to-image model, and send requests to an Endpoint to generate images from text-based inputs.
 - [Run Google's Gemma model](/tutorials/serverless/gpu/run-gemma-7b): Deploy Google's Gemma model on RunPod's vLLM Worker, create a Serverless Endpoint, and interact with the model using OpenAI APIs and Python.
@@ -25,7 +25,7 @@ Explore how to run and deploy AI applications using RunPod's Serverless platform
 
 Discover how to leverage RunPod Pods to run and manage your AI applications.
 
-### GPU
+### GPUs
 
 - [Fine tune an LLM with Axolotl on RunPod](/tutorials/pods/fine-tune-llm-axolotl): Learn how to fine-tune large language models with Axolotl on RunPod, a streamlined workflow for configuring and training AI models with GPU resources, and explore examples for LLaMA2, Gemma, LLaMA3, and Jamba.
 - [Run Fooocus in Jupyter Notebook](/tutorials/pods/run-fooocus): Learn how to run Fooocus, an open-source image generating model, in a Jupyter Notebook and launch the Gradio-based interface in under 5 minutes, with minimal requirements of 4GB Nvidia GPU memory and 8GB system memory.
@@ -34,7 +34,7 @@ Discover how to leverage RunPod Pods to run and manage your AI applications.
 - [Set up Ollama on your GPU Pod](/tutorials/pods/run-ollama): Set up Ollama, a powerful language model, on a GPU Pod using RunPod, and interact with it through HTTP API requests, harnessing the power of GPU acceleration for your AI projects.
 - [Run your first Fast Stable Diffusion with Jupyter Notebook](/tutorials/pods/run-your-first): Deploy a Jupyter Notebook to RunPod and generate your first image with Stable Diffusion in just 20 minutes, requiring Hugging Face user access token, RunPod infrastructure, and basic familiarity with the platform.
 
-### CPU
+### CPUs
 
 - [Run Docker in Docker on RunPod CPU Instances](/tutorials/pods/run-docker-in-docker): Learn how to run Docker in Docker on RunPod CPU instances for enhanced development and testing capabilities.
 
