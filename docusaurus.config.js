@@ -121,6 +121,7 @@ const config = {
         },
 
         { href: "https://blog.runpod.io", label: "Blog", position: "left" },
+        { href: "https://www.runpod.io/console/signup", label: "Sign up", position: "left" },
         {
           href: "https://github.com/runpod",
           label: "GitHub",
