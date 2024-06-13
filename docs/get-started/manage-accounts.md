@@ -8,7 +8,7 @@ You will need to create an account or get invited by a team member to use RunPod
 
 ## Create an account
 
-Sign up for an account at [RunPod.io](https://www.runpod.io).
+Sign up for an account at [RunPod.io](https://www.runpod.io/console/signup).
 
 ### Convert personal account to a team account
 
