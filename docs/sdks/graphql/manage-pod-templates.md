@@ -7,7 +7,7 @@ description: Create, modify, and delete templates in RunPod using GraphQL API wi
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-Requrired arguments:
+Required arguments:
 
 - `containerDiskInGb`
 - `dockerArgs`
@@ -31,14 +31,17 @@ Template names must be unique as well; if you try to create a new template with 
 
 <Tabs>
   <TabItem value="curl" label="cURL" default>
+
 ```curl
 curl --request POST \
   --header 'content-type: application/json' \
   --url 'https://api.runpod.io/graphql?api_key=${YOUR_API_KEY}' \
   --data '{"query": "mutation { saveTemplate(input: { containerDiskInGb: 5, dockerArgs: \"sleep infinity\", env: [ { key: \"key1\", value: \"value1\" }, { key: \"key2\", value: \"value2\" } ], imageName: \"ubuntu:latest\", name: \"Generated Template\", ports: \"8888/http,22/tcp\", readme: \"## Hello, World!\", volumeInGb: 15, volumeMountPath: \"/workspace\" }) { containerDiskInGb dockerArgs env { key value } id imageName name ports readme volumeInGb volumeMountPath } }"}'
 ```
-  </TabItem>
+
+</TabItem>
   <TabItem value="graphql" label="GraphQL">
+
 ```graphql
 mutation {
   saveTemplate(input: {
@@ -77,8 +80,10 @@ mutation {
   }
 }
 ```
-  </TabItem>
+
+</TabItem>
   <TabItem value="output" label="Output">
+
 ```json
 {
   "data": {
@@ -106,7 +111,8 @@ mutation {
   }
 }
 ```
-  </TabItem>
+
+</TabItem>
 </Tabs>
 
 ### Create Serverless Template
@@ -115,14 +121,17 @@ For Serverless templates, always pass `0` for `volumeInGb`, since Serverless wor
 
 <Tabs>
   <TabItem value="curl" label="cURL" default>
+
 ```curl
 curl --request POST \
   --header 'content-type: application/json' \
   --url 'https://api.runpod.io/graphql?api_key=${YOUR_API_KEY}' \
   --data '{"query": "mutation { saveTemplate(input: { containerDiskInGb: 5, dockerArgs: \"python handler.py\", env: [ { key: \"key1\", value: \"value1\" }, { key: \"key2\", value: \"value2\" } ], imageName: \"runpod/serverless-hello-world:latest\", isServerless: true, name: \"Generated Serverless Template\", readme: \"## Hello, World!\", volumeInGb: 0 }) { containerDiskInGb dockerArgs env { key value } id imageName isServerless name readme } }"}'
 ```
-  </TabItem>
+
+</TabItem>
   <TabItem value="graphql" label="GraphQL">
+
 ```graphql
 mutation {
   saveTemplate(input: {
@@ -158,8 +167,10 @@ mutation {
   }
 }
 ```
-  </TabItem>
+
+</TabItem>
   <TabItem value="output" label="Output">
+
 ```json
 {
   "data": {
@@ -185,7 +196,8 @@ mutation {
   }
 }
 ```
-  </TabItem>
+
+</TabItem>
 </Tabs>
 
 ## Modify a Template
@@ -194,14 +206,17 @@ mutation {
 
 <Tabs>
   <TabItem value="curl" label="cURL" default>
+
 ```curl
 curl --request POST \
   --header 'content-type: application/json' \
   --url 'https://api.runpod.io/graphql?api_key=${YOUR_API_KEY}' \
   --data '{"query": "mutation { saveTemplate(input: { id: \"wphkv67a0p\", containerDiskInGb: 5, dockerArgs: \"sleep infinity\", env: [ { key: \"key1\", value: \"value1\" }, { key: \"key2\", value: \"value2\" } ], imageName: \"ubuntu:latest\", name: \"Generated Template\", volumeInGb: 15, readme: \"## Goodbye, World!\" }) { id containerDiskInGb dockerArgs env { key value } imageName name volumeInGb readme } }"}'
 ```
-  </TabItem>
+
+</TabItem>
   <TabItem value="graphql" label="GraphQL">
+
 ```graphql
 mutation {
   saveTemplate(input: {
@@ -221,8 +236,6 @@ mutation {
     imageName: "ubuntu:latest",
     name: "Generated Template",
     volumeInGb: 15,
-    # Modify your template options here (or above, if applicable).
-    # For this example, we've modified the template's README.
     readme: "## Goodbye, World!"
   }) {
     id
@@ -235,13 +248,14 @@ mutation {
     imageName
     name
     volumeInGb
-    # You can include what you've changed here, too.
     readme
   }
 }
 ```
-  </TabItem>
+
+</TabItem>
   <TabItem value="output" label="Output">
+
 ```json
 {
   "data": {
@@ -267,21 +281,27 @@ mutation {
   }
 }
 ```
-  </TabItem>
+
+</TabItem>
 </Tabs>
 
 ### Modify a Serverless Template
 
 <Tabs>
   <TabItem value="curl" label="cURL" default>
+
 ```curl
 curl --request POST \
   --header 'content-type: application/json' \
   --url 'https://api.runpod.io/graphql?api_key=${YOUR_API_KEY}' \
-  --data '{"query": "mutation { saveTemplate(input: { id: \"xkhgg72fuo\", containerDiskInGb: 5, dockerArgs: \"python handler.py\", env: [ { key: \"key1\", value: \"value1\" }, { key: \"key2\", value: \"value2\" } ], imageName: \"runpod/serverless-hello-world:latest\", name: \"Generated Serverless Template\", volumeInGb: 0, readme: \"## Goodbye, World!\" }) { id containerDiskInGb dockerArgs env { key value } imageName name readme } }"}'
+  --data '{"query": "mutation { saveTemplate(input: { id: \"xkhgg72fuo\", containerDisk
+
+InGb: 5, dockerArgs: \"python handler.py\", env: [ { key: \"key1\", value: \"value1\" }, { key: \"key2\", value: \"value2\" } ], imageName: \"runpod/serverless-hello-world:latest\", name: \"Generated Serverless Template\", volumeInGb: 0, readme: \"## Goodbye, World!\" }) { id containerDiskInGb dockerArgs env { key value } imageName name readme } }"}'
 ```
-  </TabItem>
+
+</TabItem>
   <TabItem value="graphql" label="GraphQL">
+
 ```graphql
 mutation {
   saveTemplate(input: {
@@ -301,8 +321,6 @@ mutation {
     imageName: "runpod/serverless-hello-world:latest",
     name: "Generated Serverless Template",
     volumeInGb: 0,
-    # Modify your template options here (or above, if applicable).
-    # For this example, we've modified the template's README.
     readme: "## Goodbye, World!"
   }) {
     id
@@ -314,13 +332,14 @@ mutation {
     }
     imageName
     name
-    # You can include what you've changed here, too.
     readme
   }
 }
 ```
-  </TabItem>
+
+</TabItem>
   <TabItem value="output" label="Output">
+
 ```json
 {
   "data": {
@@ -345,10 +364,11 @@ mutation {
   }
 }
 ```
-  </TabItem>
+
+</TabItem>
 </Tabs>
 
-## Delete a template
+## Delete a Template
 
 Note that the template you'd like to delete must not be in use by any Pods or assigned to any Serverless endpoints. It can take up to 2 minutes to be able to delete a template after its most recent use by a Pod or Serverless endpoint, too.
 
@@ -359,20 +379,23 @@ The same mutation is used for deleting both Pod and Serverless templates.
 
 ```curl
 curl --request POST \
-	--header 'content-type: application/json' \
+  --header 'content-type: application/json' \
   --url 'https://api.runpod.io/graphql?api_key=${YOUR_API_KEY}' \
   --data '{"query": "mutation { deleteTemplate(templateName: \"Generated Template\") }"}'
 ```
 
 </TabItem>
   <TabItem value="graphql" label="GraphQL">
+
 ```graphql
 mutation {
   deleteTemplate(templateName: "Generated Template")
 }
 ```
-  </TabItem>
+
+</TabItem>
   <TabItem value="output" label="Output">
+
 ```json
 {
   "data": {
@@ -380,5 +403,41 @@ mutation {
   }
 }
 ```
+
+</TabItem>
+</Tabs>
+
+
+
+## Create a Secret
+
+To create a secret, you need to send a GraphQL mutation request. This request will include the `secretCreate` mutation with the required input fields `value` and `name`. The `value` represents the actual secret, and the `name` is a unique identifier for the secret.
+
+<Tabs>
+  <TabItem value="curl" label="cURL" default>
+
+```curl
+curl --request POST \
+  --header 'content-type: application/json' \
+  --url 'https://api.runpod.io/graphql?api_key=${YOUR_API_KEY}' \
+  --data '{"query": "mutation { secretCreate(input: { value: \"i am a test secret\", name: \"i-am-a-secret\" }) { id name description } }"}'
+```
+
+  </TabItem>
+  <TabItem value="graphql" label="GraphQL">
+
+```graphql
+mutation {
+  secretCreate(input: {
+    value: "i am a test secret",
+    name: "i-am-a-secret"
+  }) {
+    id
+    name
+    description
+  }
+}
+```
+
   </TabItem>
 </Tabs>
