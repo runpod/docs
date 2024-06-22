@@ -78,15 +78,36 @@ For a complete list of available environment variables, see the [vLLM Worker var
 
 ## Send a request
 
-This section walks you through sending a request to your Serverless Endpoint.
-The vLLM Worker can use any Hugging Face model and is compatible with OpenAI's API.
-If you have the OpenAI library installed, you can continue using it with the vLLM Worker.
-See the [OpenAI documentation](https://platform.openai.com/docs/libraries/) for more information.
+This section walks you through sending a request to your Serverless Endpoint. 
+The vLLM Worker can use any Hugging Face model and is compatible with OpenAI's API. 
+If you have the OpenAI library installed, you can continue using it with the vLLM Worker. See the [OpenAI documentation](https://platform.openai.com/docs/libraries/) for more information.
 
-### Initialize your project
+### Environment setup
+
+Set the `RUNPOD_ENDPOINT_ID` and `RUNPOD_API_KEY` environment variables with your Endpoint ID and API Key.
+
+<Tabs>
+  <TabItem value="macos" label="macOS" default>
+    
+  ```bash
+  export RUNPOD_ENDPOINT_ID=<YOUR_RUNPOD_ENDPOINT_ID>
+  export RUNPOD_API_KEY=<YOUR_RUNPOD_API_KEY>
+  ```
+
+  </TabItem>
+  <TabItem value="windows" label="Windows">
+    
+  ```bash
+  set RUNPOD_ENDPOINT_ID=<YOUR_RUNPOD_ENDPOINT_ID>
+  set RUNPOD_API_KEY=<YOUR_RUNPOD_API_KEY>
+  ```
+
+  </TabItem>
+</Tabs>
+
+### Code implementation
 
 Choose your programming language and add the following code to your file.
-Set the `RUNPOD_ENDPOINT_ID` and `RUNPOD_API_KEY` environment variables with your Endpoint ID and API Key.
 
 <Tabs>
   <TabItem value="python" label="Python" default>
@@ -119,7 +140,7 @@ Install the OpenAI library if needed:
 pip install openai
 ```
 
-</TabItem>
+  </TabItem>
   <TabItem value="node.js" label="Node.js">
 
 Create a file called `main.js` with the following code:
@@ -128,8 +149,7 @@ Create a file called `main.js` with the following code:
 import OpenAI from "openai";
 
 const openai = new OpenAI({
-  baseURL:
-    `https://api.runpod.ai/v2/${process.env.RUNPOD_ENDPOINT_ID}/openai/v1`,
+  baseURL: `https://api.runpod.ai/v2/${process.env.RUNPOD_ENDPOINT_ID}/openai/v1`,
   apiKey: process.env.RUNPOD_API_KEY,
 });
 
@@ -147,7 +167,7 @@ Install the OpenAI library if needed:
 npm install openai
 ```
 
-</TabItem>
+  </TabItem>
   <TabItem value="curl" label="cURL">
 
 Run the following command in your terminal:
@@ -167,7 +187,7 @@ curl https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/openai/v1/chat/completions \
     }'
 ```
 
-</TabItem>
+  </TabItem>
 </Tabs>
 
 ### Run your code
@@ -181,15 +201,17 @@ Run your code from the terminal:
 python main.py
 ```
 
-</TabItem>
+  </TabItem>
   <TabItem value="node.js" label="Node.js">
 
 ```bash
 node main.js
 ```
 
-</TabItem>
+  </TabItem>
 </Tabs>
+
+### Output
 
 The output should look similar to:
 
@@ -218,6 +240,7 @@ The output should look similar to:
 ```
 
 You have now successfully sent a request to your Serverless Endpoint and received a response.
+
 
 ## Troubleshooting
 
