@@ -58,11 +58,10 @@ const config = {
         },
         */
         theme: {
-        customCss: [
+          customCss: [
             "./src/css/custom.css",
             // require.resolve("@code-hike/mdx/styles.css"),
           ],
-     
         },
       }),
     ],
@@ -198,7 +197,6 @@ const config = {
         hideable: true,
       },
     },
-
     /* announcementBar: {
       id: "ollama-cpu",
       content:
@@ -224,7 +222,7 @@ const config = {
       async: true,
       defer: true,
     },
-    //{
+    // {
     // src: "/scripts/fullstory.js",
     //  async: true,
     //  defer: true,

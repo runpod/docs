@@ -407,8 +407,6 @@ mutation {
 </TabItem>
 </Tabs>
 
-
-
 ## Create a Secret
 
 To create a secret, you need to send a GraphQL mutation request. This request will include the `secretCreate` mutation with the required input fields `value` and `name`. The `value` represents the actual secret, and the `name` is a unique identifier for the secret.
@@ -423,7 +421,7 @@ curl --request POST \
   --data '{"query": "mutation { secretCreate(input: { value: \"i am a test secret\", name: \"i-am-a-secret\" }) { id name description } }"}'
 ```
 
-  </TabItem>
+</TabItem>
   <TabItem value="graphql" label="GraphQL">
 
 ```graphql
@@ -439,5 +437,5 @@ mutation {
 }
 ```
 
-  </TabItem>
+</TabItem>
 </Tabs>
