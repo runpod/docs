@@ -305,6 +305,11 @@ runpod.serverless.start(
 
 </Tabs>
 
+:::note
+
+The maximum size for a payload that can be sent using yield to stream results is 1 MB. 
+
+:::
 ## Status
 
 Returns the status of the Job request.

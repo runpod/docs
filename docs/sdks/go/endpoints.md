@@ -456,6 +456,12 @@ runpod.serverless.start(
 </TabItem>
 </Tabs>
 
+:::note
+
+The maximum size for a payload that can be sent using yield to stream results is 1 MB. 
+
+:::
+
 ## Health check
 
 Monitor the health of an endpoint by checking its status, including jobs completed, failed, in progress, in queue, and retried, as well as the status of workers.
