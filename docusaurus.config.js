@@ -4,9 +4,10 @@
 // There are various equivalent ways to declare your Docusaurus config.
 // See: https://docusaurus.io/docs/api/docusaurus-config
 import { injectSpeedInsights } from "@vercel/speed-insights";
-const {
+/* const {
   remarkCodeHike,
 } = require("@code-hike/mdx");
+*/
 import path from "path";
 import { themes as prismThemes } from "prism-react-renderer";
 
@@ -42,9 +43,10 @@ const config = {
           sidebarCollapsible: true,
           routeBasePath: "",
           editUrl: "https://github.com/runpod/docs/blob/main",
-          beforeDefaultRemarkPlugins: [
+          /* beforeDefaultRemarkPlugins: [
             [remarkCodeHike, { theme: "nord" }],
           ],
+          */
         },
         /*
         blog: {
@@ -58,7 +60,7 @@ const config = {
         theme: {
           customCss: [
             "./src/css/custom.css",
-            require.resolve("@code-hike/mdx/styles.css"),
+            // require.resolve("@code-hike/mdx/styles.css"),
           ],
         },
       }),
@@ -195,8 +197,7 @@ const config = {
         hideable: true,
       },
     },
-
-    announcementBar: {
+    /* announcementBar: {
       id: "ollama-cpu",
       content:
         "Checkout our new Serverless CPU by running <a href=\"https://docs.runpod.io/tutorials/serverless/cpu/run-ollama-inference/\">inference with Ollama</a>.",
@@ -204,6 +205,7 @@ const config = {
       textColor: "#ffffff",
       isCloseable: true,
     },
+    */
   },
 
   scripts: [
@@ -220,11 +222,11 @@ const config = {
       async: true,
       defer: true,
     },
-    {
-      src: "/scripts/fullstory.js",
-      async: true,
-      defer: true,
-    },
+    // {
+    // src: "/scripts/fullstory.js",
+    //  async: true,
+    //  defer: true,
+    /// },
   ],
   plugins: [
     [

@@ -80,13 +80,34 @@ For a complete list of available environment variables, see the [vLLM Worker var
 
 This section walks you through sending a request to your Serverless Endpoint.
 The vLLM Worker can use any Hugging Face model and is compatible with OpenAI's API.
-If you have the OpenAI library installed, you can continue using it with the vLLM Worker.
-See the [OpenAI documentation](https://platform.openai.com/docs/libraries/) for more information.
+If you have the OpenAI library installed, you can continue using it with the vLLM Worker. See the [OpenAI documentation](https://platform.openai.com/docs/libraries/) for more information.
 
-### Initialize your project
+### Environment setup
+
+Set the `RUNPOD_ENDPOINT_ID` and `RUNPOD_API_KEY` environment variables with your Endpoint ID and API Key.
+
+<Tabs>
+  <TabItem value="macos" label="macOS" default>
+
+```bash
+export RUNPOD_ENDPOINT_ID=<YOUR_RUNPOD_ENDPOINT_ID>
+export RUNPOD_API_KEY=<YOUR_RUNPOD_API_KEY>
+```
+
+</TabItem>
+  <TabItem value="windows" label="Windows">
+
+```bash
+set RUNPOD_ENDPOINT_ID=<YOUR_RUNPOD_ENDPOINT_ID>
+set RUNPOD_API_KEY=<YOUR_RUNPOD_API_KEY>
+```
+
+</TabItem>
+</Tabs>
+
+### Code implementation
 
 Choose your programming language and add the following code to your file.
-Set the `RUNPOD_ENDPOINT_ID` and `RUNPOD_API_KEY` environment variables with your Endpoint ID and API Key.
 
 <Tabs>
   <TabItem value="python" label="Python" default>
@@ -190,6 +211,8 @@ node main.js
 
 </TabItem>
 </Tabs>
+
+### Output
 
 The output should look similar to:
 
