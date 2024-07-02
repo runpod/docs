@@ -52,10 +52,6 @@ It is designed to bring autoscaling to your production environment, meaning it c
 Serverless GPU is a pay-per-second serverless GPU computing solution.
 It is designed to bring autoscaling to your production environment, meaning it can dynamically adjust computational resources based on your application's needs.
 
-## Serverless CPU
-
-Serverless CPU is a pay-per-second serverless CPU computing solution. It is designed to bring autoscaling to your production environment, meaning it can dynamically adjust computational resources based on your application's needs.
-
 ## Template
 
 A RunPod template is a Docker container image paired with a configuration.
