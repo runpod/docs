@@ -1,45 +1,42 @@
 ---
-title: Referral programs
-sidebar_position: 5
-description: "Learn how to earn additional revenue with RunPod's referral programs and template program, offering credits for referring users and template creators."
+title: Referral programs  
+sidebar_position: 5  
+description: "Learn how to earn additional revenue with RunPod's referral programs and template program, offering credits for referring users and template creators."  
 ---
 
-RunPod offers two referral programs and a template program that allow users to earn additional revenue in the form of RunPod Credits.
-This document provides an overview of these programs and instructions on how to participate.
+RunPod offers two referral programs and a template program that allow users to earn additional revenue in the form of RunPod Credits. This document provides an overview of these programs and instructions on how to participate.
 
 ## Referral Programs
 
 ### 1. Serverless Referral Program (BETA)
 
-The Serverless Referral Program rewards both the referrer and the referred user with RunPod Credits when the referred user spends a certain amount on Serverless.
+The Serverless Referral Program rewards the referrer with RunPod Credits when the referred user spends a certain amount on Serverless.
 
 #### Rewards
 
-- Referrer: Earns $500 in RunPod Credits
-- Referred User: Earns $500 in RunPod Credits
+- Referrer: Earns 5% in RunPod Credits for Serverless spend
 
 #### Eligibility
 
-- The referred user must spend $1000 on Serverless.
+- Till December 31st, 2024.
 
-### 2. Referral Program (BETA)
+### 2. Pod Referral Program (BETA)
 
-The Referral Program allows users to earn a percentage of the money spent by their referred users for the lifetime of their account.
+The Pod Referral Program allows users to earn a percentage of the money spent by their referred users for the lifetime of their account.
 
 #### Rewards
 
-- Referrer: Earns 2% in RunPod Credits for every penny spent by the referred user.
+- Referrer: Earns 3% in RunPod Credits for every penny spent by the referred user on GPU Pods.
 
 #### Example
 
-- If 20 referrals spend $100 each, the referrer earns $40.
+- If 20 referrals spend $100 each on GPU Pods, the referrer earns $60.
 
 #### Eligibility
 
-- The referrer must have at least 25 referrals and a minimum of $500 in referral spend.
-- To be eligible, [contact RunPod](https://contact.runpod.io/hc/en-us/requests/new) once these criteria are met.
+- Till December 31st, 2024.
 
-## Template Program (BETA)
+### 3. Template Referral Program (BETA)
 
 The Template Program allows users to earn a percentage of the money spent by users who use their Pod Template.
 
@@ -57,15 +54,14 @@ The Template Program allows users to earn a percentage of the money spent by use
 
 ## How to Participate
 
-### Serverless Referral Program
-
-- Follow the instructions on the Serverless Referral Program page to refer users.
-
-### Referral Program
-
 1. Access your [referral dashboard](https://www.runpod.io/console/user/referrals).
-2. Locate your unique referral link. For example `https://runpod.io?ref=5t99c9je`.
+2. Locate your unique referral link. For example, `https://runpod.io?ref=5t99c9je`.
 3. Share your referral link with potential users.
+
+#### Important Notes
+
+1. Commissions are calculated as a percentage of credits used, not credits purchased. So if your friend purchases $1000 in credits, you won't receive a commission until they use them.
+2. Referrals are only valid when the referred user creates a new account using your referral link. If your referral already had a RunPod account, you won't receive a commission for referring them.
 
 ## Support
 
