@@ -27,7 +27,7 @@ The basic terminal SSH access that RunPod exposes is not a full SSH connection a
 - An SSH daemon is started. If you're using a RunPod official template such as RunPod Stable Diffusion, you don't need to take any additional steps. If you're using a custom template, make sure your template has TCP port 22 exposed and use the following Docker command. If you have an existing start command, replace `sleep infinity` at the end with your existing command:
 
 ```bash
-bash -c 'apt update;DEBIAN_FRONTEND=noninteractive apt-get install openssh-server -y;mkdir -p ~/.ssh;cd $_;chmod 700 ~/.ssh;echo "$RUNPOD_SSH_PUBLIC_KEY" >> authorized_keys;chmod 700 authorized_keys;service ssh start;sleep infinity'
+bash -c 'apt update;DEBIAN_FRONTEND=noninteractive apt-get install openssh-server -y;mkdir -p ~/.ssh;cd $_;chmod 700 ~/.ssh;echo "$PUBLIC_KEY" >> authorized_keys;chmod 700 authorized_keys;service ssh start;sleep infinity'
 ```
 
 ![](/img/docs/97823c6-image.png)
