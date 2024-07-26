@@ -22,8 +22,8 @@ To begin, you need to set up a new endpoint on RunPod.
 2. Navigate to the **Serverless** section and select **New Endpoint**.
 3. Choose **CPU** and provide a name for your Endpoint, for example 8 vCPUs 16 GB RAM.
 4. Configure your Worker settings according to your needs.
-5. In the **Container Image** field, enter the `pooyaharatian/runpod-ollama:0.0.8` container image.
-6. In the **Container Start Command** field, specify the [Ollama supported model](https://ollama.com/library), such as `orca-mini`.
+5. In the **Container Image** field, enter the `pooyaharatian/runpod-ollama:0.0.9` container image.
+6. In the **Container Start Command** field, specify the [Ollama supported model](https://ollama.com/library), such as `orca-mini` or `llama3.1`.
 7. Allocate sufficient container disk space for your model. Typically, 20 GB should suffice for most models.
 8. (optional) In **Enviroment Variables** set a new key to `OLLAMA_MODELS` and its value to `/runpod-volume`. This will allow the model to be stored to your attached volume.
 9. Click **Deploy** to initiate the setup.
