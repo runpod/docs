@@ -232,6 +232,4 @@ Table last generated: 2024-06-04
 | Ryzen 5 5600X                                   |     6 |              2 |
 | Ryzen 9 5900X                                   |    12 |              2 |
 | Ryzen Threadripper PRO 3955WX                   |    16 |              2 |
-| unknown                                         |     0 |              0 |
-| nan                                             |   nan |            nan |
-| nan                                             |   nan |            nan |
+
