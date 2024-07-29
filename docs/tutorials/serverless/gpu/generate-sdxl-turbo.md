@@ -100,7 +100,7 @@ This step will walk you through deploying a Serverless Endpoint to RunPod.
    4. (optional) Select **FlashBoot**.
    5. (optional) Select a template.
    6. Enter the name of your Docker image.
-      - For example, `runpod/sdxl-turbo:latest`.
+      - For example, `runpod/sdxl-turbo:dev`.
    7. Specify enough memory for your Docker image.
 4. Select **Deploy**.
 
