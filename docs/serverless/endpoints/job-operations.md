@@ -264,7 +264,7 @@ curl https://api.runpod.ai/v2/{endpoint_id}/stream/{job_id} \
 
 :::note
 
-The maximum size for a payload that can be sent using yield to stream results is 1 MB. 
+The maximum size for a payload that can be sent using yield to stream results is 1 MB.
 
 :::
 
