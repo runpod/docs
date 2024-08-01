@@ -69,3 +69,4 @@ Run the formatter.
 ```bash
 git ls-files -z -- '*.md' | xargs -0 blacken-docs
 ```
+
