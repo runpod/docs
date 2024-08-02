@@ -6,14 +6,16 @@ description: "This document provides guidance to troubleshoot the storage full, 
 
 Storage full can occur when users generate many files, transfer files, or perform other storage-intensive tasks. This document provides guidance to help you troubleshoot this.
 
-### Check Disk Usage
+## Check Disk Usage
 
 When encountering a storage full, the first step is to check your container’s disk usage. You can use the `df -h` command to display a summary of disk usage.
 
 ```bash
 df -h
 ```
+
 Example output:
+
 ```bash
 root@9b8e325167b2:/# df -h
 Filesystem                    Size  Used Avail Use% Mounted on
@@ -31,7 +33,8 @@ tmpfs                         252G     0  252G   0% /proc/scsi
 tmpfs                         252G     0  252G   0% /sys/firmware
 tmpfs                         252G     0  252G   0% /sys/devices/virtual/powercap
 ```
-### Key Areas to Check
+
+## Key Areas to Check
 
 **Container Disk Usage**: The primary storage area for your container is mounted on the `overlay` filesystem. This indicates the container’s root directory.
 
@@ -59,11 +62,11 @@ root@9b8e325167b2:/# find /workspace -type f -exec du -h {} + | sort -rh | head 
 512     /workspace/a.txt
 ```
 
-### Removing Files and Directories
+## Removing Files and Directories
 
 Once you’ve identified large files or directories that are no longer needed, you can remove them to free up space.
 
-:::warning 
+:::warning
 This will permanently delete the file, folder. Use with caution.
 :::
 
