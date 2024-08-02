@@ -1,19 +1,61 @@
 ---
-title: "Transfer files with SCP"
+title: "Transfer files"
 sidebar_position: 9
-description: "Transfer files to and from your Pod using SCP and rsync commands. Prerequisites include a Linux or WSL instance, SSH configured, and rsync installed. Follow syntax guides for secure file transfer and option flags for customization."
+description: "Transfer files to and from your Pod using runpotctl, SCP and rsync commands. Prerequisites include a Linux or WSL instance, runpotctl installed, SSH configured, and rsync installed. Follow syntax guides for secure file transfer and option flags for customization."
 ---
 
-Learn to transfer files to and from RunPod with Secure Copy Protocol (SCP).
+Learn to transfer files to and from RunPod.
 
 ## Prerequisites
 
-- Make sure your Pod is configured to use real SSH.
+- If you intend to use `runpodctl`, make sure it's installed on your machine, see [install runpodctl](../../cli/install-runpodctl.md)
+
+- If you intend to use `scp`, make sure your Pod is configured to use real SSH.
   For more information, see [use SSH](/pods/configuration/use-ssh).
 
-- If you intend to use rsync, make sure it's installed on both your local machine and your Pod with `apt install rsync`.
+- If you intend to use `rsync`, make sure it's installed on both your local machine and your Pod with `apt install rsync`.
 
 - Note the public IP address and external port from the SSH over exposed TCP command (you'll need these for the SCP/rsync commands).
+
+## Transferring with [runpodctl](../../cli/overview.md#data-transfer)
+
+The RunPod CLI (runpodctl) provides simple commands for transferring data between your machine and RunPod. **It’s preinstalled on all RunPod Pods** and uses one-time codes for secure authentication, so no API keys are required.
+
+#### Sending a File
+
+To send a file from source machine:
+
+```bash
+runpodctl send data.txt
+```
+
+Example output:
+
+```bash
+Sending 'data.txt' (5 B)
+Code is: 8338-galileo-collect-fidel
+On the other computer run
+
+runpodctl receive 8338-galileo-collect-fidel
+```
+
+#### Receiving a File
+
+To receive a file on destination machine:
+
+```bash
+runpodctl receive 8338-galileo-collect-fidel
+```
+
+Example output:
+
+```bash
+Receiving 'data.txt' (5 B)
+
+Receiving (<-149.36.0.243:8692)
+data.txt 100% |████████████████████| ( 5/ 5B, 0.040 kB/s)
+```
+
 
 ## Transferring with SCP
 
@@ -110,3 +152,8 @@ sending incremental file list
 sent 120 bytes  received 12 bytes  88.00 bytes/sec
 total size is 119  speedup is 0.90
 ```
+
+
+## Sync a volume to a cloud provider
+
+You can sync your volume to a cloud provider by clicking the **Cloud Sync** option under your **My Pods** page, For detailed instructions on connecting to AWS S3, Google Cloud Storage, Azure, Backblaze, Dropbox, and configuring these services, please refer to this [configuration guide](../configuration/export-data.md).
