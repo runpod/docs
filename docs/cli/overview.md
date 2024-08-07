@@ -113,11 +113,11 @@ For a comprehensive list of commands, refer to the [RunPod CLI reference documen
 
 ### Data Transfer
 
-RunPod CLI provides simple commands for transferring data between your local machine and RunPod. These commands do not require API keys due to built-in security measures using one-time codes.
+The RunPod CLI (runpodctl) provides simple commands for transferring data between your machine and RunPod. **It’s preinstalled on all RunPod Pods** and uses one-time codes for secure authentication, so no API keys are required.
 
 #### Sending a File
 
-To send a file from your local machine:
+To send a file from source machine:
 
 ```bash
 runpodctl send data.txt
@@ -135,7 +135,7 @@ runpodctl receive 8338-galileo-collect-fidel
 
 #### Receiving a File
 
-To receive a file on another machine:
+To receive a file on destination machine:
 
 ```bash
 runpodctl receive 8338-galileo-collect-fidel
@@ -150,7 +150,7 @@ Receiving (<-149.36.0.243:8692)
 data.txt 100% |████████████████████| ( 5/ 5B, 0.040 kB/s)
 ```
 
-### Using Google Drive
+### Transferring Files between Google Drive and RunPod
 
 You can also use Google Drive for transferring files via the following links for Google Colab:
 

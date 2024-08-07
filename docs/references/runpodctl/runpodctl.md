@@ -26,7 +26,7 @@ wget --quiet --show-progress https://github.com/runpod/runpodctl/releases/downlo
 ### Linux
 
 ```bash
-wget --quiet --show-progress https://github.com/Run-Pod/runpodctl/releases/download/v1.14.3/runpodctl-linux-amd -O runpodctl && chmod +x runpodctl && sudo cp runpodctl /usr/bin/runpodctl
+wget --quiet --show-progress https://github.com/Run-Pod/runpodctl/releases/download/v1.14.3/runpodctl-linux-amd64 -O runpodctl && chmod +x runpodctl && sudo cp runpodctl /usr/bin/runpodctl
 ```
 
 ### Windows (powershell)
