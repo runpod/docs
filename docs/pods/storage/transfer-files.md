@@ -56,7 +56,6 @@ Receiving (<-149.36.0.243:8692)
 data.txt 100% |████████████████████| ( 5/ 5B, 0.040 kB/s)
 ```
 
-
 ## Transferring with SCP
 
 The general syntax for sending files to a Pod with SCP is as follows (execute this on your local machine, and replace the x's with your Pod's external TCP port and IP; for this example, they are 43201 and 194.26.196.6, respectively):
@@ -152,7 +151,6 @@ sending incremental file list
 sent 120 bytes  received 12 bytes  88.00 bytes/sec
 total size is 119  speedup is 0.90
 ```
-
 
 ## Sync a volume to a cloud provider
 
