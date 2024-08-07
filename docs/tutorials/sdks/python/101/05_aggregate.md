@@ -5,8 +5,8 @@ description: "Learn how to use RunPod's Python SDK to aggregate results from gen
 sidebar_position: 6
 ---
 
-This tutorial will guide you through using the `return_aggregate_stream` feature in RunPod to simplify result handling in your serverless functions. 
-Using `return_aggregate_stream` allows you to automatically collect and aggregate all yielded results from a generator handler into a single response. 
+This tutorial will guide you through using the `return_aggregate_stream` feature in RunPod to simplify result handling in your serverless functions.
+Using `return_aggregate_stream` allows you to automatically collect and aggregate all yielded results from a generator handler into a single response.
 This simplifies result handling, making it easier to manage and return a consolidated set of results from asynchronous tasks, such as concurrent sentiment analysis or object detection, without needing additional code to collect and format the results manually.
 
 We'll create a multi-purpose analyzer that can perform sentiment analysis on text and object detection in images, demonstrating how to aggregate outputs efficiently.

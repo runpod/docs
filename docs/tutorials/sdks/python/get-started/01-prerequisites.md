@@ -8,7 +8,7 @@ sidebar_position: 2
 Setting up a proper development environment is fundamental to effectively building serverless AI applications using RunPod.
 This guide will take you through each necessary step to prepare your system for RunPod development, ensuring you have the correct tools and configurations.
 
-In this guide, you will learn how to  the RunPod library.
+In this guide, you will learn how to the RunPod library.
 
 When you're finished, you'll have a fully prepared environment to begin developing your serverless AI applications with RunPod.
 

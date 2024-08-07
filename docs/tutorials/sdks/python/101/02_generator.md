@@ -5,10 +5,10 @@ description: "Create a serverless function that streams results using RunPod's P
 sidebar_position: 3
 ---
 
-This tutorial will guide you through creating a serverless function using RunPod's Python SDK that simulates a text-to-speech (TTS) process. 
+This tutorial will guide you through creating a serverless function using RunPod's Python SDK that simulates a text-to-speech (TTS) process.
 We'll use a generator handler to stream results incrementally, demonstrating how to handle long-running tasks efficiently in a serverless environment.
 
-A generator in the RunPod's Python SDK is a special type of function that allows you to iterate over a sequence of values lazily. Instead of returning a single value and exiting, a generator yields multiple values, one at a time, pausing the function's state between each yield. 
+A generator in the RunPod's Python SDK is a special type of function that allows you to iterate over a sequence of values lazily. Instead of returning a single value and exiting, a generator yields multiple values, one at a time, pausing the function's state between each yield.
 This is particularly useful for handling large data streams or long-running tasks, as it allows the function to produce and return results incrementally, rather than waiting until the entire process is complete.
 
 ## Setting up your Serverless Function

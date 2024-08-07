@@ -36,7 +36,6 @@ These samples are complete Python libraries for common use cases.
 
 Continue your journey by following our sequenced lessons designed to deepen your understanding and skills:
 
-
 Here's a brief overview of each tutorial:
 
 1. [Prerequisites and setup](/tutorials/sdks/python/get-started/prerequisites):
@@ -53,41 +52,41 @@ Here's a brief overview of each tutorial:
    - Testing with JSON input files
    - Interpreting local test output
 
-3. [RunPod functions](/tutorials/sdks/python/101/hello):
+4. [RunPod functions](/tutorials/sdks/python/101/hello):
    - Creating a basic handler function
    - Understanding job input and output
    - Starting the serverless worker
    - Testing with command-line arguments
 
-4. [Using a Local Server](/tutorials/sdks/python/101/local-server-testing):
+5. [Using a Local Server](/tutorials/sdks/python/101/local-server-testing):
    - Setting up a local test server
    - Sending HTTP requests to your local function
    - Understanding server output and debugging
    - Comparing command-line and server-based testing
 
-5. [Building a Generator Handler for Streaming Results](/tutorials/sdks/python/101/generator):
+6. [Building a Generator Handler for Streaming Results](/tutorials/sdks/python/101/generator):
    - Understanding generator functions in RunPod's SDK
    - Creating a text-to-speech simulator with streaming output
    - Implementing a generator handler for incremental processing
    - Testing and debugging generator-based serverless functions
 
-6. [Advanced Handler Techniques](/tutorials/sdks/python/101/async):
+7. [Advanced Handler Techniques](/tutorials/sdks/python/101/async):
    - Synchronous vs asynchronous handlers
    - Using generator functions for streaming output
    - Handling multiple inputs and complex data structures
 
-7. [Error Handling and Logging](/tutorials/sdks/python/101/error):
+8. [Error Handling and Logging](/tutorials/sdks/python/101/error):
    - Implementing try-except blocks in handlers
    - Using RunPod's logging system
    - Best practices for error management in serverless functions
 
-8. [Hugging Face Integration](/tutorials/sdks/python/102/huggingface-models):
+9. [Hugging Face Integration](/tutorials/sdks/python/102/huggingface-models):
    - Installing and importing external libraries
    - Loading and using a Hugging Face model
    - Optimizing model loading for serverless environments
 
-9. [Stable Diffusion](/tutorials/sdks/python/102/stable-diffusion-text-to-image):
-   - Setting up a text-to-image generation function
-   - Handling larger inputs and outputs
+10. [Stable Diffusion](/tutorials/sdks/python/102/stable-diffusion-text-to-image):
+    - Setting up a text-to-image generation function
+    - Handling larger inputs and outputs
 
 Now, move on to the [prerequisites](/tutorials/sdks/python/get-started/prerequisites) and then set up [your first “Hello World”](/tutorials/sdks/python/get-started/hello-world) application with RunPod Python SDK.

@@ -4,13 +4,12 @@ description: "Learn how to leverage concurrent workers in your local testing env
 sidebar_position: 6
 ---
 
-In this tutorial, we'll dive deep into the `--rp_api_concurrency` argument of the RunPod Python SDK. 
+In this tutorial, we'll dive deep into the `--rp_api_concurrency` argument of the RunPod Python SDK.
 This powerful feature allows you to simulate multiple concurrent requests to your serverless function, mimicking real-world scenarios more closely.
 
 ## What is rp_api_concurrency?
 
 The `--rp_api_concurrency` argument controls the number of concurrent workers that the local FastAPI server uses when simulating the RunPod serverless environment. Each worker can handle a separate request simultaneously, allowing you to test how your function performs under parallel execution.
-
 
 ### Basic Usage
 
@@ -48,7 +47,7 @@ python counter_function.py --rp_serve_api --rp_api_concurrency 1
 ```
 
 3. In another terminal, use curl to send multiple requests.
-Create a new file called `counter.sh` and add the following to the file.
+   Create a new file called `counter.sh` and add the following to the file.
 
 ```bash
 for i in {1..10}; do
@@ -59,7 +58,6 @@ done
 To execute this file run `bash counter.sh`.
 
 4. Observe the results. With a single worker, the requests are processed sequentially, and you'll see the counter increment from 1 to 10.
-
 
 5. Now, let's run the function with multiple workers:
 
@@ -84,7 +82,7 @@ This error occurs because the RunPod SDK integrates with FastAPI to create the l
 8. To make this work, we need to rename our file to `main.py`. This allows Uvicorn to correctly import and run multiple instances of your application. Here's what you need to do:
 
    a. Rename your `counter_function.py` to `main.py`:
-   
+
    ```bash
    mv counter_function.py main.py
    ```
@@ -105,12 +103,12 @@ for i in {1..10}; do
 done
 ```
 
-10. Observe the results. With multiple workers, you might see inconsistent results due to race conditions. 
-The counter might not reach 10, and you may see duplicate values.
+10. Observe the results. With multiple workers, you might see inconsistent results due to race conditions.
+    The counter might not reach 10, and you may see duplicate values.
 
 ## Handling Concurrency in your code
 
-To make your function concurrency-safe, you need to use appropriate synchronization mechanisms. 
+To make your function concurrency-safe, you need to use appropriate synchronization mechanisms.
 Here's an improved version of the counter function:
 
 ```python
@@ -139,13 +137,12 @@ Now, even with multiple workers, the counter will increment correctly.
 4. **Monitor Resources**: Keep an eye on CPU and memory usage as you increase concurrency.
 5. **Use Logging**: Implement detailed logging to track the flow of concurrent executions.
 
-
-It's important to note that `--rp_api_concurrency` provides concurrent execution, not necessarily parallel execution. 
+It's important to note that `--rp_api_concurrency` provides concurrent execution, not necessarily parallel execution.
 The degree of parallelism depends on your system's capabilities and the nature of your function.
 
 ## Conclusion
 
 The `--rp_api_concurrency` argument is a powerful tool for testing your RunPod serverless functions under more realistic conditions. By simulating concurrent requests, you can identify and resolve issues related to race conditions, resource contention, and scalability before deploying to production.
 
-Remember, while local testing with concurrency is valuable, it's not a complete substitute for load testing in a production-like environment. 
+Remember, while local testing with concurrency is valuable, it's not a complete substitute for load testing in a production-like environment.
 Use this feature as part of a comprehensive testing strategy to ensure your serverless functions are robust and scalable.

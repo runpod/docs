@@ -5,7 +5,6 @@ description: "A step-by-step guide to creating and deploying serverless function
 sidebar_position: 1
 ---
 
-
 RunPod's serverless library enables you to create and deploy scalable functions without managing infrastructure.
 This tutorial will walk you through creating a simple serverless function that determines whether a number is even.
 

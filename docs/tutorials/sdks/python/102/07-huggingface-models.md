@@ -6,10 +6,9 @@ sidebar_position: 7
 
 Artificial Intelligence (AI) has revolutionized how applications analyze and interact with data. One powerful aspect of AI is sentiment analysis, which allows machines to interpret and categorize emotions expressed in text. In this tutorial, you will learn how to integrate pre-trained Hugging Face models into your RunPod Serverless applications to perform sentiment analysis. By the end of this guide, you will have a fully functional AI-powered sentiment analysis function running in a serverless environment.
 
-
 ### Install Required Libraries
 
-To begin, we need to install the necessary Python libraries. 
+To begin, we need to install the necessary Python libraries.
 Hugging Face's `transformers` library provides state-of-the-art machine learning models, while the `torch` library supports these models.
 
 Execute the following command in your terminal to install the required libraries:
@@ -158,9 +157,9 @@ INFO   | Local testing complete, exiting.
 
 ## Conclusion
 
-In this tutorial, you learned how to integrate a pre-trained Hugging Face model into a RunPod serverless function to perform sentiment analysis on text input. 
+In this tutorial, you learned how to integrate a pre-trained Hugging Face model into a RunPod serverless function to perform sentiment analysis on text input.
 
-This powerful combination enables you to create advanced AI applications in a serverless environment. 
+This powerful combination enables you to create advanced AI applications in a serverless environment.
 
 You can extend this concept to use more complex models or perform different types of inference tasks as needed.
 

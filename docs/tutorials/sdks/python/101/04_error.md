@@ -5,10 +5,10 @@ description: "Learn how to create robust serverless applications with effective 
 sidebar_position: 5
 ---
 
-This tutorial will guide you through implementing effective error handling and logging in your RunPod serverless functions. 
+This tutorial will guide you through implementing effective error handling and logging in your RunPod serverless functions.
 
 Proper error handling ensures that your serverless functions can handle unexpected situations gracefully. This prevents crashes and ensures that your application can continue running smoothly, even if some parts encounter issues.
- 
+
 We'll create a simulated image classification model to demonstrate these crucial practices, ensuring your serverless deployments are robust and maintainable.
 
 ## Setting up your Serverless Function

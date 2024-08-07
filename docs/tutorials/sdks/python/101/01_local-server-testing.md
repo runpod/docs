@@ -5,8 +5,7 @@ description: "Learn how to build a simple serverless function using RunPod's Pyt
 sidebar_position: 2
 ---
 
-
-This tutorial will guide you through creating a basic serverless function using RunPod's Python SDK. 
+This tutorial will guide you through creating a basic serverless function using RunPod's Python SDK.
 We'll build a function that reverses a given string, demonstrating the simplicity and flexibility of RunPod's serverless architecture.
 
 ## Setting up your Serverless Function

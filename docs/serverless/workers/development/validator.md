@@ -7,8 +7,7 @@ sidebar_position: 4
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-
-RunPod's validator utility ensures robust execution of serverless workers by validating input data against a defined schema. 
+RunPod's validator utility ensures robust execution of serverless workers by validating input data against a defined schema.
 
 To use it, import the following to your Python file:
 
@@ -16,7 +15,7 @@ To use it, import the following to your Python file:
 from runpod.serverless.utils.rp_validator import validate
 ```
 
-The `validate` function takes two arguments: 
+The `validate` function takes two arguments:
 
 - the input data
 - the schema to validate against
@@ -83,7 +82,7 @@ Or with inline input:
 python your_handler.py --test_input '{"input": {"text": "Hello, world!", "max_length": 5}}'
 ```
 
-  </TabItem>
+</TabItem>
   <TabItem value="json" label="JSON">
 
 Create `test_input.json`:
@@ -97,7 +96,7 @@ Create `test_input.json`:
 }
 ```
 
-  </TabItem>
+</TabItem>
 </Tabs>
 
 This approach allows early detection of input errors, preventing issues from unexpected or malformed inputs.

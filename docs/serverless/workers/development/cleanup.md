@@ -7,13 +7,13 @@ description: "Learn how to use the clean() function to manage resources and clea
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-When developing for RunPod serverless, it's crucial to manage resources efficiently. 
-The RunPod SDK provides a `clean()` function to help you remove temporary files and folders after processing. 
+When developing for RunPod serverless, it's crucial to manage resources efficiently.
+The RunPod SDK provides a `clean()` function to help you remove temporary files and folders after processing.
 This guide will show you how to use this cleanup utility effectively.
 
 ## The clean() Function
 
-The `clean()` function is part of RunPod's serverless utilities. 
+The `clean()` function is part of RunPod's serverless utilities.
 It helps maintain a clean environment by removing specified folders and files after a job is completed.
 
 To use it, import the function from the RunPod serverless utilities:
@@ -86,7 +86,8 @@ def handler(event):
 # Start the serverless function
 runpod.serverless.start({"handler": handler})
 ```
-  </TabItem>
+
+</TabItem>
 </Tabs>
 
 In this example, `clean()` is called after the model processing is complete, ensuring that temporary files and folders are removed.
@@ -114,16 +115,17 @@ python ai_model_handler.py \
     }
 }'
 ```
-  </TabItem>
+
+</TabItem>
   <TabItem value="json" label="JSON">
 
 Create a `test_input.json` file:
 
 ```json
 {
-    "input": {
-        "image_url": "https://avatars.githubusercontent.com/u/95939477?s=200&v=4"
-    }
+  "input": {
+    "image_url": "https://avatars.githubusercontent.com/u/95939477?s=200&v=4"
+  }
 }
 ```
 
@@ -132,7 +134,8 @@ Then run:
 ```bash
 python ai_model_handler.py
 ```
-  </TabItem>
+
+</TabItem>
 </Tabs>
 
 ## Best Practices
