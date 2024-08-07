@@ -5,7 +5,7 @@ title: Serverless CPU types
 The following list contains all CPU types available on RunPod.
 
 <!--
-Table last generated: 2024-07-29
+Table last generated: 2024-08-07
 -->
 
 | displayName                                     | cores | threadsPerCore |
@@ -112,6 +112,7 @@ Table last generated: 2024-07-29
 | AMD Ryzen 7 5700X 8-Core Processor              |     8 |              2 |
 | AMD Ryzen 7 5800X 8-Core Processor              |     8 |              2 |
 | AMD Ryzen 7 7700 8-Core Processor               |     8 |              2 |
+| AMD Ryzen 7 PRO 3700 8-Core Processor           |     8 |              2 |
 | AMD Ryzen 9 3900X 12-Core Processor             |    12 |              2 |
 | AMD Ryzen 9 5950X 16-Core Processor             |    16 |              2 |
 | AMD Ryzen 9 7900 12-Core Processor              |    12 |              2 |
@@ -146,6 +147,7 @@ Table last generated: 2024-07-29
 | Intel(R) Core(TM) i5-10400 CPU @ 2.90GHz        |     6 |              2 |
 | Intel(R) Core(TM) i5-10400F CPU @ 2.90GHz       |     6 |              2 |
 | Intel(R) Core(TM) i5-10600 CPU @ 3.30GHz        |     6 |              2 |
+| Intel(R) Core(TM) i5-14500                      |    14 |              2 |
 | Intel(R) Core(TM) i5-4570 CPU @ 3.20GHz         |     4 |              1 |
 | Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz         |     4 |              1 |
 | Intel(R) Core(TM) i5-6500 CPU @ 3.20GHz         |     4 |              1 |
