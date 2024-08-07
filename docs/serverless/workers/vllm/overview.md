@@ -29,7 +29,7 @@ For a full list of supported models architectures, see [Compatible model archite
 
 ## Getting started
 
-At a high level, you can set up the vLLM Worker by:
+At a high level, you can Set up the vLLM Worker by:
 
 - Selecting your deployment options
 - Configure any necessary environment variables

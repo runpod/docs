@@ -15,7 +15,7 @@ This step ensures that you have access to the model and are in compliance with u
 - [Hugging Face access token](https://huggingface.co/settings/tokens)
 - [Accepting Google's terms of service](https://huggingface.co/google/gemma-7b)
 
-The next section will guide you through setting up your Serverless Endpoint with RunPod.
+The next section will guide you through Setting up your Serverless Endpoint with RunPod.
 
 ## Get started
 

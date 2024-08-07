@@ -458,7 +458,7 @@ runpod.serverless.start(
 
 :::note
 
-The maximum size for a payload that can be sent using yield to stream results is 1 MB. 
+The maximum size for a payload that can be sent using yield to stream results is 1 MB.
 
 :::
 

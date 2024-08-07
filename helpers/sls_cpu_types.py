@@ -1,10 +1,11 @@
+import io
 import os
 from datetime import datetime
+
+import pandas as pd
 import requests
 from dotenv import load_dotenv
-import pandas as pd
 from tabulate import tabulate
-import io
 
 load_dotenv()
 
@@ -30,12 +31,13 @@ if response.status_code == 200:
 
     # Filter out empty CPU types and rows where all values are NaN
     filtered_cpus = [
-        cpu for cpu in cpus 
-        if cpu['displayName'] and 
-        cpu['displayName'].lower() != 'unknown' and 
-        not pd.isna(cpu['cores']) and 
-        not pd.isna(cpu['threadsPerCore']) and
-        not all(pd.isna(value) for value in cpu.values())
+        cpu
+        for cpu in cpus
+        if cpu["displayName"]
+        and cpu["displayName"].lower() != "unknown"
+        and not pd.isna(cpu["cores"])
+        and not pd.isna(cpu["threadsPerCore"])
+        and not all(pd.isna(value) for value in cpu.values())
     ]
 
     # Convert to DataFrame
@@ -72,7 +74,7 @@ if response.status_code == 200:
         updated_df = new_df
 
     # Remove rows where all values are NaN
-    updated_df = updated_df.dropna(how='all')
+    updated_df = updated_df.dropna(how="all")
 
     # Sort the DataFrame alphabetically by displayName
     updated_df = updated_df.sort_values(by="displayName").reset_index(drop=True)
