@@ -24,16 +24,16 @@ Before getting started, ensure you have the following:
 You can use RunPod's Web UI to deploy a vLLM Worker with a model directly from Hugging Face.
 
 1. Log in to your RunPod account and go to the [Serverless page](https://www.runpod.io/console/serverless).
-2. Under **Quick Deploy**, select **vLLM** and choose **Start**.
+2. Under **Quick Deploy**, find **Serverless vLLM** and choose **Start**.
 
 You will now enter the vLLM module. Follow the on-screen instructions to add your LLM as a Serverless Endpoint:
 
-1. Add a Hugging Face model (e.g., `openchat/openchat-3.5-0106`).
-2. (Optional) Add a Hugging Face token for gated models.
-3. Select your CUDA version.
+1. Select a vLLM version.
+2. Add a Hugging Face model (e.g., `openchat/openchat-3.5-0106`).
+3. (Optional) Add a Hugging Face token for gated models.
 4. Review your options and choose **Next**.
 
-On the **vLLM** parameters page, provide additional parameters and options for your model:
+On the **vLLM parameters** page, provide additional parameters and options for your model:
 
 1. In **LLM Settings**, enter **8192** for the **Max Model Length** parameter.
 2. Review your options and choose **Next**.
@@ -42,8 +42,8 @@ On the **Endpoint parameters** page, configure your deployment:
 
 1. Specify your GPU configuration for your Worker.
 2. Configure your Worker deployment.
-   - (Optional) Select **FlashBoot** to speed up Worker startup times.
-3. Update the Container Disk size if needed.
+  - Verify the **Container Image** uses your desired CUDA version.
+  - Update the **Container Disk** size if needed.
 4. Select **Deploy**.
 
 Once the Endpoint initializes, you can send requests to your [Endpoint](/serverless/endpoints/get-started).
@@ -64,7 +64,7 @@ Follow these steps to run the vLLM Worker on a Serverless Endpoint:
    - (Optional) Select **FlashBoot** to speed up Worker startup times
    - Enter the vLLM RunPod Worker image name with the compatible CUDA version:
      - `runpod/worker-vllm:stable-cuda11.8.0`
-     - `runpod/worker-vllm:stable-cuda12.1.0`
+     - `runpod/worker-v1-vllm:stable-cuda12.1.0`
    - (Optional) Select a [network storage volume](/serverless/endpoints/manage-endpoints#add-a-network-volume)
    - Configure the environment variables:
      - `MODEL_NAME`: (Required) The large language model (e.g., `openchat/openchat-3.5-0106`)
