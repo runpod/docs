@@ -127,7 +127,6 @@ python your_handler.py --rp_serve_api
 
 This command starts a FastAPI server on your local machine, accessible at `http://localhost:8000`.
 
-
 ### Customizing the Local Server
 
 You can further customize the local server using additional flags:
@@ -153,14 +152,15 @@ Once your local server is running, you can send HTTP POST requests to test your 
 
 Example using `curl`:
 <Tabs>
-  <TabItem value="run" label="Run" default>
+<TabItem value="run" label="Run" default>
 
 ```bash
 curl -X POST http://localhost:8000/run \
      -H "Content-Type: application/json" \
      -d '{"input": {"prompt": "The quick brown fox jumps"}}'
 ```
-  </TabItem>
+
+</TabItem>
   <TabItem value="runsync" label="RunSync">
 
 ```bash
@@ -169,7 +169,7 @@ curl -X POST http://localhost:8000/runsync \
      -d '{"input": {"prompt": "The quick brown fox jumps"}}'
 ```
 
-  </TabItem>
+</TabItem>
 </Tabs>
 
 ## Advanced testing options
@@ -184,7 +184,6 @@ Example:
 ```bash
 python your_handler.py --rp_serve_api --rp_log_level DEBUG --rp_debugger
 ```
-
 
 Local testing is a crucial step in developing robust and reliable serverless functions for RunPod. By utilizing these local testing options, you can catch and fix issues early, optimize your function's performance, and ensure a smoother deployment process.
 
