@@ -7,13 +7,12 @@ description: "Learn how to test your Handler Function locally using custom input
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-
-When developing your Handler Function for RunPod serverless, it's crucial to test it thoroughly in a local environment before deployment. 
+When developing your Handler Function for RunPod serverless, it's crucial to test it thoroughly in a local environment before deployment.
 The RunPod SDK provides multiple ways to facilitate this local testing, allowing you to simulate various scenarios and inputs without consuming cloud resources.
 
 ## Custom Inputs
 
-The simplest way to test your Handler Function is by passing a custom input directly when running your Python file. 
+The simplest way to test your Handler Function is by passing a custom input directly when running your Python file.
 
 This method is ideal for quick checks and iterative development.
 
@@ -23,12 +22,14 @@ You can pass inline json to your function to test its response.
 
 Assuming your handler function is in a file named `your_handler.py`, you can test it like this:
 <Tabs>
-  <TabItem value="cli" label="CLI" default>
+<TabItem value="cli" label="CLI" default>
+
 ```bash
 python your_handler.py \
   --test_input '{"input": {"prompt": "The quick brown fox jumps"}}'
 ```
-  </TabItem>
+
+</TabItem>
   <TabItem value="python" label="Python">
 
 Add the following file to your project and run the command.
@@ -56,16 +57,16 @@ def handler(event):
 # Start the serverless function
 runpod.serverless.start({"handler": handler})
 ```
-  </TabItem>
+
+</TabItem>
 
 </Tabs>
-
 
 This command runs your handler with the specified input, allowing you to verify the output and behavior quickly.
 
 ### JSON file
 
-For more complex or reusable test inputs, you can use a `test_input.json` file. 
+For more complex or reusable test inputs, you can use a `test_input.json` file.
 
 This approach allows you to easily manage and version control your test cases.
 
@@ -73,9 +74,9 @@ Create a file named `test_input.json` in the same directory as your `your_handle
 
 ```json
 {
-    "input": {
+  "input": {
     "prompt": "This is a test input from JSON file"
-    }
+  }
 }
 ```
 
@@ -102,6 +103,7 @@ INFO   | Local testing complete, exiting.
 ```
 
 Using `test_input.json` is particularly helpful when:
+
 - You have complex input structures that are cumbersome to type in the command line.
 - You want to maintain a set of test cases that you can easily switch between.
 - You're collaborating with a team and want to share standardized test inputs.
@@ -112,10 +114,9 @@ If you provide a test input via the command line (`--test_input` argument), it w
 
 :::
 
-
 ## Local Test Server
 
-For more comprehensive testing, especially when you want to simulate HTTP requests to your serverless function, you can launch a local test server. 
+For more comprehensive testing, especially when you want to simulate HTTP requests to your serverless function, you can launch a local test server.
 This server provides an endpoint that you can send requests to, mimicking the behavior of a deployed serverless function.
 
 To start the local test server, use the `--rp_serve_api` flag:

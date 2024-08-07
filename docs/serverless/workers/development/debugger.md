@@ -76,7 +76,6 @@ Example:
 python hello_world.py --rp_server_api --test_input '{"input": {"name": "RunPod"}}'
 ```
 
-
 You can combine these arguments to create a highly customized local testing environment. Here's an example that uses multiple options:
 
 ```bash
@@ -91,7 +90,6 @@ This command:
 4. Uses port 8080 for the API server
 5. Sets up 2 concurrent workers
 6. Provides a test input directly in the command
-
 
 ## Conclusion
 

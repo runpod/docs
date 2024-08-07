@@ -59,8 +59,7 @@ To start the serverless worker, which will run the handler function, use the `ru
 runpod.serverless.start({"handler": random_number_handler})
 ```
 
-
-Now your serverless worker is ready to process jobs and generate random numbers. 
+Now your serverless worker is ready to process jobs and generate random numbers.
 
 ## Complete code example
 
