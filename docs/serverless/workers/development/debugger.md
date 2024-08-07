@@ -4,11 +4,10 @@ description: "Learn how to use additional arguments for more control over your l
 sidebar_position: 5
 ---
 
-In the previous lesson, we covered the basics of running your RunPod serverless functions locally. 
+In the previous lesson, we covered the basics of running your RunPod serverless functions locally.
 Now, let's explore some advanced options that give you more control over your local testing environment.
 
-
-The RunPod Python SDK provides several command-line arguments that allow you to customize your local testing setup. 
+The RunPod Python SDK provides several command-line arguments that allow you to customize your local testing setup.
 
 Let's go through each of these options:
 
@@ -26,6 +25,7 @@ This argument allows you to set the verbosity of the console output. Options are
 - `DEBUG`: Show all messages, including detailed debug information
 
 Example:
+
 ```bash
 python hello_world.py --rp_server_api --rp_log_level DEBUG
 ```
@@ -33,6 +33,7 @@ python hello_world.py --rp_server_api --rp_log_level DEBUG
 The `--rp_log_level` flag enables the RunPod debugger, which can help you troubleshoot issues in your code.
 
 Example:
+
 ```bash
 python hello_world.py --rp_server_api --rp_debugger
 ```
@@ -54,6 +55,7 @@ The following arguments allow you to configure the FastAPI server that simulates
 - `--rp_api_host`: Sets the hostname (default is "localhost")
 
 Example:
+
 ```bash
 python hello_world.py --rp_serve_api --rp_api_port 8080 --rp_api_concurrency 4 --rp_api_host 0.0.0.0
 ```
