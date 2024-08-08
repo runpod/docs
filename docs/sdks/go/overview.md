@@ -5,7 +5,7 @@ tags:
   - go
 ---
 
-Get started with Setting up your RunPod projects using Go.
+Get started with setting up your RunPod projects using Go.
 Whether you're building web applications, server-side implementations, or automating tasks, the RunPod Go SDK provides the tools you need.
 This guide outlines the steps to get your development environment ready and integrate RunPod into your Go projects.
 

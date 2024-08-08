@@ -4,7 +4,7 @@ sidebar_position: 1
 description: "Get started with RunPod JavaScript SDK, a tool for building web apps, server-side implementations, and automating tasks. Learn how to install, integrate, and secure your API key for seamless development."
 ---
 
-Get started with Setting up your RunPod projects using JavaScript. Whether you're building web applications, server-side implementations, or automating tasks, the RunPod JavaScript SDK provides the tools you need.
+Get started with setting up your RunPod projects using JavaScript. Whether you're building web applications, server-side implementations, or automating tasks, the RunPod JavaScript SDK provides the tools you need.
 This guide outlines the steps to get your development environment ready and integrate RunPod into your JavaScript projects.
 
 ## Install the RunPod SDK

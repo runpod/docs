@@ -1,13 +1,13 @@
 ---
 title: Overview
 sidebar_position: 1
-description: "Get started with Setting up your RunPod projects using Python. Learn how to install the RunPod SDK, create a Python virtual environment, and configure your API key for access to the RunPod platform."
+description: "Get started with setting up your RunPod projects using Python. Learn how to install the RunPod SDK, create a Python virtual environment, and configure your API key for access to the RunPod platform."
 ---
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-Get started with Setting up your RunPod projects using Python.
+Get started with setting up your RunPod projects using Python.
 Depending on the specific needs of your project, there are various ways to interact with the RunPod platform.
 This guide provides an approach to get you up and running.
 
