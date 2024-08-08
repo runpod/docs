@@ -1,6 +1,6 @@
 ---
 title: "Run your first serverless endpoint with Stable Diffusion"
-description: "Learn how to use RunPod's Stable Diffusion v1 inference endpoint to generate images, including Setting up your serverless worker, starting a job, checking job status, and retrieving results."
+description: "Learn how to use RunPod's Stable Diffusion v1 inference endpoint to generate images, including setting up your serverless worker, starting a job, checking job status, and retrieving results."
 sidebar_position: 1
 ---
 

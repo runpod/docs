@@ -30,7 +30,7 @@ Utilizing a Dockerfile for migration offers a bridge between Banana and RunPod, 
 
 **Dockerfile**
 
-The provided Dockerfile outlines a straightforward process for Setting up your application on RunPod.
+The provided Dockerfile outlines a straightforward process for setting up your application on RunPod.
 
 Add this Dockerfile to your project.
 

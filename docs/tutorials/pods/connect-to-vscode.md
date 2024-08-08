@@ -43,7 +43,7 @@ In this step, you will connect to your Pod instance using SSH.
    ssh root@123.456.789.80 -p 12345 -i ~/.ssh/id_ed12345
    ```
 
-Next, you will Set up the connection in VSCode.
+Next, you will set up the connection in VSCode.
 
 ## Configuring VSCode for remote development
 

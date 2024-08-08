@@ -29,7 +29,7 @@ To begin using RunPod with SkyPilot, follow these steps:
 
 ## Running a Project
 
-After Setting up your environment, you can seamlessly spin up a cluster in minutes:
+After setting up your environment, you can seamlessly spin up a cluster in minutes:
 
 1. **Create a New Project Directory**: Run `mkdir hello-sky` to create a new directory for your project.
 

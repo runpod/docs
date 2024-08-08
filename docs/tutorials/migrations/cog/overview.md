@@ -34,7 +34,7 @@ By following this streamlined process, you'll be able to simplify the migration 
 
 ## Clone and navigate the cog-worker repository
 
-Before we begin, let's Set up the necessary environment.
+Before we begin, let's set up the necessary environment.
 You will need to clone the `cog-worker` repository, which contains essential scripts and configuration files required for the migration process.
 To do this, run the following commands in your terminal:
 
