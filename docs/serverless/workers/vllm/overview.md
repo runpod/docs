@@ -4,7 +4,7 @@ sidebar_position: 1
 description: "Deploy a highly optimized vLLM Worker as a serverless endpoint, leveraging Hugging Face LLMs and OpenAI's API with ease, featuring ease of use, open compatibility, dynamic batch size, and customization options for a scalable and cost-effective solution."
 ---
 
-Use the `runpod/worker-vllm:stable-cuda11.8.0` or `runpod/worker-vllm:stable-cuda12.1.0` image to deploy a vLLM Worker.
+Use the `runpod/worker-v1-vllm:stable-cuda12.1.0` image to deploy a vLLM Worker.
 The vLLM Worker can use most Hugging Face LLMs and is compatible with OpenAI's API, by specifying the `MODEL_NAME` parameter.
 You can also use RunPod's [`input` request format](/serverless/endpoints/send-requests).
 
