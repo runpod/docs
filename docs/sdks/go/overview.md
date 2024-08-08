@@ -1,8 +1,6 @@
 ---
 title: Overview
 sidebar_position: 1
-tags:
-  - go
 ---
 
 Get started with setting up your RunPod projects using Go.

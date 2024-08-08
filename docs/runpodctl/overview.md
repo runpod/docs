@@ -26,11 +26,11 @@ RunPod also contains a functionality that enables you to develop and deploy endp
 That means you can get a worker up and running without knowing Docker or needing to structure handler code.
 This Dockerless workflow also streamlines the development process: you don't need to rebuild and push container images or edit your endpoint to use the new image each time you change your code.
 
-To get started, see [Managing Projects](/cli/projects/manage-projects).
+To get started, see [Managing Projects](/runpodctl/projects/manage-projects).
 
 ## Installation
 
-For more information, see [Install RunPod CLI](/cli/install-runpodctl).
+For more information, see [Install RunPod CLI](/runpodctl/install-runpodctl).
 
 <Tabs>
 
@@ -109,7 +109,7 @@ RunPod CLI allows you to manage your computing pods effectively. Below are some 
   runpodctl stop pod {podId}
   ```
 
-For a comprehensive list of commands, refer to the [RunPod CLI reference documentation](/references/runpodctl).
+For a comprehensive list of commands, refer to the [RunPod CLI reference documentation](/runpodctl/reference/runpodctl).
 
 ### Data Transfer
 

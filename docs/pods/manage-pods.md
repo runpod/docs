@@ -12,7 +12,7 @@ import TabItem from '@theme/TabItem';
 
 ### Prerequisites
 
-If you are using the [RunPod CLI](/cli/install-runpodctl), you'll need to set your API key in the configuration.
+If you are using the [RunPod CLI](/runpodctl/install-runpodctl), you'll need to set your API key in the configuration.
 
 ```bash
 runpodctl config --apiKey $RUNPOD_API_KEY

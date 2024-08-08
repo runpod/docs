@@ -35,7 +35,7 @@ RunPod also provides a Command Line Interface (CLI) tool for quickly developing 
 For more informaiton, see the following:
 
 - [GitHub](https://github.com/runpod/runpodctl)
-- [Reference documentation](/references/runpodctl)
+- [Reference documentation](/runpodctl/reference/runpodctl)
 
 ### Our mission
 
