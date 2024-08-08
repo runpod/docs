@@ -49,7 +49,7 @@ else:
 # 2. Move Markdown files
 print("Moving Markdown files...")
 source_dir = "runpodctl/docs/"
-target_dir = "docs/references/runpodctl/"
+target_dir = "docs/runpodctl/reference/"
 os.makedirs(target_dir, exist_ok=True)
 for md_file in glob.glob(f"{source_dir}*.md"):
     os.rename(md_file, f"{target_dir}{os.path.basename(md_file)}")
@@ -99,7 +99,7 @@ def modify_markdown(file_path, title):
 
 
 # Example usage
-modify_markdown("docs/references/runpodctl/runpodctl.md", "runpodctl")
+modify_markdown("docs/runpodctl/reference/runpodctl.md", "runpodctl")
 
 
 # 4. Clean up

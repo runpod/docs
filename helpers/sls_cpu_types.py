@@ -1,10 +1,11 @@
+import io
 import os
 from datetime import datetime
+
+import pandas as pd
 import requests
 from dotenv import load_dotenv
-import pandas as pd
 from tabulate import tabulate
-import io
 
 load_dotenv()
 

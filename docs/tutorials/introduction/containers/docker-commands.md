@@ -7,7 +7,7 @@ RunPod enables bring-your-own-container (BYOC) development. If you choose this w
 
 :::note
 
-For a Dockerless workflow, see [RunPod projects](/docs/cli/projects/overview.md).
+For a Dockerless workflow, see [RunPod projects](/docs/runpodctl/projects/overview.md).
 
 :::
 
