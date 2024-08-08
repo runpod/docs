@@ -31,7 +31,7 @@ wget -qO- cli.runpod.net | sudo bash
   <TabItem value="windows" label="Windows">
 
 ```bash
-wget https://github.com/runpod/runpodctl/releases/download/v1.12.3/runpodctl-windows-amd64.exe -O runpodctl.exe
+wget https://github.com/runpod/runpodctl/releases/download/v1.14.3/runpodctl-windows-amd64.exe -O runpodctl.exe
 ```
 
 </TabItem>
