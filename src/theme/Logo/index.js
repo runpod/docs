@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useLayoutEffect } from "react";
 import Link from "@docusaurus/Link";
 import useBaseUrl from "@docusaurus/useBaseUrl";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
@@ -27,6 +27,7 @@ function LogoThemedImage({ logo, alt, imageClassName }) {
     themedImage
   );
 }
+
 export default function Logo(props) {
   const {
     siteConfig: { title },
@@ -35,18 +36,23 @@ export default function Logo(props) {
     navbar: { title: navbarTitle, logo },
   } = useThemeConfig();
   const { imageClassName, titleClassName, ...propsRest } = props;
-  const logoLink = useBaseUrl(logo?.href || "/");
   // If visible title is shown, fallback alt text should be
   // an empty string to mark the logo as decorative.
   const fallbackAlt = navbarTitle ? "" : title;
   // Use logo alt text if provided (including empty string),
   // and provide a sensible fallback otherwise.
   const alt = logo?.alt ?? fallbackAlt;
+
+  const [logoLink, setLogoLink] = React.useState(logo?.href || "/");
+  useLayoutEffect(() => {
+    setLogoLink(window.location.origin);
+  }, []);
+
   return (
     <>
       {logo && (
         <Link
-          to={window.location.origin}
+          to={logoLink}
           {...propsRest}
           {...(logo?.target && { target: logo.target })}
         >
