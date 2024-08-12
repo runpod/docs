@@ -42,8 +42,10 @@ On the **Endpoint parameters** page, configure your deployment:
 
 1. Specify your GPU configuration for your Worker.
 2. Configure your Worker deployment.
-  - Verify the **Container Image** uses your desired CUDA version.
-  - Update the **Container Disk** size if needed.
+
+- Verify the **Container Image** uses your desired CUDA version.
+- Update the **Container Disk** size if needed.
+
 4. Select **Deploy**.
 
 Once the Endpoint initializes, you can send requests to your [Endpoint](/serverless/endpoints/get-started).
