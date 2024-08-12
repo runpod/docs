@@ -1,6 +1,6 @@
 ---
 title: Expose ports
-description: "Exposing ports on your pod to the outside world: Learn how to expose ports via RunPod's Proxy or TCP Public IP, and discover the benefits and limitations of each method, including symmetrical port mapping requests."
+description: "Exposing ports on your pod to the outside world: Learn how to expose ports via RunPod's Proxy or TCP Public IP, and discover the benefits and limitations of each method, including symmetrical port mapping requests and proxy timeout considerations."
 sidebar_position: 8
 ---
 
@@ -27,6 +27,23 @@ https://{POD_ID}-{INTERNAL_PORT}.proxy.runpod.net
 ```
 
 Keep in mind that this exposed to the public internet. While your pod ID can act as a password of sorts, it's not a replacement for real authentication, which should be implemented at your API level.
+
+#### Important Proxy Behavior Notes
+
+When users access their pods via the RunPod proxy, the connection follows this chain:
+
+```
+User -> Cloudflare -> RunPod Loadbalancer -> Pod
+```
+
+It's crucial to be aware of the following behavior:
+
+- Cloudflare has a 100-second limit for a connection to remain open.
+- If your service does not respond within 100 seconds of a request, the connection will be closed.
+- In such cases, the user will receive a `524` error code.
+
+This timeout limit is particularly important for long-running operations or services that might take more than 100 seconds to respond. 
+Make sure to design your applications with this limitation in mind, potentially implementing progress updates or chunked responses for longer operations.
 
 ### Through TCP Public IP
 
