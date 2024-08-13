@@ -101,12 +101,14 @@ const config = {
     },
     image: "img/docusaurus-social-card.png",
     navbar: {
-      title: "RunPod",
+      title: "Docs Home",
 
       logo: {
         alt: "RunPod Logo",
-        src: "img/logo.svg",
+        src: "img/logoLightMode.svg",
+        srcDark: "img/logoDarkMode.svg",
         target: "_self",
+        href: "https://www.runpod.io",
       },
       items: [
         {
