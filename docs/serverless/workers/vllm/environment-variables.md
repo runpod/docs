@@ -8,7 +8,7 @@ Environment variables configure your vLLM Worker by providing control over model
 
 ## CUDA versions
 
-Operating your vLLM Worker with different CUDA versions enhances compatibilit and performance across various hardware configurations.
+Operating your vLLM Worker with different CUDA versions enhances compatibility and performance across various hardware configurations.
 When deploying, ensure you choose an appropriate CUDA version based on your needs.
 
 | CUDA Version | Stable Image Tag                          | Development Image Tag                  | Note                                                                            |
