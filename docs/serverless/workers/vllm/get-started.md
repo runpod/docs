@@ -42,8 +42,10 @@ On the **Endpoint parameters** page, configure your deployment:
 
 1. Specify your GPU configuration for your Worker.
 2. Configure your Worker deployment.
-  - Verify the **Container Image** uses your desired CUDA version.
-  - Update the **Container Disk** size if needed.
+
+- Verify the **Container Image** uses your desired CUDA version.
+- Update the **Container Disk** size if needed.
+
 4. Select **Deploy**.
 
 Once the Endpoint initializes, you can send requests to your [Endpoint](/serverless/endpoints/get-started).
@@ -112,6 +114,12 @@ Choose your programming language and add the following code to your file.
 <Tabs>
   <TabItem value="python" label="Python" default>
 
+Install the OpenAI library if needed:
+
+```bash
+pip install openai
+```
+
 Create a file called `main.py` with the following code:
 
 ```python
@@ -134,14 +142,15 @@ chat_completion = client.chat.completions.create(
 print(chat_completion)
 ```
 
-Install the OpenAI library if needed:
-
-```bash
-pip install openai
-```
 
 </TabItem>
   <TabItem value="node.js" label="Node.js">
+
+Install the OpenAI library if needed:
+
+```bash
+npm install openai
+```
 
 Create a file called `main.js` with the following code:
 
@@ -160,12 +169,6 @@ const chatCompletion = await openai.chat.completions.create({
 });
 
 console.log(chatCompletion);
-```
-
-Install the OpenAI library if needed:
-
-```bash
-npm install openai
 ```
 
 </TabItem>
