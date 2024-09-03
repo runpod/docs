@@ -45,7 +45,7 @@ Deploying a project on RunPod transforms it into a serverless endpoint. Unlike t
 To create a new RunPod project, use the following command:
 
 ```bash
-runpod project create
+runpodctl project create
 ```
 
 You will be prompted to select a starter project, which includes pre-configured settings for different types of environments. Customize your project as needed by adding dependencies to the `requirements.txt` file.
