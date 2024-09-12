@@ -19,20 +19,19 @@ Select one or more GPUs that you want your Endpoint to run on. RunPod matches yo
 
 ## Active (Min) Workers
 
-Setting this amount to one will result in "always on" workers.
-This will allow you to have a worker ready to respond to job requests without incurring any cold start delay.
+Setting the active workers to 1 or more ensures you have “always on” workers, ready to respond to job requests without cold start delays.
+
+Default: 0
 
 :::note
 
-You will incur the cost of any active workers you have set regardless if they are working on a job.
+You will be charged for all active workers. However, when active workers are not processing jobs, they will receive up to a 30% discount on the regular cost.
 
 :::
 
 ## Max Workers
 
-Set an upper limit on the number of active workers your endpoint has running at any given point.
-Setting a value for max workers that is too low can lead to [throttled workers](/glossary#throttled-worker).
-If you consistently see throttled workers, increase your max workers to five or more.
+Max workers set a limit on the number of workers your endpoint can run simultaneously. If the max workers are set too low, you might experience [throttled workers](/glossary#throttled-worker). To prevent this, consider increasing the max workers to 5 or more if you see frequent throttling.
 
 Default: 3
 

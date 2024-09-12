@@ -56,6 +56,48 @@ It is designed to bring autoscaling to your production environment, meaning it c
 
 A RunPod template is a Docker container image paired with a configuration.
 
+## Total Workers
+
+Total workers refer to the total number of workers available to your account, which is the sum of the max workers across all your endpoints. If you run out of total workers, please reach out to us by [creating a support ticket](https://contact.runpod.io/).
+
+## Initial Workers
+
+When you first create your endpoint, RunPod needs to download the Docker image for your workers, and they will be marked as initializing during this process.
+
+## Active (Min) Workers
+
+“Always on” workers. Setting active workers to 1 or more ensures that a worker is always ready to respond to job requests without cold start delays.
+
+Default: 0
+
+:::note
+
+You will be charged for all active workers. However, when active workers are not processing jobs, they will receive up to a 30% discount on the regular cost.
+
+:::
+
+## Max Workers
+
+Max workers set the upper limit on the number of workers your endpoint can run simultaneously.
+
+Default: 3
+
+## Flex Workers
+
+Flex workers are non-active workers (Max Workers - Active Workers) that help scale your endpoint during traffic surges. Once a flex worker completes its job, it goes to “sleep” to save costs. You can adjust the idle timeout to keep them active a little longer, helping to avoid cold start delays when new requests arrive.
+
+Default: Max Workers(3) - Active Workers(0) = 3
+
+## Extra Workers
+
+RunPod proactively caches your worker’s Docker image on our host servers. If you experience a spike in traffic, extra workers are immediately added as part of the flex workers to meet demand as soon as you increase the number of max workers.
+
+Default: 2
+
 ## Throttled Worker
 
-RunPod proactively caches Workers to minimize cold start time. If your GPU selections are not available at the time your Worker starts up, the Worker is throttled until resources are available.
+If the selected GPUs are not available when your worker starts up, the worker is throttled until resources become available.
+
+## Stale Workers
+
+When you change your endpoint configuration or update the worker with a new Docker image, the worker is marked as stale and replaced with a new worker once it completes its current job. This replacement occurs through a rolling update, where a portion of stale workers are replaced with new workers based on the number of max worker your endpoint has.
