@@ -10,6 +10,7 @@ Users will get email reminders of upcoming maintenance that will occur on their 
 Please contact RunPod on Discord or Slack if you are:
 - scheduling maintenance on more than a few machines, and/or
 - performing operations that could affect user data
+
 Please err on the side of caution and aim to overcommunicate. We must prioritize user experience, and need to be aware of any major impacts to our customers.
 
 Here are some things to keep in mind.
