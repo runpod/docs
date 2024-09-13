@@ -5,9 +5,12 @@ description: "Schedule maintenance with at least one-week notice to minimize dis
 
 ## Maintenance
 
-Hosts must currently schedule maintenance at least one week in advance and are able to program flash maintenance in the case their server is unrented.
+Hosts must currently schedule maintenance at least one week in advance and are able to program immediate maintenance in the case their server is unrented.
 Users will get email reminders of upcoming maintenance that will occur on their active pods.
-Please contact RunPod on Discord or Slack if you are scheduling maintenance on more than a few machines so that we are aware of any major impacts to our customers.
+Please contact RunPod on Discord or Slack if you are:
+- scheduling maintenance on more than a few machines, and/or
+- performing operations that could affect user data
+Please err on the side of caution and aim to overcommunicate. We must prioritize user experience, and need to be aware of any major impacts to our customers.
 
 Here are some things to keep in mind.
 
@@ -16,6 +19,7 @@ Here are some things to keep in mind.
 - All machines that have maintenance scheduled will be automatically unlisted 4 days prior to the scheduled maintenance start time to minimize disruption for clients.
 - Excessive maintenance will result in further penalties.
 - You are allowed to bring down machines that have active users on them provided that you are in a maintenance window.
+- Immediate maintenance: this option is only for quick repairs/updates that are absolutely necessary. Unrented servers can still house user data, any operations that can result in potential data loss SHOULD NOT be performed in this maintenance mode.
 
 ## Reliability calculations
 
