@@ -5,13 +5,13 @@ description: "Schedule maintenance with at least one-week notice to minimize dis
 
 ## Maintenance
 
-Hosts must currently schedule maintenance at least one week in advance and are able to program immediate maintenance in the case their server is unrented.
+Hosts must currently schedule maintenance at least one week in advance and are able to program immediate maintenance *only* in the case their server is unrented.
 Users will get email reminders of upcoming maintenance that will occur on their active pods.
 Please contact RunPod on Discord or Slack if you are:
 - scheduling maintenance on more than a few machines, and/or
 - performing operations that could affect user data
 
-Please err on the side of caution and aim to overcommunicate. We must prioritize user experience, and need to be aware of any major impacts to our customers.
+Please err on the side of caution and aim to overcommunicate.
 
 Here are some things to keep in mind.
 
