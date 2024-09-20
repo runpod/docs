@@ -84,13 +84,13 @@ Default: 3
 
 ## Flex Workers
 
-Flex workers are non-active workers (Max Workers - Active Workers) that help scale your endpoint during traffic surges. Once a flex worker completes its job, it goes to “sleep” to save costs. You can adjust the idle timeout to keep them active a little longer, helping to avoid cold start delays when new requests arrive.
+Flex workers are "sometimes on" workers (Max Workers - Active Workers) that help scale your endpoint during traffic surges. Once a flex worker completes its job, it goes to “sleep” to save costs. You can adjust the idle timeout to keep them active a little longer, helping to avoid cold start delays when new requests arrive.
 
 Default: Max Workers(3) - Active Workers(0) = 3
 
 ## Extra Workers
 
-RunPod proactively caches your worker’s Docker image on our host servers. If you experience a spike in traffic, extra workers are immediately added as part of the flex workers to meet demand as soon as you increase the number of max workers.
+RunPod caches your worker’s Docker image on our host servers, ensuring faster scalability. If you experience a traffic spike, you can increase the max number of workers, and extra workers will be immediately added as part of the flex workers to handle the increased demand.
 
 Default: 2
 
