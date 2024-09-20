@@ -25,7 +25,7 @@ Default: 0
 
 :::note
 
-You will be charged for all active workers. However, when active workers are not processing jobs, they will receive up to a 30% discount on the regular cost.
+Active workers incur charges as soon as you enable them (set to >0), but they come with a discount of up to 30% off the regular price.
 
 :::
 
