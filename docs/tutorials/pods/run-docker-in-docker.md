@@ -74,7 +74,7 @@ docker --version
 Start the Docker daemon:
 
 ```shell
-sudo dockerd &
+dockerd &
 ```
 
 ## Test Docker Service
