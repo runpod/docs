@@ -49,7 +49,14 @@ The web terminal is a powerful way to interact with your Pod.
 1. Select **Connect** and choose **Start Web Terminal**.
 2. Make note of the **Username** and **Password**, then select **Connect to Web Terminal**.
 3. Enter your username and password.
-4. In the terminal of your newly created Pod, run the following command and send to the background:
+4. To ensure Ollama can automatically detect and utilize your GPU, run the following commands.
+
+```sh
+apt update
+apt install lshw
+```
+
+5. Run the following command to install ollama and send to the background:
 
 ```bash
 (curl -fsSL https://ollama.com/install.sh | sh && ollama serve > ollama.log 2>&1) &
