@@ -24,7 +24,8 @@ yarn build
 
 ## Linting
 
-To lint a specific folder or file, run:
+- Install [vale](https://vale.sh/docs/vale-cli/installation/)
+- Lint a specific folder or file, run:
 
 ```command
 vale path/to/docs/
@@ -32,7 +33,7 @@ vale path/to/docs/
 vale path/to/*.md
 ```
 
-To lint the entire repo, run:
+- Lint the entire repo
 
 ```command
 yarn lint
