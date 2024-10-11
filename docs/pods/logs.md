@@ -1,7 +1,7 @@
 ---
 title: Access Logs
 description: "Get insights into your pods' activities with logs, including container logs and system logs, detailing console output, formation, and status updates, accessible through the Pods dashboard's Logs button."
-sidebar_position: 5
+sidebar_position: 7
 ---
 
 Pods provide two types of logs.
