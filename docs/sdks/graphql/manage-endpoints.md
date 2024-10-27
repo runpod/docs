@@ -23,7 +23,7 @@ curl --request POST \
 ```graphql
 mutation {
   saveEndpoint(input: {
-    # options for gpuIds are "AMPERE_16,AMPERE_24,AMPERE_48,AMPERE_80,ADA_24"
+    # options for gpuIds are "AMPERE_16,AMPERE_24,ADA_24,AMPERE_48,ADA_48_PRO,AMPERE_80,ADA_80_PRO"
     gpuIds: "AMPERE_16",
     idleTimeout: 5,
     # leave locations as an empty string or null for any region
