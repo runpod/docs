@@ -34,30 +34,79 @@ To clone the `worker-template` repo, you'll need access to the following:
 - Git installed
 - Permissions to clone GitHub repos
 
-## Build and push your Docker image
+## Build a Serverless Application on RunPod
 
-This step will walk you through building and pushing your Docker image to your container registry.
-This is useful to building custom images for your use case.
+Follow these steps to create a handler file, test it locally, and build a Docker image for deployment:
 
-1. Clone the [worker-template](https://github.com/runpod-workers/worker-template):
+1. Create the handler file (rp_handler.py):
 
-```command
-gh repo clone runpod-workers/worker-template
+```python
+import runpod
+import time
+
+def handler(event):
+    input = event['input']
+    instruction = input.get('instruction')
+    seconds = input.get('seconds', 0)
+
+    # Placeholder for a task; replace with image or text generation logic as needed
+    time.sleep(seconds)
+    result = instruction.replace(instruction.split()[0], 'created', 1)
+
+    return result
+
+if __name__ == '__main__':
+    runpod.serverless.start({'handler': handler})
 ```
 
-2. Navigate to the root of the cloned repo:
+2. Create a test_input.json file in the same folder:
 
-```command
-cd worker-template
+```python
+{
+    "input": {
+        "instruction": "create a image",
+        "seconds": 15
+    }
+}
 ```
 
-3. Build the Docker image:
+3. Test the handler code locally:
+
+```python
+python3 rp_handler.py
+
+# You should see an output like this:
+--- Starting Serverless Worker |  Version 1.7.0 ---
+INFO   | Using test_input.json as job input.
+DEBUG  | Retrieved local job: {'input': {'instruction': 'create a image', 'seconds': 15}, 'id': 'local_test'}
+INFO   | local_test | Started.
+DEBUG  | local_test | Handler output: created a image
+DEBUG  | local_test | run_job return: {'output': 'created a image'}
+INFO   | Job local_test completed successfully.
+INFO   | Job result: {'output': 'created a image'}
+INFO   | Local testing complete, exiting.
+```
+
+4. Create a Dockerfile:
+
+```docker
+FROM python:3.10-slim
+
+WORKDIR /
+RUN pip install --no-cache-dir runpod
+COPY rp_handler.py /
+
+# Start the container
+CMD ["python3", "-u", "rp_handler.py"]
+```
+
+5. Build and push your Docker image
 
 ```command
 docker build --platform linux/amd64 --tag <username>/<repo>:<tag> .
 ```
 
-4. Push your container registry:
+6. Push to your container registry:
 
 ```command
 docker push <username>/<repo>:<tag>
@@ -71,6 +120,8 @@ This is important when you are building on a machine with a different architectu
 When building for RunPod providers use `--platform=linux/amd64`.
 
 :::
+
+Alternatively, you can clone our [worker-template](https://github.com/runpod-workers/worker-template) repository to quickly build a Docker image and push it to your container registry for a faster start.
 
 Now that you've pushed your container registry, you're ready to deploy your Serverless Endpoint to RunPod.
 

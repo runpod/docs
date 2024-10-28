@@ -45,9 +45,9 @@ def handler(event):
     try:
         # Extract the prompt from the input
         prompt = event["input"]["prompt"]
-        
+
         result = f"Hello! You said: {prompt}"
-        
+
         # Return the result
         return {"output": result}
     except Exception as e:
@@ -151,17 +151,6 @@ This starts the server on port `8080` with 4 worker processes.
 Once your local server is running, you can send HTTP POST requests to test your function. Use tools like `curl` or Postman, or write scripts to automate your tests.
 
 Example using `curl`:
-<Tabs>
-<TabItem value="run" label="Run" default>
-
-```bash
-curl -X POST http://localhost:8000/run \
-     -H "Content-Type: application/json" \
-     -d '{"input": {"prompt": "The quick brown fox jumps"}}'
-```
-
-</TabItem>
-  <TabItem value="runsync" label="RunSync">
 
 ```bash
 curl -X POST http://localhost:8000/runsync \
@@ -169,8 +158,9 @@ curl -X POST http://localhost:8000/runsync \
      -d '{"input": {"prompt": "The quick brown fox jumps"}}'
 ```
 
-</TabItem>
-</Tabs>
+:::note
+When testing locally, the /run endpoint only returns a fake requestId without executing your code, as async mode requires communication with our system. This is why you can’t check job status using /status. For local testing, use /runsync. To test async functionality, you’ll need to deploy your app on our platform.
+:::
 
 ## Advanced testing options
 
