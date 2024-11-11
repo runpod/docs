@@ -31,7 +31,7 @@ Feel free to use them for tasks like rendering, molecular dynamics, or any other
 
 ## How to interact with RunPod Serverless?
 
-RunPod generates an Endpoint Id that that allows you to interact with your Serverless Pod.
+RunPod generates an Endpoint Id that allows you to interact with your Serverless Pod.
 Pass in your Endpoint Id to the Endpoint URL and provide an operation.
 
 This Endpoint URL will look like this:
