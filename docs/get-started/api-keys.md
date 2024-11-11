@@ -7,9 +7,9 @@ sidebar_position: 4
 API keys authenticate requests to RunPod.
 You can generate an API key with **Read/Write** permission, **Restricted** permission, or **Read Only** permission.
 
-:::note 
+:::note
 
-Legacy API keys generated before November 11, 2024 have full access permissions. 
+Legacy API keys generated before November 11, 2024 have either Read/Write or Read Only access to GraphQL based on what was set for that key. All legacy keys have full access to AI API. To improve security, generate a new key with Restricted permission and select the minimum permission needed for your use case. 
 
 :::
 
@@ -24,6 +24,11 @@ To create an API key:
     - (AI API only) **Restricted**: Custom access to specific endpoints. No access is default.
     - **Read/Write**: Full access 
     - **Read Only**: Read access without write access 
+    :::warning
+
+    Select the minimum permission needed for your use case. Only allow full access to GraphQL when absolutely necessary for automations like creating or managing RunPod resources outside of Serverless endpoints. 
+
+    :::
 5. Choose **Create**.
 
 :::note
