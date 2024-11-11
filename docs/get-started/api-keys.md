@@ -1,19 +1,30 @@
 ---
 title: API keys
-description: "Generate API keys with Read and Write or Read permission to authenticate requests to RunPod. Create and revoke keys from the console under Settings > API Keys."
+description: "Generate API keys with Read/Write, Restricted, or Read permission to authenticate requests to RunPod. Create and revoke keys from the console under Settings > API Keys."
 sidebar_position: 4
 ---
 
 API keys authenticate requests to RunPod.
-You can generate an API key with **Read and Write** permission or **Read** permission.
+You can generate an API key with **Read/Write** permission, **Restricted** permission, or **Read Only** permission.
+
+:::note 
+
+Legacy API keys generated before November 11, 2024 have full access permissions. 
+
+:::
 
 ## Generate
 
 To create an API key:
 
 1. From the console, select **Settings**.
-2. Under **API Keys**, choose **+ API Keys**.
-3. Select the permission and choose **Create**.
+2. Under **API Keys**, choose **+ Create API Key**.
+3. Select the permission. If you choose **Restricted** permission, you can customize access for each API:
+    - **None**: No access
+    - (AI API only) **Restricted**: Custom access to specific endpoints. No access is default.
+    - **Read/Write**: Full access 
+    - **Read Only**: Read access without write access 
+5. Choose **Create**.
 
 :::note
 
@@ -21,9 +32,31 @@ Once your API key is generated, keep it secure. Treat it like a password and avo
 
 :::
 
+## Edit permission
+
+To edit an API key:
+
+1. From the console, select **Settings**.
+2. Under **API Keys**, select the pencil icon and select the permission.
+3. Choose **Update**.
+
+## Disable
+
+To disable an API key:
+
+1. From the console, select **Settings**.
+2. Under **API Keys**, select the toggle and select **Yes**.
+
+## Enable
+
+To enable an API key:
+
+1. From the console, select **Settings**.
+2. Under **API Keys**, select the toggle and select **Yes**.
+
 ## Revoke
 
 To delete an API key:
 
 1. From the console, select **Settings**.
-2. Under **API Keys**, select the trash can icon and select **Yes**.
+2. Under **API Keys**, select the trash can icon and select **Revoke Key**.
