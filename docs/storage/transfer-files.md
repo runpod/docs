@@ -8,7 +8,7 @@ Learn to transfer files to and from RunPod.
 
 ## Prerequisites
 
-- If you intend to use `runpodctl`, make sure it's installed on your machine, see [install runpodctl](../../runpodctl/install-runpodctl.md)
+- If you intend to use `runpodctl`, make sure it's installed on your machine, see [install runpodctl](/runpodctl/install-runpodctl)
 
 - If you intend to use `scp`, make sure your Pod is configured to use real SSH.
   For more information, see [use SSH](/pods/configuration/use-ssh).
@@ -17,7 +17,7 @@ Learn to transfer files to and from RunPod.
 
 - Note the public IP address and external port from the SSH over exposed TCP command (you'll need these for the SCP/rsync commands).
 
-## Transferring with [runpodctl](../../runpodctl/overview.md#data-transfer)
+## Transferring with [runpodctl](/runpodctl/overview#data-transfer)
 
 The RunPod CLI (runpodctl) provides simple commands for transferring data between your machine and RunPod. **It’s preinstalled on all RunPod Pods** and uses one-time codes for secure authentication, so no API keys are required.
 
@@ -154,4 +154,4 @@ total size is 119  speedup is 0.90
 
 ## Sync a volume to a cloud provider
 
-You can sync your volume to a cloud provider by clicking the **Cloud Sync** option under your **My Pods** page, For detailed instructions on connecting to AWS S3, Google Cloud Storage, Azure, Backblaze, Dropbox, and configuring these services, please refer to this [configuration guide](../configuration/export-data.md).
+You can sync your volume to a cloud provider by clicking the **Cloud Sync** option under your **My Pods** page, For detailed instructions on connecting to AWS S3, Google Cloud Storage, Azure, Backblaze, Dropbox, and configuring these services, please refer to this [configuration guide](/pods/configuration/export-data).

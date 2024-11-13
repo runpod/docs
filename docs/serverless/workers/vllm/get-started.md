@@ -142,7 +142,6 @@ chat_completion = client.chat.completions.create(
 print(chat_completion)
 ```
 
-
 </TabItem>
   <TabItem value="node.js" label="Node.js">
 
