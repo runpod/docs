@@ -12,6 +12,7 @@ To complete this tutorial, you will need:
 
 - A local development environment with VSCode installed. Download it from [Visual Studio Code](https://code.visualstudio.com/download).
 - Familiarity with basic command-line operations and SSH.
+- Your SSH key setup with RunPod, see [Use SSH](https://docs.runpod.io/pods/configuration/use-ssh).
 - A RunPod account. Sign up at [RunPod](https://www.runpod.io/).
 - (Optional) A GitHub account for code management.
 
