@@ -71,14 +71,13 @@ def handler(job):
 runpod.serverless.start({"handler": handler})  # Required.
 ```
 
-You must return something as output when your worker is done processing the job. 
+You must return something as output when your worker is done processing the job.
 This can directly be the output, or it can be links to cloud storage where the artifacts are saved.
 Keep in mind that the input and output payloads are limited to 2 MB each.
 
 :::note
 
 Keep setup processes and functions outside of your handler function. For example, if you are running models make sure they are loaded into VRAM prior to calling `serverless.start` with your handler function.
-
 
 <details>
   <summary>Example</summary>
@@ -125,16 +124,16 @@ def handler(event):
 runpod.serverless.start({"handler": handler})
 ```
 
-  </TabItem>
+</TabItem>
   <TabItem value="cli" label="CLI">
 
 The following is an example of the input command.
 
 ```command
- python your_handler.py --test_input '{"input": {"prompt": "The quick brown fox jumps"}}'
+python your_handler.py --test_input '{"input": {"prompt": "The quick brown fox jumps"}}'
 ```
 
-   </TabItem>
+</TabItem>
 </Tabs>
 
 </details>
