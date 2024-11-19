@@ -17,7 +17,8 @@ This private networking feature enables secure communication between all Pods wi
 
 2. **Access the Private Network**:
    - Each Pod with Global Networking enabled will be assigned a private IP address.
-   - You can use these private IP addresses to communicate between Pods within your account.
+   - The Private IP Address is referenced via the DNS record for the pod using the pattern: $podid.runpod.internal
+   - The DNS record will displayed on the pod details card after the pod is created.
 3. **Run Services**:
    - Start your services on the Pods as usual. They will be accessible to other Pods on the private network without needing to explicitly expose ports.
 4. **Public Access** (if needed):
