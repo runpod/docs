@@ -13,8 +13,6 @@ This private networking feature enables secure communication between all Pods wi
 
    - When creating a new Pod, check the "**Global Networking**" option.
 
-![How to enable Global Networking for your Pod](/img/docs/global-networking-enable.png)
-
 2. **Access the Private Network**:
    - Each Pod with Global Networking enabled will be assigned a private IP address.
    - The Private IP Address is referenced via the DNS record for the pod using the pattern: `$podid.runpod.internal`
