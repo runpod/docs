@@ -39,3 +39,10 @@ For more detailed information or support, please [contact our customer service t
 
 - Available only on NVIDIA GPU Pods
 - Not yet available for CPU Pods
+
+The following datacenters can take advateage of Global Networking:
+
+- CA-MTL-3
+- US-GA-1
+- US-GA-2
+- US-KS-2
