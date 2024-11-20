@@ -1,6 +1,6 @@
 ---
-title: "Get started"
-sidebar_position: 2
+title: "Get started with Endponts"
+sidebar_position: 3
 description: Master the art of building Docker images, deploying Serverless endpoints, and sending requests with this comprehensive guide, covering prerequisites, RunPod setup, and deployment steps.
 ---
 
