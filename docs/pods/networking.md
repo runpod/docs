@@ -15,7 +15,6 @@ This private networking feature enables secure communication between all Pods wi
 2. Toggle the **Global Networking** to select Pods that have Global Networking enabled.
 3. Configure your GPUs and select **Deploy**.
 
-
 **Access the Private Network**
 
 - Each Pod with Global Networking enabled will be assigned a private IP address.
@@ -42,9 +41,7 @@ Global Networking doesn't increase throughput between Pods, but it does allow fo
 
 :::
 
-
 For more detailed information or support, please [contact our customer service team](https://contact.runpod.io/hc/en-us/requests/new).
-
 
 ## Current Limitations
 
