@@ -29,7 +29,7 @@ A Pod consists of the following resources:
 - Instance Volume
   - Data persists even when you reset or stop a Pod. Volume is removed when the Pod is terminated.
   - You pay for volume storage even when the Pod is stopped.
-
+- Global Networking
 ### Create On-Demand Pod
 
 <Tabs>
