@@ -42,7 +42,7 @@ It's crucial to be aware of the following behavior:
 - If your service does not respond within 100 seconds of a request, the connection will be closed.
 - In such cases, the user will receive a `524` error code.
 
-This timeout limit is particularly important for long-running operations or services that might take more than 100 seconds to respond. 
+This timeout limit is particularly important for long-running operations or services that might take more than 100 seconds to respond.
 Make sure to design your applications with this limitation in mind, potentially implementing progress updates or chunked responses for longer operations.
 
 ### Through TCP Public IP
