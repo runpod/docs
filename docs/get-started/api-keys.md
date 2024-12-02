@@ -24,11 +24,11 @@ To create an API key:
    - (AI API only) **Restricted**: Custom access to specific endpoints. No access is default.
    - **Read/Write**: Full access
    - **Read Only**: Read access without write access
-     :::warning
+    :::warning
 
    Select the minimum permission needed for your use case. Only allow full access to GraphQL when absolutely necessary for automations like creating or managing RunPod resources outside of Serverless endpoints.
 
-   :::
+    :::
 4. Choose **Create**.
 
 :::note
