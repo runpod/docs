@@ -48,7 +48,7 @@ For more detailed information or support, please [contact our customer service t
 - Available only on NVIDIA GPU Pods
 - Not yet available for CPU Pods
 
-The following datacenters can take advateage of Global Networking:
+The following datacenters can take advantage of Global Networking:
 
 - CA-MTL-3
 - US-GA-1
