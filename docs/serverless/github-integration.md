@@ -70,7 +70,7 @@ This ensures safe testing while maintaining full control over your deployment en
 
 ## Status
 
-The following statuses are for builds.
+Builds can have the following statuses:
 
 | Status name | Description                                  |
 | ----------- | -------------------------------------------- |
