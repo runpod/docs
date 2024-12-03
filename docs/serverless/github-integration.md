@@ -21,7 +21,7 @@ You must use [RunPod](docs/serverless/workers/development/overview) Python libra
 
 ## Authorize RunPod
 
-You will need to authorize RunPod to have access to deploy your GitHub repository as a container.
+You will need to authorize RunPod to have access to your GitHub repository.
 
 You can connect and authorize your GitHub account either through the [settings page](http://runpod.io/console/user/settings) or when deploying through the GitHub integration for the first time.
 Only one GitHub account per RunPod account can be connected at a time.
