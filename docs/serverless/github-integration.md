@@ -56,17 +56,17 @@ Your first build will take some time; however, every subsequent build will rely 
 
 :::
 
-## Clone an Endpoint
+## Multiple Environments
 
-One benefit of using RunPod's GitHub integration is it makes iteration with your Serverless code easier.
+GitHub Integration enables streamlined development workflows for your Serverless endpoints. By cloning endpoints and connecting them to different branches, you can maintain separate environments for testing and production.
 
-You can clone an Endpoint and select a new branch for RunPod to watch. This helps unlock working in branches in your organization.
+For instance:
 
-For example, you can have an endpoint named `prod` that watches `main` and another endpoint named `testing` that watches the branch named `feature-release`.
+- Production endpoint tracking the `main` branch
+- Staging endpoint tracking the `dev` branch
 
-This way you don't test your Endpoints in production while maintaining control of each environment's GPU, Worker count, and more.
-
-Select your Endpoint and choose **Clone Endpoint** and update the configuration from that options page.
+Each environment maintains independent GPU and worker configurations. To set this up, select **Clone Endpoint** and modify the repository branch setting.
+This ensures safe testing while maintaining full control over your deployment environments.
 
 ## Status
 
