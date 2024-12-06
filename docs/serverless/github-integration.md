@@ -1,5 +1,5 @@
 ---
-title: "Get started"
+title: "Deploying with GitHub"
 sidebar_position: 2
 description: Get started by deploying a Worker and integrating it with GitHub
 ---
