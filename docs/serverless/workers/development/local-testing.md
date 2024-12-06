@@ -37,6 +37,7 @@ Add the following file to your project and run the command.
 ```python
 import runpod
 
+
 def handler(event):
     """
     This is a sample handler function that echoes the input
@@ -53,6 +54,7 @@ def handler(event):
     except Exception as e:
         # If there's an error, return it
         return {"error": str(e)}
+
 
 # Start the serverless function
 runpod.serverless.start({"handler": handler})

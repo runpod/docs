@@ -100,13 +100,16 @@ model = AutoModelForSequenceClassification.from_pretrained(model_name)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
 
+
 def handler(event):
     # Extract text from the event
     input_data = event.get("input", {})
     text = input_data.get("prompt", "")
 
     # Tokenize and prepare input
-    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True).to(device)
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True).to(
+        device
+    )
 
     # Perform inference
     with torch.no_grad():
@@ -121,6 +124,8 @@ def handler(event):
         "sentiment": "positive" if predicted_class == 1 else "negative",
         "confidence": float(torch.softmax(logits, dim=1)[0][predicted_class].item()),
     }
+
+
 runpod.serverless.start({"handler": handler})
 ```
 

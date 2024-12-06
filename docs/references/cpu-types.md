@@ -5,13 +5,14 @@ title: Serverless CPU types
 The following list contains all CPU types available on RunPod.
 
 <!--
-Table last generated: 2024-08-07
+Table last generated: 2024-12-06
 -->
 
 | displayName                                     | cores | threadsPerCore |
 | :---------------------------------------------- | ----: | -------------: |
 | 11th Gen Intel(R) Core(TM) i5-11400 @ 2.60GHz   |     6 |              2 |
 | 11th Gen Intel(R) Core(TM) i5-11400F @ 2.60GHz  |     6 |              2 |
+| 11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz  |     2 |              1 |
 | 11th Gen Intel(R) Core(TM) i7-11700 @ 2.50GHz   |     8 |              2 |
 | 11th Gen Intel(R) Core(TM) i7-11700F @ 2.50GHz  |     8 |              2 |
 | 11th Gen Intel(R) Core(TM) i7-11700K @ 3.60GHz  |     8 |              2 |
@@ -28,6 +29,7 @@ Table last generated: 2024-08-07
 | 13th Gen Intel(R) Core(TM) i9-13900F            |    24 |              1 |
 | 13th Gen Intel(R) Core(TM) i9-13900K            |    24 |              1 |
 | 13th Gen Intel(R) Core(TM) i9-13900KF           |    24 |              1 |
+| AMD EPYC 4564P 16-Core Processor                |    16 |              2 |
 | AMD EPYC 7251 8-Core Processor                  |     8 |              2 |
 | AMD EPYC 7252 8-Core Processor                  |     8 |              2 |
 | AMD EPYC 7272 12-Core Processor                 |    12 |              2 |
@@ -40,6 +42,7 @@ Table last generated: 2024-08-07
 | AMD EPYC 7343 16-Core Processor                 |    16 |              2 |
 | AMD EPYC 7351P 16-Core Processor                |    16 |              2 |
 | AMD EPYC 7352 24-Core Processor                 |    24 |              2 |
+| AMD EPYC 7371 16-Core Processor                 |    16 |              2 |
 | AMD EPYC 7402 24-Core Processor                 |    24 |              2 |
 | AMD EPYC 7402P 24-Core Processor                |    24 |              2 |
 | AMD EPYC 7413 24-Core Processor                 |    24 |              2 |
@@ -85,9 +88,11 @@ Table last generated: 2024-08-07
 | AMD EPYC 9354 32-Core Processor                 |    32 |              2 |
 | AMD EPYC 9354P 32-Core Processor                |    32 |              2 |
 | AMD EPYC 9374F 32-Core Processor                |    32 |              1 |
+| AMD EPYC 9454 48-Core Processor                 |    48 |              2 |
 | AMD EPYC 9474F 48-Core Processor                |    48 |              2 |
 | AMD EPYC 9534 64-Core Processor                 |    64 |              2 |
 | AMD EPYC 9554 64-Core Processor                 |   126 |              1 |
+| AMD EPYC 9654 96-Core Emb Processor             |    96 |              1 |
 | AMD EPYC 9654 96-Core Processor                 |    96 |              2 |
 | AMD EPYC 9754 128-Core Processor                |   128 |              2 |
 | AMD EPYC Processor                              |     1 |              1 |
@@ -125,6 +130,7 @@ Table last generated: 2024-08-07
 | AMD Ryzen Threadripper 2970WX 24-Core Processor |    24 |              1 |
 | AMD Ryzen Threadripper 2990WX 32-Core Processor |    32 |              2 |
 | AMD Ryzen Threadripper 3960X 24-Core Processor  |    24 |              2 |
+| AMD Ryzen Threadripper 7960X 24-Cores           |    24 |              2 |
 | AMD Ryzen Threadripper PRO 3975WX 32-Cores      |    32 |              2 |
 | AMD Ryzen Threadripper PRO 3995WX 64-Cores      |    64 |              2 |
 | AMD Ryzen Threadripper PRO 5945WX 12-Cores      |    12 |              2 |
@@ -148,6 +154,7 @@ Table last generated: 2024-08-07
 | Intel(R) Core(TM) i5-10400F CPU @ 2.90GHz       |     6 |              2 |
 | Intel(R) Core(TM) i5-10600 CPU @ 3.30GHz        |     6 |              2 |
 | Intel(R) Core(TM) i5-14500                      |    14 |              2 |
+| Intel(R) Core(TM) i5-14600KF                    |    14 |              2 |
 | Intel(R) Core(TM) i5-4570 CPU @ 3.20GHz         |     4 |              1 |
 | Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz         |     4 |              1 |
 | Intel(R) Core(TM) i5-6500 CPU @ 3.20GHz         |     4 |              1 |
@@ -178,6 +185,7 @@ Table last generated: 2024-08-07
 | Intel(R) Xeon(R) CPU E5-2620 v4 @ 2.10GHz       |     8 |              2 |
 | Intel(R) Xeon(R) CPU E5-2630 0 @ 2.30GHz        |     6 |              2 |
 | Intel(R) Xeon(R) CPU E5-2630 v2 @ 2.60GHz       |     6 |              2 |
+| Intel(R) Xeon(R) CPU E5-2630 v3 @ 2.40GHz       |     8 |              2 |
 | Intel(R) Xeon(R) CPU E5-2630 v4 @ 2.20GHz       |    10 |              2 |
 | Intel(R) Xeon(R) CPU E5-2637 v2 @ 3.50GHz       |     4 |              2 |
 | Intel(R) Xeon(R) CPU E5-2643 0 @ 3.30GHz        |     4 |              1 |

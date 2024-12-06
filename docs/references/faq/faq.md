@@ -92,7 +92,9 @@ It is highly advisable to continually back up anything you want to save offsite 
 No, RunPod does not offer the option to withdraw your unused balance after depositing funds into your account. When you add funds to your RunPod account, these credits are non-refundable and can only be used for RunPod services.
 
 :::important
+
 When depositing funds into your RunPod account, please be aware that you cannot withdraw your balance once it has been added. Only deposit the amount you intend to use for RunPod services.
+
 :::
 
 We recommend carefully considering the amount you wish to deposit based on your expected usage of our services. If you have any questions about billing or need assistance in planning your RunPod expenses, please don't hesitate to contact our support team at [help@runpod.io](mailto:help@runpod.io).

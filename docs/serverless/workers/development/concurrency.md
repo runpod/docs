@@ -32,10 +32,12 @@ import runpod
 
 counter = 0
 
+
 def handler(event):
     global counter
     counter += 1
     return {"counter": counter}
+
 
 runpod.serverless.start({"handler": handler})
 ```
@@ -118,11 +120,13 @@ from threading import Lock
 counter = 0
 counter_lock = Lock()
 
+
 def handler(event):
     global counter
     with counter_lock:
         counter += 1
         return {"counter": counter}
+
 
 runpod.serverless.start({"handler": handler})
 ```

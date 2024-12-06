@@ -45,22 +45,24 @@ schema = {
         "required": False,
         "default": 100,
         "constraints": lambda x: x > 0,
-    }
+    },
 }
+
 
 def handler(event):
     try:
         validated_input = validate(event["input"], schema)
-        if 'errors' in validated_input:
-            return {"error": validated_input['errors']}
-        
-        text = validated_input['validated_input']['text']
-        max_length = validated_input['validated_input']['max_length']
-        
+        if "errors" in validated_input:
+            return {"error": validated_input["errors"]}
+
+        text = validated_input["validated_input"]["text"]
+        max_length = validated_input["validated_input"]["max_length"]
+
         result = text[:max_length]
         return {"output": result}
     except Exception as e:
         return {"error": str(e)}
+
 
 runpod.serverless.start({"handler": handler})
 ```

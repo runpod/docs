@@ -17,7 +17,7 @@ RunPod accepts several payment methods for funding your account:
 
 <!-- [source](https://blog.runpod.io/how-to-manage-funding-your-runpod-account#my-card-keeps-getting-declined) -->
 
-1. **Crypto Payments**: RunPod also accepts crypto payments. It's recommended to set up a [crypto.com](https://crypto.com/?ref=blog.runpod.io) account and go through any KYC checks they may require ahead of time. This provides an alternate way of funding your account in case you run into issues with card payment.
+2. **Crypto Payments**: RunPod also accepts crypto payments. It's recommended to set up a [crypto.com](https://crypto.com/?ref=blog.runpod.io) account and go through any KYC checks they may require ahead of time. This provides an alternate way of funding your account in case you run into issues with card payment.
 
 <!-- [source](https://blog.runpod.io/how-to-manage-funding-your-runpod-account#crypto-payments) -->
 
