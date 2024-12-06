@@ -136,7 +136,7 @@ client = OpenAI(
 
 chat_completion = client.chat.completions.create(
     model="openchat/openchat-3.5-0106",
-    messages=[{"role": "user", "content": "Reply with: Hello, World!"}]
+    messages=[{"role": "user", "content": "Reply with: Hello, World!"}],
 )
 
 print(chat_completion)

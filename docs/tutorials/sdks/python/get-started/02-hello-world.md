@@ -22,10 +22,12 @@ Create a new file called `hello_world.py` in your text editor and add the follow
 ```python
 import runpod
 
+
 def handler(job):
     job_input = job["input"]
 
     return f"Hello {job_input['name']}!"
+
 
 runpod.serverless.start({"handler": handler})
 ```

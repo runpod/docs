@@ -40,7 +40,9 @@ Here’s a breakdown of the imports:
 Next, confirm that CUDA is available, as the model requires a GPU to function efficiently.
 
 ```python
-assert torch.cuda.is_available(), "CUDA is not available. Make sure you have a GPU instance."
+assert (
+    torch.cuda.is_available()
+), "CUDA is not available. Make sure you have a GPU instance."
 ```
 
 This assertion checks whether a compatible NVIDIA GPU is available for PyTorch to use.
@@ -88,7 +90,7 @@ def stable_diffusion_handler(event):
     global model
 
     # Ensure the model is loaded
-    if 'model' not in globals():
+    if "model" not in globals():
         model = load_model()
 
     # Get the input prompt from the event
@@ -105,10 +107,7 @@ def stable_diffusion_handler(event):
         # Convert the image to base64
         image_base64 = image_to_base64(image)
 
-        return {
-            "image": image_base64,
-            "prompt": prompt
-        }
+        return {"image": image_base64, "prompt": prompt}
 
     except Exception as e:
         return {"error": str(e)}
@@ -143,7 +142,10 @@ from diffusers import StableDiffusionPipeline
 from io import BytesIO
 import base64
 
-assert torch.cuda.is_available(), "CUDA is not available. Make sure you have a GPU instance."
+assert (
+    torch.cuda.is_available()
+), "CUDA is not available. Make sure you have a GPU instance."
+
 
 def load_model():
     model_id = "runwayml/stable-diffusion-v1-5"
@@ -152,15 +154,17 @@ def load_model():
     pipe = pipe.to("cuda")
     return pipe
 
+
 def image_to_base64(image):
     buffered = BytesIO()
     image.save(buffered, format="PNG")
     return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
+
 def stable_diffusion_handler(event):
     global model
 
-    if 'model' not in globals():
+    if "model" not in globals():
         model = load_model()
 
     prompt = event["input"].get("prompt")
@@ -172,13 +176,11 @@ def stable_diffusion_handler(event):
         image = model(prompt).images[0]
         image_base64 = image_to_base64(image)
 
-        return {
-            "image": image_base64,
-            "prompt": prompt
-        }
+        return {"image": image_base64, "prompt": prompt}
 
     except Exception as e:
         return {"error": str(e)}
+
 
 runpod.serverless.start({"handler": stable_diffusion_handler})
 ```

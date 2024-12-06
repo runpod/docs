@@ -91,7 +91,12 @@ Provide the following parameters to the `chat.completions.create` method:
 - `max_tokens`: The maximum number of tokens to generate.
 
 ```python
-messages = [{"role": "assistant", "content": "Hello, I'm your assistant. How can I help you today?"}]
+messages = [
+    {
+        "role": "assistant",
+        "content": "Hello, I'm your assistant. How can I help you today?",
+    }
+]
 
 
 def display_chat_history(messages):
@@ -103,19 +108,19 @@ def get_assistant_response(messages):
     r = client.chat.completions.create(
         model="google/gemma-7b-it",
         messages=[{"role": m["role"], "content": m["content"]} for m in messages],
-        temperature=.7,
-        top_p=.8,
+        temperature=0.7,
+        top_p=0.8,
         max_tokens=100,
     )
     response = r.choices[0].message.content
     return response
+
 
 while True:
     display_chat_history(messages)
 
     prompt = input("User: ")
     messages.append({"role": "user", "content": prompt})
-
 
     response = get_assistant_response(messages)
     messages.append({"role": "assistant", "content": response})

@@ -40,9 +40,10 @@ This behavior is achieved by doing the following within your worker:
 import runpod
 import time
 
+
 def sync_handler(job):
     job_input = job["input"]  # Access the input from the request.
-    
+
     results = []
     for i in range(5):
         # Generate a synchronous output token
@@ -51,9 +52,10 @@ def sync_handler(job):
 
         # Simulate a synchronous task, such as processing time for a large language model
         time.sleep(1)
-    
+
     # Return the results and indicate the worker should be refreshed
     return {"refresh_worker": True, "job_results": results}
+
 
 # Configure and start the RunPod serverless function
 runpod.serverless.start(
@@ -71,6 +73,7 @@ runpod.serverless.start(
 import runpod
 import asyncio
 
+
 async def async_generator_handler(job):
     results = []
     for i in range(5):
@@ -80,9 +83,10 @@ async def async_generator_handler(job):
 
         # Simulate an asynchronous task, such as processing time for a large language model
         await asyncio.sleep(1)
-    
+
     # Return the results and indicate the worker should be refreshed
     return {"refresh_worker": True, "job_results": results}
+
 
 # Configure and start the RunPod serverless function
 runpod.serverless.start(

@@ -69,6 +69,7 @@ Here is the complete code for the Random Number Generator:
 import runpod
 import random
 
+
 def random_number_handler(job):
     job_input = job["input"]
 
@@ -84,6 +85,7 @@ def random_number_handler(job):
     random_num = random.randint(min_value, max_value)
 
     return {"random_number": random_num}
+
 
 runpod.serverless.start({"handler": random_number_handler})
 ```

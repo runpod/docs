@@ -36,7 +36,9 @@ Loading the model in a function ensures that the model is only loaded once when 
 
 ```python
 def load_model():
-    return pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
+    return pipeline(
+        "sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english"
+    )
 ```
 
 In this function, we use the `pipeline` method from `transformers` to load a pre-trained sentiment analysis model. The `distilbert-base-uncased-finetuned-sst-2-english` model is a distilled version of BERT fine-tuned for sentiment analysis tasks.
@@ -50,7 +52,7 @@ def sentiment_analysis_handler(event):
     global model
 
     # Ensure the model is loaded
-    if 'model' not in globals():
+    if "model" not in globals():
         model = load_model()
 
     # Get the input text from the event
@@ -63,10 +65,7 @@ def sentiment_analysis_handler(event):
     # Perform sentiment analysis
     result = model(text)[0]
 
-    return {
-        "sentiment": result["label"],
-        "score": float(result["score"])
-    }
+    return {"sentiment": result["label"], "score": float(result["score"])}
 ```
 
 This function performs the following steps:
@@ -95,13 +94,17 @@ Here is the complete code for our sentiment analysis serverless function:
 import runpod
 from transformers import pipeline
 
+
 def load_model():
-    return pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
+    return pipeline(
+        "sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english"
+    )
+
 
 def sentiment_analysis_handler(event):
     global model
 
-    if 'model' not in globals():
+    if "model" not in globals():
         model = load_model()
 
     text = event["input"].get("text")
@@ -111,10 +114,8 @@ def sentiment_analysis_handler(event):
 
     result = model(text)[0]
 
-    return {
-        "sentiment": result["label"],
-        "score": float(result["score"])
-    }
+    return {"sentiment": result["label"], "score": float(result["score"])}
+
 
 runpod.serverless.start({"handler": sentiment_analysis_handler})
 ```

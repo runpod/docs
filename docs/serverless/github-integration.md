@@ -1,6 +1,6 @@
 ---
 title: "Deploying with GitHub"
-sidebar_position: 2
+sidebar_position: 3
 description: Get started by deploying a Worker and integrating it with GitHub
 ---
 

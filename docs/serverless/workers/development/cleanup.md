@@ -44,13 +44,15 @@ from runpod.serverless.utils.rp_cleanup import clean
 import requests
 import os
 
+
 def download_image(url, save_path):
     response = requests.get(url)
     if response.status_code == 200:
-        with open(save_path, 'wb') as file:
+        with open(save_path, "wb") as file:
             file.write(response.content)
         return True
     return False
+
 
 def handler(event):
     """
@@ -60,28 +62,29 @@ def handler(event):
     try:
         # Extract the image URL from the input
         image_url = event["input"]["image_url"]
-        
+
         # Create a temporary directory for the image
         os.makedirs("temp_images", exist_ok=True)
         image_path = "temp_images/downloaded_image.jpg"
-        
+
         # Download the image
         if not download_image(image_url, image_path):
             raise Exception("Failed to download image")
-        
+
         # Your AI model processing code here
         # For this example, we're just simulating processing
         result = f"Processed image from: {image_url}"
-        
+
         # Cleanup after processing
         clean(folder_list=["temp_images"])
-        
+
         # Return the result
         return {"output": result}
     except Exception as e:
         # If there's an error, attempt cleanup and return the error
         clean(folder_list=["temp_images"])
         return {"error": str(e)}
+
 
 # Start the serverless function
 runpod.serverless.start({"handler": handler})
@@ -97,7 +100,7 @@ In this example, `clean()` is called after the model processing is complete, ens
 You can also specify additional folders to be removed by passing a list to the `clean()` function:
 
 ```python
-clean(['custom_folder1', 'custom_folder2'])
+clean(["custom_folder1", "custom_folder2"])
 ```
 
 ## Testing your Handler with Cleanup
