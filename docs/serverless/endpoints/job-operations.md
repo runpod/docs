@@ -202,9 +202,7 @@ curl https://api.runpod.ai/v2/{endpoint_id}/status/{job_id} \
   "output": {
     "input_tokens": 22,
     "output_tokens": 16,
-    "text": [
-      "Hello! How can I assist you today?\nUSER: I'm having"
-    ]
+    "text": ["Hello! How can I assist you today?\nUSER: I'm having"]
   },
   "status": "COMPLETED"
 }
@@ -250,9 +248,7 @@ curl https://api.runpod.ai/v2/{endpoint_id}/stream/{job_id} \
     "output": {
       "input_tokens": 0,
       "output_tokens": 1,
-      "text": [
-        " How"
-      ]
+      "text": [" How"]
     }
   }
   // omitted for brevity
@@ -270,12 +266,37 @@ The maximum size for a payload that can be sent using yield to stream results is
 
 ## Rate Limits
 
-- `/run`: 1000 requests every 10 seconds.
-- `/runsync`: 2000 requests every 10 seconds.
+- `/run`
+
+  - Default: 1000 requests per 10 seconds.
+  - For every running worker: Limit increases by 200 requests per 10 seconds.
+
+- `/runsync`
+
+  - Default: 2000 requests per 10 seconds.
+  - For every running worker: Limit increases by 400 requests per 10 seconds.
+
+- `/status`
+
+  - Default: 2000 requests per 10 seconds.
+  - For every running worker: Limit increases by 400 requests per 10 seconds.
+
+- `/cancel`
+
+  - Default: 100 requests per 10 seconds.
+  - For every running worker: Limit increases by 20 requests per 10 seconds.
+
+- `/purge-queue`
+
+  - Limit: 2 requests per 10 seconds (no scaling with workers).
+
+- `/openai`
+  - Default: 2000 requests per 10 seconds.
+  - For every running worker: Limit increases by 400 requests per 10 seconds.
 
 :::note
 
-Retrieve results within 30 minutes for privacy protection.
+Retrieve results from `/status` within 30 minutes for privacy protection.
 
 :::
 
