@@ -129,11 +129,12 @@ Note how you don't get the images directly in the output. The output contains th
 
 You've successfully generated your first images with our Stable Diffusion API!
 
-### Rate Limit
+### Rate Limits
 
-Rate limits are enforced on a per-user basis.
-If you exceed the rate limit, you will receive a `429` error code.
+Rate limits are enforced per-user basis. 
+Exceeding limits returns a `429` error.
 
-`/run` - 1000 requests every 10s.
+`/run` - 1000 requests/10s, max 200 concurrent
+`/runsync` - 2000 requests/10s, max 400 concurrent
 
-`/runsync` - 2000 requests every 10s.
+For more information, see [Job operations](/serverless/references/operations).

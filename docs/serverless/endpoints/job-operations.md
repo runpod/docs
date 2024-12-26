@@ -266,33 +266,29 @@ The maximum size for a payload that can be sent using yield to stream results is
 
 ## Rate Limits
 
+RunPod's Endpoints facilitate submitting jobs and retrieving outputs. 
+Access these endpoints at: `https://api.runpod.ai/v2/{endpoint_id}/{operation}`
+
 - `/run`
+  - 1000 requests per 10 seconds, 200 concurrent
 
-  - Default: 1000 requests per 10 seconds.
-  - For every running worker: Limit increases by 200 requests per 10 seconds.
+- `/runsync`  
+  - 2000 requests per 10 seconds, 400 concurrent
 
-- `/runsync`
-
-  - Default: 2000 requests per 10 seconds.
-  - For every running worker: Limit increases by 400 requests per 10 seconds.
-
-- `/status`
-
-  - Default: 2000 requests per 10 seconds.
-  - For every running worker: Limit increases by 400 requests per 10 seconds.
+- `/status`, `/status-sync`, `/stream`
+  - 2000 requests per 10 seconds, 400 concurrent
 
 - `/cancel`
-
-  - Default: 100 requests per 10 seconds.
-  - For every running worker: Limit increases by 20 requests per 10 seconds.
+  - 100 requests per 10 seconds, 20 concurrent
 
 - `/purge-queue`
+  - 2 requests per 10 seconds
 
-  - Limit: 2 requests per 10 seconds (no scaling with workers).
+- `/openai/*`
+  - 2000 requests per 10 seconds, 400 concurrent
 
-- `/openai`
-  - Default: 2000 requests per 10 seconds.
-  - For every running worker: Limit increases by 400 requests per 10 seconds.
+- `/requests`
+  - 10 requests per 10 seconds, 2 concurrent
 
 :::note
 
