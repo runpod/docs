@@ -266,13 +266,13 @@ The maximum size for a payload that can be sent using yield to stream results is
 
 ## Rate Limits
 
-RunPod's Endpoints facilitate submitting jobs and retrieving outputs. 
+RunPod's Endpoints facilitate submitting jobs and retrieving outputs.
 Access these endpoints at: `https://api.runpod.ai/v2/{endpoint_id}/{operation}`
 
 - `/run`
   - 1000 requests per 10 seconds, 200 concurrent
 
-- `/runsync`  
+- `/runsync`
   - 2000 requests per 10 seconds, 400 concurrent
 
 - `/status`, `/status-sync`, `/stream`

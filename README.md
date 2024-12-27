@@ -36,7 +36,7 @@ vale path/to/*.md
 - Lint the entire repo
 
 ```command
-yarn lint
+yarn format
 ```
 
 ## Format Python code examples

@@ -5,7 +5,7 @@ title: Serverless CPU types
 The following list contains all CPU types available on RunPod.
 
 <!--
-Table last generated: 2024-12-06
+Table last generated: 2024-12-27
 -->
 
 | displayName                                     | cores | threadsPerCore |
@@ -143,6 +143,7 @@ Table last generated: 2024-12-06
 | Genuine Intel(R) CPU $0000%@                    |    24 |              2 |
 | Genuine Intel(R) CPU @ 2.20GHz                  |    14 |              2 |
 | INTEL(R) XEON(R) PLATINUM 8558                  |    48 |              2 |
+| INTEL(R) XEON(R) PLATINUM 8568Y+                |    48 |              2 |
 | Intel Xeon Processor (Icelake)                  |    40 |              2 |
 | Intel(R) Celeron(R) CPU G3900 @ 2.80GHz         |     2 |              1 |
 | Intel(R) Celeron(R) G5905 CPU @ 3.50GHz         |     2 |              1 |
@@ -238,6 +239,7 @@ Table last generated: 2024-12-06
 | Intel(R) Xeon(R) Platinum 8452Y                 |    36 |              2 |
 | Intel(R) Xeon(R) Platinum 8462Y+                |    32 |              2 |
 | Intel(R) Xeon(R) Platinum 8468                  |    48 |              2 |
+| Intel(R) Xeon(R) Platinum 8468V                 |    44 |              2 |
 | Intel(R) Xeon(R) Platinum 8470                  |    52 |              2 |
 | Intel(R) Xeon(R) Platinum 8480+                 |    56 |              2 |
 | Intel(R) Xeon(R) Platinum 8480C                 |    56 |              2 |
