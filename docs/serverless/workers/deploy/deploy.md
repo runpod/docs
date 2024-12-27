@@ -45,7 +45,7 @@ ADD handler.py .
 CMD [ "python", "-u", "/handler.py" ]
 ```
 
-To build and push the image, review the steps in [Get started](/serverless/workers/get-started).
+To build and push the image, review the steps in [Get started](/serverless/workers/overview).
 
 > 🚧 If your handler requires external files such as model weights, be sure to cache them into your docker image. You are striving for a completely self-contained worker that doesn't need to download or fetch external files to run.
 
