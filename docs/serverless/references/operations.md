@@ -6,7 +6,6 @@ sidebar_position: 2
 
 RunPod's Endpoints facilitate submitting jobs and retrieving outputs. Access these endpoints at: `https://api.runpod.ai/v2/{endpoint_id}/{operation}`
 
-
 ### /run
 
 - **Method**: `POST`
@@ -47,12 +46,12 @@ All status and stream operations share a rate limit of 2000 requests per 10 seco
 - `/cancel/{job_id}`
   - **Method**: `POST`
   - **Rate Limit**: 100 requests per 10 seconds, 20 concurrent
-  
+
 - `/purge-queue`
   - **Method**: `POST`
   - **Description**: Clears all queued jobs (does not affect running jobs)
   - **Rate Limit**: 2 requests per 10 seconds
-  
+
 - `/health`
   - **Method**: `GET`
   - **Description**: Provides worker statistics and endpoint health

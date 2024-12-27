@@ -131,7 +131,7 @@ You've successfully generated your first images with our Stable Diffusion API!
 
 ### Rate Limits
 
-Rate limits are enforced per-user basis. 
+Rate limits are enforced per-user basis.
 Exceeding limits returns a `429` error.
 
 `/run` - 1000 requests/10s, max 200 concurrent
