@@ -27,7 +27,7 @@ yarn build
 - Install [vale](https://vale.sh/docs/vale-cli/installation/)
 - Lint a specific folder or file, run:
 
-```command
+```bash
 vale path/to/docs/
 # or
 vale path/to/*.md
@@ -35,27 +35,31 @@ vale path/to/*.md
 
 - Lint the entire repo
 
-```command
-yarn format
+```bash
+yarn lint
 ```
 
 ## Format Python code examples
 
 Install `blacken-docs`.
 
-```command
+```bash
 python -m pip install blacken-docs
 ```
 
 Run the formatter.
 
-```command
+```bash
+yarn format
+```
+
+```bash
 git ls-files -z -- '*.md' | xargs -0 blacken-docs
 ```
 
 ## Update CPU and GPUs
 
-```command
+```bash
 yarn gpu-types
 yarn cpu-types
 ```

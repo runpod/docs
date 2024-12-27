@@ -57,11 +57,11 @@ Explore how to integrate RunPod with other tools and platforms like OpenAI, SkyP
 
 ### SkyPilot
 
-- [Running RunPod on SkyPilot](/tutorials/integrations/skypilot): Learn how to deploy Pods from RunPod using SkyPilot.
+- [Running RunPod on SkyPilot](/integrations/skypilot): Learn how to deploy Pods from RunPod using SkyPilot.
 
 ### Mods
 
-- [Running RunPod on Mods](/tutorials/integrations/mods): Learn to integrate into Charm's Mods tool chain and use RunPod as the Serverless Endpoint.
+- [Running RunPod on Mods](/integrations/mods): Learn to integrate into Charm's Mods tool chain and use RunPod as the Serverless Endpoint.
 
 ## Migration
 
