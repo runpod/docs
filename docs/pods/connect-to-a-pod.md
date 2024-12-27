@@ -51,3 +51,11 @@ The web terminal is useful for quickly logging in to your Pod and running comman
 1. On your Pod's page, select **Connect**.
 2. Select **Start Web Terminal** then choose **Connect to Web Terminal** in a new window.
 3. Enter the **Username** and **Password**.
+
+:::note
+
+You can find the **Username** and **Password** for your web terminal once select **Start Web Terminal**.
+
+![Username and password](/img/docs/username-password.png)
+
+:::
