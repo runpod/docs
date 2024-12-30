@@ -23,7 +23,7 @@ Because of this, we recommend fine-tuning using RunPod's GPUs.
 
 To do this, you'll need to create a Pod, specify a container, then you can begin training.
 A Pod is an instance on a GPU or multiple GPUs that you can use to run your training job.
-You also specify a Docker image like `winglian/axolotl-cloud:main-latest` that you want installed on your Pod.
+You also specify a Docker image like `axolotlai/axolotl-cloud:main-latest` that you want installed on your Pod.
 
 1. Login to [RunPod](https://www.runpod.io/console/console/home) and deploy your Pod.
    1. Select **Deploy**.
