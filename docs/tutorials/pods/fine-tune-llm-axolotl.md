@@ -28,7 +28,7 @@ You also specify a Docker image like `winglian/axolotl-cloud:main-latest` that y
 1. Login to [RunPod](https://www.runpod.io/console/console/home) and deploy your Pod.
    1. Select **Deploy**.
    2. Select a GPU instance.
-   3. Specify the `winglian/axolotl-cloud:main-latest` image as your Template image.
+   3. Specify the `axolotlai/axolotl-cloud:main-latest` image as your Template image.
    4. Select your GPU count.
    5. Select **Deploy**.
 
