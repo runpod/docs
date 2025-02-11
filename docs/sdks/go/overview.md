@@ -25,7 +25,7 @@ go get github.com/runpod/go-sdk
 ```
 
 This command installs the `runpod-sdk` package.
-Then run the following command to install the dependcies:
+Then run the following command to install the dependencies:
 
 ```command
 go mod tidy

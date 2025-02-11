@@ -17,10 +17,10 @@ To get started, login to RunPod and select Serverless.
 Choose your GPU.
 Add `runpod/worker-vllm:0.2.2` to the Container Image.
 Set the Container Disk to size large enough for your model.
-Under Enviroment Variables, add `MODEL_NAME` and set it to your model name, for example `bert-base-uncased`.
+Under Environment Variables, add `MODEL_NAME` and set it to your model name, for example `bert-base-uncased`.
 Select **Deploy**.
 
-Once your serverless pod has initialized, you can start executing commands against the Endpont.
+Once your serverless pod has initialized, you can start executing commands against the Endpoint.
 
 ```command
 curl --request POST \

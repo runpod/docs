@@ -109,7 +109,7 @@ Now, let's send a request to your Endpoint.
 ## Send a request
 
 Now that our Endpoint is deployed, you can begin interacting with and integrating it into an application.
-Before writing the logic into the applicaiton, ensure that you can interact with the Endpoint by sending a request.
+Before writing the logic into the application, ensure that you can interact with the Endpoint by sending a request.
 
 Run the following command:
 

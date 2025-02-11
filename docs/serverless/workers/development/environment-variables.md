@@ -9,7 +9,7 @@ This section focuses on how to use environment variables to facilitate the uploa
 
 You will go through the process of writing Python code for the uploading and setting the necessary environment variables in the Web interface.
 
-## Prerequistes
+## Prerequisites
 
 - Ensure the RunPod Python library is installed: `pip install runpod`.
 - Have an image file named `image.png` in the Docker container's working directory.

@@ -73,7 +73,7 @@ mutation {
 }
 ```
   </TabItem>
-  <TabItem value="ouput" label="Output">
+  <TabItem value="output" label="Output">
 ```json
 {
   "data": {
@@ -137,7 +137,7 @@ mutation {
 }
 ```
   </TabItem>
-  <TabItem value="ouput" label="Output">
+  <TabItem value="output" label="Output">
 ```json
 {
   "data": {
@@ -251,7 +251,7 @@ mutation {
 }
 ```
   </TabItem>
-  <TabItem value="ouput" label="Output">
+  <TabItem value="output" label="Output">
 ```json
 {
   "data": {
@@ -300,7 +300,7 @@ mutation {
 }
 ```
   </TabItem>
-  <TabItem value="ouput" label="Output">
+  <TabItem value="output" label="Output">
 ```json
 {
   "data": {
@@ -418,7 +418,7 @@ mutation {
 }
 ```
   </TabItem>
-  <TabItem value="ouput" label="Output">
+  <TabItem value="output" label="Output">
 ```json
 {
   "data": {
@@ -476,7 +476,7 @@ query Pods {
 }
 ```
   </TabItem>
-  <TabItem value="ouput" label="Output">
+  <TabItem value="output" label="Output">
 ```json
 {
   "data": {
@@ -576,7 +576,7 @@ query Pod {
 }
 ```
   </TabItem>
-  <TabItem value="ouput" label="Output">
+  <TabItem value="output" label="Output">
 ```json
 {
   "data": {
@@ -638,7 +638,7 @@ query GpuTypes {
 }
 ```
   </TabItem>
-  <TabItem value="ouput" label="Output">
+  <TabItem value="output" label="Output">
 ```json
 {
   "data": {
@@ -693,7 +693,7 @@ query GpuTypes {
 }
 ```
   </TabItem>
-  <TabItem value="ouput" label="Output">
+  <TabItem value="output" label="Output">
 ```json
 {
   "data": {

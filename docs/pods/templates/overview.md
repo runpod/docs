@@ -14,7 +14,7 @@ You can also define environment variables within the Template.
 
 There a few types of Templates:
 
-- **Managed by RunPod**: Also known as offical Templates; these templates are created and maintained by RunPod.
+- **Managed by RunPod**: Also known as official Templates; these templates are created and maintained by RunPod.
 - **Custom Templates**:
   - **Community Templates**: Custom Templates shared by the community.
   - **Private Templates**: Custom Templates created by you or if using a team account, shared inside your team.
@@ -79,7 +79,7 @@ Here are some working examples to try in dev:
 - Command only: `bash -c 'mkdir /testdir1 && /start.sh'`
 - Command only: `{"cmd": ["bash", "-c", "mkdir /testdir8 && /start.sh"]}`
 - Command and Entrypoint: `{"cmd": ["test-echo-test-echo"], "entrypoint": ["echo"]}`
-- Cmmand and Entrypoint: `{"cmd": ["mkdir -p /testdir12 && /start.sh"], "entrypoint": ["bash", "-c"]}`
+- Command and Entrypoint: `{"cmd": ["mkdir -p /testdir12 && /start.sh"], "entrypoint": ["bash", "-c"]}`
 
 :::note
 

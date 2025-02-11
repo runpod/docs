@@ -27,7 +27,7 @@ The SDK allows you to define handler functions, conduct local testing, and utili
 
 Acting as a bridge between your Python code and RunPod's cloud infrastructure, the SDK enables you to execute complex AI tasks without managing underlying hardware.
 
-To start using RunPod Python SDK, see the [prerequistes](/tutorials/sdks/python/get-started/prerequisites) section or if, you're already setup proceed to the [Hello World](/tutorials/sdks/python/get-started/hello-world) tutorial, where we will guide you through creating, deploying, and running your first serverless AI application.
+To start using RunPod Python SDK, see the [prerequisites](/tutorials/sdks/python/get-started/prerequisites) section or if, you're already setup proceed to the [Hello World](/tutorials/sdks/python/get-started/hello-world) tutorial, where we will guide you through creating, deploying, and running your first serverless AI application.
 
 You can also see a library of complete RunPod samples in the [Worker library](https://github.com/runpod-workers) on GitHub.
 These samples are complete Python libraries for common use cases.

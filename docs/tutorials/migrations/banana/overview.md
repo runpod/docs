@@ -194,7 +194,7 @@ For runs that take longer than 30 seconds to execute, you should use the `sync` 
 **Max Replicas**
 
 When creating a Worker in RunPod, you can set the max Workers that will scale up depending on the amount of Worker sent to your Endpoint.
-For more informaiton, see [Scale Type](/serverless/references/endpoint-configurations#scale-type)
+For more information, see [Scale Type](/serverless/references/endpoint-configurations#scale-type).
 
 :::note
 

@@ -54,7 +54,7 @@ This is a simple script that will print the current time when the container star
 
 With those files created, we can now build a Docker image using our Dockerfile:
 
-```
+```bash
 docker image build -t my-time-image .
 ```
 
@@ -74,7 +74,7 @@ This will build the image named `my-time-image` from the Dockerfile in the curre
 
 Finally, let's run a container from our new image:
 
-```commmand
+```bash
 docker run my-time-image
 ```
 

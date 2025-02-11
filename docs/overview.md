@@ -32,7 +32,7 @@ Get started with:
 
 RunPod also provides a Command Line Interface (CLI) tool for quickly developing and deploying custom endpoints on the RunPod serverless platform.
 
-For more informaiton, see the following:
+For more information, see the following:
 
 - [GitHub](https://github.com/runpod/runpodctl)
 - [Reference documentation](/runpodctl/reference/runpodctl)
