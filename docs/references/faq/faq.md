@@ -145,7 +145,7 @@ RunPod needs to provide you with reliable servers. All of our listed servers mus
 
 If you want to avoid this, using network volumes is the best choice. [Read about it here.](https://blog.runpod.io/four-reasons-to-set-up-a/)
 
-[Learn how to use them here](https://docs.runpod.io/docs/create-a-network-volume).
+[Learn how to use them here](https://docs.runpod.io/pods/storage/create-network-volumes).
 
 Most of our machines have between 4 and 8 GPUs per physical machine. When you start a Pod, it is locked to a specific physical machine. If you keep it running (On-Demand), then that GPU cannot be taken from you. However, if you stop your Pod, it becomes available for a different user to rent. When you want to start your Pod again, your specific machine may be wholly occupied! In this case, we give you the option to spin up your Pod with zero GPUs so you can retain access to your data.
 
