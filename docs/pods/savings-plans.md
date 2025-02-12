@@ -18,7 +18,7 @@ There are two ways to create a savings plan.
 
 Regularly check the **Savings Plans** section to track your Savings Plans and associated pods.
 
-![Image of Savigns Plan in the UI](/img/docs/savings-plan.png)
+![Image of Savings Plan in the UI](/img/docs/savings-plan.png)
 
 ## Benefits
 

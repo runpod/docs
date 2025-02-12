@@ -12,7 +12,7 @@ Ollama makes it easy to run, create, and customize models.
 
 However, not everyone has access to the compute power needed to run these models.
 With RunPod, you can spin up and manage GPUs in the Cloud.
-RunPod offers templates with preinstalled libaries, which makes it quick to run Ollama.
+RunPod offers templates with preinstalled libraries, which makes it quick to run Ollama.
 
 In the following tutorial, you'll set up a Pod on a GPU, install and serve the Ollama model, and interact with it on the CLI.
 
@@ -28,12 +28,12 @@ In this step, you will set overrides to configure Ollama.
 
 1. Log in to your [RunPod account](https://www.runpod.io/console/pods) and choose **+ GPU Pod**.
 2. Choose a GPU Pod like `A40`.
-3. From the availble templates, select the lastet PyTorch template.
+3. From the available templates, select the lastet PyTorch template.
 4. Select **Customize Deployment**.
    1. Add the port `11434` to the list of exposed ports. This port is used by Ollama for HTTP API requests.
    2. Add the following environment variable to your Pod to allow Ollama to bind to the HTTP port:
-   - Key: `OLLAMA_HOST`
-   - Value: `0.0.0.0`
+      - Key: `OLLAMA_HOST`
+      - Value: `0.0.0.0`
 5. Select **Set Overrides**, **Continue**, then **Deploy**.
 
 This setting configures Ollama to listen on all network interfaces, enabling external access through the exposed port.
@@ -56,7 +56,7 @@ apt update
 apt install lshw
 ```
 
-5. Run the following command to install ollama and send to the background:
+5. Run the following command to install Ollama and send to the background:
 
 ```bash
 (curl -fsSL https://ollama.com/install.sh | sh && ollama serve > ollama.log 2>&1) &
@@ -134,7 +134,7 @@ Replace `[your-pod-id]` with your actual Pod Id.
 
 </TabItem>
 </Tabs>
-Getting a list of avaialbe models is great, but how do you send an HTTP request to your Pod?
+Getting a list of available models is great, but how do you send an HTTP request to your Pod?
 
 **Make requests**
 

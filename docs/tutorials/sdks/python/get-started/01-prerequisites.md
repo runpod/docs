@@ -30,7 +30,7 @@ To install Python, follow these steps:
 2. Download the latest stable version of Python (version is 3.8 or later).
 3. Follow the installation instructions for your operating system.
 
-Once Python is installed, you can move onto setting up a virual environment.
+Once Python is installed, you can move onto setting up a virtual environment.
 
 ## Set up a virtual environment
 
@@ -99,6 +99,6 @@ For example:
 You have now successfully set up your development environment.
 Your system is equipped with Python, a virtual environment, and the RunPod library.
 
-You will use the RunPod Python library for writing your serverless applicaiton.
+You will use the RunPod Python library for writing your serverless application.
 
 Next, we'll proceed with creating a [Hello World application with RunPod](/tutorials/sdks/python/get-started/hello-world).

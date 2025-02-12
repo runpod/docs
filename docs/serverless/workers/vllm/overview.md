@@ -39,7 +39,7 @@ For detailed guidance on setting up, configuring, and deploying your vLLM Server
 
 ### Deployment options
 
-- **[Configurable Endpoints](/serverless/workers/vllm/get-started#deploy-using-the-web-ui)**: (recommended) Use RunPod's Web UI to quickly deploy the OpenAI compatable LLM with the vLLM Worker.
+- **[Configurable Endpoints](/serverless/workers/vllm/get-started#deploy-using-the-web-ui)**: (recommended) Use RunPod's Web UI to quickly deploy the OpenAI compatible LLM with the vLLM Worker.
 
 - **[Pre-Built docker image](/serverless/workers/vllm/get-started#deploy-using-the-worker-image)**: Leverage pre-configured Docker image for hassle-free deployment. Ideal for users seeking a quick and straightforward setup process
 

@@ -1,6 +1,6 @@
 ---
 title: Overview
-description: "Unlock serverless functionality with RunPod SDKs, enabling developers to create custom logic, simplify deployments, and programatically manage infrastructure, including Pods, Templates, and Endpoints."
+description: "Unlock serverless functionality with RunPod SDKs, enabling developers to create custom logic, simplify deployments, and programmatically manage infrastructure, including Pods, Templates, and Endpoints."
 sidebar_position: 1
 ---
 
@@ -13,7 +13,7 @@ Once deployed, serverless functions is exposed as an Endpoints, you can allow ex
 
 #### Interact with Serverless Endpoints:
 
-Your Serverless Endpoints works similarlly to an HTTP request.
+Your Serverless Endpoints works similarly to an HTTP request.
 You will need to provide an Endpoint Id and a reference to your API key to complete requests.
 
 ## Infrastructure management

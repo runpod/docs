@@ -6,7 +6,7 @@ sidebar_position: 3
 
 This guide will review the things you learned in the 101 courses.
 
-This is breif.
+This is brief.
 
 In this guide, we'll show you how to run your RunPod serverless applications right on your own machine.
 We'll cover both synchronous and asynchronous handlers.

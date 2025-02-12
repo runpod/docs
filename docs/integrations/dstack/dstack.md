@@ -524,7 +524,7 @@ volumes:
  path: /data
 ```
 
-This configuration will mount the volumne to the `/data` directory inside your container.
+This configuration will mount the volume to the `/data` directory inside your container.
 
 By doing this, you can store models and data persistently, which can be especially useful for large models that take time to download.
 
