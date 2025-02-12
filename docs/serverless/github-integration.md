@@ -79,3 +79,14 @@ Builds can have the following statuses:
 | Pending     | RunPod is scheduling the build.              |
 | Uploading   | Your container is uploading to the registry. |
 | Completed   | The container build and upload is complete.  |
+
+
+## Known limitations
+- Private registry base images
+At the moment, RunPod does not support privately hosted images as base images for docker build. A good workaround is to pack as much of the content in the privately hosted image into the image you are building.
+
+- GPU builds
+Some builds require GPUs. A good example is ones that rely on the GPU build version of bitsandbytes. 
+
+- Images only served on the RunPod platform
+Images that are built using runpod's image builder service cannot be used anywhere else.
