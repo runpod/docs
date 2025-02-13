@@ -73,9 +73,7 @@ endpoint = runpod.Endpoint("YOUR_ENDPOINT_ID")
 try:
     run_request = endpoint.run_sync(
         {
-            "input": {
-                "prompt": "Hello, world!",
-            }
+            "prompt": "Hello, world!",
         },
         timeout=60,  # Timeout in seconds.
     )
@@ -108,7 +106,7 @@ import os
 
 runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
-input_payload = {"input": {"prompt": "Hello, World!"}}
+input_payload = {"prompt": "Hello, World!"}
 
 try:
     endpoint = runpod.Endpoint("YOUR_ENDPOINT_ID")
