@@ -1,0 +1,83 @@
+# How To Run a "Hello World" and Create and Push a Docker Image in RunPod Serverless
+
+First, let's create a new directory for our project and set up the necessary files. Run this in your Terminal:
+
+```python # Create a new directory and navigate into it
+mkdir runpod-hello-world
+cd runpod-hello-world
+
+# Create a virtual environment and activate it
+python -m venv venv
+source venv/bin/activate
+
+# Install the RunPod SDK
+pip install runpod~=1.7.0
+```
+Next, create a new file called handler.py with this simple "Hello World" handler:
+
+```python import runpod
+def handler(job):
+    """
+    This is a simple handler that takes a name as input and returns a greeting.
+    The job parameter contains the input data in job["input"]
+    """
+    job_input = job["input"]
+    
+    # Get the name from the input, default to "World" if not provided
+    name = job_input.get("name", "World")
+    
+    # Return a greeting message
+    return f"Hello, {name}! Welcome to RunPod Serverless!"
+
+# Start the serverless function
+runpod.serverless.start({"handler": handler})
+```
+Create a new plaintext file called Dockerfile that will define how to build your container:
+```python # Use Python 3.9 slim image as the base
+FROM python:3.9-slim
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Copy the requirements file
+COPY requirements.txt .
+
+# Install the Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy your handler code
+COPY handler.py .
+
+# Command to run when the container starts
+CMD [ "python", "-u", "handler.py" ]
+```
+Create a requirements.txt file with our dependencies:
+```
+runpod==1.3.0
+```
+Let's build the Docker image and test it locally. Be sure to replace the username with your Dockerhub username, e.g. brendanmckeag/runpod-hello-world:latest .
+
+```python
+# Build the Docker image
+docker build --platform linux/amd64 -t [[your-dockerhub-username]]/runpod-hello-world:latest .
+
+# Run the container locally
+docker run -it [[your-dockerhub-username]]/runpod-hello-world:latest
+```
+Note that you must build for linux/amd64 (otherwise you'll run into an 'exec format error' error down the line.)
+
+Now that we've built and tested our image, let's push it to DockerHub:
+
+```# Log in to DockerHub
+docker login
+
+# Push the image
+docker push [[ your-dockerhub-username ]]/runpod-hello-world:latest
+```
+Go to RunPod's Serverless dashboard and click "New Endpoint" and then Docker Image. 
+
+Under Container Image, put in your Docker image path, just substitute your Docker Hub username. I've left the image used in this demonstration up under brendanmckeag if you'd like to test it, otherwise substitute your username instead.
+
+Fill in the details - since this is a simple example, you don't need a high powered GPU spec example. You could even test this with CPU if you wanted to, but for the purposes of this example we'll select a 16GB spec. Once you're all set, click Create Endpoint at the bottom.
+
+You can test the endpoint by going to your Serverless console and then clicking on the endpoint, and then clicking on Requests. Click on the Streaming checkbox, and then Run.
