@@ -108,22 +108,19 @@ runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
 input_payload = {"prompt": "Hello, World!"}
 
-try:
-    endpoint = runpod.Endpoint("YOUR_ENDPOINT_ID")
-    run_request = endpoint.run(input_payload)
+endpoint = runpod.Endpoint("YOUR_ENDPOINT_ID")
+run_request = endpoint.run(input_payload)
 
-    # Initial check without blocking, useful for quick tasks
-    status = run_request.status()
-    print(f"Initial job status: {status}")
+# Initial check without blocking, useful for quick tasks
+status = run_request.status()
+print(f"Initial job status: {status}")
 
-    if status != "COMPLETED":
-        # Polling with timeout for long-running tasks
-        output = run_request.output(timeout=60)
-    else:
-        output = run_request.output()
-    print(f"Job output: {output}")
-except Exception as e:
-    print(f"An error occurred: {e}")
+if status != "COMPLETED":
+    # Polling with timeout for long-running tasks
+    output = run_request.output(timeout=60)
+else:
+    output = run_request.output()
+print(f"Job output: {output}")
 ```
 
 </TabItem>
@@ -324,22 +321,20 @@ runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
 input_payload = {"input": {"prompt": "Hello, World!"}}
 
-try:
-    endpoint = runpod.Endpoint("YOUR_ENDPOINT_ID")
-    run_request = endpoint.run(input_payload)
+endpoint = runpod.Endpoint("YOUR_ENDPOINT_ID")
+run_request = endpoint.run(input_payload)
 
-    # Initial check without blocking, useful for quick tasks
-    status = run_request.status()
-    print(f"Initial job status: {status}")
+# Initial check without blocking, useful for quick tasks
+status = run_request.status()
+print(f"Initial job status: {status}")
 
-    if status != "COMPLETED":
-        # Polling with timeout for long-running tasks
-        output = run_request.output(timeout=60)
-    else:
-        output = run_request.output()
-    print(f"Job output: {output}")
-except Exception as e:
-    print(f"An error occurred: {e}")
+if status != "COMPLETED":
+    # Polling with timeout for long-running tasks
+    output = run_request.output(timeout=60)
+else:
+    output = run_request.output()
+print(f"Job output: {output}")
+print(f"An error occurred: {e}")
 ```
 
 </TabItem>
@@ -404,9 +399,6 @@ except KeyboardInterrupt:  # Catch KeyboardInterrupt
     if run_request:  # Check if a job is active
         run_request.cancel()
     print("Job canceled.")
-
-except Exception as e:
-    print(f"An error occurred: {e}")
 ```
 
 </TabItem>
