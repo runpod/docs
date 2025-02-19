@@ -109,140 +109,144 @@ set RUNPOD_API_KEY=<YOUR_RUNPOD_API_KEY>
 
 ### Code implementation
 
-Choose your programming language and add the following code to your file.
 
-<Tabs>
-  <TabItem value="python" label="Python" default>
+## Using Runpod API
 
-Install the OpenAI library if needed:
+RunPod API provides an efficient way to interact with vllm endpoint by sending requests with either a prompt or a list of messages. The API applies chat templates automatically to messages, allowing seamless interaction.
 
-```bash
-pip install openai
+---
+
+## API Endpoints
+
+### Synchronous Request
+
+```http
+POST https://api.runpod.ai/v2/{endpoint_id}/run_sync
 ```
 
-Create a file called `main.py` with the following code:
+### Asynchronous Request
 
-```python
-from openai import OpenAI
-import os
-
-endpoint_id = os.environ.get("RUNPOD_ENDPOINT_ID")
-api_key = os.environ.get("RUNPOD_API_KEY")
-
-client = OpenAI(
-    base_url=f"https://api.runpod.ai/v2/{endpoint_id}/openai/v1",
-    api_key=api_key,
-)
-
-chat_completion = client.chat.completions.create(
-    model="openchat/openchat-3.5-0106",
-    messages=[{"role": "user", "content": "Reply with: Hello, World!"}],
-)
-
-print(chat_completion)
+```http
+POST https://api.runpod.ai/v2/{endpoint_id}/run
 ```
 
-</TabItem>
-  <TabItem value="node.js" label="Node.js">
+---
 
-Install the OpenAI library if needed:
+## Request Parameters
 
-```bash
-npm install openai
-```
+### Main Input Parameters
 
-Create a file called `main.js` with the following code:
+<details>
+  <summary>Click to expand</summary>
 
-```javascript
-import OpenAI from "openai";
+| Argument              | Type                   | Default | Description                                                                        |
+| --------------------- | ---------------------- | ------- | ---------------------------------------------------------------------------------- |
+| `prompt`              | `str`                  | `None`  | The input string for text generation.                                              |
+| `messages`            | `list[dict[str, str]]` | `None`  | A list of messages with roles (`system`, `user`, `assistant`). Overrides `prompt`. |
+| `apply_chat_template` | `bool`                 | `False` | Whether to apply the model's chat template to the `prompt`.                        |
+| `sampling_params`     | `dict`                 | `{}`    | Sampling parameters to control generation (see below).                             |
+| `stream`              | `bool`                 | `False` | Whether to enable streaming of the output.                                         |
+| `max_batch_size`      | `int`                  |  env var `DEFAULT_BATCH_SIZE` |   The maximum number of tokens to stream every HTTP POST call. |
+| `min_batch_size`       | `int`                 | env var `DEFAULT_MIN_BATCH_SIZE` | The minimum number of tokens to stream every HTTP POST call. |
+| `batch_size_growth_factor` | `int`             | env var `DEFAULT_BATCH_SIZE_GROWTH_FACTOR` | The growth factor by which min_batch_size will be multiplied for each call until max_batch_size is reached. |
+</details>
 
-const openai = new OpenAI({
-  baseURL:
-    `https://api.runpod.ai/v2/${process.env.RUNPOD_ENDPOINT_ID}/openai/v1`,
-  apiKey: process.env.RUNPOD_API_KEY,
-});
+### Sampling Parameters
+Below are all available sampling parameters that you can specify in the `sampling_params` dictionary. If you do not specify any of these parameters, the default values will be used.
+<details>
+  <summary>Click to expand</summary>
 
-const chatCompletion = await openai.chat.completions.create({
-  model: "openchat/openchat-3.5-0106",
-  messages: [{ role: "user", content: "Reply with: Hello, World!" }],
-});
+| Argument                        | Type                          | Default | Description                                                  |
+| ------------------------------- | ----------------------------- | ------- | ------------------------------------------------------------ |
+| `n`                             | `int`                         | `1`     | Number of output sequences generated.                        |
+| `best_of`                       | `Optional[int]`               | `n`     | Number of sequences generated before selecting the best `n`. |
+| `presence_penalty`              | `float`                       | `0.0`   | Penalizes tokens based on their presence.                    |
+| `frequency_penalty`             | `float`                       | `0.0`   | Penalizes tokens based on frequency.                         |
+| `repetition_penalty`            | `float`                       | `1.0`   | Penalizes tokens based on repetition.                        |
+| `temperature`                   | `float`                       | `1.0`   | Controls randomness; lower values make it deterministic.     |
+| `top_p`                         | `float`                       | `1.0`   | Limits probability mass of top tokens.                       |
+| `top_k`                         | `int`                         | `-1`    | Limits number of top tokens considered.                      |
+| `min_p`                         | `float`                       | `0.0`   | Minimum probability relative to most likely token.           |
+| `use_beam_search`               | `bool`                        | `False` | Enables beam search.                                         |
+| `length_penalty`                | `float`                       | `1.0`   | Penalizes sequences based on length.                         |
+| `early_stopping`                | `Union[bool, str]`            | `False` | Controls stopping conditions.                                |
+| `stop`                          | `Union[None, str, List[str]]` | `None`  | Stop generation on specified strings.                        |
+| `stop_token_ids`                | `Optional[List[int]]`         | `None`  | Stop generation on specified token IDs.                      |
+| `ignore_eos`                    | `bool`                        | `False` | Ignore End-Of-Sequence token.                                |
+| `max_tokens`                    | `int`                         | `16`    | Maximum tokens generated.                                    |
+| `skip_special_tokens`           | `bool`                        | `True`  | Whether to skip special tokens in the output.                |
+| `spaces_between_special_tokens` | `bool`                        | `True`  | Whether to add spaces between special tokens.                |
 
-console.log(chatCompletion);
-```
+</details>
 
-</TabItem>
-  <TabItem value="curl" label="cURL">
+---
 
-Run the following command in your terminal:
+## Text Input Formats
 
-```bash
-curl https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/openai/v1/chat/completions \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer ${RUNPOD_API_KEY}" \
-    -d '{
-        "model": "openchat/openchat-3.5-0106",
-        "messages": [
-            {
-                "role": "user",
-                "content": "Reply with: Hello, World!"
-            }
-        ]
-    }'
-```
-
-</TabItem>
-</Tabs>
-
-### Run your code
-
-Run your code from the terminal:
-
-<Tabs>
-  <TabItem value="python" label="Python" default>
-
-```bash
-python main.py
-```
-
-</TabItem>
-  <TabItem value="node.js" label="Node.js">
-
-```bash
-node main.js
-```
-
-</TabItem>
-</Tabs>
-
-### Output
-
-The output should look similar to:
-
+### Using `prompt`
+The prompt string can be any string, and the model's chat template will not be applied to it unless `apply_chat_template` is set to `true`, in which case it will be treated as a user message.
 ```json
 {
-  "choices": [
-    {
-      "finish_reason": "stop",
-      "index": 0,
-      "message": {
-        "content": "Hello, World!",
-        "role": "assistant"
-      }
-    }
-  ],
-  "created": 3175963,
-  "id": "cmpl-74d7792c92cd4b159292c38bda1286b0",
-  "model": "openchat/openchat-3.5-0106",
-  "object": "chat.completion",
-  "usage": {
-    "completion_tokens": 5,
-    "prompt_tokens": 39,
-    "total_tokens": 44
-  }
+  "prompt": "Translate the following text to French: 'Hello, how are you?'"
 }
 ```
 
-You have now successfully sent a request to your Serverless Endpoint and received a response.
+### Using `messages`
+Your list can contain any number of messages, and each message usually can have any role from the following list:
+    - `user`
+    - `assistant`
+    - `system`
+However, some models may have different roles, so you should check the model's chat template to see which roles are required.
+The model's chat template will be applied to the messages automatically, so the model must have one.
+```json
+{
+  "messages": [
+    { "role": "system", "content": "You are a helpful assistant." },
+    { "role": "user", "content": "Tell me a joke." }
+  ]
+}
+```
+
+---
+
+## Sample API Requests
+
+### Python Example
+
+```python
+import requests
+
+url = "https://api.runpod.ai/v2/<endpoint_id>/run"
+headers = {"Authorization": "Bearer YOUR_API_KEY", "Content-Type": "application/json"}
+
+data = {"input": {
+    "messages": [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Write a short poem."}
+    ],
+    "sampling_params": {"temperature": 0.7, "max_tokens": 100}
+}}
+
+response = requests.post(url, headers=headers, json=data)
+print(response.json())
+```
+
+### cURL Example
+
+```sh
+curl -X POST "https://api.runpod.ai/v2/yf2k4t0vl3ciaf/run" \
+     -H "Authorization: Bearer YOUR_API_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{"input":
+               {
+                 "prompt": "Write a haiku about nature.",
+                 "sampling_params": {"temperature": 0.8, "max_tokens": 50}
+         }}'
+```
+
+---
+
+
 
 ## Troubleshooting
 
