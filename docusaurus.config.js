@@ -189,7 +189,7 @@ const config = {
             },
             {
               label: "GitHub",
-              href: "https://github.com/runpod/doc",
+              href: "https://github.com/runpod/docs",
             },
           ],
         },
