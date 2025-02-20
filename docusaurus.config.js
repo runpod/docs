@@ -133,7 +133,7 @@ const config = {
           position: "left",
         },
         {
-          href: "https://github.com/runpod",
+          href: "https://github.com/runpod/docs",
           label: "GitHub",
           position: "right",
         },
@@ -189,7 +189,7 @@ const config = {
             },
             {
               label: "GitHub",
-              href: "https://github.com/runpod",
+              href: "https://github.com/runpod/doc",
             },
           ],
         },

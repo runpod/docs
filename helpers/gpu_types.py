@@ -1,69 +1,52 @@
 import os
 from datetime import datetime
 
+import pandas as pd
 import requests
-from dotenv import load_dotenv
+from tabulate import tabulate
 
-load_dotenv()
+response = requests.post(
+    "https://api.runpod.io/graphql", 
+    headers={
+        "content-type": "application/json"
+    }, 
+    json={
+        "query": "query GpuTypes { gpuTypes { id displayName memoryInGb } }"
+    })
 
+response.raise_for_status()
 
-api_key = os.getenv("API_KEY")
-# URL and headers for the POST request
-url = "https://api.runpod.io/graphql"
-headers = {"content-type": "application/json", "api_key": api_key}
+gpu_data = response.json()
+gpus = gpu_data["data"]["gpuTypes"]
 
-# The GraphQL query
-data = {"query": "query GpuTypes { gpuTypes { id displayName memoryInGb } }"}
+gpus_df = pd.DataFrame(gpus)
 
-# Send the POST request
-response = requests.post(url, headers=headers, json=data)
+gpus_df = gpus_df[(gpus_df["id"].str.lower() != "unknown")]
 
-# Check if the request was successful
-if response.status_code == 200:
-    # Parse the response JSON
-    gpu_data = response.json()
+gpus_df.sort_values(by="displayName").reset_index(drop=True, inplace=True)
 
-    # Extract GPU data
-    gpus = gpu_data["data"]["gpuTypes"]
+file_path = os.path.join(
+    os.path.dirname(__file__), "../docs/references/gpu-types.md"
+)
 
-    # Sort the GPUs by display name
-    gpus_sorted = sorted(gpus, key=lambda x: x["displayName"])
+table = tabulate(gpus_df, headers=["GPU ID", "Display Name", "Memory (GB)"], tablefmt="github", showindex=False)
 
-    # Writing to a markdown file
-    # relative path
-    # os.path.join(os.path.dirname(__file__), "gpu-types.md")
-    file_path = os.path.join(
-        os.path.dirname(__file__), "../docs/references/gpu-types.md"
-    )
-
-    with open(file_path, "w") as file:
-        # Write the table headers
-        date = datetime.now().strftime("%Y-%m-%d")
-        file.write(
-            f"""---
+with open(file_path, "w") as file:
+    # Write the table headers
+    date = datetime.now().strftime("%Y-%m-%d")
+    file.write(
+        f"""---
 title: GPU types
 ---
 
 The following list contains all GPU types available on RunPod.
 
 For more information, see [GPU pricing](https://www.runpod.io/gpu-instance/pricing).
+
 <!--
 Table last generated: {date}
 -->
-| GPU ID | Display Name | Memory (GB) |
-| ------ | ------------ | ----------- |
-                   """
-        )
+{table}
+""")
 
-        # Write each GPU data as a row in the table
-        for gpu in gpus_sorted:
-            if gpu["id"] == "unknown":
-                pass
-            else:
-                file.write(
-                    f"| {gpu['id']} | {gpu['displayName']} | {gpu['memoryInGb']} |\n"
-                )
-
-    print("Markdown file with GPU data created successfully.")
-else:
-    print("Failed to retrieve data: ", response.status_code)
+print("Markdown file with GPU data created successfully.")
