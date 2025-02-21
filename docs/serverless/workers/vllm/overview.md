@@ -14,17 +14,18 @@ For more information, see the [vLLM Worker](https://github.com/runpod-workers/wo
 
 ## Key features
 
+- **Multi-Model Support**: Deploy and run multiple models, including vision models, through a single endpoint with easy model selection via the UI.
 - **Ease of Use**: Deploy any LLM using the pre-built Docker image without the hassle of building custom Docker images yourself, uploading heavy models, or waiting for lengthy downloads.
 - **OpenAI Compatibility**: Seamlessly integrate with OpenAI's API by changing 2 lines of code, supporting Chat Completions, Completions, and Models, with both streaming and non-streaming.
 - **Dynamic Batch Size**: Experience the rapid time-to-first-token high of no batching combined with the high throughput of larger batch sizes. (Related to batching tokens when streaming output)
-- **Extensive Model Support**: Deploy almost any LLM from Hugging Face, including your own.
+- **Extensive Model Support**: Deploy almost any LLM from Hugging Face, including your own, plus vision models for image processing tasks.
 - **Customization**: Have full control over the configuration of every aspect of your deployment, from the model settings, to tokenizer options, to system configurations, and much more, all done through environment variables.
 - **Speed**: Experience the speed of the vLLM Engine.
 - **Serverless Scalability and Cost-Effectiveness**: Scale your deployment to handle any number of requests and only pay for active usage.
 
 ## Compatible models
 
-You can deploy most [models from Hugging Face](https://huggingface.co/models?other=LLM).
+You can deploy most [models from Hugging Face](https://huggingface.co/models?other=LLM), including both language and vision models.
 For a full list of supported models architectures, see [Compatible model architectures](https://github.com/runpod-workers/worker-vllm/blob/main/README.md#compatible-model-architectures).
 
 ## Getting started
@@ -34,12 +35,13 @@ At a high level, you can set up the vLLM Worker by:
 - Selecting your deployment options
 - Configure any necessary environment variables
 - Deploy your model
+- Select your desired model type (language or vision) through the UI
 
 For detailed guidance on setting up, configuring, and deploying your vLLM Serverless Endpoint Worker, including compatibility details, environment variable settings, and usage examples, see [Get started](/serverless/workers/vllm/get-started).
 
 ### Deployment options
 
-- **[Configurable Endpoints](/serverless/workers/vllm/get-started#deploy-using-the-web-ui)**: (recommended) Use RunPod's Web UI to quickly deploy the OpenAI compatible LLM with the vLLM Worker.
+- **[Configurable Endpoints](/serverless/workers/vllm/get-started#deploy-using-the-web-ui)**: (recommended) Use RunPod's Web UI to quickly deploy the OpenAI compatible LLM with the vLLM Worker. Select between language and vision models directly through the interface.
 
 - **[Pre-Built docker image](/serverless/workers/vllm/get-started#deploy-using-the-worker-image)**: Leverage pre-configured Docker image for hassle-free deployment. Ideal for users seeking a quick and straightforward setup process
 

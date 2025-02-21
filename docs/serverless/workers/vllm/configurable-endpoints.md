@@ -1,22 +1,23 @@
 ---
 title: Configurable Endpoints
-description: "Deploy large language models with ease using RunPod's Configurable Endpoints feature, leveraging vLLM to simplify model loading, hardware configuration, and execution, allowing you to focus on model selection and customization."
+description: "Deploy large language models and vision models with ease using RunPod's Configurable Endpoints feature, leveraging vLLM to simplify model loading, hardware configuration, and execution, allowing you to focus on model selection and customization."
 ---
 
-RunPod's Configurable Endpoints feature leverages vLLM to enable the deployment of any large language model.
+RunPod's Configurable Endpoints feature leverages vLLM to enable the deployment of multiple model types, including language and vision models.
 
-When you select the **Serverless vLLM** option, RunPod utilizes vLLM's capabilities to load and run the specified Hugging Face model.
-By integrating vLLM into the configurable endpoints, RunPod simplifies the process of deploying and running large language models.
+When you select the **Serverless vLLM** option, RunPod utilizes vLLM's capabilities to load and run the specified Hugging Face models.
+By integrating vLLM into the configurable endpoints, RunPod simplifies the process of deploying and running various AI models.
 
-Focus on selecting your desired model and customizing the template parameters, while vLLM takes care of the low-level details of model loading, hardware configuration, and execution.
+Focus on selecting your desired models and customizing the template parameters, while vLLM takes care of the low-level details of model loading, hardware configuration, and execution.
 
-## Deploy an LLM
+## Deploy Models
 
-1. Select **Explore** and then choose **Serverless vLLM** to deploy any large language model.
+1. Select **Explore** and then choose **Serverless vLLM** to deploy your models.
 2. In the vLLM deploy modal, enter the following:
    1. Select a vLLM version.
-   2. Enter your Hugging Face LLM repository name.
-   3. (optional) Enter your Hugging Face token.
+   2. Enter your Hugging Face model repository name.
+   3. Choose your model type (language or vision) using the UI selector.
+   4. (optional) Enter your Hugging Face token.
 3. Select **Next** and review the configurations on the **vLLM parameters** page.
 4. Select **Next** and review the **Endpoint parameters** page.
    1. Prioritize your **Worker Configuration** by selecting GPUs in the order that you prefer your Workers to use.
@@ -28,11 +29,11 @@ Focus on selecting your desired model and customizing the template parameters, w
       4. Review the **Environment Variables**.
 5. Select **Deploy**.
 
-Your LLM is now deployed to an Endpoint.
-You can now use the API to interact with your model.
+Your models are now deployed to an Endpoint.
+You can now use the API to interact with your models, selecting between language and vision capabilities as needed through the interface.
 
 :::note
 
-RunPod supports any models' architecture that can run on [vLLM](https://github.com/vllm-project/vllm) with configurable endpoints.
+RunPod supports any models' architecture that can run on [vLLM](https://github.com/vllm-project/vllm) with configurable endpoints, including both language and vision models.
 
 :::
