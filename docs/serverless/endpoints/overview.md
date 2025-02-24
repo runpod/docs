@@ -14,6 +14,13 @@ Whether you're processing large data sets, requiring immediate results, or sched
 - **Serverless Workers:** Deploy your computational tasks without worrying about server management, enjoying the benefits of a fully managed infrastructure.
 - **Scalability and flexibility:** Easily scale your operations up or down based on demand, with the flexibility to handle various computational loads.
 
+### Key Concepts
+
+Check out these two links for fundamental endpoint concepts, including key definitions and basic settings.
+
+- [Glossary](../../glossary.md)
+- [Settings](../references/endpoint-configurations.md)
+
 ### Getting started
 
 Before you begin, ensure you have obtained your [RunPod API key](/get-started/api-keys).
