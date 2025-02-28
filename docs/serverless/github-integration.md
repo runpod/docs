@@ -82,7 +82,9 @@ Builds can have the following statuses:
 
 
 ## Known limitations
-- Private registry base images
+- **Docker image size limit**: The GitHub integration has a size limit of 100GB for Docker images.
+
+- **Private registry base images**:
 At the moment, RunPod does not support privately hosted images as base images for docker build. A good workaround is to pack as much of the content in the privately hosted image into the image you are building.
 
 - GPU builds
