@@ -90,3 +90,9 @@ Some builds require GPUs. A good example is ones that rely on the GPU build vers
 
 - Images only served on the RunPod platform
 Images that are built using runpod's image builder service cannot be used anywhere else.
+
+- **Docker image size limit**  
+The GitHub integration has a size limit of 100GB for Docker images. If your image exceeds this size, it cannot be built and deployed through the GitHub integration.
+
+- **GitHub account association**  
+Users can only associate one GitHub account with one RunPod account for the time being, and this cannot be shared among team members.
