@@ -82,11 +82,21 @@ Builds can have the following statuses:
 
 
 ## Known limitations
-- Private registry base images
-At the moment, RunPod does not support privately hosted images as base images for docker build. A good workaround is to pack as much of the content in the privately hosted image into the image you are building.
 
-- GPU builds
-Some builds require GPUs. A good example is ones that rely on the GPU build version of bitsandbytes. 
+- **Build execution timeout**
+  The maximum execution time for GitHub builds is 9,600 seconds (160 minutes or approximately 2.5 hours). If your build process exceeds this limit, it will fail. Consider optimizing your Dockerfile and build process for large images.
 
-- Images only served on the RunPod platform
-Images that are built using runpod's image builder service cannot be used anywhere else.
+- **Docker image size limit**
+  The GitHub integration has a size limit of 100 GB for Docker images. Larger images cannot be built or deployed through the integration.
+
+- **GitHub account association**
+  Users can only associate one GitHub account with one RunPod account for the time being, and this cannot be shared among team members.
+
+- **Private registry base images**
+  At the moment, RunPod does not support privately hosted images as base images for docker build. A good workaround is to pack as much of the content in the privately hosted image into the image you are building.
+
+- **GPU builds**
+  Some builds require GPUs. A good example is ones that rely on the GPU build version of bitsandbytes. 
+
+- **Images only served on the RunPod platform**
+  Images that are built using runpod's image builder service cannot be used anywhere else.
