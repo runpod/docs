@@ -14,7 +14,25 @@ Start today by [signing up for an account](https://www.runpod.io/console/signup)
 
 **Pods** allow you to run your code on GPU and CPU instances using containers.
 
-Pods are available in two types: [Secure Cloud and Community Cloud](references/faq/#secure-cloud-vs-community-cloud). Secure Cloud operates in T3/T4 data centers, providing high reliability and security. Community Cloud connects individual compute providers to consumers through a vetted, secure peer-to-peer system.
+### Secure Cloud vs Community Cloud
+
+Pods are available in two deployment environments, each with different characteristics:
+
+**Secure Cloud**
+- Operates in professional T3/T4 data centers
+- Provides high reliability with redundant power and networking
+- Offers Network Volumes for persistent, shareable storage
+- Recommended for mission-critical workloads and important data
+- Ideal for production environments and sensitive applications
+
+**Community Cloud**
+- Connects vetted individual compute providers to consumers
+- Offers competitive pricing through a peer-to-peer network
+- Has variable reliability depending on individual providers
+- No guarantee of persistent data storage
+- Best for cost-sensitive workloads where data can be backed up elsewhere
+
+For workloads where data persistence is critical, we strongly recommend using Secure Cloud with Network Volumes and implementing regular backups. Learn more about [data persistence in RunPod](/pods/storage/data-persistence).
 
 ## What is Serverless?
 
