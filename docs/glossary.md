@@ -105,7 +105,7 @@ You can disable this setting, but we highly recommend keeping it enabled. The de
 
 Default: 600 seconds (10 minutes)
 
-### Job [TTL](https://docs.runpod.io/serverless/endpoints/send-requests#execution-policies)(Time-To-Live)
+### Job [TTL](/serverless/endpoints/send-requests#execution-policies)(Time-To-Live)
 
 Defines the maximum time a job can remain in the queue before it's automatically terminated. This parameter ensures that jobs don't stay in the queue indefinitely. You should set this if your job runs longer than 24 hours or if you want to remove job data as soon as it is finished.
 
