@@ -219,4 +219,4 @@ For servers hosted in GDPR-compliant regions like the European Union, we ensure:
   ongoing effectiveness and adherence to regulatory requirements, conducting data protection
   impact assessments and internal audits as needed.
 
-For any inquiries or concerns regarding our GDPR compliance or our data protection practices, reach out to our team through email at [support@runpod.io](mailto:support@runpod.io).
+For any inquiries or concerns regarding our GDPR compliance or our data protection practices, reach out to our team through email at [help@runpod.io](mailto:help@runpod.io).
