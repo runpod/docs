@@ -21,4 +21,4 @@ For more details on payment methods and billing, visit our [Billing Information]
 
 ### Running your resources
 
-Once your account is funded, you're ready to deploy computing resources. You can choose to run [Serverless GPUs or CPUs](/serverless/overview) or rent a [Pod](/pods/overview) based on your needs.
+Once your account is funded, you're ready to deploy computing resources. Follow this [step-by-step guide](https://app.tango.us/app/workflow/Deploy-your-first-pod-ad7802d9a9234471a7828e6edf350a74) to launch your first pod or explore the [Serverless endpoint](https://app.tango.us/app/workflow/Deploy-your-first-endpoint-b8e04943700f4c06bbf40df018c1b03c)
