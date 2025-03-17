@@ -11,7 +11,6 @@ This guide explains how to fine-tune a large language model with RunPod.
 Make sure you have:
 
 - An account with access to the fine-tuning feature
-- A Hugging Face account (required for accessing models)
 - (Optional) A HuggingFace access token for gated models
 
 ## Select a base model
@@ -160,7 +159,23 @@ When your configuration is ready:
 
 2. The training process will begin, and progress will be displayed in your terminal.
 
-When you've finished, push your changes to Hugging Face.
+When you've finished, push your changes to Hugging Face:
+
+1. Log in to Hugging Face:
+
+   ```bash
+   huggingface-cli login
+   ```
+
+2. Create a new repository on Hugging Face if needed.
+
+3. Push your model to Hugging Face:
+
+   ```bash
+   huggingface-cli upload <your-username>/<model-name> ./output
+   ```
+
+Replace `<your-username>` with your Hugging Face username and `<model-name>` with what you want to name your fine-tuned model.
 
 ## Resources
 
