@@ -4,41 +4,29 @@ sidebar_position: 2
 description: Master the art of building Docker images, deploying Serverless endpoints, and sending requests with this comprehensive guide, covering prerequisites, RunPod setup, and deployment steps.
 ---
 
-## Overview
-
-You'll have an understanding of building a Docker image, deploying a Serverless endpoint, and sending a request.
-You'll also have a basic understanding of how to customize the handler for your use case.
-
-## Prerequisites
-
-This section presumes you have an understanding of the terminal and can execute commands from your terminal.
-
-### RunPod
-
-To continue with this quick start, you'll need the following from RunPod:
-
-- RunPod account
-- RunPod API Key
-
-### Docker
-
-To build your Docker image, you'll need the following:
-
-- Docker installed
-- Docker account
-
-### GitHub
-
-To clone the `worker-template` repo, you'll need access to the following:
-
-- Git installed
-- Permissions to clone GitHub repos
-
 ## Build a Serverless Application on RunPod
 
-Follow these steps to create a handler file, test it locally, and build a Docker image for deployment:
+Follow these steps to set up a development environment, create a handler file, test it locally, and build a Docker image for deployment:
 
-1. Create the handler file (rp_handler.py):
+1. Create a Python virtual environment and install RunPod SDK
+
+```bash
+# 1. Create a Python virtual environment
+python3 -m venv venv
+
+# 2. Activate the virtual environment
+# On macOS/Linux:
+
+source venv/bin/activate
+
+# On Windows:
+venv\Scripts\activate
+
+# 3. Install the RunPod SDK
+pip install runpod
+```
+
+2. Create the handler file (rp_handler.py):
 
 ```python
 import runpod
@@ -59,7 +47,7 @@ if __name__ == '__main__':
     runpod.serverless.start({'handler': handler})
 ```
 
-2. Create a test_input.json file in the same folder:
+3. Create a test_input.json file in the same folder:
 
 ```python
 {
@@ -70,7 +58,7 @@ if __name__ == '__main__':
 }
 ```
 
-3. Test the handler code locally:
+4. Test the handler code locally:
 
 ```python
 python3 rp_handler.py
@@ -87,7 +75,7 @@ INFO   | Job result: {'output': 'created a image'}
 INFO   | Local testing complete, exiting.
 ```
 
-4. Create a Dockerfile:
+5. Create a Dockerfile:
 
 ```docker
 FROM python:3.10-slim
@@ -100,13 +88,13 @@ COPY rp_handler.py /
 CMD ["python3", "-u", "rp_handler.py"]
 ```
 
-5. Build and push your Docker image
+6. Build and push your Docker image
 
 ```command
 docker build --platform linux/amd64 --tag <username>/<repo>:<tag> .
 ```
 
-6. Push to your container registry:
+7. Push to your container registry:
 
 ```command
 docker push <username>/<repo>:<tag>
@@ -121,26 +109,24 @@ When building for RunPod providers use `--platform=linux/amd64`.
 
 :::
 
-Alternatively, you can clone our [worker-template](https://github.com/runpod-workers/worker-template) repository to quickly build a Docker image and push it to your container registry for a faster start.
+Alternatively, you can clone our [worker-basic](https://github.com/runpod-workers/worker-basic) repository to quickly build a Docker image and push it to your container registry for a faster start.
 
 Now that you've pushed your container registry, you're ready to deploy your Serverless Endpoint to RunPod.
 
 ## Deploy a Serverless Endpoint
 
-This step will walk you through deploying a Serverless Endpoint to RunPod.
-You can refer to this walkthrough to deploy your own custom Docker image.
+This step will walk you through deploying a Serverless Endpoint to RunPod. You can refer to this walkthrough to deploy your own custom Docker image.
 
-1. Log in to the [RunPod Serverless console](https://www.runpod.io/console/serverless).
-2. Select **+ New Endpoint**.
-3. Provide the following:
-   1. Endpoint name.
-   2. Select your GPU configuration.
-   3. Configure the number of Workers.
-   4. (optional) Select **FlashBoot**.
-   5. (optional) Select a template.
-   6. Enter the name of your Docker image.
-      - For example `<username>/<repo>:<tag>`.
-   7. Specify enough memory for your Docker image.
-4. Select **Deploy**.
-
-Now, let's send a request to your [Endpoint](/serverless/endpoints/get-started).
+<iframe 
+    src="https://app.tango.us/app/embed/7df17d43-9467-4d09-9b0f-19eba8a17249" 
+    sandbox="allow-scripts allow-top-navigation-by-user-activation allow-popups allow-same-origin" 
+    security="restricted" 
+    title="Deploy your first serverless endpoint" 
+    width="100%" 
+    height="600px" 
+    referrerpolicy="strict-origin-when-cross-origin" 
+    frameborder="0" 
+    webkitallowfullscreen="webkitallowfullscreen" 
+    mozallowfullscreen="mozallowfullscreen" 
+    allowfullscreen
+></iframe>
