@@ -55,7 +55,7 @@ After your Fine Tuning pod is deployed and active:
 
 ## Configure your environment
 
-When you connect to your environment, you'll find this directory structure in `/workspace/Fine Tuning/`:
+When you connect to your environment, you'll find this directory structure in `/workspace/fine-tuning/`:
 
 - `examples/`: Contains sample configurations and scripts
 - `outputs/`: Stores training results and model outputs
