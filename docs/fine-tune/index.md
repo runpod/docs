@@ -137,6 +137,15 @@ special_tokens:
   pad_token: <|end_of_text|>
 ```
 
+:::note
+
+The `config.yaml` file contains all the hyper parameters needed to fine tune a model.
+You will make your adjustments in the `config.yaml`.
+
+Changes to this and running the `axolotl train config.yaml` command might require iteration.
+
+:::
+
 For more configuration examples, see the [Axolotl examples repository](https://github.com/axolotl-ai-cloud/axolotl/tree/main/examples).
 
 ## Start the fine-tuning process
