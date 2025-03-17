@@ -1,22 +1,22 @@
 ---
-title: Fine-tune a model
-description: "Learn how to fine-tune a model using Axolotl"
+title: Fine Tune a model
+description: "Learn how to Fine Tune a model using Axolotl"
 sidebar_position: 1
 ---
 
-This guide explains how to fine-tune a large language model with RunPod.
+This guide explains how to Fine Tune a large language model with RunPod.
 
 ## Before you begin
 
 Make sure you have:
 
-- An account with access to the fine-tuning feature
+- An account with access to the Fine Tuning feature
 - (Optional) A HuggingFace access token for gated models
 
 ## Select a base model
 
-1. Go to the **Fine-Tuning** section in the sidebar.
-2. In the **Base Model** field, enter the Hugging Face model ID you want to fine-tune. 
+1. Go to the **Fine Tuning** section in the sidebar.
+2. In the **Base Model** field, enter the Hugging Face model ID you want to Fine Tune. 
     For example: `NousResearch/Meta-Llama-3-8B`
 
 3. If your selected model is gated (requires special access):
@@ -25,15 +25,15 @@ Make sure you have:
 
 ## Select a dataset (Optional)
 
-1. Choose a dataset from Hugging Face for fine-tuning.
+1. Choose a dataset from Hugging Face for Fine Tuning.
 
    Example: `tatsu-lab/alpaca`
 
 2. Enter the dataset identifier in the **Dataset** field.
 
-## Deploy the fine-tuning pod
+## Deploy the Fine Tuning pod
 
-1. Click **Deploy the Fine-Tuning Pod**.
+1. Click **Deploy the Fine Tuning Pod**.
 2. Select an appropriate GPU instance based on your model's requirements:
    - For smaller models: Choose GPUs with less memory
    - For larger models/datasets: Choose GPUs with higher memory capacity
@@ -43,9 +43,9 @@ Make sure you have:
 
 ## Connect to your training environment
 
-After your fine-tuning pod is deployed and active:
+After your Fine Tuning pod is deployed and active:
 
-1. Go to your fine-tuning pod dashboard.
+1. Go to your Fine Tuning pod dashboard.
 2. Click **Connect** to view connection options:
    - **Jupyter Notebook**: Launch a browser-based notebook interface
    - **Web Terminal**: Open a terminal in your browser
@@ -55,7 +55,7 @@ After your fine-tuning pod is deployed and active:
 
 ## Configure your environment
 
-When you connect to your environment, you'll find this directory structure in `/workspace/fine-tuning/`:
+When you connect to your environment, you'll find this directory structure in `/workspace/Fine Tuning/`:
 
 - `examples/`: Contains sample configurations and scripts
 - `outputs/`: Stores training results and model outputs
@@ -147,11 +147,11 @@ Changes to this and running the `axolotl train config.yaml` command might requir
 
 For more configuration examples, see the [Axolotl examples repository](https://github.com/axolotl-ai-cloud/axolotl/tree/main/examples).
 
-## Start the fine-tuning process
+## Start the Fine Tuning process
 
 When your configuration is ready:
 
-1. Run the following command to start fine-tuning:
+1. Run the following command to start Fine Tuning:
 
    ```bash
    axolotl train config.yaml
@@ -175,7 +175,7 @@ When you've finished, push your changes to Hugging Face:
    huggingface-cli upload <your-username>/<model-name> ./output
    ```
 
-Replace `<your-username>` with your Hugging Face username and `<model-name>` with what you want to name your fine-tuned model.
+Replace `<your-username>` with your Hugging Face username and `<model-name>` with what you want to name your Fine Tuned model.
 
 ## Resources
 
