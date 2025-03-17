@@ -13,6 +13,29 @@ RunPod provides two cloud computing services: [Secure Cloud](https://www.runpod.
 
 Both solutions offer far more competitive prices than large cloud providers such as AWS or GCP.
 
+### Data Persistence in Community Cloud vs Secure Cloud
+
+**Important:** There are significant differences in data persistence expectations between our cloud offerings:
+
+**Secure Cloud:**
+- Higher reliability infrastructure with redundant power and networking
+- More predictable uptime and availability
+- Recommended for mission-critical workloads and important data
+- Network Volumes available for persistent storage across multiple pods
+
+**Community Cloud:**
+- No guarantee of persistent data storage
+- Machines may be taken offline by providers for maintenance or due to hardware issues
+- Data could be lost if the physical machine becomes unavailable
+- Best used for temporary workloads or when data is regularly backed up elsewhere
+
+For any workloads where data persistence is critical, we strongly recommend:
+1. Using Secure Cloud with Network Volumes
+2. Implementing regular backups to external storage
+3. Using Cloud Sync to synchronize important data with cloud storage providers
+
+Remember that even with persistent storage options, RunPod is designed primarily as a compute platform, not a long-term storage solution. Always maintain backups of important data.
+
 ## On-Demand vs. Spot Pod
 
 **On-Demand Pods** can run forever without interruptions with resources dedicated to your Pod. They do incur higher costs than Spot Pods.
