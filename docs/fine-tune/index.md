@@ -4,9 +4,7 @@ description: "Learn how to fine-tune a model using Axolotl"
 sidebar_position: 1
 ---
 
-# Fine-tuning a model
-
-This guide explains how to fine-tune a large language model using the Axolotl framework.
+This guide explains how to fine-tune a large language model with RunPod.
 
 ## Before you begin
 
@@ -19,17 +17,16 @@ Make sure you have:
 ## Select a base model
 
 1. Go to the **Fine-Tuning** section in the sidebar.
-2. In the **Base Model** field, enter the HuggingFace model ID you want to fine-tune.
-
-   Example: `NousResearch/Meta-Llama-3-8B`
+2. In the **Base Model** field, enter the Hugging Face model ID you want to fine-tune. 
+    For example: `NousResearch/Meta-Llama-3-8B`
 
 3. If your selected model is gated (requires special access):
-   1. Generate a HuggingFace token with the necessary permissions.
+   1. Generate a Hugging Face token with the necessary permissions.
    2. Add the token in the designated field.
 
 ## Select a dataset (Optional)
 
-1. Choose a dataset from HuggingFace for fine-tuning.
+1. Choose a dataset from Hugging Face for fine-tuning.
 
    Example: `tatsu-lab/alpaca`
 
@@ -147,11 +144,14 @@ For more configuration examples, see the [Axolotl examples repository](https://g
 When your configuration is ready:
 
 1. Run the following command to start fine-tuning:
+
    ```bash
    axolotl train config.yaml
    ```
 
 2. The training process will begin, and progress will be displayed in your terminal.
+
+When you've finished, push your changes to Hugging Face.
 
 ## Resources
 
