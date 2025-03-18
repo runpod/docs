@@ -46,6 +46,11 @@ module.exports = {
       ],
     },
     {
+      type: "doc",
+      id: "fine-tune/index",
+      label: "Fine-tune a model",
+    },
+    {
       type: "category",
       label: "SDKs",
       items: [
