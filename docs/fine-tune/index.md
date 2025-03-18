@@ -31,6 +31,12 @@ Make sure you have:
 
 2. Enter the dataset identifier in the **Dataset** field.
 
+:::note 
+
+For a list of datasets, see the [Hugging Face dataset](https://huggingface.co/datasets?task_categories=task_categories:text-generation&sort=trending).
+
+:::
+
 ## Deploy the Fine Tuning pod
 
 1. Click **Deploy the Fine Tuning Pod**.
