@@ -53,7 +53,7 @@ Exceptions list:
 
 Main system memory must have ECC.
 
-| GPU Configuration | Recommended RAM  |
+| GPU Configuration | Minimum RAM  |
 | ----------------- | ---------------- |
 | 8x 80 GB VRAM     | >= 2048 GB DDR5  |
 | 8x 40/48 GB VRAM  | >= 1024 GB DDR5  |
