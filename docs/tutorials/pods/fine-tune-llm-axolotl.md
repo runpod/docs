@@ -9,7 +9,7 @@ import TabItem from '@theme/TabItem';
 :::note
 
 RunPod provides an easier method to fine tune an LLM.
-For more information, see [Fine tune a model](/docs/fine-tune/).
+For more information, see [Fine tune a model](/fine-tune/).
 
 :::
 
