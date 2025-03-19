@@ -109,7 +109,6 @@ set RUNPOD_API_KEY=<YOUR_RUNPOD_API_KEY>
 
 ### Code implementation
 
-
 ## Using Runpod API
 
 RunPod API provides an efficient way to interact with vllm endpoint by sending requests with either a prompt or a list of messages. The API applies chat templates automatically to messages, allowing seamless interaction.
@@ -139,20 +138,23 @@ POST https://api.runpod.ai/v2/{endpoint_id}/run
 <details>
   <summary>Click to expand</summary>
 
-| Argument              | Type                   | Default | Description                                                                        |
-| --------------------- | ---------------------- | ------- | ---------------------------------------------------------------------------------- |
-| `prompt`              | `str`                  | `None`  | The input string for text generation.                                              |
-| `messages`            | `list[dict[str, str]]` | `None`  | A list of messages with roles (`system`, `user`, `assistant`). Overrides `prompt`. |
-| `apply_chat_template` | `bool`                 | `False` | Whether to apply the model's chat template to the `prompt`.                        |
-| `sampling_params`     | `dict`                 | `{}`    | Sampling parameters to control generation (see below).                             |
-| `stream`              | `bool`                 | `False` | Whether to enable streaming of the output.                                         |
-| `max_batch_size`      | `int`                  |  env var `DEFAULT_BATCH_SIZE` |   The maximum number of tokens to stream every HTTP POST call. |
-| `min_batch_size`       | `int`                 | env var `DEFAULT_MIN_BATCH_SIZE` | The minimum number of tokens to stream every HTTP POST call. |
-| `batch_size_growth_factor` | `int`             | env var `DEFAULT_BATCH_SIZE_GROWTH_FACTOR` | The growth factor by which min_batch_size will be multiplied for each call until max_batch_size is reached. |
+| Argument                   | Type                   | Default                                    | Description                                                                                                 |
+| -------------------------- | ---------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `prompt`                   | `str`                  | `None`                                     | The input string for text generation.                                                                       |
+| `messages`                 | `list[dict[str, str]]` | `None`                                     | A list of messages with roles (`system`, `user`, `assistant`). Overrides `prompt`.                          |
+| `apply_chat_template`      | `bool`                 | `False`                                    | Whether to apply the model's chat template to the `prompt`.                                                 |
+| `sampling_params`          | `dict`                 | `{}`                                       | Sampling parameters to control generation (see below).                                                      |
+| `stream`                   | `bool`                 | `False`                                    | Whether to enable streaming of the output.                                                                  |
+| `max_batch_size`           | `int`                  | env var `DEFAULT_BATCH_SIZE`               | The maximum number of tokens to stream every HTTP POST call.                                                |
+| `min_batch_size`           | `int`                  | env var `DEFAULT_MIN_BATCH_SIZE`           | The minimum number of tokens to stream every HTTP POST call.                                                |
+| `batch_size_growth_factor` | `int`                  | env var `DEFAULT_BATCH_SIZE_GROWTH_FACTOR` | The growth factor by which min_batch_size will be multiplied for each call until max_batch_size is reached. |
+
 </details>
 
 ### Sampling Parameters
+
 Below are all available sampling parameters that you can specify in the `sampling_params` dictionary. If you do not specify any of these parameters, the default values will be used.
+
 <details>
   <summary>Click to expand</summary>
 
@@ -184,7 +186,9 @@ Below are all available sampling parameters that you can specify in the `samplin
 ## Text Input Formats
 
 ### Using `prompt`
+
 The prompt string can be any string, and the model's chat template will not be applied to it unless `apply_chat_template` is set to `true`, in which case it will be treated as a user message.
+
 ```json
 {
   "prompt": "Translate the following text to French: 'Hello, how are you?'"
@@ -192,12 +196,15 @@ The prompt string can be any string, and the model's chat template will not be a
 ```
 
 ### Using `messages`
+
 Your list can contain any number of messages, and each message usually can have any role from the following list:
-    - `user`
-    - `assistant`
-    - `system`
-However, some models may have different roles, so you should check the model's chat template to see which roles are required.
-The model's chat template will be applied to the messages automatically, so the model must have one.
+
+- `user`
+- `assistant`
+- `system`
+  However, some models may have different roles, so you should check the model's chat template to see which roles are required.
+  The model's chat template will be applied to the messages automatically, so the model must have one.
+
 ```json
 {
   "messages": [
@@ -245,8 +252,6 @@ curl -X POST "https://api.runpod.ai/v2/yf2k4t0vl3ciaf/run" \
 ```
 
 ---
-
-
 
 ## Troubleshooting
 
