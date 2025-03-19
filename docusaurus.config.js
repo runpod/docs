@@ -14,8 +14,7 @@ import { themes as prismThemes } from "prism-react-renderer";
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: "RunPod Documentation",
-  tagline:
-    "Globally distributed GPU cloud built for production. Develop, train, and scale AI applications.",
+  tagline: "Globally distributed GPU cloud built for production. Develop, train, and scale AI applications.",
   favicon: "img/favicon.ico",
   url: "https://docs.runpod.io",
   baseUrl: "/",
@@ -23,7 +22,7 @@ const config = {
   organizationName: "runpod",
   projectName: "docs",
 
-  onBrokenLinks: "log",
+  onBrokenLinks: "ignore",
   onBrokenMarkdownLinks: "warn",
   customFields: {
     runPodAPI: process.env.REACT_APP_RUNPOD_AI_KEY,
@@ -91,6 +90,15 @@ const config = {
       },
     ],
       */
+  ],
+
+  plugins: [
+    [
+      "posthog-docusaurus",
+      {
+        apiKey: "phc_1ku7R949l2D5wsXgMCBNSRIVRMiAn8FyKFNoJWDCcOb",
+      },
+    ],
   ],
 
   themeConfig: {
@@ -227,8 +235,7 @@ const config = {
       "data-website-id": "d8e25089-cadd-4c1c-9010-7e83cd99a2a5",
       "data-project-name": "RunPod",
       "data-project-color": "#070D27",
-      "data-project-logo":
-        "https://avatars.githubusercontent.com/u/95939477?s=200&v=4",
+      "data-project-logo": "https://avatars.githubusercontent.com/u/95939477?s=200&v=4",
       async: true,
     },
     {
@@ -241,14 +248,6 @@ const config = {
     //  async: true,
     //  defer: true,
     /// },
-  ],
-  plugins: [
-    [
-      "posthog-docusaurus",
-      {
-        apiKey: "phc_1ku7R949l2D5wsXgMCBNSRIVRMiAn8FyKFNoJWDCcOb",
-      },
-    ],
   ],
 };
 
