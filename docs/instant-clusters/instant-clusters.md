@@ -49,9 +49,11 @@ torchrun \
 High-bandwidth interfaces `eth1, eth2...` are provided for inter-node communication, while the
 management interface `eth0` can be used for external traffic. The NCCL environment variable `$NCCL_SOCKET_IFNAME` is configured by default to use all available interfaces. The aforementioned `PRIMARY_ADDR` simply corresponds to `eth1` , to allow launching and bootstrapping distributed processes.
 
-<aside>
+:::note
+
 💡 All accounts have a default spending limit. To launch a larger cluster, please submit a support ticket [here](mailto:help@runpod.io)
-</aside>
+
+:::
 
 ## Multi-Link Support for higher Throughput
 
@@ -76,7 +78,7 @@ Let's look at some use cases where you can benefit from this feature:
     - **Big Data Processing**: Multi-GPU clusters accelerate data processing in AI-driven analytics and recommendation systems
     - **Social Media Analysis**: Real-time trend detection, sentiment analysis, and misinformation detection
 
-<aside>
+:::note
 💡Note: You can review your spending in the "Clusters" tab in the billing section
 
-</aside>
+:::
