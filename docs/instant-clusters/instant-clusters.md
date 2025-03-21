@@ -55,10 +55,6 @@ management interface `eth0` can be used for external traffic. The NCCL environme
 
 :::
 
-## Multi-Link Support for higher Throughput
-
-We are excited to offer Multi-link connectivity between nodes, with up to 8 high-bandwidth interfaces per pod. Each interface `eth1, eth2, ..., eth8` provides a private subnet for inter-node communication, made available to distributed backends such as NCCL or GLOO.
-
 ## Applications
 
 Let's look at some use cases where you can benefit from this feature:
