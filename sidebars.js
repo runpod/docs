@@ -51,6 +51,11 @@ module.exports = {
       label: "Fine-tune a model",
     },
     {
+      type: "doc",
+      id: "instant-clusters/index",
+      label: "Instant Clusters",
+    },
+    {
       type: "category",
       label: "SDKs",
       items: [
