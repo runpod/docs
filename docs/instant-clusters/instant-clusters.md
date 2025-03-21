@@ -2,7 +2,7 @@
 
 # Overview
 
-This feature enables high-performance computing across multiple machines with high-speed networking capabilities
+This feature enables high-performance computing across multiple machines with high-speed networking capabilities.
 
 **Key characteristics:**
 
