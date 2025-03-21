@@ -16,8 +16,8 @@ Make sure you have:
 ## Select a base model
 
 1. Go to the **Fine Tuning** section in the sidebar.
-2. In the **Base Model** field, enter the Hugging Face model ID you want to Fine Tune. 
-    For example: `NousResearch/Meta-Llama-3-8B`
+2. In the **Base Model** field, enter the Hugging Face model ID you want to Fine Tune.
+   For example: `NousResearch/Meta-Llama-3-8B`
 
 3. If your selected model is gated (requires special access):
    1. Generate a Hugging Face token with the necessary permissions.
@@ -31,7 +31,7 @@ Make sure you have:
 
 2. Enter the dataset identifier in the **Dataset** field.
 
-:::note 
+:::note
 
 For a list of datasets, see the [Hugging Face dataset](https://huggingface.co/datasets?task_categories=task_categories:text-generation&sort=trending).
 
