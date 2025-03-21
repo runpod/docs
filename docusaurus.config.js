@@ -14,8 +14,7 @@ import { themes as prismThemes } from "prism-react-renderer";
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: "RunPod Documentation",
-  tagline:
-    "Globally distributed GPU cloud built for production. Develop, train, and scale AI applications.",
+  tagline: "Globally distributed GPU cloud built for production. Develop, train, and scale AI applications.",
   favicon: "img/favicon.ico",
   url: "https://docs.runpod.io",
   baseUrl: "/",
@@ -227,8 +226,7 @@ const config = {
       "data-website-id": "d8e25089-cadd-4c1c-9010-7e83cd99a2a5",
       "data-project-name": "RunPod",
       "data-project-color": "#070D27",
-      "data-project-logo":
-        "https://avatars.githubusercontent.com/u/95939477?s=200&v=4",
+      "data-project-logo": "https://avatars.githubusercontent.com/u/95939477?s=200&v=4",
       async: true,
     },
     {
