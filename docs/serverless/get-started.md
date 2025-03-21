@@ -117,16 +117,16 @@ Now that you've pushed your container registry, you're ready to deploy your Serv
 
 This step will walk you through deploying a Serverless Endpoint to RunPod. You can refer to this walkthrough to deploy your own custom Docker image.
 
-<iframe 
-    src="https://app.tango.us/app/embed/7df17d43-9467-4d09-9b0f-19eba8a17249" 
-    sandbox="allow-scripts allow-top-navigation-by-user-activation allow-popups allow-same-origin" 
-    security="restricted" 
-    title="Deploy your first serverless endpoint" 
-    width="100%" 
-    height="600px" 
-    referrerpolicy="strict-origin-when-cross-origin" 
-    frameborder="0" 
-    webkitallowfullscreen="webkitallowfullscreen" 
-    mozallowfullscreen="mozallowfullscreen" 
+<iframe
+    src="https://app.tango.us/app/embed/7df17d43-9467-4d09-9b0f-19eba8a17249"
+    sandbox="allow-scripts allow-top-navigation-by-user-activation allow-popups allow-same-origin"
+    security="restricted"
+    title="Deploy your first serverless endpoint"
+    width="100%"
+    height="600px"
+    referrerpolicy="strict-origin-when-cross-origin"
+    frameborder="0"
+    webkitallowfullscreen="webkitallowfullscreen"
+    mozallowfullscreen="mozallowfullscreen"
     allowfullscreen
 ></iframe>
