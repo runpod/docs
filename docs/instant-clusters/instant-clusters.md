@@ -6,7 +6,7 @@ This feature enables high-performance computing across multiple machines with hi
 
 **Key characteristics:**
 
-- Provides very fast local networking with bandwidths from 100Gbps up to 3200Gbps within a single data center⁠
+- Provides very fast local networking with bandwidths from 100 Gbps up to 3200 Gbps within a single data center⁠
 - Each pod in a cluster gets a static IP within the network, with environment variables set for coordination between nodes
 
 ## Deploy your first Instant Cluster
