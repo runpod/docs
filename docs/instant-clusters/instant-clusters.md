@@ -14,7 +14,7 @@ This feature enables high-performance computing across multiple machines with hi
 This guide explains how to use Instant Clusters to support larger workloads
 
 Each pod will have a static IP on their overlay network. Machines will have a designated
-PRIMARY_IP and CLUSTER_IP set. The primary is arbitrary but one is selected for you on
+`PRIMARY_IP` and `CLUSTER_IP` set. The primary is arbitrary but one is selected for you on
 cluster creation, to make it easier to work with multiprocessing libraries that expect a primary.
 
 The following environment variables will be set in all pods:
