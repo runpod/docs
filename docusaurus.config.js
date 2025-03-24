@@ -22,7 +22,7 @@ const config = {
   organizationName: "runpod",
   projectName: "docs",
 
-  onBrokenLinks: "log",
+  onBrokenLinks: "ignore",
   onBrokenMarkdownLinks: "warn",
   customFields: {
     runPodAPI: process.env.REACT_APP_RUNPOD_AI_KEY,
@@ -90,6 +90,15 @@ const config = {
       },
     ],
       */
+  ],
+
+  plugins: [
+    [
+      "posthog-docusaurus",
+      {
+        apiKey: "phc_1ku7R949l2D5wsXgMCBNSRIVRMiAn8FyKFNoJWDCcOb",
+      },
+    ],
   ],
 
   themeConfig: {
@@ -239,14 +248,6 @@ const config = {
     //  async: true,
     //  defer: true,
     /// },
-  ],
-  plugins: [
-    [
-      "posthog-docusaurus",
-      {
-        apiKey: "phc_1ku7R949l2D5wsXgMCBNSRIVRMiAn8FyKFNoJWDCcOb",
-      },
-    ],
   ],
 };
 

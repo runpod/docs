@@ -116,6 +116,11 @@ module.exports = {
       type: "doc",
       id: "glossary",
     },
+    {
+      type: "link",
+      label: "Complete Documentation",
+      href: "/llms.txt",
+    },
   ],
 
   // Sidebar for "Tutorials"
