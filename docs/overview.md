@@ -10,7 +10,7 @@ RunPod offers:
 
 - **High-performance compute:** Access powerful GPU & CPU resources on demand.
 - **Flexible deployment:** Deploy your code using [Serverless](/serverless/overview) for autoscaling pay-per-second execution, or [Pods](/pods/overview) for containerized GPU and CPU instances.
-- **Common Line Interface:** Use the [RunPod command-line interface](/runpodctl/overview) to seamlessly automate deployments.
+- **Command-line interface:** Use the [RunPod command-line interface](/runpodctl/overview) to seamlessly automate deployments.
 - **Transparent pricing:** GPUs are billed by the minute, with no fees for ingress/egress. See [RunPod Pricing](https://www.runpod.io/pricing) for details.
 
 Get started today by [signing up for an account](https://www.runpod.io/console/signup).
@@ -61,6 +61,6 @@ If you need help, reach out to us on [Discord](https://discord.gg/cUpRmau42V), v
 
 ## Next steps
 
-- [Manage your account](/get-started/manage-accounts)
+- [Create and manage your account](/get-started/manage-accounts)
 - [Add funds to your account](/get-started/billing-information)
 - [Complete your first tutorial](/tutorials/introduction/overview)
