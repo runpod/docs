@@ -1,7 +1,7 @@
 ---
 title: Billing information
 description: "Learn about RunPod's billing and payment methods, including credit cards, crypto payments, and business invoicing options, with guidance on common issues and troubleshooting tips."
-sidebar_position: 2
+sidebar_position: 4
 ---
 
 All billing, including per-hour compute and storage billing, is charged per minute.
