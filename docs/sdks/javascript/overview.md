@@ -4,31 +4,36 @@ sidebar_position: 1
 description: "Get started with RunPod JavaScript SDK, a tool for building web apps, server-side implementations, and automating tasks. Learn how to install, integrate, and secure your API key for seamless development."
 ---
 
-Get started with setting up your RunPod projects using JavaScript. Whether you're building web applications, server-side implementations, or automating tasks, the RunPod JavaScript SDK provides the tools you need.
-This guide outlines the steps to get your development environment ready and integrate RunPod into your JavaScript projects.
+This guide helps you set up and use the RunPod JavaScript SDK in your projects. You'll learn how to install the SDK, configure your environment, and integrate RunPod into your JavaScript applications.
 
-## Install the RunPod SDK
+## Install the SDK
 
-Before integrating RunPod into your project, you'll need to install the SDK.
-Using Node.js and npm (Node Package Manager) simplifies this process.
-Ensure you have Node.js and npm installed on your system before proceeding.
+To use the RunPod SDK in your project:
 
-To install the RunPod SDK, run the following npm command in your project directory.
+1. Ensure you have Node.js and npm installed on your system
+2. Run one of these commands in your project directory:
 
-```command
-npm install --save runpod-sdk
-# or
-yarn add runpod-sdk
-```
+   ```bash
+   npm install --save runpod-sdk
+   # or
+   yarn add runpod-sdk
+   ```
 
-This command installs the `runpod-sdk` package and adds it to your project's `package.json` dependencies.
-For more details about the package, visit the [npm package page](https://www.npmjs.com/package/runpod-sdk) or the [GitHub repository](https://github.com/runpod/js-sdk).
+This installs the `runpod-sdk` package and adds it to your project's `package.json` dependencies.
 
-## Add your API key
+For more details, visit:
+- [npm package page](https://www.npmjs.com/package/runpod-sdk)
+- [GitHub repository](https://github.com/runpod/js-sdk)
 
-To use the RunPod SDK in your project, you first need to import it and configure it with your API key and endpoint ID. Ensure these values are securely stored, preferably as environment variables.
+## Configure your environment
 
-Below is a basic example of how to initialize and use the RunPod SDK in your JavaScript project.
+To use the RunPod SDK, you need to:
+
+1. Import the SDK
+2. Configure it with your API key and endpoint ID
+3. Store sensitive information securely
+
+Here's how to initialize the SDK:
 
 ```javascript
 const { RUNPOD_API_KEY, ENDPOINT_ID } = process.env;
@@ -38,22 +43,22 @@ const runpod = runpodSdk(RUNPOD_API_KEY);
 const endpoint = runpod.endpoint(ENDPOINT_ID);
 ```
 
-This snippet demonstrates how to import the SDK, initialize it with your API key, and reference a specific endpoint using its ID.
-Remember, the RunPod SDK uses the ES Module (ESM) system and supports asynchronous operations, making it compatible with modern JavaScript development practices.
+The SDK uses ES Modules (ESM) and supports asynchronous operations for modern JavaScript development.
 
-### Secure your API key
+## Secure your API key
 
-When working with the RunPod SDK, it's essential to secure your API key.
-Storing the API key in environment variables is recommended, as shown in the initialization example. This method keeps your key out of your source code and reduces the risk of accidental exposure.
+Always store your API key securely:
 
-:::note
+- Use environment variables (recommended)
+- Avoid storing keys in source code
+- Use secure secrets management solutions
 
-Use environment variables or secure secrets management solutions to handle sensitive information like API keys.
+> **Note:** Never commit API keys to version control. Use environment variables or secure secrets management solutions to handle sensitive information.
 
-:::
+## Next steps
 
-For more information, see the following:
+For more information, see:
 
-- [RunPod SDK npm Package](https://www.npmjs.com/package/runpod-sdk)
-- [RunPod GitHub Repository](https://github.com/runpod/js-sdk)
-- [Endpoints](/sdks/javascript/endpoints)
+- [Endpoints documentation](endpoints.md)
+- [npm package documentation](https://www.npmjs.com/package/runpod-sdk)
+- [GitHub repository](https://github.com/runpod/js-sdk)

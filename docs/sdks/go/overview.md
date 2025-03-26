@@ -1,43 +1,39 @@
 ---
 title: Overview
 sidebar_position: 1
+description: "Get started with RunPod Go SDK for building web applications, server-side implementations, and automating tasks. Learn how to install, configure, and secure your API key."
 ---
 
-Get started with setting up your RunPod projects using Go.
-Whether you're building web applications, server-side implementations, or automating tasks, the RunPod Go SDK provides the tools you need.
-This guide outlines the steps to get your development environment ready and integrate RunPod into your Go projects.
+This guide helps you set up and use the RunPod Go SDK in your projects. You'll learn how to install the SDK, configure your environment, and integrate RunPod into your Go applications.
 
 ## Prerequisites
 
-Before you begin, ensure that you have the following:
+Before you begin, ensure you have:
 
-- Go installed on your machine (version 1.16 or later)
-- A RunPod account with an API key and Endpoint Id
+- Go 1.16 or later installed
+- A RunPod account with an API key and endpoint ID
 
-## Install the RunPod SDK {#install}
+## Install the SDK
 
-Before integrating RunPod into your project, you'll need to install the SDK.
+To install the RunPod SDK in your project:
 
-To install the RunPod SDK, run the following `go get` command in your project directory.
+1. Run this command in your project directory:
+   ```bash
+   go get github.com/runpod/go-sdk
+   ```
 
-```command
-go get github.com/runpod/go-sdk
-```
+2. Install dependencies:
+   ```bash
+   go mod tidy
+   ```
 
-This command installs the `runpod-sdk` package.
-Then run the following command to install the dependencies:
+For more details, visit:
+- [Go package documentation](https://pkg.go.dev/github.com/runpod/go-sdk/pkg/sdk)
+- [GitHub repository](https://github.com/runpod/go-sdk)
 
-```command
-go mod tidy
-```
+## Configure your environment
 
-For more details about the package, visit the [Go package page](https://pkg.go.dev/github.com/runpod/go-sdk/pkg/sdk) or the [GitHub repository](https://github.com/runpod/go-sdk).
-
-## Add your API key
-
-To use the RunPod SDK in your project, you first need to import it and configure it with your API key and endpoint ID. Ensure these values are securely stored, preferably as environment variables.
-
-Below is a basic example of how to initialize and use the RunPod SDK in your Go project.
+Set up your API key and endpoint ID in your Go application:
 
 ```go
 func main() {
@@ -54,21 +50,20 @@ func main() {
 }
 ```
 
-This snippet demonstrates how to import the SDK, initialize it with your API key, and reference a specific endpoint using its ID.
+## Secure your API key
 
-### Secure your API key
+Always store your API key securely:
 
-When working with the RunPod SDK, it's essential to secure your API key.
-Storing the API key in environment variables is recommended, as shown in the initialization example. This method keeps your key out of your source code and reduces the risk of accidental exposure.
+- Use environment variables (recommended)
+- Avoid storing keys in source code
+- Use secure secrets management solutions
 
-:::note
+> **Note:** Never commit API keys to version control. Use environment variables or secure secrets management solutions to handle sensitive information.
 
-Use environment variables or secure secrets management solutions to handle sensitive information like API keys.
+## Next steps
 
-:::
+For more information, see:
 
-For more information, see the following:
-
-- [RunPod SDK Go Package](https://pkg.go.dev/github.com/runpod/go-sdk/pkg/sdk)
-- [RunPod GitHub Repository](https://github.com/runpod/go-sdk)
-- [Endpoints](/sdks/go/endpoints)
+- [Endpoints documentation](endpoints.md)
+- [Go package documentation](https://pkg.go.dev/github.com/runpod/go-sdk/pkg/sdk)
+- [GitHub repository](https://github.com/runpod/go-sdk)

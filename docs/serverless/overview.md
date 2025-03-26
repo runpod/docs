@@ -1,32 +1,98 @@
 ---
-title: Overview
-description: "Scale machine learning workloads with RunPod Serverless, offering flexible GPU computing for AI inference, training, and general compute, with pay-per-second pricing and fast deployment options for custom endpoints and handler functions."
-sidebar_position: 1
+title: Concepts overview
+description: "Learn the core concepts of RunPod Serverless - how it works, key components, and fundamental architecture. Understand workers, endpoints, and the request lifecycle."
+sidebar_position: 4
 ---
 
-RunPod offers Serverless GPU and CPU computing for AI inference, training, and general compute, allowing users to pay by the second for their compute usage.
-This flexible platform is designed to scale dynamically, meeting the computational needs of AI workloads from the smallest to the largest scales.
+# RunPod Serverless concepts
 
-You can use the following methods:
+This guide explains the core concepts of RunPod Serverless to help you understand how the platform works and how different components interact with each other.
 
-- Handler Functions: Bring your own functions and run in the cloud.
-- Quick Deploy: Quick deploys are pre-built custom endpoints of the most popular AI models.
+## Architecture overview
 
-## Why RunPod Serverless?
+RunPod Serverless operates as a managed container platform that automatically handles scaling, infrastructure, and resource allocation. Here's how it works:
 
-You should choose RunPod Serverless instances for the following reasons:
+1. **Containers**: Your code runs inside Docker containers with the resources you specify (GPU, memory, etc.)
+2. **Request queue**: API requests are placed in a queue specific to your endpoint
+3. **Workers**: Container instances process jobs from the queue in parallel
+4. **Auto-scaling**: Workers are dynamically created or destroyed based on demand
 
-- **AI Inference:** Handle millions of inference requests daily and can be scaled to handle billions, making it an ideal solution for machine learning inference tasks. This allows users to scale their machine learning inference while keeping costs low.
-- **Autoscale:** Dynamically scale workers from 0 to 100 on the Secure Cloud platform, which is highly available and distributed globally. This provides users with the computational resources exactly when needed.
-- **AI Training:** Machine learning training tasks that can take up to 12 hours. GPUs can be spun up per request and scaled down once the task is done, providing a flexible solution for AI training needs.
-- **Container Support:** Bring any Docker container to RunPod. Both public and private image repositories are supported, allowing users to configure their environment exactly how they want.
-- **3s Cold-Start:** To help reduce cold-start times, RunPod proactively pre-warms workers. The total start time will vary based on the runtime, but for stable diffusion, the total start time is 3 seconds cold-start plus 5 seconds runtime.
-- **Metrics and Debugging:** Transparency is vital in debugging. RunPod provides access to GPU, CPU, Memory, and other metrics to help users understand their computational workloads. Full debugging capabilities for workers through logs and SSH are also available, with a web terminal for even easier access.
-- **Webhooks:** Users can leverage webhooks to get data output as soon as a request is done. Data is pushed directly to the user's Webhook API, providing instant access to results.
+<!-- Architecture diagram will be added here in the future -->
 
-RunPod Serverless are not just for AI Inference and Training.
-They're also great for a variety of other use cases.
-Feel free to use them for tasks like rendering, molecular dynamics, or any other computational task that suits your needs.
+## Core components
+
+### Endpoints
+
+An endpoint is the public REST API URL that serves your application. It has:
+
+- A unique ID and API key for authentication
+- Configuration for scaling, resources, and networking
+- A job queue that manages all incoming requests
+
+### Workers
+
+Workers are container instances that process jobs from the queue:
+
+- Each worker runs your container image
+- Workers can be scaled from 0 to many instances
+- Workers are isolated for security and performance
+
+### Handler functions
+
+A handler function is the code that processes each request:
+
+```python
+def handler(event):
+    # Process input data
+    job_input = event["input"]
+    
+    # Perform work here
+    result = process_data(job_input)
+    
+    # Return output
+    return result
+```
+
+### Jobs
+
+Each request to your endpoint creates a job:
+
+- Jobs have unique IDs for tracking
+- Jobs can be synchronous (wait for result) or asynchronous (get result later)
+- Jobs have states (PENDING, IN_PROGRESS, COMPLETED, etc.)
+
+## Request lifecycle
+
+1. **Request submission**: A client sends a POST request to your endpoint's URL
+2. **Queue entry**: The request becomes a job in the queue
+3. **Worker assignment**: A worker picks up the job when available
+4. **Processing**: Your handler function processes the job
+5. **Response**: The result is returned to the client
+
+## Scalability concepts
+
+### Min/Max workers
+
+- **Min workers**: The minimum number of workers to keep running (even when idle)
+- **Max workers**: The maximum number of concurrent workers to scale to
+
+### Idle timeout
+
+The time (in seconds) a worker remains active after finishing a job before shutting down.
+
+### Flash boot
+
+A feature that pre-warms workers to reduce cold start latency.
+
+## Next steps
+
+Now that you understand the core concepts:
+
+1. [Deploy a pre-built model](quick-start/deploy-models.md) for a quick start
+2. [Create your first endpoint](build/first-endpoint.md) to build something custom
+3. [Learn about handler functions](workers/handlers/overview.md) for advanced development
+
+> **Pro tip**: For optimal performance and cost-efficiency, tailor your worker count and idle timeout to your workload patterns.
 
 <!--
 ### Endpoints
