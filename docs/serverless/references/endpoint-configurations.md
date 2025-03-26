@@ -68,13 +68,16 @@ Currently only available for 48 GB GPUs.
 
 ## Idle Timeout
 
-The amount of time a worker remains running after completing its current request. During this period, the worker stays active, continuously checking the queue for new jobs, and continues to incur charges. If no new requests arrive within this time, the worker will go to sleep.
+The amount of time in seconds a worker not currently processing a job will remain active until it is put back into standby.
+During the idle period, your worker is considered running and will incur a charge.
 
 Default: 5 seconds
 
 ## FlashBoot
 
-FlashBoot is RunPod’s magic solution for reducing the average cold-start times on your endpoint. It works probabilistically. When your endpoint has consistent traffic, your workers have a higher chance of benefiting from FlashBoot for faster spin-ups. However, if your endpoint isn’t receiving frequent requests, FlashBoot has fewer opportunities to optimize performance. There’s no additional cost associated with FlashBoot.
+RunPod magic to further reduce the average cold-start time of your endpoint.
+FlashBoot works best when an endpoint receives consistent utilization.
+There is no additional cost associated with FlashBoot.
 
 ## Advanced
 
@@ -102,7 +105,7 @@ This will limit the availability of cards, as your endpoint workers will be lock
 
 ### Scale Type
 
-- **Queue Delay** scaling strategy adjusts worker numbers based on request wait times. With zero workers initially, the first request adds one worker. Subsequent requests add workers only after waiting in the queue for the defined number of delay seconds.
+- **Queue Delay** scaling strategy adjusts worker numbers based on request wait times. With zero workers initially, the first request adds one worker. For subsequent requests, if a request waits in the queue longer than the defined delay threshold, a new worker is added. If multiple requests exceed the queue delay threshold simultaneously (for example, if 200 requests exceed the threshold), a worker will be added for each request that exceeds the threshold (in this case, 200 workers would be added).
 - **Request Count** scaling strategy adjusts worker numbers according to total requests in the queue and in progress. It automatically adds workers as the number of requests increases, ensuring tasks are handled efficiently.
 
 ```text
