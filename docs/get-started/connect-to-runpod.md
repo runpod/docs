@@ -29,7 +29,7 @@ The [RunPod REST API](https://rest.runpod.io/v1/docs) allows you to programmatic
 
 ## Command-line interface (CLI)
 
-The [RunPod CLI](/runpodctl/overview) can be used to:
+The [RunPod CLI](/runpodctl/overview) allows you to:
 
 - Manage Pods from your terminal
 - Execute code on Pods
@@ -44,8 +44,9 @@ Every Pod comes pre-installed with the `runpodctl` command and includes a Pod-sc
 
 RunPod provides SDKs to help you integrate our services into your applications:
 
-- [GraphQL SDK](/sdks/graphql/manage-pods) - For direct GraphQL API access
-- [JavaScript SDK](/sdks/javascript/overview) - For Node.js and browser applications
-- [Python SDK](/sdks/python/overview) - For Python applications and scripts
+- [GraphQL SDK](/sdks/graphql/manage-pods)
+- [JavaScript SDK](/sdks/javascript/overview)
+- [Python SDK](/sdks/python/overview)
+- [Go SDK](/sdks/go/overview)
 
 [Explore the SDKs →](/sdks/overview)

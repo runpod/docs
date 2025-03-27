@@ -82,7 +82,6 @@ With custom templates, you can:
 You will be charged for idle Pods even if they are stopped. If you don't need to retain your Pod environment, you should terminate it completely.
 :::
 
-
 <Tabs groupId="interface">
 
 <TabItem value="web-ui" label="Web" default>
@@ -134,7 +133,7 @@ The examples below show how to use the CLI and the [web terminal](/pods/connect-
 
 ## Start a Pod
 
-Pods start as soon as they've been created, but you can resume a Pod that has been stopped.
+Pods start as soon as they are created, but you can resume a Pod that has been stopped.
 
 <Tabs groupId="interface">
 

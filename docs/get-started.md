@@ -1,12 +1,12 @@
 ---
 title: Quickstart
 sidebar_position: 2
-description: "Learn how to create a RunPod account, add funds, deploy your first GPU or CPU Pod, and explore next steps for API keys, Serverless deployment, and connecting via CLI or REST API."
+description: "Learn how to create a RunPod account, add funds, and deploy your first GPU Pod."
 ---
 
 # Get started with RunPod
 
-Welcome to RunPod! This page shows you how to create an account and deploy your first Pod.
+Learn how to create an account and deploy your first Pod.
 
 ## Create an account
 
@@ -30,9 +30,9 @@ For detailed information on payment methods and billing policies, see [Billing i
 
 ## Launch your first Pod
 
-Now that your account is funded, you're ready to deploy computing resources.
+Now that you've funded your account, you're ready to deploy computing resources.
 
-### 1. Deploy a Pod and connect with JupyterLab
+### 1. Deploy a Pod and connect to JupyterLab
 
 Follow this step-by-step guide to deploy a Pod and use it to run code in JupyterLab:
 
@@ -72,6 +72,6 @@ Now that you've learned the basics, you're ready to:
 
 ## Need help?
 
-- Join our [Discord community](https://discord.gg/cUpRmau42V).
-- Contact us via [email](mailto:help@runpod.io).
-- Submit a request using our [contact page](https://contact.runpod.io/hc/requests/new).
+- Join the [Discord community](https://discord.gg/cUpRmau42V).
+- Reach out via [email](mailto:help@runpod.io).
+- Submit a request using the [contact page](https://contact.runpod.io/hc/requests/new).
