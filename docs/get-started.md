@@ -10,7 +10,7 @@ Learn how to create an account and deploy your first Pod.
 
 ## Create an account
 
-Start by creating a RunPod account to access GPU and CPU compute resources:
+Start by creating a RunPod account to access GPU Pods and Serverless compute resources:
 
 1. [Sign up here](https://www.runpod.io/console/signup)
 2. Verify your email address
