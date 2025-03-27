@@ -31,12 +31,13 @@ The following environment variables are available in all pods:
 | `NUM_NODES`                    | Number of pods in the cluster                                |
 | `NUM_TRAINERS`                 | Number of GPUs per pod                                       |
 | `HOST_NODE_ADDR`               | Defined as `PRIMARY_ADDR:PRIMARY_PORT` for convenience       |
+| `WORLD_SIZE`                   | The total number of GPUs in the cluser (`NUM_NODES` * `NUM_TRAINERS`). |
 
 The variables `MASTER_ADDR`/`PRIMARY_ADDR` and `MASTER_PORT`/`PRIMARY_PORT` are equivalent. The `MASTER_*` variables provide compatibility with tools that expect these legacy names.
 
 ### Network interfaces
 
-High-bandwidth interfaces (`eth1`, `eth2`, etc.) handle inter-node communication, while the management interface (`eth0`) manages external traffic. The NCCL environment variable `NCCL_SOCKET_IFNAME` uses all available interfaces by default. The `PRIMARY_ADDR` corresponds to `eth1` to enable launching and bootstrapping distributed processes.
+High-bandwidth interfaces (`eth1`, `eth2`, etc.) handle inter-node communication, while the management interface (`eth0`) manages external traffic. The NCCL environment variable `NCCL_SOCKET_IFNAME` uses all available interfaces by default. The `PRIMARY_ADDR` corresponds to `eth1` to enable launching and bootstrapping distributed processes. Instant Clusters support up to 8 interfaces per Pod. Each interface (`eth1` - `eth8`) provides a private network connection for inter-node communication, made available to distributed backends such as NCCL or GLOO.
 
 ### Example PyTorch implementation
 
