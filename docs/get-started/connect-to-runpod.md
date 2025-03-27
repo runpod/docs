@@ -9,10 +9,10 @@ RunPod offers multiple ways to connect and manage your compute resources. Choose
 ## Web interface
 
 The [RunPod web interface](https://runpod.io/console/home) provides an intuitive way to:
-- Launch and manage Pods
-- Monitor resource usage
-- Access Pod terminals
-- View billing and usage history
+- Launch and manage Pods.
+- Monitor resource usage.
+- Access Pod terminals.
+- View billing and usage history.
 
 To get started, [create an account](/get-started) and log in at [runpod.io/console](https://www.runpod.io/console).
 
@@ -20,10 +20,10 @@ To get started, [create an account](/get-started) and log in at [runpod.io/conso
 
 The [RunPod REST API](https://rest.runpod.io/v1/docs) allows you to programmatically manage and control compute resources. Use the API to:
 
-- Manage Pod lifecycles
-- Manage Serverless endpoints
-- Monitor resource utilization
-- Integrate RunPod into your applications
+- Manage Pod lifecycles.
+- Manage Serverless endpoints.
+- Monitor resource utilization.
+- Integrate RunPod into your applications.
 
 [Explore the API reference →](https://rest.runpod.io/v1/docs).
 
@@ -31,10 +31,10 @@ The [RunPod REST API](https://rest.runpod.io/v1/docs) allows you to programmatic
 
 The [RunPod CLI](/runpodctl/overview) allows you to:
 
-- Manage Pods from your terminal
-- Execute code on Pods
-- Transfer data between local systems and RunPod
-- Programmatically manage Serverless endpoints
+- Manage Pods from your terminal.
+- Execute code on Pods.
+- Transfer data between local systems and RunPod.
+- Programmatically manage Serverless endpoints.
 
 Every Pod comes pre-installed with the `runpodctl` command and includes a Pod-scoped API key for seamless command-line management.
 
