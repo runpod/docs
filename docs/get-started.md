@@ -6,9 +6,9 @@ description: "Learn how to create a RunPod account, add funds, and deploy your f
 
 # Get started with RunPod
 
-Learn how to create an account and deploy your first Pod.
+Learn how to create an account, deploy your first Pod, and execute code on it using JupyterLab.
 
-## Create an account
+## Step 1: Create an account
 
 Start by creating a RunPod account to access GPU Pods and Serverless compute resources:
 
@@ -16,49 +16,60 @@ Start by creating a RunPod account to access GPU Pods and Serverless compute res
 2. Verify your email address.
 3. Set up two-factor authentication (recommended for security).
 
-## Add funds to your account
+## Step 2: Deploy a Pod
 
-Before deploying resources, you'll need to add funds to your account:
+Now that you've created your account, you're ready to deploy your first Pod:
 
-1. Open the [Billing page](https://www.runpod.io/console/user/billing).
-2. Choose your preferred payment method:
-   - Credit/debit card
-   - Cryptocurrency (Bitcoin, Ethereum, etc.)
-3. Complete the payment process.
+1. Open the [Pods page](https://www.runpod.io/console/pods) in the web interface.
+2. Click the **Deploy** button.
+3. Select **RTX 2000 Ada** from the list of graphics cards.
 
-For detailed information on payment methods and billing policies, see [Billing information](/get-started/billing-information).
+<img src="/img/docs/quickstart-select-gpu.png" width="700" alt="Image of the Pod graphics card selection menu"/>
 
-## Launch your first Pod
+4. In the **Pod Name** field, enter the name **"test-pod"**.
+5. Keep all other fields (Pod Template, Instance Pricing, and GPU Count) on their default settings.
+6. Click **Deploy On-Demand** to deploy and start your Pod. You'll be redirected back to the Pods page after a few seconds.
 
-Now that you've funded your account, you're ready to deploy computing resources.
+:::note
 
-### 1. Deploy a Pod and connect to JupyterLab
+If you haven't set up payments yet, you'll be prompted to add a payment method and purchase credits for your account.
 
-Follow this step-by-step guide to deploy a Pod and use it to run code in JupyterLab:
+:::
 
-<iframe
-  src="https://app.tango.us/app/embed/e494032e-b628-45d6-a134-fd86bb76b668"
-  sandbox="allow-scripts allow-top-navigation-by-user-activation allow-popups allow-same-origin"
-  security="restricted"
-  title="Deploy your first pod"
-  width="100%"
-  height="600px"
-  referrerpolicy="strict-origin-when-cross-origin"
-  frameborder="0"
-  allowfullscreen
-></iframe>
+## Step 3: Execute code on your Pod with JupyterLab
 
-### 2. Clean up
+After your Pod has finished starting up (this may take a minute or two), you can connect to it:
 
-To avoid incurring extra charges, make sure to:
+1. On the [Pods page](https://www.runpod.io/console/pods), find the Pod you just created and click the **Connect** button. If it's greyed out, your Pod hasn't finished starting up yet.
+1. In the window that opens, under **HTTP Services**, click **Jupyter Lab** to open a JupyterLab workspace on your Pod.
+1. Under **Notebook**, select **Python 3 (ipykernel)**.
+1. Type `print("Hello, world!")` in the first line of the notebook.
+1. Press the play button to run your code.
 
-1. Return to the [Pods page](https://www.runpod.io/console/pods) when you're finished.
-2. [Stop your Pod](/pods/manage-pods#stop-a-pod) if you plan to use it again later.
-3. [Terminate your Pod](/pods/manage-pods#terminate-a-pod) if you no longer need it.
+Congratulations! You just ran your first line of code using RunPod.
+
+## Step 4: Clean up
+
+To avoid incurring unnecessary charges, make sure to:
+
+1. Return to the [Pods page](https://www.runpod.io/console/pods).
+1. Click the **Stop button** (square icon) to stop your Pod.
+1. Confirm by clicking the **Stop Pod** button.
 
 :::warning
 
-You will be charged for idle Pods even if they are stopped. If you don't need to retain your Pod environment, you should terminate it completely.
+You will be charged for storage on stopped Pods. If you don't need to retain your Pod environment, you should terminate it completely.
+
+:::
+
+To terminate your Pod:
+
+1. Click the **Terminate** button (trash icon).
+1. Confirm by clicking the **Yes** button.
+
+:::danger
+
+Terminating a Pod permanently deletes all data that isn't stored in a [network volume](/pods/storage/create-network-volumes). Be sure you've saved any data you want to access again.
 
 :::
 
@@ -66,9 +77,10 @@ You will be charged for idle Pods even if they are stopped. If you don't need to
 
 Now that you've learned the basics, you're ready to:
 
-- Generate [API keys](/get-started/api-keys) for programmatic access.
-- Connect to RunPod using the [REST API](https://rest.runpod.io/v1/docs) or [command-line interface](/runpodctl/overview).
-- Learn how to [choose the right Pod](/pods/choose-a-pod) for your workload.
+- Generate [API keys](/get-started/api-keys) for programmatic pod management.
+- [Connect to RunPod](/get-started/connect-to-runpod) using the [REST API](https://rest.runpod.io/v1/docs) or [command-line interface](/runpodctl/overview) (CLI).
+- [Choose the right Pod](/pods/choose-a-pod) for your workload.
+- [Manage Pods](/pods/manage-pods) using the web interface and CLI.
 - Build production-ready applications with [Serverless](/serverless/get-started).
 - Explore [tutorials](/tutorials/overview) for specific use cases.
 

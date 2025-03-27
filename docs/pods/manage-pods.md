@@ -14,10 +14,10 @@ import TabItem from '@theme/TabItem';
 
 If you want to manage Pods using the RunPod CLI, you'll need to [install `runpodctl`](/runpodctl/install-runpodctl), and set your [API key](/get-started/api-keys) in the configuration.
 
-Run the following command, replacing `RUNPOD_API_KEY` with your API key:
+Run the following command, replacing `$RUNPOD_API_KEY` with your API key:
 
 ```bash
-runpodctl config --apiKey RUNPOD_API_KEY
+runpodctl config --apiKey $RUNPOD_API_KEY
 ```
 
 ## Create a Pod
@@ -43,7 +43,7 @@ GPU configuration:
 CPU configuration:
 
 1. Select a **CPU type** (e.g., CPU3/CPU5, Compute Optimized, General Purpose, Memory-Optimized).
-1. Specify the number of CPUs and quantity of RAM for you Pod by selecting an **Instance Cofiguration**.
+1. Specify the number of CPUs and quantity of RAM for your Pod by selecting an **Instance Configuration**.
 1. Give your Pod a name using the **Pod Name** field.
 1. Click **Deploy On-Demand** to deploy and start your Pod.
 
@@ -69,6 +69,7 @@ runpodctl create pods \
 ### Custom templates
 
 RunPod supports custom [Pod templates](/pods/templates/overview) that let you define your environment using a Dockerfile.
+
 With custom templates, you can:
 
 - Install specific dependencies and packages.
@@ -79,25 +80,29 @@ With custom templates, you can:
 ## Stop a Pod
 
 :::warning
+
 You will be charged for idle Pods even if they are stopped. If you don't need to retain your Pod environment, you should terminate it completely.
+
 :::
 
 <Tabs groupId="interface">
 
 <TabItem value="web-ui" label="Web" default>
 
-  1. Open the [Pods page](https://www.runpod.io/console/pods).
-  1. Find the Pod you want to stop and expand it.
-  1. Click the **Stop button** (square icon).
-  1. Confirm by clicking the **Stop Pod** button.
-  </TabItem>
+1. Open the [Pods page](https://www.runpod.io/console/pods).
+1. Find the Pod you want to stop and expand it.
+1. Click the **Stop button** (square icon).
+1. Confirm by clicking the **Stop Pod** button.
+
+</TabItem>
 
 <TabItem value="cli" label="Command line">
-    To stop a Pod, enter the following command.
 
-    ```bash
-    runpodctl stop pod $RUNPOD_POD_ID
-    ```
+To stop a Pod, enter the following command.
+
+```bash
+runpodctl stop pod $RUNPOD_POD_ID
+```
 
 </TabItem>
 
@@ -108,27 +113,32 @@ You will be charged for idle Pods even if they are stopped. If you don't need to
 You can also stop a Pod after a specified period of time.
 The examples below show how to use the CLI and the [web terminal](/pods/connect-to-a-pod#web-terminal) to schedule a Pod to stop after 2 hours of runtime.
 
-      <Tabs>
-        <TabItem value="cli" label="Command line">
+<Tabs groupip="interface">
 
-          Use the following command to stop a Pod after 2 hours:
+<TabItem value="cli" label="Command line">
 
-          ```bash
-          sleep 2h; runpodctl stop pod $RUNPOD_POD_ID &
-          ```
-          This command uses sleep to wait for 2 hours before executing the `runpodctl stop pod` command to stop the Pod.
-          The `&` at the end runs the command in the background, allowing you to continue using the SSH session.
-        </TabItem>
-        <TabItem value="web-terminal" label="Web terminal">
+Use the following command to stop a Pod after 2 hours:
 
-          To stop a Pod after 2 hours using the web terminal, enter:
+```bash
+sleep 2h; runpodctl stop pod $RUNPOD_POD_ID &
+```
+This command uses sleep to wait for 2 hours before executing the `runpodctl stop pod` command to stop the Pod.
+The `&` at the end runs the command in the background, allowing you to continue using the SSH session.
 
-          ```bash
-          nohup bash -c "sleep 2h; runpodctl stop pod $RUNPOD_POD_ID" &
-          ```
-          `nohup` ensures the process continues running if you close the web terminal window.
-        </TabItem>
-      </Tabs>
+</TabItem>
+
+<TabItem value="web-terminal" label="Web terminal">
+
+To stop a Pod after 2 hours using the web terminal, enter:
+
+```bash
+nohup bash -c "sleep 2h; runpodctl stop pod $RUNPOD_POD_ID" &
+```
+`nohup` ensures the process continues running if you close the web terminal window.
+
+</TabItem>
+
+</Tabs>
 
 
 ## Start a Pod
@@ -153,12 +163,15 @@ runpodctl start pod $RUNPOD_POD_ID
 ```
 
 </TabItem>
+
 </Tabs>
 
 ## Terminate a Pod
 
 :::danger
+
 Terminating a Pod permanently deletes all data outside your [network volume](/pods/storage/create-network-volumes). Be sure you've saved any data you want to access again.
+
 :::
 
 <Tabs groupId="interface">
