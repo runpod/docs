@@ -12,9 +12,9 @@ Learn how to create an account and deploy your first Pod.
 
 Start by creating a RunPod account to access GPU Pods and Serverless compute resources:
 
-1. [Sign up here](https://www.runpod.io/console/signup)
-2. Verify your email address
-3. Set up two-factor authentication (recommended for security)
+1. [Sign up here](https://www.runpod.io/console/signup).
+2. Verify your email address.
+3. Set up two-factor authentication (recommended for security).
 
 ## Add funds to your account
 
