@@ -56,7 +56,8 @@ torchrun \
 All accounts have a default spending limit. To launch a larger cluster, submit a support ticket at help@runpod.io
 :::
 
-## Multi-Link Support for higher Throughput
+## Multi-Link Support for higher throughput
+
 We are excited to offer Multi-link connectivity between nodes, with up to 8 high-bandwidth interfaces per pod. Each interface `eth1, eth2, ..., eth8` provides a private subnet for inter-node communication, made available to distributed backends such as NCCL or GLOO.
 
 ## Applications
