@@ -31,7 +31,7 @@ The following environment variables are available in all pods:
 | `NUM_NODES`                    | Number of pods in the cluster                                |
 | `NUM_TRAINERS`                 | Number of GPUs per pod                                       |
 | `HOST_NODE_ADDR`               | Defined as `PRIMARY_ADDR:PRIMARY_PORT` for convenience       |
-| `WORLD_SIZE`                   | NUM_NODES * NUM_TRAINERS, total number of GPU's in cluster   |
+| `WORLD_SIZE`                   | The total number of GPUs in the cluser (`NUM_NODES` * `NUM_TRAINERS`). |
 
 The variables `MASTER_ADDR`/`PRIMARY_ADDR` and `MASTER_PORT`/`PRIMARY_PORT` are equivalent. The `MASTER_*` variables provide compatibility with tools that expect these legacy names.
 
