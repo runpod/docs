@@ -57,7 +57,9 @@ To avoid incurring extra charges, make sure to:
 3. [Terminate your Pod](/pods/manage-pods#terminate-a-pod) if you no longer need it.
 
 :::warning
+
 You will be charged for idle Pods even if they are stopped. If you don't need to retain your Pod environment, you should terminate it completely.
+
 :::
 
 ## Next steps
