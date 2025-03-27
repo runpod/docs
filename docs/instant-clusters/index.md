@@ -31,6 +31,7 @@ The following environment variables are available in all pods:
 | `NUM_NODES`                    | Number of pods in the cluster                                |
 | `NUM_TRAINERS`                 | Number of GPUs per pod                                       |
 | `HOST_NODE_ADDR`               | Defined as `PRIMARY_ADDR:PRIMARY_PORT` for convenience       |
+| `WORLD_SIZE`                   | NUM_NODES * NUM_TRAINERS, total number of GPU's in cluster   |
 
 The variables `MASTER_ADDR`/`PRIMARY_ADDR` and `MASTER_PORT`/`PRIMARY_PORT` are equivalent. The `MASTER_*` variables provide compatibility with tools that expect these legacy names.
 
@@ -54,6 +55,9 @@ torchrun \
 :::note
 All accounts have a default spending limit. To launch a larger cluster, submit a support ticket at help@runpod.io
 :::
+
+## Multi-Link Support for higher Throughput
+We are excited to offer Multi-link connectivity between nodes, with up to 8 high-bandwidth interfaces per pod. Each interface `eth1, eth2, ..., eth8` provides a private subnet for inter-node communication, made available to distributed backends such as NCCL or GLOO.
 
 ## Applications
 
