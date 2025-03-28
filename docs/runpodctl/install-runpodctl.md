@@ -1,13 +1,13 @@
 ---
-title: Installing runpodctl
-description: "Get started with runpodctl, an open-source CLI, to work with Pods and RunPod projects. Install and configure the tool, then verify the installation and API key setup to start using runpodctl."
+title: Install runpodctl
+description: "Get started with runpodctl, an open-source CLI for working with Pods and RunPod projects. Learn how to install and configure the tool, then verify the installation and API key setup to start using runpodctl."
 sidebar_position: 2
 ---
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-runpodctl is an [open-source command-line interface (CLI)](https://github.com/runpod/runpodctl). You can use runpodctl to work with Pods and RunPod projects.
+`runpodctl` is an [open-source command-line interface (CLI)](https://github.com/runpod/runpodctl). You can use `runpodctl` to work with Pods and RunPod projects.
 
 When you create a Pod, it comes with runpodctl installed and configured with a Pod-scoped API key. You can also run runpodctl locally.
 
