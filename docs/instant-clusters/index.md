@@ -22,10 +22,10 @@ Follow these steps to deploy an Instant Cluster and run a multi-node process usi
 
 1. Open the [Instant Clusters page](https://www.runpod.io/console/cluster) on the RunPod web interface.
 1. Click **Create Cluster**.
-1. Use the UI to name and configure your cluster. For this walkthrough, keep **Pod Count** at **2**, and select the option for **16x H100 SXM** GPUs. Keep the Pod Template at it's default setting (RunPod Pytorch).
+1. Use the UI to name and configure your Cluster. For this walkthrough, keep **Pod Count** at **2**, and select the option for **16x H100 SXM** GPUs. Keep the Pod Template at it's default setting (RunPod PyTorch).
 1. Click **Deploy Cluster**. You should be redirected to the Instant Clusters page after a few seconds.
 
-### Step 2: Clone the Pytorch demo into each Pod
+### Step 2: Clone the PyTorch demo into each Pod
 
 1. Click your Cluster to expand the list of Pods.
 1. Click your first Pod, for example `CLUSTERNAME-pod-0`, to expand the Pod.
