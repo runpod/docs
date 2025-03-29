@@ -120,7 +120,7 @@ The specific number and order of ranks may be different in your terminal, and th
 
 ### Step 5: Clean up
 
-If you no longer need it your Cluster, make sure you return to the [Instant Clusters page](https://www.runpod.io/console/cluster) and delete your Cluster to avoid incurring extra charges, 
+If you no longer need your Cluster, make sure you return to the [Instant Clusters page](https://www.runpod.io/console/cluster) and delete your Cluster to avoid incurring extra charges.
 
 ### Environment variables
 
