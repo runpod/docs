@@ -96,7 +96,7 @@ git clone https://github.com/murat-runpod/torch-demo.git
 
 Repeat these steps for **each Pod** in your cluster.
 
-### Step 3: Understand the `main.py` file
+### Step 3: Examine the main.py file
 
 Let's look at the code in our `main.py` file:
 
