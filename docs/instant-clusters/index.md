@@ -10,7 +10,7 @@ Instant Clusters provide:
 
 - Fast local networking between Pods, with bandwidths from 100 Gbps to 3200 Gbps within a single data center.
 - Static IP assignment for each Pod in the cluster.
-- Automatic assignment of [environment variables](#environment-variables) for seamless coordination between nodes.
+- Automatic assignment of [environment variables](#environment-variables) for seamless coordination between Pods.
 
 Each Pod receives a static IP address on the overlay network. The system designates one Pod as the primary node by setting the `PRIMARY_IP` and `CLUSTER_IP` environment variables. This primary designation simplifies working with multiprocessing libraries that require a primary node.
 
@@ -43,7 +43,7 @@ Instant Clusters provide powerful computing capabilities that benefit a wide ran
 
 ## Network interfaces
 
-High-bandwidth interfaces (`eth1`, `eth2`, etc.) handle communication between nodes, while the management interface (`eth0`) manages external traffic. The [NCCL](https://developer.nvidia.com/nccl) environment variable `NCCL_SOCKET_IFNAME` uses all available interfaces by default. The `PRIMARY_ADDR` corresponds to `eth1` to enable launching and bootstrapping distributed processes.
+High-bandwidth interfaces (`eth1`, `eth2`, etc.) handle communication between Pods, while the management interface (`eth0`) manages external traffic. The [NCCL](https://developer.nvidia.com/nccl) environment variable `NCCL_SOCKET_IFNAME` uses all available interfaces by default. The `PRIMARY_ADDR` corresponds to `eth1` to enable launching and bootstrapping distributed processes.
 
 Instant Clusters support up to 8 interfaces per Pod. Each interface (`eth1` - `eth8`) provides a private network connection for inter-node communication, made available to distributed backends such as NCCL or GLOO.
 
@@ -131,7 +131,7 @@ def main():
     
     print(f"Running on rank {global_rank}/{world_size-1} (local rank: {local_rank}), device: {device}")
 
-    """Your code here"""
+    # Your code here
     
     # Clean up distributed environment when done
     cleanup_distributed()
@@ -144,7 +144,7 @@ This is the minimal code necessary for initializing a distributed environment. T
 
 ### Step 4: Start the PyTorch process on each Pod
 
-Run the following command in the web terminal for each Pod:
+Run the following command in the web terminal of **each Pod**:
 
 ```bash
 export NCCL_DEBUG=WARN
@@ -159,7 +159,7 @@ torch-demo/main.py
 
 This command launches eight `main.py` processes per node (one per GPU in the Pod).
 
-After running the command on the final Pod, you should see output similar to this:
+After running the command on the last Pod, you should see output similar to this:
 
 ```bash
 Running on rank 8/15 (local rank: 0), device: cuda:0
@@ -176,7 +176,7 @@ The first number refers to the global rank of the thread, spanning from `0` to `
 
 The specific number and order of ranks may be different in your terminal, and the global ranks listed will be different for each Pod.
 
-The following diagram illustrates how local and global ranks are distributed across multiple nodes:
+The following diagram illustrates how local and global ranks are distributed across multiple Pods:
 
 <img src="/img/docs/instant-clusters-rank-diagram.png" alt="Instant Cluster rank diagram" width="750"/>
 
