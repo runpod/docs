@@ -12,7 +12,7 @@ Instant Clusters provide:
 - Static IP assignment for each Pod in the cluster.
 - Automatic assignment of [environment variables](#environment-variables) for seamless coordination between Pods.
 
-Each Pod receives a static IP address on the overlay network. The system designates one Pod as the primary node by setting the `PRIMARY_IP` and `CLUSTER_IP` environment variables. This primary designation simplifies working with multiprocessing libraries that require a primary node.
+Each Pod receives a static IP address on the overlay network. The system designates one Pod as the primary node by setting the `PRIMARY_ADDR` and `PRIMARY_PORT` environment variables. This primary designation simplifies working with multiprocessing libraries that require a primary node.
 
 ## Use cases for Instant Clusters
 
@@ -57,12 +57,12 @@ The following environment variables are available in all Pods:
 | `PRIMARY_PORT` / `MASTER_PORT` | The port of the primary Pod (all ports are available).        |
 | `NODE_ADDR`                    | The static IP of this Pod within the cluster network.         |
 | `NODE_RANK`                    | The Cluster (i.e., global) rank assigned to this Pod (0 for the primary Pod). |
-| `NUM_NODES`                    | The number of Pods in the Cluster.                                |
-| `NUM_TRAINERS`                 | The number of GPUs per Pod.                                       |
+| `NUM_NODES`                    | The number of Pods in the Cluster.                            |
+| `NUM_TRAINERS`                 | The number of GPUs per Pod.                                   |
 | `HOST_NODE_ADDR`               | Defined as `PRIMARY_ADDR:PRIMARY_PORT` for convenience.       |
 | `WORLD_SIZE`                   | The total number of GPUs in the Cluster (`NUM_NODES` * `NUM_TRAINERS`). |
 
-Each Pod receives a static IP (`NODE_ADDR`) on the overlay network. When a Cluster is deployed, the system designates one GPU as the primary node by setting the `PRIMARY_IP` and `CLUSTER_IP` environment variables. This simplifies working with multiprocessing libraries that require a primary node.
+Each Pod receives a static IP (`NODE_ADDR`) on the overlay network. When a Cluster is deployed, the system designates one Pod as the primary node by setting the `PRIMARY_ADDR` and `PRIMARY_PORT` environment variables. This simplifies working with multiprocessing libraries that require a primary node.
 
 The variables `MASTER_ADDR`/`PRIMARY_ADDR` and `MASTER_PORT`/`PRIMARY_PORT` are equivalent. The `MASTER_*` variables provide compatibility with tools that expect these legacy names.
 
@@ -79,16 +79,16 @@ All accounts have a default spending limit. To deploy a larger cluster, submit a
 ### Step 1: Deploy an Instant Cluster using the web interface
 
 1. Open the [Instant Clusters page](https://www.runpod.io/console/cluster) on the RunPod web interface.
-1. Click **Create Cluster**.
-1. Use the UI to name and configure your Cluster. For this walkthrough, keep **Pod Count** at **2**, and select the option for **16x H100 SXM** GPUs. Keep the Pod Template at its default setting (RunPod PyTorch).
-1. Click **Deploy Cluster**. You should be redirected to the Instant Clusters page after a few seconds.
+2. Click **Create Cluster**.
+3. Use the UI to name and configure your Cluster. For this walkthrough, keep **Pod Count** at **2** and select the option for **16x H100 SXM** GPUs. Keep the **Pod Template** at its default setting (RunPod PyTorch).
+4. Click **Deploy Cluster**. You should be redirected to the Instant Clusters page after a few seconds.
 
 ### Step 2: Clone the PyTorch demo into each Pod
 
 1. Click your Cluster to expand the list of Pods.
-1. Click your first Pod, for example `CLUSTERNAME-pod-0`, to expand the Pod.
-1. Click **Connect**, then click **web terminal**.
-1. Run the following command to clone a basic `main.py` file into the Pod's main directory:
+2. Click your first Pod, for example `CLUSTERNAME-pod-0`, to expand the Pod.
+3. Click **Connect**, then click **web terminal**.
+4. Run the following command to clone a basic `main.py` file into the Pod's main directory:
 
 ```bash
 git clone https://github.com/murat-runpod/torch-demo.git
