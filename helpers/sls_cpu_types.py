@@ -1,94 +1,47 @@
-import io
 import os
 from datetime import datetime
 
 import pandas as pd
 import requests
-from dotenv import load_dotenv
 from tabulate import tabulate
 
-load_dotenv()
+response = requests.post(
+    "https://api.runpod.io/graphql", 
+    headers={
+        "content-type": "application/json"
+    }, 
+    json={
+        "query": "query CpuTypes { cpuTypes { displayName cores threadsPerCore } }"
+    })
 
-api_key = os.getenv("API_KEY")
+response.raise_for_status()
 
-# URL and headers for the POST request
-url = "https://api.runpod.io/graphql"
-headers = {"content-type": "application/json", "api_key": api_key}
+cpu_data = response.json()
+cpus = cpu_data["data"]["cpuTypes"]
 
-# The GraphQL query
-data = {"query": "query CpuTypes { cpuTypes { displayName cores threadsPerCore } }"}
+cpus_df = pd.DataFrame(cpus)
 
-# Send the POST request
-response = requests.post(url, headers=headers, json=data)
+cpus_df = cpus_df[
+    (cpus_df["displayName"].str.lower() != "unknown")
+    & (~cpus_df["cores"].isna())
+    & (~cpus_df["threadsPerCore"].isna())
+]
 
-# Check if the request was successful
-if response.status_code == 200:
-    # Parse the response JSON
-    cpu_data = response.json()
+cpus_df['displayName'].str.replace(r'\s{2,}', ' ', regex=True).str.strip()
+cpus_df.dropna(how="all")
+cpus_df.sort_values(by="displayName").reset_index(drop=True, inplace=True)
 
-    # Extract CPU data
-    cpus = cpu_data["data"]["cpuTypes"]
+file_path = os.path.join(
+    os.path.dirname(__file__), "../docs/references/cpu-types.md"
+)
 
-    # Filter out empty CPU types and rows where all values are NaN
-    filtered_cpus = [
-        cpu
-        for cpu in cpus
-        if cpu["displayName"]
-        and cpu["displayName"].lower() != "unknown"
-        and not pd.isna(cpu["cores"])
-        and not pd.isna(cpu["threadsPerCore"])
-        and not all(pd.isna(value) for value in cpu.values())
-    ]
+table = tabulate(cpus_df, headers=["Display Name", "Cores", "Threads Per Core"], tablefmt="github", showindex=False)
 
-    # Convert to DataFrame
-    new_df = pd.DataFrame(filtered_cpus)
-
-    # Writing to a markdown file
-    file_path = os.path.join(
-        os.path.dirname(__file__), "../docs/references/cpu-types.md"
-    )
-
-    # Check if the file already exists
-    if os.path.exists(file_path):
-        with open(file_path, "r") as file:
-            lines = file.readlines()
-
-        # Find where the table ends
-        table_end_index = 0
-        for i, line in enumerate(lines):
-            if line.strip() == "" and i > 0:
-                table_end_index = i
-                break
-
-        # Extract the current table
-        current_table = "".join(lines[:table_end_index])
-
-        # Convert the current table to a DataFrame
-        current_df = pd.read_csv(io.StringIO(current_table), sep="|").iloc[:, 1:-1]
-
-        # Append the new data to the current table
-        updated_df = pd.concat([current_df, new_df], ignore_index=True)
-
-    else:
-        # If the file does not exist, start a new DataFrame
-        updated_df = new_df
-
-    # Remove rows where all values are NaN
-    updated_df = updated_df.dropna(how="all")
-
-    # Sort the DataFrame alphabetically by displayName
-    updated_df = updated_df.sort_values(by="displayName").reset_index(drop=True)
-
-    # Convert the updated DataFrame to markdown table format
-    updated_table = tabulate(
-        updated_df, headers="keys", tablefmt="pipe", showindex=False
-    )
-
-    with open(file_path, "w") as file:
-        # Write the headers and table
-        date = datetime.now().strftime("%Y-%m-%d")
-        file.write(
-            f"""---
+with open(file_path, "w") as file:
+    # Write the headers and table
+    date = datetime.now().strftime("%Y-%m-%d")
+    file.write(
+        f"""---
 title: Serverless CPU types
 ---
 
@@ -97,10 +50,7 @@ The following list contains all CPU types available on RunPod.
 <!--
 Table last generated: {date}
 -->
-{updated_table}
-"""
-        )
+{table}
+""")
 
-    print("Markdown file with CPU data updated successfully.")
-else:
-    print("Failed to retrieve data: ", response.status_code)
+print("Markdown file with CPU data updated successfully.")
