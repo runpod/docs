@@ -12,8 +12,6 @@ Instant Clusters provide:
 - Static IP assignment for each Pod in the cluster.
 - Automatic assignment of [environment variables](#environment-variables) for seamless coordination between Pods.
 
-Each Pod receives a static IP address on the overlay network. The system designates one Pod as the primary node by setting the `PRIMARY_ADDR` and `PRIMARY_PORT` environment variables. This primary designation simplifies working with multiprocessing libraries that require a primary node.
-
 ## Use cases for Instant Clusters
 
 Instant Clusters provide powerful computing capabilities that benefit a wide range of applications:
