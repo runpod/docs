@@ -1,42 +1,74 @@
 ---
 title: Overview
-description: "Unlock serverless functionality with RunPod SDKs, enabling developers to create custom logic, simplify deployments, and programmatically manage infrastructure, including Pods, Templates, and Endpoints."
+description: "Learn how to use RunPod SDKs to build, deploy, and manage AI applications. Find solutions for common use cases and get started quickly with your preferred programming language."
 sidebar_position: 1
 ---
 
-RunPod SDKs provide developers with tools to use the RunPod API for creating serverless functions and managing infrastructure.
-They enable custom logic integration, simplify deployments, and allow for programmatic infrastructure management.
+This guide helps you use RunPod SDKs to build and manage AI applications. Choose your preferred programming language and follow the guides that match your goals.
 
-## Interacting with Serverless Endpoints
+## Quick start
 
-Once deployed, serverless functions is exposed as an Endpoints, you can allow external applications to interact with them through HTTP requests.
+Get started quickly with your preferred programming language:
 
-#### Interact with Serverless Endpoints:
+- [Python SDK](python/overview.md) - Best for AI/ML applications
+- [JavaScript SDK](javascript/overview.md) - Ideal for web applications
+- [Go SDK](go/overview.md) - Great for high-performance services
+- [GraphQL API](graphql/configurations.md) - Direct API access
 
-Your Serverless Endpoints works similarly to an HTTP request.
-You will need to provide an Endpoint Id and a reference to your API key to complete requests.
+## Common use cases
 
-## Infrastructure management
+### Build AI applications
+- [Create serverless endpoints](python/endpoints.md)
+- [Deploy ML models](python/apis.md)
+- [Monitor application performance](python/structured-logging.md)
 
-The RunPod SDK facilitates the programmatic creation, configuration, and management of various infrastructure components, including Pods, Templates, and Endpoints.
+### Manage infrastructure
+- [Set up GPU instances](python/apis.md#list-available-gpus)
+- [Configure templates](python/apis.md#create-templates)
+- [Scale resources](python/apis.md#create-endpoints)
 
-### Managing Pods
+### Monitor and debug
+- [Track application logs](python/structured-logging.md)
+- [Monitor performance](python/apis.md)
+- [Debug issues](python/structured-logging.md#log-levels)
 
-Pods are the fundamental building blocks in RunPod, representing isolated environments for running applications.
+## Choose your SDK
 
-#### Manage Pods:
+Each SDK is optimized for different use cases:
 
-1. **Create a Pod**: Use the SDK to instantiate a new Pod with the desired configuration.
-2. **Configure the Pod**: Adjust settings such as GPU, memory allocation, and network access according to your needs.
-3. **Deploy Applications**: Deploy your applications or services within the Pod.
-4. **Monitor and scale**: Utilize the SDK to monitor Pod performance and scale resources as required.
+### Python SDK
+Best for:
+- AI/ML model deployment
+- Data processing pipelines
+- Scientific computing
+- Quick prototyping
 
-### Manage Templates and Endpoints
+### JavaScript SDK
+Best for:
+- Web applications
+- Frontend integrations
+- Browser-based tools
+- Node.js services
 
-Templates define the base environment for Pods, while Endpoints enable external access to services running within Pods.
+### Go SDK
+Best for:
+- High-performance services
+- Microservices
+- CLI tools
+- System utilities
 
-#### Use Templates and Endpoints:
+### GraphQL API
+Best for:
+- Custom integrations
+- Direct API access
+- Complex queries
+- Real-time updates
 
-1. **Create a Template**: Define a Template that specifies the base configuration for Pods.
-2. **Instantiate Pods from Templates**: Use the Template to create Pods with a consistent environment.
-3. **Expose Services via Endpoints**: Configure Endpoints to allow external access to applications running in Pods.
+## Next steps
+
+1. Choose your preferred programming language
+2. Follow the quick start guide
+3. Explore use case examples
+4. Build your application
+
+> **Note:** All SDKs provide similar core functionality. Choose based on your team's expertise and project requirements.

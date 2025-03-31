@@ -1,148 +1,73 @@
 ---
 title: Overview
 sidebar_position: 1
-description: "Get started with setting up your RunPod projects using Python. Learn how to install the RunPod SDK, create a Python virtual environment, and configure your API key for access to the RunPod platform."
+description: "Get started with RunPod Python SDK for building AI applications, deploying ML models, and managing computational resources. Learn how to set up your environment and start building."
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
+This guide helps you use the RunPod Python SDK to build AI applications and manage computational resources. You'll learn how to set up your environment and start building with Python.
 
-Get started with setting up your RunPod projects using Python.
-Depending on the specific needs of your project, there are various ways to interact with the RunPod platform.
-This guide provides an approach to get you up and running.
+## Quick start
 
-## Install the RunPod SDK
+1. Set up your Python environment:
+   ```bash
+   python3 -m venv env
+   source env/bin/activate  # On macOS/Linux
+   # or
+   env\Scripts\activate    # On Windows
+   ```
 
-Create a Python virtual environment to install the RunPod SDK library.
-Virtual environments allow you to manage dependencies for different projects separately, avoiding conflicts between project requirements.
+2. Install the SDK:
+   ```bash
+   python -m pip install runpod
+   ```
 
-To get started, install setup a virtual environment then install the RunPod SDK library.
+3. Configure your API key:
+   ```python
+   import runpod
+   import os
 
-<Tabs>
-  <TabItem value="macos" label="macOS" default>
+   runpod.api_key = os.getenv("RUNPOD_API_KEY")
+   ```
 
-Create a Python virtual environment with [venv](https://docs.python.org/3/library/venv.html):
+## Common use cases
 
-    ```command
-    python3 -m venv env
-    source env/bin/activate
-    ```
+### Deploy ML models
+- [Create serverless endpoints](endpoints.md)
+- [Configure GPU resources](apis.md#list-available-gpus)
+- [Monitor model performance](structured-logging.md)
 
-</TabItem>
-  <TabItem value="windows" label="Windows">
+### Build AI applications
+- [Set up development environment](apis.md#create-templates)
+- [Deploy applications](apis.md#create-endpoints)
+- [Track application logs](structured-logging.md)
 
-Create a Python virtual environment with [venv](https://docs.python.org/3/library/venv.html):
+### Manage resources
+- [Configure GPU instances](apis.md#list-available-gpus)
+- [Set up templates](apis.md#create-templates)
+- [Scale endpoints](apis.md#create-endpoints)
 
-    ```command
-    python -m venv env
-    env\Scripts\activate
-    ```
+## Key features
 
-</TabItem>
-  <TabItem value="linux" label="Linux">
+### Serverless deployment
+- Deploy ML models as serverless endpoints
+- Automatic scaling based on demand
+- Pay-per-use pricing model
 
-Create a Python virtual environment with [venv](https://docs.python.org/3/library/venv.html):
+### Resource management
+- GPU instance configuration
+- Template-based deployment
+- Resource monitoring
 
-    ```command
-    python3 -m venv env
-    source env/bin/activate
-    ```
+### Monitoring and logging
+- Structured logging interface
+- Performance tracking
+- Error handling
 
-</TabItem>
-</Tabs>
+## Next steps
 
-To install the SDK, run the following command from the terminal.
+1. [Set up your environment](apis.md)
+2. [Deploy your first model](endpoints.md)
+3. [Monitor your application](structured-logging.md)
+4. [Scale your resources](apis.md#create-endpoints)
 
-```command
-python -m pip install runpod
-```
-
-<!--
-pip uninstall -y runpod
--->
-
-You should have the RunPod SDK installed and ready to use.
-
-## Get RunPod SDK version
-
-To ensure you've setup your RunPod SDK in Python, choose from one of the following methods to print the RunPod Python SDK version to your terminal.
-
-<Tabs>
-  <TabItem value="pip" label="Pip" default>
-
-    Run the following command using pip to get the RunPod SDK version.
-
-    ```command
-    pip show runpod
-    ```
-
-    You should see something similar to the following output.
-
-    ```command
-    runpod==1.6.1
-    ```
-
-</TabItem>
-  <TabItem value="shell" label="Shell">
-
-    Run the following command from your terminal to get the RunPod SDK version.
-
-    ```command
-    python3 -c "import runpod; print(runpod.__version__)"
-    ```
-
-</TabItem>
-  <TabItem value="python" label="Python">
-
-    To ensure you've setup your installation correctly, get the RunPod SDK version.
-    Create a new file called `main.py`.
-    Add the following to your Python file and execute the script.
-
-    ```python
-    import runpod
-
-    version = runpod.version.get_version()
-
-    print(f"RunPod version number: {version}")
-    ```
-
-    You should see something similar to the following output.
-
-    ```text
-    RunPod version number: 1.X.0
-    ```
-
-</TabItem>
-</Tabs>
-
-You can find the latest version of the RunPod Python SDK on [GitHub](https://github.com/runpod/runpod-python/releases).
-
-Now that you've installed the RunPod SDK, add your API key.
-
-## Add your API key
-
-Set `api_key` and reference its variable in your Python application.
-This authenticates your requests to the RunPod platform and allows you to access the [RunPod API](/sdks/python/apis).
-
-```python
-import runpod
-import os
-
-runpod.api_key = os.getenv("RUNPOD_API_KEY")
-```
-
-:::note
-
-It's recommended to use environment variables to set your API key.
-You shouldn't load your API key directly into your code.
-
-For these examples, the API key loads from an environment variable called `RUNPOD_API_KEY`.
-
-:::
-
-Now that you've have the RunPod Python SDK installed and configured, you can start using the RunPod platform.
-
-For more information, see:
-
-- [APIs](/sdks/python/apis)
-- [Endpoints](/sdks/python/endpoints)
+> **Note:** The Python SDK is optimized for AI/ML applications. Use it for model deployment, data processing, and scientific computing.

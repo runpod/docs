@@ -8,13 +8,11 @@ description: "Learn how to manage computational resources with the RunPod API, i
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-This document outlines the core functionalities provided by the RunPod API, including how to interact with Endpoints, manage Templates, and list available GPUs.
-These operations let you dynamically manage computational resources within the RunPod environment.
+This guide explains how to use the RunPod API to manage computational resources. You'll learn how to work with endpoints, templates, and GPUs programmatically.
 
-## Get Endpoints
+## Get endpoints
 
-To retrieve a comprehensive list of all available endpoint configurations within RunPod, you can use the `get_endpoints()` function.
-This function returns a list of endpoint configurations, allowing you to understand what's available for use in your projects.
+Retrieve a list of all available endpoint configurations:
 
 ```python
 import runpod
@@ -22,17 +20,14 @@ import os
 
 runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
-# Fetching all available endpoints
+# Get all available endpoints
 endpoints = runpod.get_endpoints()
-
-# Displaying the list of endpoints
 print(endpoints)
 ```
 
-## Create Template
+## Create templates
 
-Templates in RunPod serve as predefined configurations for setting up environments efficiently.
-The `create_template()` function facilitates the creation of new templates by specifying a name and a Docker image.
+Templates define predefined configurations for your environments. Create a new template:
 
 <Tabs>
   <TabItem value="python" label="Python" default>
@@ -44,14 +39,14 @@ import os
 runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
 try:
-    # Creating a new template with a specified name and Docker image
-    new_template = runpod.create_template(name="test", image_name="runpod/base:0.1.0")
-
-    # Output the created template details
+    # Create a new template
+    new_template = runpod.create_template(
+        name="test",
+        image_name="runpod/base:0.1.0"
+    )
     print(new_template)
 
 except runpod.error.QueryError as err:
-    # Handling potential errors during template creation
     print(err)
     print(err.query)
 ```
@@ -77,11 +72,9 @@ except runpod.error.QueryError as err:
 </TabItem>
 </Tabs>
 
-## Create Endpoint
+## Create endpoints
 
-Creating a new endpoint with the `create_endpoint()` function.
-This function requires you to specify a `name` and a `template_id`.
-Additional configurations such as GPUs, number of Workers, and more can also be specified depending your requirements.
+Create a new endpoint using a template:
 
 <Tabs>
   <TabItem value="python" label="Python" default>
@@ -93,28 +86,25 @@ import os
 runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
 try:
-    # Creating a template to use with the new endpoint
+    # Create a template first
     new_template = runpod.create_template(
-        name="test", image_name="runpod/base:0.4.4", is_serverless=True
+        name="test",
+        image_name="runpod/base:0.4.4",
+        is_serverless=True
     )
-
-    # Output the created template details
     print(new_template)
 
-    # Creating a new endpoint using the previously created template
+    # Create an endpoint using the template
     new_endpoint = runpod.create_endpoint(
         name="test",
         template_id=new_template["id"],
         gpu_ids="AMPERE_16",
         workers_min=0,
-        workers_max=1,
+        workers_max=1
     )
-
-    # Output the created endpoint details
     print(new_endpoint)
 
 except runpod.error.QueryError as err:
-    # Handling potential errors during endpoint creation
     print(err)
     print(err.query)
 ```
@@ -153,9 +143,9 @@ except runpod.error.QueryError as err:
 </TabItem>
 </Tabs>
 
-## Get GPUs
+## List available GPUs
 
-For understanding the computational resources available, the `get_gpus()` function lists all GPUs that can be allocated to endpoints in RunPod. This enables optimal resource selection based on your computational needs.
+Get information about available GPUs:
 
 <Tabs>
   <TabItem value="python" label="Python" default>
@@ -167,10 +157,8 @@ import os
 
 runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
-# Fetching all available GPUs
+# Get all available GPUs
 gpus = runpod.get_gpus()
-
-# Displaying the GPUs in a formatted manner
 print(json.dumps(gpus, indent=2))
 ```
 
@@ -189,17 +177,15 @@ print(json.dumps(gpus, indent=2))
     "displayName": "A100 SXM 80GB",
     "memoryInGb": 80
   }
-  // Additional GPUs omitted for brevity
 ]
 ```
 
 </TabItem>
 </Tabs>
 
-## Get GPU by Id
+## Get GPU details
 
-Use `get_gpu()` and pass in a GPU Id to retrieve details about a specific GPU model by its ID.
-This is useful when understanding the capabilities and costs associated with various GPU models.
+Retrieve detailed information about a specific GPU:
 
 <Tabs>
   <TabItem value="python" label="Python" default>
@@ -211,9 +197,9 @@ import os
 
 runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
-gpus = runpod.get_gpu("NVIDIA A100 80GB PCIe")
-
-print(json.dumps(gpus, indent=2))
+# Get details for a specific GPU
+gpu = runpod.get_gpu("NVIDIA A100 80GB PCIe")
+print(json.dumps(gpu, indent=2))
 ```
 
 </TabItem>
@@ -244,7 +230,6 @@ print(json.dumps(gpus, indent=2))
 ```
 
 </TabItem>
-
 </Tabs>
 
-Through these functionalities, the RunPod API enables efficient and flexible management of computational resources, catering to a wide range of project requirements.
+> **Note:** The API provides flexible resource management options. Choose configurations that best match your project requirements.
