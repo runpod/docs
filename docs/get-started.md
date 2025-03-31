@@ -41,10 +41,16 @@ If you haven't set up payments yet, you'll be prompted to add a payment method a
 After your Pod has finished starting up (this may take a minute or two), you can connect to it:
 
 1. On the [Pods page](https://www.runpod.io/console/pods), find the Pod you just created and click the **Connect** button. If it's greyed out, your Pod hasn't finished starting up yet.
-1. In the window that opens, under **HTTP Services**, click **Jupyter Lab** to open a JupyterLab workspace on your Pod.
-1. Under **Notebook**, select **Python 3 (ipykernel)**.
-1. Type `print("Hello, world!")` in the first line of the notebook.
-1. Press the play button to run your code.
+
+<img src="/img/docs/quickstart-connect-button.png" width="750" alt="Image of the Pod graphics card selection menu"/>
+
+2. In the window that opens, under **HTTP Services**, click **Jupyter Lab** to open a JupyterLab workspace on your Pod.
+
+<img src="/img/docs/quickstart-jupyter-lab.png" width="500" alt="Image of the Pod graphics card selection menu"/>
+
+3. Under **Notebook**, select **Python 3 (ipykernel)**.
+4. Type `print("Hello, world!")` in the first line of the notebook.
+5. Click the play button to run your code.
 
 Congratulations! You just ran your first line of code using RunPod.
 
