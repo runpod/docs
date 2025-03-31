@@ -234,6 +234,10 @@ const config = {
       async: true,
       defer: true,
     },
+    {
+      src: "https://kit.fontawesome.com/4b9ba14b0f.js",
+      crossOrigin: "anonymous",
+    },
     // {
     // src: "/scripts/fullstory.js",
     //  async: true,

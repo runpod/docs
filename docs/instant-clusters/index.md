@@ -49,16 +49,16 @@ Instant Clusters support up to 8 interfaces per Pod. Each interface (`eth1` - `e
 
 The following environment variables are available in all Pods:
 
-| Environment Variable           | Description                                                  |
-| ------------------------------ | ------------------------------------------------------------ |
-| `PRIMARY_ADDR` / `MASTER_ADDR` | The address of the primary Pod.                               |
-| `PRIMARY_PORT` / `MASTER_PORT` | The port of the primary Pod (all ports are available).        |
-| `NODE_ADDR`                    | The static IP of this Pod within the cluster network.         |
+| Environment Variable           | Description                                                                   |
+| ------------------------------ | ----------------------------------------------------------------------------- |
+| `PRIMARY_ADDR` / `MASTER_ADDR` | The address of the primary Pod.                                               |
+| `PRIMARY_PORT` / `MASTER_PORT` | The port of the primary Pod (all ports are available).                        |
+| `NODE_ADDR`                    | The static IP of this Pod within the cluster network.                         |
 | `NODE_RANK`                    | The Cluster (i.e., global) rank assigned to this Pod (0 for the primary Pod). |
-| `NUM_NODES`                    | The number of Pods in the Cluster.                            |
-| `NUM_TRAINERS`                 | The number of GPUs per Pod.                                   |
-| `HOST_NODE_ADDR`               | Defined as `PRIMARY_ADDR:PRIMARY_PORT` for convenience.       |
-| `WORLD_SIZE`                   | The total number of GPUs in the Cluster (`NUM_NODES` * `NUM_TRAINERS`). |
+| `NUM_NODES`                    | The number of Pods in the Cluster.                                            |
+| `NUM_TRAINERS`                 | The number of GPUs per Pod.                                                   |
+| `HOST_NODE_ADDR`               | Defined as `PRIMARY_ADDR:PRIMARY_PORT` for convenience.                       |
+| `WORLD_SIZE`                   | The total number of GPUs in the Cluster (`NUM_NODES` * `NUM_TRAINERS`).       |
 
 Each Pod receives a static IP (`NODE_ADDR`) on the overlay network. When a Cluster is deployed, the system designates one Pod as the primary node by setting the `PRIMARY_ADDR` and `PRIMARY_PORT` environment variables. This simplifies working with multiprocessing libraries that require a primary node.
 
@@ -98,44 +98,44 @@ Repeat these steps for **each Pod** in your cluster.
 
 Let's look at the code in our `main.py` file:
 
- ```python
+```python
 import os
 import torch
 import torch.distributed as dist
 
 def init_distributed():
-    """Initialize the distributed training environment"""
-    # Initialize the process group
-    dist.init_process_group(backend="nccl")
-    
-    # Get local rank and global rank
-    local_rank = int(os.environ["LOCAL_RANK"])
-    global_rank = dist.get_rank()
-    world_size = dist.get_world_size()
-    
-    # Set device for this process
-    device = torch.device(f"cuda:{local_rank}")
-    torch.cuda.set_device(device)
-        
-    return local_rank, global_rank, world_size, device
+   """Initialize the distributed training environment"""
+   # Initialize the process group
+   dist.init_process_group(backend="nccl")
+   
+   # Get local rank and global rank
+   local_rank = int(os.environ["LOCAL_RANK"])
+   global_rank = dist.get_rank()
+   world_size = dist.get_world_size()
+   
+   # Set device for this process
+   device = torch.device(f"cuda:{local_rank}")
+   torch.cuda.set_device(device)
+       
+   return local_rank, global_rank, world_size, device
 
 def cleanup_distributed():
-    """Clean up the distributed environment"""
-    dist.destroy_process_group()
+   """Clean up the distributed environment"""
+   dist.destroy_process_group()
 
 def main():
-    # Initialize distributed environment
-    local_rank, global_rank, world_size, device = init_distributed()
-    
-    print(f"Running on rank {global_rank}/{world_size-1} (local rank: {local_rank}), device: {device}")
+   # Initialize distributed environment
+   local_rank, global_rank, world_size, device = init_distributed()
+   
+   print(f"Running on rank {global_rank}/{world_size-1} (local rank: {local_rank}), device: {device}")
 
-    # Your code here
-    
-    # Clean up distributed environment when done
-    cleanup_distributed()
-    
+   # Your code here
+   
+   # Clean up distributed environment when done
+   cleanup_distributed()
+   
 if __name__ == "__main__":
-    main()
+   main()
 ```
 
 This is the minimal code necessary for initializing a distributed environment. The `main()` function prints the local and global rank for each GPU process (this is also where you can add your own code). `LOCAL_RANK` is assigned dynamically to each process by PyTorch. All other environment variables are set automatically by RunPod during deployment.
