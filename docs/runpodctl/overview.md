@@ -34,7 +34,7 @@ See [Create your first project](/runpodctl/projects/get-started) for a step-by-s
 
 ## Installation
 
-For more information, see [Install RunPod CLI](/runpodctl/install-runpodctl).
+For more information, see [Install runpodctl](/runpodctl/install-runpodctl).
 
 <Tabs>
 
@@ -69,9 +69,17 @@ wget https://github.com/runpod/runpodctl/releases/latest/download/runpodctl-wind
 </TabItem>
 </Tabs>
 
-### Help command
+## Configure your API key
 
-After you've installed `runpodctl`, you can learn how to use any RunPod CLI command by browsing the [CLI reference](/runpodctl/reference/runpodctl) or by running the `help` command:
+Before you can use RunPod CLI to manage resources from your local machine, you'll need to configure your [API key](/get-started/api-keys). You can create and manage API keys on the [RunPod account settings page](https://runpod.io/console/user/settings).
+
+```bash
+runpodctl config --apiKey [YOUR_API_KEY]
+```
+
+## Help command
+
+Learn how to use RunPod CLI commands by browsing the [CLI reference](/runpodctl/reference/runpodctl) or by running the `help` command:
 
 ```bash
 runpodctl help
@@ -83,101 +91,4 @@ Learn more about a particular command by running:
 runpodctl [command] help
 ```
 
-
-### Configuration
-
-Before using RunPod CLI, configure your API key, which can be obtained from your [RunPod account](https://runpod.io/console/user/settings).
-
-```bash
-runpodctl config --apiKey your-api-key
-```
-
-## Key commands
-
-Below are some common commands for various RunPod tasks.
-
-### Managing Pods
-
-Use the following commands to manage your Pods.
-
-Get all pods:
-
-```bash
-runpodctl get pod
-```
-
-Get details of a specific pod:
-
-```bash
-runpodctl get pod {podId}
-```
-
-- Start an on-demand pod:
-
-  ```bash
-  runpodctl start pod {podId}
-  ```
-
-- Start a spot pod with a bid:
-
-  ```bash
-  runpodctl start pod {podId} --bid=0.3
-  ```
-
-- Stop a pod:
-
-  ```bash
-  runpodctl stop pod {podId}
-  ```
-
-For a comprehensive list of commands, refer to the [RunPod CLI reference documentation](/runpodctl/reference/runpodctl).
-
-### Data transfer
-
-The RunPod CLI (runpodctl) provides simple commands for transferring data between your machine and RunPod. **It’s preinstalled on all RunPod Pods** and uses one-time codes for secure authentication, so no API keys are required.
-
-#### Sending a File
-
-To send a file from source machine:
-
-```bash
-runpodctl send data.txt
-```
-
-Example output:
-
-```bash
-Sending 'data.txt' (5 B)
-Code is: 8338-galileo-collect-fidel
-On the other computer run
-
-runpodctl receive 8338-galileo-collect-fidel
-```
-
-#### Receiving a File
-
-To receive a file on destination machine:
-
-```bash
-runpodctl receive 8338-galileo-collect-fidel
-```
-
-Example output:
-
-```bash
-Receiving 'data.txt' (5 B)
-
-Receiving (<-149.36.0.243:8692)
-data.txt 100% |████████████████████| ( 5/ 5B, 0.040 kB/s)
-```
-
-### Transferring Files between Google Drive and RunPod
-
-You can also use Google Drive for transferring files via the following links for Google Colab:
-
-- [Send](https://colab.research.google.com/drive/1UaODD9iGswnKF7SZfsvwHDGWWwLziOsr#scrollTo=2nlcIAY3gGLt)
-- [Receive](https://colab.research.google.com/drive/1ot8pODgystx1D6_zvsALDSvjACBF1cj6#scrollTo=RF1bMqhBOpSZ)
-
-RunPod CLI (`runpodctl`) is a powerful tool for managing GPU and CPU resources on the RunPod platform.
-
-It simplifies the process of executing code, transferring data, and managing pods, making it an essential tool for developers and data scientists leveraging cloud computing for AI and machine learning tasks.
+For a comprehensive list of commands, see the [RunPod CLI reference](/runpodctl/reference/runpodctl).
