@@ -6,27 +6,31 @@ sidebar_position: 1
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-**RunPod CLI** (`runpodctl`) is a command-line interface tool designed to automate and manage GPU pods on [RunPod](https://runpod.io).
+# RunPod CLI
 
-This tool facilitates efficient interaction with RunPod's cloud computing platform, enabling you to execute code, transfer data, and manage computing resources seamlessly.
+**RunPod CLI** is an [open source](https://github.com/runpod/runpodctl) command-line interface tool that simplifies the management of GPU [Pods](/pods/overview) and [Serverless](/serverless/overview) endpoints on the RunPod platform. You can use RunPod CLI to execute code on Pods, deploy endpoints, transfer data, and manage computing resources efficiently.
 
-Every Pod deployed to RunPod comes with this CLI tool installed.
+Every Pod you deploy comes preinstalled with the `runpodctl` command. You can also [install it locally](/runpodctl/install-runpodctl) to manage RunPod resources from your own machine.
 
-### Purpose
+## Key capabilities
 
-The primary purpose of RunPod CLI is to provide you with a straightforward, command-line-based method to:
+RunPod CLI enables you to:
 
-- Automate the management of GPU and CPU pods.
-- Execute code on these pods.
-- Transfer data between local systems and RunPod.
-- Leverage serverless computing capabilities.
+- Manage GPU and CPU Pods programmatically.
+- Execute commands and run code on Pods.
+- Transfer files and data between your local system and RunPod.
+- Develop and deploy Serverless endpoints using [RunPod projects](/runpodctl/projects/overview).
 
-RunPod also contains a functionality that enables you to develop and deploy endpoints entirely on RunPod's infrastructure.
+## Streamline development with projects
 
-That means you can get a worker up and running without knowing Docker or needing to structure handler code.
-This Dockerless workflow also streamlines the development process: you don't need to rebuild and push container images or edit your endpoint to use the new image each time you change your code.
+RunPod projects provide a Docker-free workflow that significantly simplifies endpoint development:
 
-To get started, see [Managing Projects](/runpodctl/projects/manage-projects).
+- Create and deploy Serverless endpoints without prior experience with Docker.
+- Skip the container build-push-deploy cycle when making code changes.
+- Test changes in real time without rebuilding images.
+- Focus on your code while RunPod handles the infrastructure.
+
+See [Create your first project](/runpodctl/projects/get-started) for a step-by-step tutorial.
 
 ## Installation
 
@@ -34,7 +38,7 @@ For more information, see [Install RunPod CLI](/runpodctl/install-runpodctl).
 
 <Tabs>
 
-<TabItem value="macos" label="MacOS">
+<TabItem value="macos" label="MacOS (Homebrew)">
 
 Install using Homebrew:
 
@@ -44,7 +48,7 @@ brew install runpod/runpodctl/runpodctl
 
 </TabItem>
 
-<TabItem value="linux" label="Linux/MacOS (WSL)" default>
+<TabItem value="linux" label="Linux (WSL)" default>
 
 Install using `wget`:
 
@@ -54,9 +58,9 @@ wget -qO- cli.runpod.net | sudo bash
 
 </TabItem>
 
-<TabItem value="windows" label="Windows PowerShell">
+<TabItem value="windows" label="Windows (PowerShell)">
 
-Install via PowerShell:
+Install using PowerShell:
 
 ```powershell
 wget https://github.com/runpod/runpodctl/releases/latest/download/runpodctl-windows-amd64.exe -O runpodctl.exe
@@ -64,6 +68,21 @@ wget https://github.com/runpod/runpodctl/releases/latest/download/runpodctl-wind
 
 </TabItem>
 </Tabs>
+
+### Help command
+
+After you've installed `runpodctl`, you can learn how to use any RunPod CLI command by browsing the [CLI reference](/runpodctl/reference/runpodctl) or by running the `help` command:
+
+```bash
+runpodctl help
+```
+
+Learn more about a particular command by running:
+
+```bash
+runpodctl [command] help
+```
+
 
 ### Configuration
 
@@ -73,23 +92,25 @@ Before using RunPod CLI, configure your API key, which can be obtained from your
 runpodctl config --apiKey your-api-key
 ```
 
-## Key Features
+## Key commands
+
+Below are some common commands for various RunPod tasks.
 
 ### Managing Pods
 
-RunPod CLI allows you to manage your computing pods effectively. Below are some common commands:
+Use the following commands to manage your Pods.
 
-- Get all pods:
+Get all pods:
 
-  ```bash
-  runpodctl get pod
-  ```
+```bash
+runpodctl get pod
+```
 
-- Get details of a specific pod:
+Get details of a specific pod:
 
-  ```bash
-  runpodctl get pod {podId}
-  ```
+```bash
+runpodctl get pod {podId}
+```
 
 - Start an on-demand pod:
 
@@ -111,7 +132,7 @@ RunPod CLI allows you to manage your computing pods effectively. Below are some 
 
 For a comprehensive list of commands, refer to the [RunPod CLI reference documentation](/runpodctl/reference/runpodctl).
 
-### Data Transfer
+### Data transfer
 
 The RunPod CLI (runpodctl) provides simple commands for transferring data between your machine and RunPod. **It’s preinstalled on all RunPod Pods** and uses one-time codes for secure authentication, so no API keys are required.
 

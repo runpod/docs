@@ -1,5 +1,5 @@
 ---
-title: Managing Projects
+title: Manage projects
 description: Create and deploy projects on RunPod's infrastructure with ease, using commands like 'runpod project create' and 'runpodctl project deploy' to develop, deploy, and build your project as a serverless endpoint or Dockerfile.
 sidebar_position: 2
 ---
