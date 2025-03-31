@@ -135,25 +135,27 @@ export default function Home() {
             
             <div className={styles.actionCardsContainer}>
               {ActionCards.map((card, index) => (
-                <div key={index} className={`${styles.actionCard} ${styles[`actionCard-${card.color}`]}`}>
-                  <div className={styles.actionCardHeader}>
-                    <h3>{card.title}</h3>
-                    <p>{card.description}</p>
-                  </div>
-                  <div className={styles.actionSteps}>
-                    <div className={styles.stepsList}>
-                      {card.steps.map((step, stepIndex) => (
-                        <div key={stepIndex} className={styles.step}>
-                          <div className={styles.stepNumber}>{stepIndex + 1}</div>
-                          <div className={styles.stepText}>{step}</div>
-                        </div>
-                      ))}
+                <Link key={index} to={card.url} className={styles.cardLink}>
+                  <div className={`${styles.actionCard} ${styles[`actionCard-${card.color}`]}`}>
+                    <div className={styles.actionCardHeader}>
+                      <h3>{card.title}</h3>
+                      <p>{card.description}</p>
                     </div>
-                    <Link to={card.url} className={styles.actionCta}>
-                      {card.cta} <i className="fa-solid fa-arrow-right"></i>
-                    </Link>
+                    <div className={styles.actionSteps}>
+                      <div className={styles.stepsList}>
+                        {card.steps.map((step, stepIndex) => (
+                          <div key={stepIndex} className={styles.step}>
+                            <div className={styles.stepNumber}>{stepIndex + 1}</div>
+                            <div className={styles.stepText}>{step}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className={styles.actionCta}>
+                        {card.cta} <i className="fa-solid fa-arrow-right"></i>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
             
