@@ -9,6 +9,7 @@ RunPod offers multiple ways to connect and manage your compute resources. Choose
 ## Web interface
 
 The [RunPod web interface](https://runpod.io/console/home) provides an intuitive way to:
+
 - Launch and manage Pods.
 - Monitor resource usage.
 - Access Pod terminals.

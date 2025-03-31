@@ -122,6 +122,7 @@ Use the following command to stop a Pod after 2 hours:
 ```bash
 sleep 2h; runpodctl stop pod $RUNPOD_POD_ID &
 ```
+
 This command uses sleep to wait for 2 hours before executing the `runpodctl stop pod` command to stop the Pod.
 The `&` at the end runs the command in the background, allowing you to continue using the SSH session.
 
@@ -134,12 +135,12 @@ To stop a Pod after 2 hours using the web terminal, enter:
 ```bash
 nohup bash -c "sleep 2h; runpodctl stop pod $RUNPOD_POD_ID" &
 ```
+
 `nohup` ensures the process continues running if you close the web terminal window.
 
 </TabItem>
 
 </Tabs>
-
 
 ## Start a Pod
 

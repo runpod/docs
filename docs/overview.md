@@ -28,6 +28,7 @@ Use Serverless to:
 - Queue jobs efficiently **without managing infrastructure**.
 
 ### Get started with Serverless
+
 - [Build your first Serverless app](/serverless/get-started)
 - [Run any LLM as an endpoint using vLLM workers](/serverless/workers/vllm/get-started)
 - [Tutorial: Create a Serverless endpoint with Stable Diffusion](/tutorials/serverless/gpu/run-your-first)
