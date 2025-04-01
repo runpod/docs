@@ -63,7 +63,7 @@ torchrun \
 
 :::note
 
-Currently, the dynamic `c10d` backend is not supported. Please set `rdzv_backend` to `static`.
+Currently, the dynamic `c10d` backend is not supported. Please keep the `rdzv_backend` flag set to `static`.
 
 :::
 
