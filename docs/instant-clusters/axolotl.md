@@ -86,7 +86,7 @@ After running the command on the last Pod, you should see output similar to this
 [2025-04-01 19:24:22,603] [INFO] [axolotl.train.save_trained_model:211] [PID:1009] [RANK:0] Training completed! Saving pre-trained model to ./outputs/lora-out.
 ```
 
-Congrats! You've successfully trained a model using Axolotl on a distributed RunPod Instant Cluster. Your fine-tuned model has been saved to the `./outputs/lora-out` directory. You can now use this model for inference or continue training with different parameters.
+Congrats! You've successfully trained a model using Axolotl on an Instant Cluster. Your fine-tuned model has been saved to the `./outputs/lora-out` directory. You can now use this model for inference or continue training with different parameters.
 
 ## Step 4: Clean up
 
