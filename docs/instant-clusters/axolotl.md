@@ -1,12 +1,14 @@
 ---
 title: Deploy with Axolotl
 sidebar_position: 3
-description: Learn how to train a model with Instant Clusters and Axolotl 
+description: Learn how to deploy an Instant Cluster and use it to fine-tune a large language model (LLM) with Axolotl.
 ---
 
 # Deploy an Instant Cluster with Axolotl
 
-Learn how to deploy an Instant Cluster and use it to fine-tune a large language model (LLM) with [Axolotl](https://axolotl.ai/), a popular framework for working with LLMs.
+This tutorial demonstrates how to use Instant Clusters with [Axolotl](https://axolotl.ai/) to fine-tune large language models (LLMs) across multiple GPUs. By leveraging PyTorch's distributed training capabilities and RunPod's high-speed networking infrastructure, you can significantly accelerate your training process compared to single-GPU setups.
+
+Follow the steps below to deploy your Cluster and start training your models efficiently.
 
 ## Step 1: Deploy an Instant Cluster
 
@@ -53,12 +55,12 @@ Run this command in the web terminal of **each Pod**:
 
 ```bash
 torchrun \
---nnodes $NUM_NODES \
---node_rank $NODE_RANK \
---nproc_per_node $NUM_TRAINERS \
---rdzv_id "myjob" \
---rdzv_backend static \
---rdzv_endpoint "$PRIMARY_ADDR:$PRIMARY_PORT" -m axolotl.cli.train lora-1b.yml
+    --nnodes $NUM_NODES \
+    --node_rank $NODE_RANK \
+    --nproc_per_node $NUM_TRAINERS \
+    --rdzv_id "myjob" \
+    --rdzv_backend static \
+    --rdzv_endpoint "$PRIMARY_ADDR:$PRIMARY_PORT" -m axolotl.cli.train lora-1b.yml
 ```
 
 :::note
@@ -67,11 +69,24 @@ Currently, the dynamic `c10d` backend is not supported. Please keep the `rdzv_ba
 
 :::
 
-After running the command on the last Pod, you should see output similar to this:
+After running the command on the last Pod, you should see output similar to this after the training process is complete:
 
 ```bash
-TODO: ADD TERMINAL OUTPUT
+...
+{'loss': 1.2569, 'grad_norm': 0.11112671345472336, 'learning_rate': 5.418275829936537e-06, 'epoch': 0.9}
+{'loss': 1.2091, 'grad_norm': 0.11100614815950394, 'learning_rate': 3.7731999690749585e-06, 'epoch': 0.92}
+{'loss': 1.2216, 'grad_norm': 0.10450132936239243, 'learning_rate': 2.420361737256438e-06, 'epoch': 0.93}
+{'loss': 1.223, 'grad_norm': 0.10873789340257645, 'learning_rate': 1.3638696597277679e-06, 'epoch': 0.95}
+{'loss': 1.2529, 'grad_norm': 0.1063728854060173, 'learning_rate': 6.069322682050516e-07, 'epoch': 0.96}
+{'loss': 1.2304, 'grad_norm': 0.10996092110872269, 'learning_rate': 1.518483566683826e-07, 'epoch': 0.98}
+{'loss': 1.2334, 'grad_norm': 0.10642101615667343, 'learning_rate': 0.0, 'epoch': 0.99}
+{'train_runtime': 61.7602, 'train_samples_per_second': 795.189, 'train_steps_per_second': 1.085, 'train_loss': 1.255359119443751, 'epoch': 0.99}
+
+100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 67/67 [01:00<00:00,  1.11it/s]
+[2025-04-01 19:24:22,603] [INFO] [axolotl.train.save_trained_model:211] [PID:1009] [RANK:0] Training completed! Saving pre-trained model to ./outputs/lora-out.
 ```
+
+Congrats! You've successfully trained a model using Axolotl on a distributed RunPod Instant Cluster. Your fine-tuned model has been saved to the `./outputs/lora-out` directory. You can now use this model for inference or continue training with different parameters.
 
 ## Step 4: Clean up
 
