@@ -12,6 +12,8 @@ import TabItem from '@theme/TabItem';
 
 Every Pod you deploy comes preinstalled with the `runpodctl` command. You can also [install it locally](/runpodctl/install-runpodctl) to manage RunPod resources from your own machine.
 
+
+
 ## Key capabilities
 
 RunPod CLI enables you to:
