@@ -1,9 +1,9 @@
-import React from 'react';
 import Link from "@docusaurus/Link";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 import HomepageFeatures from "@site/src/components/HomepageFeatures";
 import Layout from "@theme/Layout";
 import clsx from "clsx";
+import React from "react";
 
 import Heading from "@theme/Heading";
 import styles from "./index.module.css";
@@ -12,7 +12,7 @@ const StatsList = [
   { value: "99.99%", label: "guaranteed uptime" },
   { value: "10PB+", label: "network storage" },
   { value: "6.8B+", label: "requests" },
-  { value: "250ms", label: "cold start time" }
+  { value: "250ms", label: "cold start time" },
 ];
 
 const ActionCards = [
@@ -24,25 +24,25 @@ const ActionCards = [
       "Create a RunPod account",
       "Select your desired GPU type",
       "Choose a template or custom image",
-      "Deploy and connect to your Pod"
+      "Deploy and connect to your Pod",
     ],
     cta: "Deploy a Pod",
-    url: "/pods/manage-pods",
-    color: "purple"
+    url: "/get-started",
+    color: "primary",
   },
   {
-    title: "Fine-tune a Model",
+    title: "Fine-Tune a Model",
     description: "Access powerful GPUs to fine-tune large language models with your custom data.",
     icon: "sliders",
     steps: [
       "Deploy a Pod with required GPUs",
       "Prepare your training data",
       "Set up your fine-tuning environment",
-      "Run the fine-tuning process"
+      "Run the fine-tuning process",
     ],
     cta: "Start Fine-tuning",
-    url: "/fine-tune/",
-    color: "purple"
+    url: "/fine-tune",
+    color: "primary",
   },
   {
     title: "Create Serverless Endpoint",
@@ -52,11 +52,11 @@ const ActionCards = [
       "Create your containerized application",
       "Configure your serverless template",
       "Deploy the endpoint",
-      "Make API requests to your endpoint"
+      "Make API requests to your endpoint",
     ],
     cta: "Create Endpoint",
-    url: "/serverless/quick-deploys",
-    color: "purple"
+    url: "/serverless/get-started",
+    color: "primary",
   },
   {
     title: "Deploy vLLM Endpoint",
@@ -66,11 +66,11 @@ const ActionCards = [
       "Choose from available vLLM models",
       "Configure your endpoint parameters",
       "Deploy the vLLM worker",
-      "Make inference requests via API"
+      "Make inference requests via API",
     ],
     cta: "Deploy vLLM",
     url: "/serverless/workers/vllm/get-started",
-    color: "purple"
+    color: "primary",
   },
   {
     title: "Launch Instant Cluster",
@@ -80,11 +80,11 @@ const ActionCards = [
       "Define your cluster requirements",
       "Select GPU types and count",
       "Configure networking options",
-      "Launch your instant cluster"
+      "Launch your instant cluster",
     ],
     cta: "Create Cluster",
-    url: "/instant-clusters/",
-    color: "purple"
+    url: "/instant-clusters",
+    color: "primary",
   },
   {
     title: "Use RunPod API",
@@ -94,12 +94,12 @@ const ActionCards = [
       "Generate API keys",
       "Explore API documentation",
       "Test API endpoints",
-      "Integrate with your application"
+      "Integrate with your application",
     ],
     cta: "View API Docs",
     url: "https://rest.runpod.io/v1/docs",
-    color: "purple"
-  }
+    color: "primary",
+  },
 ];
 
 export default function Home() {
@@ -128,11 +128,11 @@ export default function Home() {
                 </Link>
               </div>
             </div>
-            
+
             <div className={styles.actionHeader}>
               <p>Choose an action below to get started with RunPod</p>
             </div>
-            
+
             <div className={styles.actionCardsContainer}>
               {ActionCards.map((card, index) => (
                 <Link key={index} to={card.url} className={styles.cardLink}>
@@ -150,15 +150,17 @@ export default function Home() {
                           </div>
                         ))}
                       </div>
-                      <div className={styles.actionCta}>
-                        {card.cta} <i className="fa-solid fa-arrow-right"></i>
+                      <div className={styles.actionButtonContainer}>
+                        <div className={styles.actionButton}>
+                          {card.cta}
+                        </div>
                       </div>
                     </div>
                   </div>
                 </Link>
               ))}
             </div>
-            
+
             <div className={styles.statsContainer}>
               {StatsList.map((stat, idx) => (
                 <div key={idx} className={styles.statsItem}>
