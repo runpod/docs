@@ -16,7 +16,7 @@ Instant Clusters provide:
 
 :::note
 
-All accounts have a default spending limit. To deploy a larger cluster, submit a support ticket at help@runpod.io
+All accounts have a default spending limit. To deploy a larger cluster, submit a support ticket at help@runpod.io.
 
 :::
 

@@ -8,9 +8,7 @@ description: Learn how to train a model with Instant Clusters and Axolotl
 
 Learn how to deploy an Instant Cluster and use it to fine-tune a large language model (LLM) with [Axolotl](https://axolotl.ai/), a popular framework for working with LLMs.
 
-For more information on fine-tuning with Axolotl, refer to the [Axolotl documentation](https://github.com/OpenAccess-AI-Collective/axolotl).
-
-## Step 1: Deploy an Instant Cluster using the web interface
+## Step 1: Deploy an Instant Cluster
 
 1. Open the [Instant Clusters page](https://www.runpod.io/console/cluster) on the RunPod web interface.
 2. Click **Create Cluster**.
@@ -72,12 +70,18 @@ Currently, the dynamic `c10d` backend is not supported. Please set `rdzv_backend
 After running the command on the last Pod, you should see output similar to this:
 
 ```bash
-TODO: ADD TERMINAL OUTPUT FOR AXOLOTL RUNNING & END OF TRAINING
+TODO: ADD TERMINAL OUTPUT
 ```
 
 ## Step 4: Clean up
 
 If you no longer need your Cluster, make sure you return to the [Instant Clusters page](https://www.runpod.io/console/cluster) and delete your Cluster to avoid incurring extra charges.
+
+:::note
+
+You can monitor your Cluster usage and spending using the **Billing Explorer** at the bottom of the [Billing page](https://www.runpod.io/console/user/billing) section under the **Cluster** tab.
+
+:::
 
 ## Next steps
 
@@ -86,3 +90,5 @@ Now that you've successfully deployed and tested an Axolotl distributed training
 - **Fine-tune your own models** by modifying the configuration files in Axolotl to suit your specific requirements.
 - **Scale your training** by adjusting the number of Pods in your Cluster (and the size of their containers and volumes) to handle larger models or datasets.
 - **Try different optimization techniques** such as DeepSpeed, FSDP (Fully Sharded Data Parallel), or other distributed training strategies.
+
+For more information on fine-tuning with Axolotl, refer to the [Axolotl documentation](https://github.com/OpenAccess-AI-Collective/axolotl).

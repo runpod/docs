@@ -8,7 +8,7 @@ description: Learn how to deploy an Instant Cluster and run a multi-node process
 
 Learn how to deploy an Instant Cluster and run a multi-node process using PyTorch.
 
-## Step 1: Deploy an Instant Cluster using the web interface
+## Step 1: Deploy an Instant Cluster
 
 1. Open the [Instant Clusters page](https://www.runpod.io/console/cluster) on the RunPod web interface.
 2. Click **Create Cluster**.
@@ -129,8 +129,7 @@ Now that you've successfully deployed and tested a PyTorch distributed applicati
 - **Adapt your own PyTorch code** to run on the Cluster by modifying the distributed initialization in your scripts.
 - **Scale your training** by adjusting the number of Pods in your Cluster to handle larger models or datasets.
 - **Try different frameworks** like [Axolotl](/instant-clusters/axolotl) for fine-tuning large language models.
-- **Explore advanced features** such as checkpointing to save and resume training across sessions.
-- **Optimize performance** by experimenting with different distributed training strategies like Data Parallel (DP), Distributed Data Parallel (DDP), or Fully Sharded Data Parallel (FSDP)
+- **Optimize performance** by experimenting with different distributed training strategies like Data Parallel (DP), Distributed Data Parallel (DDP), or Fully Sharded Data Parallel (FSDP).
 
 For more information on distributed training with PyTorch, refer to the [PyTorch Distributed Training documentation](https://pytorch.org/tutorials/beginner/dist_overview.html).
 
