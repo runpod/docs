@@ -18,15 +18,15 @@ Learn how to deploy an Instant Cluster and run a multi-node process using PyTorc
 ## Step 2: Clone the PyTorch demo into each Pod
 
 1. Click your Cluster to expand the list of Pods.
-2. Click your first Pod, for example `CLUSTERNAME-pod-0`, to expand the Pod.
-3. Click **Connect**, then click **web terminal**.
+2. Click on a Pod, for example `CLUSTERNAME-pod-0`, to expand the Pod.
+3. Click **Connect**, then click **Web Terminal**.
 4. Run this command to clone a basic `main.py` file into the Pod's main directory:
 
 ```bash
 git clone https://github.com/murat-runpod/torch-demo.git
 ```
 
-Repeat these steps for **each Pod** in your cluster.
+Repeat these steps for **each Pod** in your Cluster.
 
 ## Step 3: Examine the main.py file
 
@@ -121,3 +121,16 @@ If you no longer need your Cluster, make sure you return to the [Instant Cluster
 You can monitor your cluster usage and spending using the **Billing Explorer** at the bottom of the [Billing page](https://www.runpod.io/console/user/billing) section under the **Cluster** tab.
 
 :::
+
+## Next steps
+
+Now that you've successfully deployed and tested a PyTorch distributed application on an Instant Cluster, you can:
+
+- **Adapt your own PyTorch code** to run on the Cluster by modifying the distributed initialization in your scripts.
+- **Scale your training** by adjusting the number of Pods in your Cluster to handle larger models or datasets.
+- **Try different frameworks** like [Axolotl](/instant-clusters/axolotl) for fine-tuning large language models.
+- **Explore advanced features** such as checkpointing to save and resume training across sessions.
+- **Optimize performance** by experimenting with different distributed training strategies like Data Parallel (DP), Distributed Data Parallel (DDP), or Fully Sharded Data Parallel (FSDP)
+
+For more information on distributed training with PyTorch, refer to the [PyTorch Distributed Training documentation](https://pytorch.org/tutorials/beginner/dist_overview.html).
+
