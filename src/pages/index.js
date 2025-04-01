@@ -55,7 +55,7 @@ const ActionCards = [
       "Make API requests to your endpoint",
     ],
     cta: "Create Endpoint",
-    url: "/serverless/get-started",
+    url: "/serverless/github-integration",
     color: "primary",
   },
   {
