@@ -5,7 +5,7 @@ title: Serverless CPU types
 The following list contains all CPU types available on RunPod.
 
 <!--
-Table last generated: 2024-12-27
+Table last generated: 2025-04-02
 -->
 
 | displayName                                     | cores | threadsPerCore |
@@ -86,11 +86,14 @@ Table last generated: 2024-12-27
 | AMD EPYC 9124 16-Core Processor                 |    16 |              2 |
 | AMD EPYC 9254 24-Core Processor                 |    24 |              2 |
 | AMD EPYC 9354 32-Core Processor                 |    32 |              2 |
+| AMD EPYC 9354P                                  |    64 |              1 |
 | AMD EPYC 9354P 32-Core Processor                |    32 |              2 |
 | AMD EPYC 9374F 32-Core Processor                |    32 |              1 |
 | AMD EPYC 9454 48-Core Processor                 |    48 |              2 |
+| AMD EPYC 9454P 48-Core Emb Processor            |    48 |              2 |
 | AMD EPYC 9474F 48-Core Processor                |    48 |              2 |
 | AMD EPYC 9534 64-Core Processor                 |    64 |              2 |
+| AMD EPYC 9554 64-Core Emb Processor             |    64 |              1 |
 | AMD EPYC 9554 64-Core Processor                 |   126 |              1 |
 | AMD EPYC 9654 96-Core Emb Processor             |    96 |              1 |
 | AMD EPYC 9654 96-Core Processor                 |    96 |              2 |
@@ -144,6 +147,7 @@ Table last generated: 2024-12-27
 | Genuine Intel(R) CPU @ 2.20GHz                  |    14 |              2 |
 | INTEL(R) XEON(R) PLATINUM 8558                  |    48 |              2 |
 | INTEL(R) XEON(R) PLATINUM 8568Y+                |    48 |              2 |
+| INTEL(R) XEON(R) PLATINUM 8570                  |    56 |              2 |
 | Intel Xeon Processor (Icelake)                  |    40 |              2 |
 | Intel(R) Celeron(R) CPU G3900 @ 2.80GHz         |     2 |              1 |
 | Intel(R) Celeron(R) G5905 CPU @ 3.50GHz         |     2 |              1 |
@@ -155,6 +159,7 @@ Table last generated: 2024-12-27
 | Intel(R) Core(TM) i5-10400F CPU @ 2.90GHz       |     6 |              2 |
 | Intel(R) Core(TM) i5-10600 CPU @ 3.30GHz        |     6 |              2 |
 | Intel(R) Core(TM) i5-14500                      |    14 |              2 |
+| Intel(R) Core(TM) i5-14600K                     |    14 |              2 |
 | Intel(R) Core(TM) i5-14600KF                    |    14 |              2 |
 | Intel(R) Core(TM) i5-4570 CPU @ 3.20GHz         |     4 |              1 |
 | Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz         |     4 |              1 |
@@ -175,6 +180,7 @@ Table last generated: 2024-12-27
 | Intel(R) Core(TM) i9-14900K                     |    24 |              1 |
 | Intel(R) Pentium(R) CPU G3260 @ 3.30GHz         |     2 |              1 |
 | Intel(R) Pentium(R) CPU G4560 @ 3.50GHz         |     2 |              2 |
+| Intel(R) Xeon(R) 6960P                          |    72 |              2 |
 | Intel(R) Xeon(R) Bronze 3204 CPU @ 1.90GHz      |     6 |              1 |
 | Intel(R) Xeon(R) CPU X5660 @ 2.80GHz            |     6 |              2 |
 | Intel(R) Xeon(R) CPU E3-1220 v3 @ 3.10GHz       |     4 |              1 |
@@ -217,6 +223,7 @@ Table last generated: 2024-12-27
 | Intel(R) Xeon(R) Gold 5118 CPU @ 2.30GHz        |    12 |              2 |
 | Intel(R) Xeon(R) Gold 5218R CPU @ 2.10GHz       |    20 |              2 |
 | Intel(R) Xeon(R) Gold 5320 CPU @ 2.20GHz        |    26 |              2 |
+| Intel(R) Xeon(R) Gold 6130 CPU @ 2.10GHz        |    16 |              2 |
 | Intel(R) Xeon(R) Gold 6133 CPU @ 2.50GHz        |    40 |              1 |
 | Intel(R) Xeon(R) Gold 6136 CPU @ 3.00GHz        |    12 |              2 |
 | Intel(R) Xeon(R) Gold 6138 CPU @ 2.00GHz        |    20 |              2 |
@@ -231,12 +238,14 @@ Table last generated: 2024-12-27
 | Intel(R) Xeon(R) Gold 6348 CPU @ 2.60GHz        |    28 |              2 |
 | Intel(R) Xeon(R) Gold 6448Y                     |    32 |              2 |
 | Intel(R) Xeon(R) Platinum 8160 CPU @ 2.10GHz    |    24 |              2 |
+| Intel(R) Xeon(R) Platinum 8168 CPU @ 2.70GHz    |    24 |              2 |
 | Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz   |    26 |              2 |
 | Intel(R) Xeon(R) Platinum 8173M CPU @ 2.00GHz   |    28 |              2 |
 | Intel(R) Xeon(R) Platinum 8176M CPU @ 2.10GHz   |    28 |              2 |
 | Intel(R) Xeon(R) Platinum 8180 CPU @ 2.50GHz    |    28 |              2 |
 | Intel(R) Xeon(R) Platinum 8352Y CPU @ 2.20GHz   |    32 |              2 |
 | Intel(R) Xeon(R) Platinum 8452Y                 |    36 |              2 |
+| Intel(R) Xeon(R) Platinum 8460Y+                |    40 |              2 |
 | Intel(R) Xeon(R) Platinum 8462Y+                |    32 |              2 |
 | Intel(R) Xeon(R) Platinum 8468                  |    48 |              2 |
 | Intel(R) Xeon(R) Platinum 8468V                 |    44 |              2 |
