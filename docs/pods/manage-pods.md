@@ -1,49 +1,57 @@
 ---
 title: Manage Pods
-description: "Learn how to start, stop, and manage Pods with RunPod, including creating and terminating Pods, and using the command line interface to manage your Pods."
+description: "Learn how to create, start, stop, and terminate Pods using both the RunPod web interface and command line interface (CLI)."
 id: manage-pods
 sidebar_position: 3
 ---
 
-Learn how to start, stop, and manage Pods with RunPod, including creating and terminating Pods, and using the command line interface to manage your Pods.
+Learn how to create, start, stop, and terminate Pods using the [web interface](https://www.runpod.io/console/pods) and the [command-line interface](/runpodctl/overview.md) (CLI).
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-### Prerequisites
+## Before you begin
 
-If you are using the [RunPod CLI](/runpodctl/install-runpodctl), you'll need to set your API key in the configuration.
+If you want to manage Pods using the RunPod CLI, you'll need to [install `runpodctl`](/runpodctl/install-runpodctl), and set your [API key](/get-started/api-keys) in the configuration.
+
+Run the following command, replacing `$RUNPOD_API_KEY` with your API key:
 
 ```bash
 runpodctl config --apiKey $RUNPOD_API_KEY
 ```
 
-Replace `$RUNPOD_API_KEY` with your RunPod API key.
-
-Once your API key is set, you can manage your infrastructure.
-
-If you're not sure which Pod meets your needs, see [Choose a Pod](/pods/choose-a-pod).
-
-## Create Pods
+## Create a Pod
 
 <Tabs groupId="interface">
 
 <TabItem value="web-ui" label="Web" default>
 
-1. Navigate to [Pods](https://www.runpod.io/console/pods) and select **+ Deploy**.
-2. Choose between **GPU** and **CPU**.
-3. Customize your an instance by setting up the following:
-   1. (optional) Specify a Network volume.
-   2. Select an instance type. For example, **A40**.
-   3. (optional) Provide a template. For example, **RunPod Pytorch**.
-   4. (GPU only) Specify your compute count.
-4. Review your configuration and select **Deploy On-Demand**.
+To create a Pod using the web interface:
+
+1. Open the [Pods page](https://www.runpod.io/console/pods) in the RunPod console and click the **Deploy** button.
+1. (Optional) Specify a **Network Volume** if you need to share data between multiple Pods, or to save data for later use.
+1. Select **GPU** or **CPU** using the buttons in the top-left corner of the window, and follow the configuration steps below.
+
+GPU configuration:
+
+1. Select a graphics card (e.g., A40, RTX 4090, H100 SXM).
+1. Give your Pod a name using the **Pod Name** field.
+1. (Optional) Choose a **Pod Template** such as **RunPod Pytorch 2.1** or **RunPod Stable Diffusion**.
+1. Specify your **GPU count** if you need multiple GPUs.
+1. Click **Deploy On-Demand** to deploy and start your Pod.
+
+CPU configuration:
+
+1. Select a **CPU type** (e.g., CPU3/CPU5, Compute Optimized, General Purpose, Memory-Optimized).
+1. Specify the number of CPUs and quantity of RAM for your Pod by selecting an **Instance Configuration**.
+1. Give your Pod a name using the **Pod Name** field.
+1. Click **Deploy On-Demand** to deploy and start your Pod.
 
 </TabItem>
 
 <TabItem value="cli" label="Command line">
 
-To create a Pod using the CLI, use the `runpodctl create pods` command.
+To create a Pod using the CLI, use the `runpodctl create pods` command:
 
 ```bash
 runpodctl create pods \
@@ -58,83 +66,93 @@ runpodctl create pods \
 </TabItem>
 </Tabs>
 
-:::tip
+### Custom templates
 
-RunPod supports custom [templates](/pods/templates/overview) that allow you to specify your own Dockerfile.
-By creating a Dockerfile, you can build a [custom Docker image](/tutorials/introduction/containers/overview) with your specific dependencies and configurations.
-This ensures that your applications are reliable and portable across different environments.
+RunPod supports custom [Pod templates](/pods/templates/overview) that let you define your environment using a Dockerfile.
 
-:::
+With custom templates, you can:
 
-Charges occur after the Pod build is complete.
+- Install specific dependencies and packages.
+- Configure your development environment.
+- Create [portable Docker images](/tutorials/introduction/containers/overview) that work consistently across deployments.
+- Share environments with team members for collaborative work.
 
 ## Stop a Pod
+
+:::warning
+
+You will be charged for idle Pods even if they are stopped. If you don't need to retain your Pod environment, you should terminate it completely.
+
+:::
 
 <Tabs groupId="interface">
 
 <TabItem value="web-ui" label="Web" default>
-  1. Click the stop icon.
-  2. Confirm by clicking the **Stop Pod** button.
-  </TabItem>
+
+1. Open the [Pods page](https://www.runpod.io/console/pods).
+1. Find the Pod you want to stop and expand it.
+1. Click the **Stop button** (square icon).
+1. Confirm by clicking the **Stop Pod** button.
+
+</TabItem>
 
 <TabItem value="cli" label="Command line">
-    To stop a Pod, enter the following command.
 
-    ```bash
-    runpodctl stop pod $RUNPOD_POD_ID
-    ```
+To stop a Pod, enter the following command.
+
+```bash
+runpodctl stop pod $RUNPOD_POD_ID
+```
 
 </TabItem>
 
 </Tabs>
 
-### Stop a Pod after a specific time
+### Stop a Pod after a period of time
 
-You can also stop a Pod after a specific amount of time.
-For example, the following command sleeps for 2 hours, and then stops the Pod.
+You can also stop a Pod after a specified period of time.
+The examples below show how to use the CLI and the [web terminal](/pods/connect-to-a-pod#web-terminal) to schedule a Pod to stop after 2 hours of runtime.
 
-      <Tabs>
-        <TabItem value="ssh" label="SSH">
+<Tabs groupip="interface">
 
-          Use the following command to stop a Pod after 2 hours:
+<TabItem value="cli" label="Command line">
 
-          ```bash
-          sleep 2h; runpodctl stop pod $RUNPOD_POD_ID &
-          ```
-          This command uses sleep to wait for 2 hours before executing the `runpodctl stop pod` command to stop the Pod.
-          The `&` at the end runs the command in the background, allowing you to continue using the SSH session.
-        </TabItem>
-        <TabItem value="web-terminal" label="Web terminal">
+Use the following command to stop a Pod after 2 hours:
 
-          To stop a Pod after 2 hours using the web terminal, enter:
+```bash
+sleep 2h; runpodctl stop pod $RUNPOD_POD_ID &
+```
 
-          ```bash
-          nohup bash -c "sleep 2h; runpodctl stop pod $RUNPOD_POD_ID" &
-          ```
-          `nohup` ensures the process continues running if you close the web terminal window.
-        </TabItem>
-      </Tabs>
+This command uses sleep to wait for 2 hours before executing the `runpodctl stop pod` command to stop the Pod.
+The `&` at the end runs the command in the background, allowing you to continue using the SSH session.
 
-:::warning
+</TabItem>
 
-You are charged for storing idle Pods.
-If you do not need to store your Pod, be sure to terminate it next.
+<TabItem value="web-terminal" label="Web terminal">
 
-:::
+To stop a Pod after 2 hours using the web terminal, enter:
+
+```bash
+nohup bash -c "sleep 2h; runpodctl stop pod $RUNPOD_POD_ID" &
+```
+
+`nohup` ensures the process continues running if you close the web terminal window.
+
+</TabItem>
+
+</Tabs>
 
 ## Start a Pod
 
-You can resume a pod that has been stopped.
+Pods start as soon as they are created, but you can resume a Pod that has been stopped.
 
 <Tabs groupId="interface">
 
 <TabItem value="web-ui" label="Web" default>
 
-1. Navigate to the **Pods** page.
-2. Select your Pod you want to resume.
-3. Select **Start**.
-
-Your Pod will resume.
+1. Open the [Pods page](https://www.runpod.io/console/pods).
+1. Find the Pod you want to start and expand it.
+1. Click the **Start** button (play icon).
 
 </TabItem>
 
@@ -146,14 +164,14 @@ runpodctl start pod $RUNPOD_POD_ID
 ```
 
 </TabItem>
+
 </Tabs>
 
 ## Terminate a Pod
 
 :::danger
 
-Terminating a Pod permanently deletes all data outside your [Network volume](/pods/storage/create-network-volumes).
-Be sure you've saved any data you want to access again.
+Terminating a Pod permanently deletes all data outside your [network volume](/pods/storage/create-network-volumes). Be sure you've saved any data you want to access again.
 
 :::
 
@@ -161,9 +179,11 @@ Be sure you've saved any data you want to access again.
 
 <TabItem value="web-ui" label="Web" default>
 
-1. Select the hamburger menu at the bottom of the Pod you want to terminate.
-2. Click **Terminate Pod**.
-3. Confirm by clicking the **Yes** button.
+1. Open the [Pods page](https://www.runpod.io/console/pods).
+1. Find the Pod you want to terminate and expand it.
+1. [Stop the Pod](#stop-a-pod) if it's running.
+1. Click the **Terminate** button (trash icon).
+1. Confirm by clicking the **Yes** button.
 
 </TabItem>
 
@@ -175,7 +195,7 @@ To remove a single Pod, enter the following command.
 runpodctl remove pod $RUNPOD_POD_ID
 ```
 
-You can also remove Pods in bulk. For example, the following command terminates up to 40 pods with the name `my-bulk-task`.
+You can also remove Pods in bulk. For example, the following command terminates up to 40 Pods with the name `my-bulk-task`.
 
 ```bash
 runpodctl remove pods my-bulk-task --podCount 40
@@ -187,7 +207,9 @@ runpodctl remove pods my-bulk-task --podCount 40
 
 ## List Pods
 
-If you're using the command line, enter the following command to list your pods.
+You can find a list of all your Pods on the [Pods page](https://www.runpod.io/console/pods) of the web interface.
+
+If you're using the CLI, use the following command to list your Pods:
 
 ```bash
 runpodctl get pod

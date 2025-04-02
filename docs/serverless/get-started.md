@@ -1,10 +1,10 @@
 ---
-title: "Get started with Endpoints"
+title: "Get started"
 sidebar_position: 2
 description: Master the art of building Docker images, deploying Serverless endpoints, and sending requests with this comprehensive guide, covering prerequisites, RunPod setup, and deployment steps.
 ---
 
-## Build a Serverless Application on RunPod
+# Get started with Serverless
 
 Follow these steps to set up a development environment, create a handler file, test it locally, and build a Docker image for deployment:
 
