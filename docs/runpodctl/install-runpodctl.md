@@ -9,11 +9,11 @@ import TabItem from '@theme/TabItem';
 
 **RunPod CLI** is an [open-source](https://github.com/runpod/runpodctl) command-line interface (CLI) for managing Pods and RunPod projects.
 
-When you create a Pod, it comes with `runpodctl` installed and configured with a Pod-scoped API key. You can also run `runpodctl` locally.
+When you create a Pod, it comes with `runpodctl` installed and configured with a Pod-scoped API key. You can also install and run `runpodctl` locally.
 
-## Install RunPod CLI locally
+## Step 1: Install RunPod CLI locally
 
-To install `runpodctl` on your local machine, run one of these commands based on your operating system:
+To install `runpodctl` on your local machine, run one of the commands below based on your operating system:
 
 <Tabs>
   <TabItem value="mac" label="macOS">
@@ -41,14 +41,9 @@ wget https://github.com/runpod/runpodctl/releases/download/v1.14.3/runpodctl-win
 
 This installs RunPod CLI globally on your system, so you can run `runpodctl` commands from any directory.
 
-## Configure your API key
+## Step 2: Create an API key
 
-Before you can use `runpodctl`, you must configure an [API key](/get-started/api-key).
-
-
-### Create an API key
-
-Follow these steps to create a new API key: following steps:
+Before you can use `runpodctl`, you must configure it with an [API key](/get-started/api-key). Follow these steps to create a new API key:
 
 1. In the web interface, go to your [**Settings**](https://www.runpod.io/console/user/settings).
 2. Expand **API Keys** and click the **+ API Key** button.
@@ -61,7 +56,7 @@ Keep your API key secret. Anyone with the key can gain full access to your accou
 
 :::
 
-### Add your API key to runpodctl
+## Step 3: Add your API key to runpodctl
 
 Now that you've created an API key, run the following command to add it to `runpodctl`:
 
@@ -69,15 +64,15 @@ Now that you've created an API key, run the following command to add it to `runp
 runpodctl config --apiKey your-api-key
 ```
 
-You should see something similar to the following output:
+After running the command, you should see a confirmation message similar to this:
 
 ```bash
 saved apiKey into config file: /Users/runpod/.runpod/config.toml
 ```
 
-### Check version
+## Step 4: Verify installation
 
-Now that you've configured an API key, check that runpodctl installed successfully. Run the following command:
+Now that you've added your API key, verify that `runpodctl` installed successfully by running this command:
 
 ```bash
 runpodctl version
@@ -86,11 +81,13 @@ runpodctl version
 You should see which version is installed.
 
 ```bash
-runpodctl v1.13.0
+runpodctl v1.14.4
 ```
 
-If at any point you need help with a command, you can use the `--help` flag to see documentation on the command you're running.
+## Next steps
 
-```bash
-runpodctl --help
-```
+Now that you have successfully installed and configured `runpodctl`, you can:
+
+- [Manage your Pods](/docs/runpodctl/pod-management) from the command line.
+- [Transfer data](/docs/runpodctl/transfer-data) between your local machine and Pods.
+- [Use projects](/docs/runpodctl/projects) to streamline endpoint development. 

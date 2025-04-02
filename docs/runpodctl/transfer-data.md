@@ -1,42 +1,43 @@
 ---
-title: Transfer data
+title: Send and receive files
 sidebar_position: 4
 ---
 
-# Transfer data with runpodctl
+# Send and receive files with runpodctl
 
-The RunPod CLI provides simple commands for transferring data between Pods or between your machine and a Pod. It uses one-time codes for secure authentication, so **no API keys are required**.
+The RunPod CLI provides simple commands for transferring data between Pods, or between your local machine and a Pod. It uses one-time codes for secure authentication, so **no API keys are required**.
 
-## Send a File
+## Send a file
 
-Send a file from the source machine:
+To send a file from the source machine (i.e. a Pod you've deployed or your local machine), run this command, replacing `YOUR_FILE` with the file you want to send:
+
+To send a file from a source machine (either your local machine or a RunPod Pod),
 
 ```bash
-runpodctl send data.txt
+runpodctl send [YOUR_FILE]
 ```
 
-Example output:
+You should see output similar to this:
 
 ```bash
-Sending 'data.txt' (5 B)
+Sending '[YOUR_FILE]' (5 B)
 Code is: 8338-galileo-collect-fidel
-On the other computer run
-
-runpodctl receive 8338-galileo-collect-fidel
 ```
+
+`8338-galileo-collect-fidel` is the **one-time code** that you would use on the destination machine (your code will be different).
 
 ## Receive a file
 
-Receive a file on the destination machine:
+Run the following command on the destination machine to receive a file, replacing `[ONE_TIME_CODE]` with the code outputted by the `send` command on the source machine (`8338-galileo-collect-fidel` in the example above):
 
 ```bash
-runpodctl receive 8338-galileo-collect-fidel
+runpodctl receive [ONE_TIME_CODE]
 ```
 
-Example output:
+You should see output similar to this:
 
 ```bash
-Receiving 'data.txt' (5 B)
+Receiving '[YOUR_FILE]' (5 B)
 
 Receiving (<-149.36.0.243:8692)
 data.txt 100% |████████████████████| ( 5/ 5B, 0.040 kB/s)
