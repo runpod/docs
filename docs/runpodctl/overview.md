@@ -8,7 +8,7 @@ import TabItem from '@theme/TabItem';
 
 # RunPod CLI
 
-**RunPod CLI** is an [open source](https://github.com/runpod/runpodctl) command-line interface tool that simplifies the management of GPU [Pods](/pods/overview) and [Serverless](/serverless/overview) endpoints on the RunPod platform. You can use RunPod CLI to execute code on Pods, deploy endpoints, transfer data, and manage computing resources efficiently.
+RunPod CLI is an [open source](https://github.com/runpod/runpodctl) command-line interface tool that simplifies the management of GPU [Pods](/pods/overview) and [Serverless](/serverless/overview) endpoints on the RunPod platform. You can use RunPod CLI to execute code on Pods, deploy endpoints, transfer data, and manage computing resources efficiently.
 
 Every Pod you deploy comes preinstalled with the `runpodctl` command. You can also [install it locally](/runpodctl/install-runpodctl) to manage RunPod resources from your own machine.
 

@@ -7,7 +7,7 @@ sidebar_position: 2
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-**RunPod CLI** is an [open-source](https://github.com/runpod/runpodctl) command-line interface (CLI) for managing Pods and RunPod projects.
+RunPod CLI is an [open-source](https://github.com/runpod/runpodctl) command-line interface (CLI) for managing Pods and RunPod projects.
 
 When you create a Pod, it comes with `runpodctl` installed and configured with a Pod-scoped API key. You can also install and run `runpodctl` locally.
 
