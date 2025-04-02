@@ -5,4 +5,4 @@ description: "Configure public key authentication for secure access via terminal
 ---
 
 RunPod attempts to inject the public key that you configure in your account's settings page for authentication using basic terminal.
-If you want to override this at a Pod level, you can manually supply a public key as the `SSH_PUBLIC_KEY` environment variable.
+If you want to override this at a Pod level, you can manually supply a public key using the `SSH_PUBLIC_KEY` environment variable.
