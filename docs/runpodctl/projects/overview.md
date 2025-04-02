@@ -21,7 +21,7 @@ By leveraging RunPod's infrastructure, projects can scale effortlessly. You can 
 
 ### Simplified deployment
 
-Deploying a project on RunPod is straightforward. With a single command, you can turn your project into a serverless endpoint, making it accessible over the internet. This reduces the time and effort required to go from development to production.
+Deploying a project on RunPod is straightforward. With a single command, you can turn your project into a Serverless endpoint, making it accessible over the internet. This reduces the time and effort required to go from development to production.
 
 ### Local vs. cloud environment
 
@@ -71,7 +71,7 @@ To deploy your project as a Serverless endpoint, run:
 runpodctl project deploy
 ```
 
-Your project is now accessible over the internet, and you can interact with it like any other serverless endpoint.
+Your project is now accessible over the internet, and you can interact with it like any other Serverless endpoint.
 
 ### Building a project
 

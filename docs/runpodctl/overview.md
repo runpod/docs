@@ -38,7 +38,7 @@ For more information, see [Install runpodctl](/runpodctl/install-runpodctl).
 
 <Tabs>
 
-<TabItem value="macos" label="MacOS (Homebrew)">
+<TabItem value="macos" label="macOS (Homebrew)">
 
 Install using Homebrew:
 
@@ -71,7 +71,7 @@ wget https://github.com/runpod/runpodctl/releases/latest/download/runpodctl-wind
 
 ## Configure your API key
 
-Before you can use RunPod CLI to manage resources from your local machine, you'll need to configure your [API key](/get-started/api-keys). You can create and manage API keys on the [RunPod account settings page](https://runpod.io/console/user/settings).
+Before you can use RunPod CLI to manage resources from your local machine, you'll need to configure your [API key](/get-started/api-keys). You can create and manage API keys on the [RunPod account settings page](https://www.runpod.io/console/user/settings).
 
 ```bash
 runpodctl config --apiKey [YOUR_API_KEY]
