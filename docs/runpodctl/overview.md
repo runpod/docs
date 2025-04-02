@@ -74,7 +74,7 @@ wget https://github.com/runpod/runpodctl/releases/latest/download/runpodctl-wind
 Before you can use RunPod CLI to manage resources from your local machine, you'll need to configure your [API key](/get-started/api-keys). You can create and manage API keys on the [RunPod account settings page](https://www.runpod.io/console/user/settings).
 
 ```bash
-runpodctl config --apiKey [YOUR_API_KEY]
+runpodctl config --apiKey [API_KEY]
 ```
 
 ## Help command

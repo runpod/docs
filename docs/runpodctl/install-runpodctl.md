@@ -45,23 +45,23 @@ This installs RunPod CLI globally on your system, so you can run `runpodctl` com
 
 Before you can use `runpodctl`, you must configure it with an [API key](/get-started/api-key). Follow these steps to create a new API key:
 
-1. In the web interface, go to your [**Settings**](https://www.runpod.io/console/user/settings).
-2. Expand **API Keys** and click the **+ API Key** button.
-3. Select **Read** or **Read & Write** permissions.
-4. Click **Create**.
+1. In the web interface, go to the [Settings page](https://www.runpod.io/console/user/settings).
+2. Expand the **API Keys** section and click the **Create API Key** button.
+3. Give your key a name and set its permissions. If you want to [manage Pods](/runpodctl/manage-pods) locally, your key will need **READ/WRITE** permissions (or **ALL**).
+4. Click **Create**, then click on your newly-generated key to copy it to your clipboard.
 
-:::note
+:::warning
 
-Keep your API key secret. Anyone with the key can gain full access to your account.
+RunPod does not store your API key, so you may wish to save it elsewhere. Keep your API key secret—anyone with your key can gain full access to your account.
 
 :::
 
 ## Step 3: Add your API key to runpodctl
 
-Now that you've created an API key, run the following command to add it to `runpodctl`:
+Now that you've created an API key, run the following command to add it to `runpodctl`, replacing `[API_KEY]` with the key you just created:
 
 ```bash
-runpodctl config --apiKey your-api-key
+runpodctl config --apiKey API_KEY
 ```
 
 After running the command, you should see a confirmation message similar to this:
@@ -90,4 +90,4 @@ Now that you have successfully installed and configured `runpodctl`, you can:
 
 - [Manage your Pods](/docs/runpodctl/pod-management) from the command line.
 - [Transfer data](/docs/runpodctl/transfer-data) between your local machine and Pods.
-- [Use projects](/docs/runpodctl/projects) to streamline endpoint development. 
+- [Use projects](/docs/runpodctl/projects) to streamline endpoint development.

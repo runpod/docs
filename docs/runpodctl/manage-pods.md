@@ -83,7 +83,7 @@ Terminating a Pod permanently deletes all data outside your [network volume](/po
 
 :::
 
-Run this command to terminate a Pod, :
+Run this command to terminate a Pod:
 
 ```bash
 runpodctl remove pod [pod_id]
