@@ -61,7 +61,7 @@ RunPod does not store your API key, so you may wish to save it elsewhere. Keep y
 Now that you've created an API key, run the following command to add it to `runpodctl`, replacing `[API_KEY]` with the key you just created:
 
 ```bash
-runpodctl config --apiKey API_KEY
+runpodctl config --apiKey [API_KEY]
 ```
 
 After running the command, you should see a confirmation message similar to this:
