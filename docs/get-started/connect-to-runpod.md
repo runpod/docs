@@ -26,7 +26,7 @@ The [RunPod REST API](https://rest.runpod.io/v1/docs) allows you to programmatic
 - Monitor resource utilization.
 - Integrate RunPod into your applications.
 
-[Explore the API reference →](https://rest.runpod.io/v1/docs).
+[Explore the API reference →](https://rest.runpod.io/v1/docs)
 
 ## Command-line interface (CLI)
 
