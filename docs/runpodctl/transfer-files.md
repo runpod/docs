@@ -11,8 +11,6 @@ The RunPod CLI provides simple commands for transferring data between Pods, or b
 
 To send a file from the source machine (i.e. a Pod you've deployed or your local machine), run this command, replacing `YOUR_FILE` with the file you want to send:
 
-To send a file from a source machine (either your local machine or a RunPod Pod),
-
 ```bash
 runpodctl send [YOUR_FILE]
 ```
