@@ -30,7 +30,7 @@ RunPod projects provide a Docker-free workflow that significantly simplifies end
 - Test changes in real time without rebuilding images.
 - Focus on your code while RunPod handles the infrastructure.
 
-See [Create your first project](/runpodctl/projects/get-started) for a step-by-step tutorial.
+Get started by learning how to [create your first project](/runpodctl/projects/get-started).
 
 ## Installation
 
