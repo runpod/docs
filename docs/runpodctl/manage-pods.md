@@ -31,7 +31,7 @@ kyvwslyyjtf97w	Pod3	1 RTX A4500	runpod/stable-diffusion:web-ui-10.2.1           
 Run this command to get the details of a single Pod:
 
 ```bash
-runpodctl get pod [pod_id]
+runpodctl get pod [POD_ID]
 ```
 
 Example output:
@@ -52,7 +52,7 @@ You will be charged for idle Pods even if they are stopped. If you don't need to
 Run this command to stop a Pod:
 
 ```bash
-runpodctl stop pod [pod_id]
+runpodctl stop pod [POD_ID]
 ```
 
 Example output:
@@ -66,7 +66,7 @@ pod "gq9xijdra9hwyd" stopped
 Run this command to resume a Pod that has been stopped:
 
 ```bash
-runpodctl start pod [pod_id]
+runpodctl start pod [POD_ID]
 ```
 
 Example output:
@@ -86,7 +86,7 @@ Terminating a Pod permanently deletes all data outside your [network volume](/po
 Run this command to terminate a Pod:
 
 ```bash
-runpodctl remove pod [pod_id]
+runpodctl remove pod [POD_ID]
 ```
 
 Example output:
@@ -97,5 +97,5 @@ pod "wu5ekmn69oh1xr" removed
 You can also terminate a Pod by name:
 
 ```bash
-runpodctl remove pods [name] 
+runpodctl remove pods [POD_NAME] 
 ```

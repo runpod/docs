@@ -18,12 +18,12 @@ RunPod CLI enables you to:
 
 - Manage GPU and CPU Pods programmatically.
 - Execute commands and run code on Pods.
-- Transfer files and data between your local system and RunPod.
+- [Transfer files](/runpodctl/transfer-files) and data between your local system and RunPod.
 - Develop and deploy Serverless endpoints using [RunPod projects](/runpodctl/projects/overview).
 
 ## Streamline development with projects
 
-RunPod projects provide a Docker-free workflow that significantly simplifies endpoint development:
+RunPod [projects](/runpodctl/projects/overview) provide a Docker-free workflow that significantly simplifies endpoint development:
 
 - Create and deploy Serverless endpoints without prior experience with Docker.
 - Skip the container build-push-deploy cycle when making code changes.

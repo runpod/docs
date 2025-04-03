@@ -43,7 +43,7 @@ This installs RunPod CLI globally on your system, so you can run `runpodctl` com
 
 ## Step 2: Create an API key
 
-Before you can use `runpodctl`, you must configure it with an [API key](/get-started/api-key). Follow these steps to create a new API key:
+Before you can use `runpodctl`, you must configure it with an [API key](/get-started/api-keys). Follow these steps to create a new API key:
 
 1. In the web interface, go to the [Settings page](https://www.runpod.io/console/user/settings).
 2. Expand the **API Keys** section and click the **Create API Key** button.
@@ -88,6 +88,6 @@ runpodctl v1.14.4
 
 Now that you have successfully installed and configured `runpodctl`, you can:
 
-- [Manage your Pods](/docs/runpodctl/pod-management) from the command line.
-- [Transfer data](/docs/runpodctl/transfer-data) between your local machine and Pods.
-- [Use projects](/docs/runpodctl/projects) to streamline endpoint development.
+- [Manage your Pods](/runpodctl/manage-pods) from the command line.
+- [Transfer files](/runpodctl/transfer-files) between your local machine and Pods.
+- [Use projects](/runpodctl/projects/overview) to streamline endpoint development.
