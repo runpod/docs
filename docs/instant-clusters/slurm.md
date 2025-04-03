@@ -8,7 +8,7 @@ description: Learn how to deploy an Instant Cluster and set up SLURM for distrib
 
 This tutorial demonstrates how to use Instant Clusters with [SLURM](https://slurm.schedmd.com/) (Simple Linux Utility for Resource Management) to manage and schedule distributed workloads across multiple nodes. SLURM is a popular open-source job scheduler that provides a framework for job management, scheduling, and resource allocation in high-performance computing environments. By leveraging SLURM on RunPod's high-speed networking infrastructure, you can efficiently manage complex workloads across multiple GPUs.
 
-Follow the steps below to deploy your Cluster and start running distributed PyTorch workloads efficiently.
+Follow the steps below to deploy your Cluster and start running distributed SLURM workloads efficiently.
 
 ## Step 1: Deploy an Instant Cluster
 
@@ -190,7 +190,7 @@ HOSTNAME2_IP=$5
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-# Install slurm
+# Install SLURM
 sudo apt update && sudo apt upgrade -y
 sudo apt install -y slurm-wlm slurm-client munge locales
 
