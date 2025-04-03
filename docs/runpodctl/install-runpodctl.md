@@ -52,7 +52,7 @@ Before you can use `runpodctl`, you must configure it with an [API key](/get-sta
 
 :::warning
 
-RunPod does not store your API key, so you may wish to save it elsewhere. Keep your API key secret—anyone with your key can gain full access to your account.
+RunPod does not store your API key, so you may wish to save it elsewhere. Treat your API key like a password and don't share it with anyone.
 
 :::
 
