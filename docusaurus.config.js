@@ -69,17 +69,16 @@ const config = {
         },
       }),
     ],
-    /*
     [
       "redocusaurus",
       {
         // Plugin Options for loading OpenAPI files
         debug: Boolean(process.env.DEBUG || process.env.CI),
-        config: path.join(__dirname, "redocly.yaml"),
         specs: [
           {
-            id: "using-single-yaml",
-            spec: "docs/references/spec/openapi.yaml",
+            id: "runpod-api",
+            spec: "openapi.json",
+            route: "/api/",
           },
         ],
         // Theme Options for modifying how redoc renders them
@@ -89,7 +88,6 @@ const config = {
         },
       },
     ],
-      */
   ],
 
   themeConfig: {
@@ -126,7 +124,7 @@ const config = {
           label: "Tutorials",
         },
         {
-          href: "https://rest.runpod.io/v1/docs",
+          href: "/api/",
           label: "API",
           position: "left",
         },

@@ -119,6 +119,11 @@ module.exports = {
           label: "GraphQL Spec",
           href: "https://graphql-spec.runpod.io",
         },
+        {
+          type: "link",
+          label: "REST API",
+          href: "/api/",
+        },
       ],
     },
     {
