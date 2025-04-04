@@ -49,8 +49,8 @@ source $HOME/.local/bin/env
 uv python install 3.11
 uv venv
 source .venv/bin/activate
-uv pip install ipykernel simple-gpu-scheduler # very useful on runpod with multi-GPUs
-python -m ipykernel install --user --name=venv # so it shows up in jupyter notebooks within vscode
+uv pip install ipykernel simple-gpu-scheduler # Useful for RunPod with multi-GPUs
+python -m ipykernel install --user --name=venv # Required for virtual environment to show up in Jupyter Notebooks within VS Code.
 
 # 3) Setup dotfiles and ZSH (optional)
 mkdir -p git && cd git
@@ -63,12 +63,11 @@ cd ..
 
 # 4) Setup github (optional)
 # echo ./scripts/setup_github.sh "<YOUR_GITHUB_EMAIL>" "<YOUR_NAME>"
-
 ```
 
 Save this as `setup.sh`, make it executable with `chmod +x setup.sh`, and run it on each node.
 
-## Step 2: SLURM Configuration Scripts
+## Step 4: SLURM Configuration Scripts
 
 Create a directory for the installation scripts:
 
@@ -267,10 +266,9 @@ sudo ln -s /etc/slurm-llnl/gres.conf /etc/slurm/gres.conf
 echo "Now run the following command to start the slurm services:"
 echo "sudo slurmctld -D"
 echo "sudo slurmd -D"
-
 ```
 
-## Step 3: Installation and Setup
+## Step X: Installation and Setup
 
 1. Make all scripts executable:
 
@@ -282,25 +280,25 @@ chmod +x create_gres_conf.sh create_slurm_conf.sh install.sh
 2. Run the installation script on each node, using the same munge key string for all nodes:
 
 ```bash
-bash install.sh "your_munge_key_string" hostname1 hostname2 hostname1_ip hostname2_ip
+bash install.sh "[YOUR_MUNGE_KEY]" [HOSTNAME1] [HOSTNAME2] [HOSTNAME1_IP] [HOSTNAME2_IP]
 
 ```
 
-Replace:
+Replacing each placeholder with the appropriate value:
 
-- `your_munge_key_string`: A secret string used to create the munge key
-- `hostname1`: The hostname of the first node (master)
-- `hostname2`: The hostname of the second node
-- `hostname1_ip`: The IP address of the first node
-- `hostname2_ip`: The IP address of the second node
+- `[YOUR_MUNGE_KEY]`: A secret string used to create the MUNGE key
+- `hostname1`: The hostname of the first (primary) node
+- `hostname2`: The hostname of the second node.
+- `hostname1_ip`: The IP address of the first node.
+- `hostname2_ip`: The IP address of the second node.
 
-You can find hostnames and IP addresses in `/etc/hosts` on each machine:
+You can find hostnames and IP addresses in `/etc/hosts` on each machine. Run this command at the root of each node:
 
 ```bash
 cat etc/hosts
 ```
 
-Example output:
+You should see output similar to this:
 
 ```bash
 127.0.0.1       localhost
@@ -319,6 +317,8 @@ ff02::2 ip6-allrouters
 10.65.6.2       d3d512c9aaf6
 10.65.7.2       d3d512c9aaf6
 ```
+
+The hostname for this Pod is: `TODO`, and the IP address is `TODO`
 
 ## Step 4: Start SLURM Services
 
