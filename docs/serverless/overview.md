@@ -4,12 +4,11 @@ description: "Scale machine learning workloads with RunPod Serverless, offering 
 sidebar_position: 1
 ---
 
-RunPod offers Serverless GPU and CPU computing for AI inference, training, and general compute, allowing users to pay by the second for their compute usage.
-This flexible platform is designed to scale dynamically, meeting the computational needs of AI workloads from the smallest to the largest scales.
+Serverless is a cloud computing platform that enables developers to run AI models and other compute-intensive workloads without managing the underlying infrastructure. It provides on-demand GPU and CPU resources with automatic scaling to handle varying workload requirements.
 
-You can use the following methods:
+You can get started with Serverless a few different ways:
 
-- Handler Functions: Bring your own functions and run in the cloud.
+- Handler functions: Bring your own functions and run in the cloud.
 - Quick Deploy: Quick deploys are pre-built custom endpoints of the most popular AI models.
 
 ## Why RunPod Serverless?
