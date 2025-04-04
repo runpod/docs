@@ -64,6 +64,7 @@ const config = {
         theme: {
           customCss: [
             "./src/css/custom.css",
+            "./src/css/redoc-custom.css",
             // require.resolve("@code-hike/mdx/styles.css"),
           ],
         },
@@ -84,7 +85,56 @@ const config = {
         // Theme Options for modifying how redoc renders them
         theme: {
           // Change with your site colors
-          primaryColor: "#1890ff",
+          primaryColor: "#824edc",
+          colors: {
+            primary: {
+              main: "#824edc",
+            },
+          },
+          typography: {
+            fontSize: "16px",
+            lineHeight: "1.5",
+            fontFamily: "var(--ifm-font-family-base)",
+            headings: {
+              fontFamily: "var(--ifm-font-family-base)",
+              fontWeight: "600",
+            },
+            code: {
+              fontSize: "13px",
+              fontFamily: "var(--ifm-font-family-monospace)",
+              lineHeight: "1.5",
+            },
+          },
+          sidebar: {
+            width: "300px",
+            backgroundColor: "var(--ifm-background-color)",
+          },
+          rightPanel: {
+            backgroundColor: "var(--ifm-background-surface-color)",
+          },
+          generateCodeSamples: {
+            languages: [
+              {
+                lang: "curl",
+                label: "cURL"
+              },
+              {
+                lang: "Python",
+                label: "Python"
+              },
+              {
+                lang: "JavaScript",
+                label: "JavaScript"
+              },
+              {
+                lang: "Go",
+                label: "Go"
+              }
+            ],
+            skipOptionalParameters: false,
+          },
+          onlyRequiredInSamples: false,
+          hideRequestPayloadSample: false
         },
       },
     ],

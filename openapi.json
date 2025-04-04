@@ -2,47 +2,48 @@
   "openapi": "3.0.3",
   "info": {
     "title": "RunPod API",
-    "description": "Public Rest API for managing RunPod programmatically",
-    "version": "0.1.0",
+    "description": "The RunPod API enables programmatic management of RunPod resources including Pods, Serverless endpoints, network volumes, and container registry authentication.\n\nThis API follows REST principles and uses JSON for request and response bodies. All requests must be authenticated using an API key in the Authorization header.\n\nFor detailed information about authentication, rate limits, and best practices, see the [RunPod API Guide](https://docs.runpod.io/api).",
+    "version": "v1",
     "contact": {
-      "name": "help",
-      "url": "https://contact.runpod.io/hc/requests/new",
+      "name": "RunPod Support",
+      "url": "https://docs.runpod.io/support",
       "email": "help@runpod.io"
+    },
+    "license": {
+      "name": "RunPod API License",
+      "url": "https://runpod.io/terms"
     }
   },
   "externalDocs": {
-    "description": "Find out more about RunPod",
-    "url": "https://runpod.io"
+    "description": "RunPod API Documentation",
+    "url": "https://docs.runpod.io/api"
   },
   "servers": [
     {
-      "url": "https://rest.runpod.io/v1"
+      "url": "https://api.runpod.io/v1",
+      "description": "Production API server"
     }
   ],
   "tags": [
     {
-      "name": "docs",
-      "description": "this documentation page"
-    },
-    {
       "name": "pods",
-      "description": "manage Pods"
+      "description": "Manage compute Pods, including creation, configuration, and lifecycle management"
     },
     {
       "name": "endpoints",
-      "description": "manage Serverless endpoints"
+      "description": "Manage Serverless endpoints for on-demand compute resources"
     },
     {
-      "name": "network volumes",
-      "description": "manage RunPod network volumes"
+      "name": "volumes",
+      "description": "Manage persistent network volumes for data storage and sharing"
     },
     {
       "name": "templates",
-      "description": "manage Pod and Serverless templates"
+      "description": "Manage Pod and Serverless endpoint templates for standardized deployments"
     },
     {
-      "name": "container registry auths",
-      "description": "manage authentication for container registries such as dockerhub to use private images"
+      "name": "registry",
+      "description": "Manage container registry authentication for private image access"
     }
   ],
   "paths": {
@@ -101,11 +102,11 @@
         "tags": [
           "pods"
         ],
-        "summary": "Create a new Pod",
-        "description": "Creates a new [Pod](#/components/schemas/Pod) and optionally deploys it",
+        "summary": "Create a Pod",
+        "description": "Creates a new Pod with the specified configuration. The Pod represents a compute instance that can run containers.\n\nRequired permissions: `pods:create`",
         "operationId": "CreatePod",
         "requestBody": {
-          "description": "Input for Pod creation",
+          "description": "The Pod configuration",
           "content": {
             "application/json": {
               "schema": {
@@ -117,7 +118,7 @@
         },
         "responses": {
           "201": {
-            "description": "Pod successfully created",
+            "description": "The Pod was successfully created",
             "content": {
               "application/json": {
                 "schema": {
@@ -127,7 +128,23 @@
             }
           },
           "400": {
-            "description": "Invalid input"
+            "description": "The request was invalid. Check the error message for details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed. Check your API key."
+          },
+          "403": {
+            "description": "You don't have permission to create Pods."
+          },
+          "429": {
+            "description": "Too many requests. Please try again later."
           }
         }
       },
@@ -136,206 +153,85 @@
           "pods"
         ],
         "summary": "List Pods",
-        "description": "Returns a list of Pods",
+        "description": "Returns a paginated list of Pods. Use query parameters to filter and sort the results.\n\nRequired permissions: `pods:list`",
         "operationId": "ListPods",
         "parameters": [
           {
+            "name": "pageSize",
+            "in": "query",
+            "description": "The maximum number of Pods to return. Default: 20, Maximum: 100",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "pageToken",
+            "in": "query",
+            "description": "A pagination token returned from a previous call to ListPods",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "computeType",
             "in": "query",
+            "description": "Filter Pods by compute type",
             "schema": {
               "type": "string",
               "enum": [
                 "GPU",
                 "CPU"
-              ],
-              "example": "CPU",
-              "description": "filter to only GPU or only CPU Pods"
+              ]
             }
           },
           {
-            "name": "cpuFlavorId",
+            "name": "status",
             "in": "query",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              },
-              "example": [
-                "cpu3c",
-                "cpu5g"
-              ],
-              "description": "filter to CPU Pods with any of the listed CPU flavors"
-            }
-          },
-          {
-            "name": "dataCenterId",
-            "in": "query",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              },
-              "example": [
-                "EU-RO-1"
-              ],
-              "description": "filter to Pods located in any of the provided RunPod data centers"
-            }
-          },
-          {
-            "name": "desiredStatus",
-            "in": "query",
+            "description": "Filter Pods by status",
             "schema": {
               "type": "string",
-              "example": "RUNNING",
               "enum": [
                 "RUNNING",
-                "EXITED",
-                "TERMINATED"
-              ],
-              "description": "filter to Pods currently in the provided state"
+                "STOPPED",
+                "ERROR"
+              ]
             }
-          },
-          {
-            "name": "endpointId",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "maxLength": 191,
-              "description": "filter to workers on the provided Serverless endpoint (note that endpoint workers are not included in the response by default, set includeWorkers to true to include them)"
-            },
-            "required": false
-          },
-          {
-            "name": "gpuTypeId",
-            "in": "query",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              },
-              "example": [
-                "NVIDIA GeForce RTX 4090",
-                "NVIDIA RTX A5000"
-              ],
-              "description": "filter to Pods with any of the listed GPU types attached"
-            }
-          },
-          {
-            "name": "id",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "example": "xedezhzb9la3ye",
-              "description": "filter to a specific Pod"
-            },
-            "required": false
-          },
-          {
-            "name": "imageName",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "example": "runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04",
-              "description": "filter to Pods created with the provided image"
-            },
-            "required": false
-          },
-          {
-            "name": "includeMachine",
-            "in": "query",
-            "schema": {
-              "type": "boolean",
-              "default": false,
-              "example": true,
-              "description": "include information about the machine the Pod is running on"
-            }
-          },
-          {
-            "name": "includeNetworkVolume",
-            "in": "query",
-            "schema": {
-              "type": "boolean",
-              "default": false,
-              "example": true,
-              "description": "include information about the network volume attached to the returned Pod, if any"
-            }
-          },
-          {
-            "name": "includeSavingsPlans",
-            "in": "query",
-            "schema": {
-              "type": "boolean",
-              "default": false,
-              "example": true,
-              "description": "include information about the savings plans applied to the Pod"
-            }
-          },
-          {
-            "name": "includeTemplate",
-            "in": "query",
-            "schema": {
-              "type": "boolean",
-              "default": false,
-              "example": true,
-              "description": "include information about the template the Pod uses, if any"
-            }
-          },
-          {
-            "name": "includeWorkers",
-            "in": "query",
-            "schema": {
-              "type": "boolean",
-              "default": false,
-              "example": true,
-              "description": "set to true to also list pods which are serverless workers"
-            }
-          },
-          {
-            "name": "name",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "maxLength": 191,
-              "description": "filter to Pods with the provided name"
-            },
-            "required": false
-          },
-          {
-            "name": "networkVolumeId",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "example": "agv6w2qcg7",
-              "description": "filter to Pods with the provided network volume attached"
-            }
-          },
-          {
-            "name": "templateId",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "example": "30zmvf89kd",
-              "description": "filter to Pods created from the provided template"
-            },
-            "required": false
           }
         ],
         "responses": {
           "200": {
-            "description": "successful operation",
+            "description": "A paginated list of Pods",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Pods"
+                  "type": "object",
+                  "properties": {
+                    "pods": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Pod"
+                      }
+                    },
+                    "nextPageToken": {
+                      "type": "string",
+                      "description": "Token for retrieving the next page of results"
+                    }
+                  }
                 }
               }
             }
           },
-          "400": {
-            "description": "Invalid ID supplied"
+          "401": {
+            "description": "Authentication failed. Check your API key."
           },
-          "404": {
-            "description": "Pod not found"
+          "403": {
+            "description": "You don't have permission to list Pods."
+          },
+          "429": {
+            "description": "Too many requests. Please try again later."
           }
         }
       }
@@ -1167,7 +1063,7 @@
     "/networkvolumes": {
       "post": {
         "tags": [
-          "network volumes"
+          "volumes"
         ],
         "summary": "Create a new network volume",
         "description": "Create a new network volume",
@@ -1201,7 +1097,7 @@
       },
       "get": {
         "tags": [
-          "network volumes"
+          "volumes"
         ],
         "summary": "List network volumes",
         "description": "Returns a list of network volumes",
@@ -1229,7 +1125,7 @@
     "/networkvolumes/{networkVolumeId}": {
       "get": {
         "tags": [
-          "network volumes"
+          "volumes"
         ],
         "summary": "Find a network volume by ID",
         "description": "Returns a single network volume",
@@ -1266,11 +1162,22 @@
       },
       "patch": {
         "tags": [
-          "network volumes"
+          "volumes"
         ],
         "summary": "Update a network volume",
         "description": "Update a network volume",
         "operationId": "UpdateNetworkVolume",
+        "parameters": [
+          {
+            "name": "networkVolumeId",
+            "in": "path",
+            "description": "ID of network volume to update",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "description": "Update a network volume",
           "content": {
@@ -1282,17 +1189,6 @@
           },
           "required": true
         },
-        "parameters": [
-          {
-            "name": "networkVolumeId",
-            "in": "path",
-            "description": "ID of network volume that needs to be updated",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful operation",
@@ -1311,16 +1207,16 @@
       },
       "delete": {
         "tags": [
-          "network volumes"
+          "volumes"
         ],
         "summary": "Delete a network volume",
-        "description": "delete a network volume",
+        "description": "Delete a network volume",
         "operationId": "DeleteNetworkVolume",
         "parameters": [
           {
             "name": "networkVolumeId",
             "in": "path",
-            "description": "network volume id to delete",
+            "description": "ID of network volume to delete",
             "required": true,
             "schema": {
               "type": "string"
@@ -1340,57 +1236,10 @@
         }
       }
     },
-    "/networkvolumes/{networkVolumeId}/update": {
-      "post": {
-        "tags": [
-          "network volumes"
-        ],
-        "summary": "Update a network volume",
-        "description": "Update a network volume - synonym for PATCH /networkvolumes/{networkVolumeId}",
-        "operationId": "UpdateNetworkVolume",
-        "requestBody": {
-          "description": "Update a network volume",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/NetworkVolumeUpdateInput"
-              }
-            }
-          },
-          "required": true
-        },
-        "parameters": [
-          {
-            "name": "networkVolumeId",
-            "in": "path",
-            "description": "ID of network volume that needs to be updated",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful operation",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NetworkVolume"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input"
-          }
-        }
-      }
-    },
     "/containerregistryauth": {
       "post": {
         "tags": [
-          "container registry auths"
+          "registry"
         ],
         "summary": "Create a new container registry auth",
         "description": "Create a new container registry auth",
@@ -1419,101 +1268,6 @@
           },
           "400": {
             "description": "Invalid input"
-          }
-        }
-      },
-      "get": {
-        "tags": [
-          "container registry auths"
-        ],
-        "summary": "List container registry auths",
-        "description": "Returns a list of container registry auths",
-        "operationId": "ListContainerRegistryAuths",
-        "responses": {
-          "200": {
-            "description": "successful operation",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ContainerRegistryAuths"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid ID supplied"
-          },
-          "404": {
-            "description": "container registry auth not found"
-          }
-        }
-      }
-    },
-    "/containerregistryauth/{containerRegistryAuthId}": {
-      "get": {
-        "tags": [
-          "container registry auths"
-        ],
-        "summary": "Find a container registry auth by ID",
-        "description": "Returns a single container registry auth",
-        "operationId": "GetContainerRegistryAuth",
-        "parameters": [
-          {
-            "name": "containerRegistryAuthId",
-            "in": "path",
-            "description": "ID of container registry auth to return",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "successful operation",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ContainerRegistryAuth"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid ID supplied"
-          },
-          "404": {
-            "description": "container registry auth not found"
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "container registry auths"
-        ],
-        "summary": "Delete a container registry auth",
-        "description": "delete a container registry auth",
-        "operationId": "DeleteContainerRegistryAuth",
-        "parameters": [
-          {
-            "name": "containerRegistryAuthId",
-            "in": "path",
-            "description": "container registry auth id to delete",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "container registry auth successfully deleted"
-          },
-          "400": {
-            "description": "Invalid container registry auth id"
-          },
-          "401": {
-            "description": "Unauthorized"
           }
         }
       }
@@ -3774,6 +3528,24 @@
             "type": "string",
             "example": "my-username",
             "description": "the username for the container registry"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "A machine-readable error code"
+          },
+          "message": {
+            "type": "string",
+            "description": "A human-readable error message"
+          },
+          "details": {
+            "type": "object",
+            "description": "Additional error details if available"
           }
         }
       }
