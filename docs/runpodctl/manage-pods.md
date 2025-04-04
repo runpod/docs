@@ -23,7 +23,7 @@ Example output:
 ID            	NAME 	GPU        	IMAGE NAME                                              	STATUS  
 wu5ekmn69oh1xr	Pod1	1 RTX A5000	runpod/stable-diffusion:web-ui-10.2.1                   	EXITED 	
 gq9xijdra9hwyd	Pod2	1 L4       	runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04	RUNNING	
-kyvwslyyjtf97w	Pod3	1 RTX A4500	runpod/stable-diffusion:web-ui-10.2.1                   	RUNNING	
+kyvwslyyjtf97w	Pod3	1 RTX A4500	runpod/stable-diffusion:web-ui-10.2.1                   	RUNNING
 ```
 
 ## Get details for a Pod
@@ -38,7 +38,7 @@ Example output:
 
 ```bash
 ID            	NAME 	GPU        	IMAGE NAME                                              	STATUS  
-gq9xijdra9hwyd	Pod2	1 L4       	runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04	RUNNING	
+gq9xijdra9hwyd	Pod2	1 L4       	runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04	RUNNING
 ```
 
 ## Stop a Pod
@@ -90,6 +90,7 @@ runpodctl remove pod [POD_ID]
 ```
 
 Example output:
+
 ```bash
 pod "wu5ekmn69oh1xr" removed
 ```
@@ -97,5 +98,5 @@ pod "wu5ekmn69oh1xr" removed
 You can also terminate a Pod by name:
 
 ```bash
-runpodctl remove pods [POD_NAME] 
+runpodctl remove pods [POD_NAME]
 ```
