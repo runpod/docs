@@ -19,10 +19,10 @@ Follow the steps below to deploy a cluster and start running distributed SLURM w
 
 ## Step 2: Clone the SLURM demo into each Pod
 
-1. Click your Cluster to expand the list of Pods.
+1. On the Instant Clusters page, click on the cluster you created to expand the list of Pods.
 2. Click on a Pod, for example `CLUSTERNAME-pod-0`, to expand the Pod.
 3. Click **Connect**, then click **Web Terminal**.
-4. Run this command to clone the SLURM demo files into the Pod's main directory:
+4. In the terminal that opens, run this command to clone the SLURM demo files into the Pod's main directory:
 
     ```bash
     git clone https://github.com/pandyamarut/dotfiles.git
@@ -37,14 +37,14 @@ Follow the steps below to deploy a cluster and start running distributed SLURM w
 
 Repeat these steps for **each Pod** in your cluster.
 
-## Step 3: Overview of SLURM configuration scripts
+## Step 3: Overview of SLURM demo scripts
 
 The repository contains several essential scripts for setting up SLURM. Let's examine what each script does:
 
 - `setup.sh`: Prepares the Pod environment with necessary dependencies and utilities for SLURM and distributed computing.
-- `install.sh`: The primary installation script that sets up MUNGE authentication, configures SLURM, and prepares the environment.
 - `create_gres_conf.sh`: Generates the SLURM Generic Resource (GRES) configuration file that defines GPU resources for each node.
 - `create_slurm_conf.sh`: Creates the main SLURM configuration file with cluster settings, node definitions, and partition setup.
+- `install.sh`: The primary installation script that sets up MUNGE authentication, configures SLURM, and prepares the environment.
 - `test_batch.sh`: A sample SLURM job script for testing cluster functionality.
 
 ## Step 4: Run setup.sh
@@ -140,9 +140,9 @@ After running these commands, you should see output indicating that the services
 
     This command should list one GPU from each of your two nodes.
 
-## Step 7: Submit a test job
+## Step 7: Submit a SLURM job script
 
-1. Create a test job script:
+1. Create a SLURM job script to test your cluster:
 
     ```bash
     cat > test_batch.sh << 'EOL'

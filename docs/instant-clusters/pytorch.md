@@ -22,11 +22,11 @@ Follow the steps below to deploy a cluster and start running distributed PyTorch
 1. Click your Cluster to expand the list of Pods.
 2. Click on a Pod, for example `CLUSTERNAME-pod-0`, to expand the Pod.
 3. Click **Connect**, then click **Web Terminal**.
-4. Run this command to clone a basic `main.py` file into the Pod's main directory:
+4. In the terminal that opens, run this command to clone a basic `main.py` file into the Pod's main directory:
 
-```bash
-git clone https://github.com/murat-runpod/torch-demo.git
-```
+    ```bash
+    git clone https://github.com/murat-runpod/torch-demo.git
+    ```
 
 Repeat these steps for **each Pod** in your Cluster.
 

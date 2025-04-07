@@ -22,30 +22,30 @@ Follow the steps below to deploy a cluster and start training your models effici
 1. Click your cluster to expand the list of Pods.
 2. Click on a Pod, for example `CLUSTERNAME-pod-0`, to expand the Pod.
 3. Click **Connect**, then click **Web Terminal**.
-4. Clone the Axolotl repository into the Pod's main directory:
+4. In the terminal that opens, run this command to clone the Axolotl repository into the Pod's main directory:
 
-```bash
-git clone https://github.com/axolotl-ai-cloud/axolotl
-```
+    ```bash
+    git clone https://github.com/axolotl-ai-cloud/axolotl
+    ```
 
 5. Navigate to the `axolotl` directory:
 
-```bash
-cd axolotl
-```
+    ```bash
+    cd axolotl
+    ```
 
 6. Install the required packages:
 
-```bash
-pip3 install -U packaging setuptools wheel ninja
-pip3 install --no-build-isolation -e '.[flash-attn,deepspeed]'
-```
+    ```bash
+    pip3 install -U packaging setuptools wheel ninja
+    pip3 install --no-build-isolation -e '.[flash-attn,deepspeed]'
+    ```
 
 7. Navigate to the `examples/llama-3` directory:
 
-```bash
-cd examples/llama-3
-```
+    ```bash
+    cd examples/llama-3
+    ```
 
 Repeat these steps for **each Pod** in your Cluster.
 
