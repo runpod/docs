@@ -24,16 +24,16 @@ Follow the steps below to deploy a cluster and start running distributed SLURM w
 3. Click **Connect**, then click **Web Terminal**.
 4. Run this command to clone the SLURM demo files into the Pod's main directory:
 
-```bash
-git clone https://github.com/pandyamarut/dotfiles.git
-cd dotfiles/runpod/slurm_example
-```
+    ```bash
+    git clone https://github.com/pandyamarut/dotfiles.git
+    cd dotfiles/runpod/slurm_example
+    ```
 
 5. Run this command to the scripts executable:
 
-```bash
-chmod +x create_gres_conf.sh create_slurm_conf.sh install.sh setup.sh test_batch.sh
-```
+    ```bash
+    chmod +x create_gres_conf.sh create_slurm_conf.sh install.sh setup.sh test_batch.sh
+    ```
 
 Repeat these steps for **each Pod** in your cluster.
 
@@ -41,11 +41,11 @@ Repeat these steps for **each Pod** in your cluster.
 
 The repository contains several essential scripts for setting up SLURM. Let's examine what each script does:
 
-1. `setup.sh`: Prepares the Pod environment with necessary dependencies and utilities for SLURM and distributed computing.
-1. `install.sh`: The primary installation script that sets up MUNGE authentication, configures SLURM, and prepares the environment.
-1. `create_gres_conf.sh`: Generates the SLURM Generic Resource (GRES) configuration file that defines GPU resources for each node.
-1. `create_slurm_conf.sh`: Creates the main SLURM configuration file with cluster settings, node definitions, and partition setup.
-1. `test_batch.sh`: A sample SLURM job script for testing cluster functionality.
+- `setup.sh`: Prepares the Pod environment with necessary dependencies and utilities for SLURM and distributed computing.
+- `install.sh`: The primary installation script that sets up MUNGE authentication, configures SLURM, and prepares the environment.
+- `create_gres_conf.sh`: Generates the SLURM Generic Resource (GRES) configuration file that defines GPU resources for each node.
+- `create_slurm_conf.sh`: Creates the main SLURM configuration file with cluster settings, node definitions, and partition setup.
+- `test_batch.sh`: A sample SLURM job script for testing cluster functionality.
 
 ## Step 4: Run setup.sh
 
@@ -55,7 +55,7 @@ Run `setup.sh` to prepare your Pod environment for each node:
 ./setup.h
 ```
 
-TODO: WHAT THIS DOES
+*TODO: Describe what this does*
 
 ## Step 4: Get the hostname and IP address for each Pod
 
@@ -85,7 +85,7 @@ Before running the installation script, you need to get the hostname and IP addr
 
 ## Step 5: Install SLURM on each Pod
 
-Now run the installation script on each Pod.
+Now run the installation script on each Pod:
 
 ```bash
 ./install.sh "[MUNGE_SECRET_KEY]" [HOSTNAME_PRIMARY] [HOSTNAME_SECONDARY] `10.65.0.2` `10.65.0.3`
@@ -96,73 +96,75 @@ Replace:
 - `[HOSTNAME_SECONDARY]` with the hostname of the secondary node (`$NODE_ADDR` = `10.65.0.3`).
 - `[MUNGE_SECRET_KEY]` with any secure random string (like a password). The secret key is used for authentication between nodes, and must be identical across all Pods in your cluster.
 
-TODO: WHAT THIS DOES
+*TODO: Describe what this does*
 
 ## Step 5: Start SLURM services
 
 1. On the primary node (`$NODE_ADDR` = `10.65.0.2`), run both SLURM services:
 
-```bash
-sudo slurmctld -D
-```
+    ```bash
+    sudo slurmctld -D
+    ```
 
 2. Use the web interface to open a second terminal on the primary node and run:
 
-```bash
-sudo slurmd -D
-```
+    ```bash
+    sudo slurmd -D
+    ```
 
 3. On the secondary node (`$NODE_ADDR` = `10.65.0.3`), run:
 
-```bash
-sudo slurmd -D
-```
+    ```bash
+    sudo slurmd -D
+    ```
 
 After running these commands, you should see output indicating that the services have started successfully. The `-D` flag keeps the services running in the foreground, so each command needs its own terminal.
 
+*TODO: Describe what this does*
+
 ## Step 6: Test your SLURM Cluster
 
-Check the status of your nodes:
+1. Run this command on one node to check the status of your nodes:
 
-```bash
-sinfo
-```
+    ```bash
+    sinfo
+    ```
 
-You should see output showing both nodes in your cluster, with a state of "idle" if everything is working correctly.
+    You should see output showing both nodes in your cluster, with a state of "idle" if everything is working correctly.
 
-Test GPU availability across nodes:
+2. Run this command to test GPU availability across both nodes:
 
-```bash
-srun --nodes=2 --gres=gpu:1 nvidia-smi -L
-```
+    ```bash
+    srun --nodes=2 --gres=gpu:1 nvidia-smi -L
+    ```
 
-This command should list one GPU from each of your two nodes.
+    This command should list one GPU from each of your two nodes.
 
 ## Step 7: Submit a test job
 
-Create a test job script:
+1. Create a test job script:
 
-```bash
-cat > test_batch.sh << 'EOL'
-#!/bin/bash
-#SBATCH --partition=gpupart
-#SBATCH --nodes=2
-#SBATCH --time=00:02:00
-#SBATCH --output=test_simple_%j.out
+    ```bash
+    cat > test_batch.sh << 'EOL'
+    #!/bin/bash
+    #SBATCH --partition=gpupart
+    #SBATCH --nodes=2
+    #SBATCH --time=00:02:00
+    #SBATCH --output=test_simple_%j.out
 
-srun hostname
-EOL
+    srun hostname
+    EOL
 
-chmod +x test_batch.sh
-```
+    chmod +x test_batch.sh
+    ```
 
-Submit the job:
+2. Submit the job:
 
-```bash
-sbatch test_batch.sh
-```
+    ```bash
+    sbatch test_batch.sh
+    ```
 
-Check the output file that is created (`test_simple_[JOBID].out`) to see the hostnames of both nodes, confirming that your job ran successfully across the cluster.
+Check the output file created by the test (`test_simple_[JOBID].out`) and look for the hostnames of both nodes. This confirms that the job ran successfully across the cluster.
 
 ## Step 8: Clean up
 
