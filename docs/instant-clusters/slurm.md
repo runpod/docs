@@ -92,9 +92,9 @@ Now run the installation script on each Pod:
 ```
 
 Replace:
+- `[MUNGE_SECRET_KEY]` with any secure random string (like a password). The secret key is used for authentication between nodes, and must be identical across all Pods in your cluster.
 - `[HOSTNAME_PRIMARY]` with the hostname of the primary node (`$NODE_ADDR` = `10.65.0.2`)
 - `[HOSTNAME_SECONDARY]` with the hostname of the secondary node (`$NODE_ADDR` = `10.65.0.3`).
-- `[MUNGE_SECRET_KEY]` with any secure random string (like a password). The secret key is used for authentication between nodes, and must be identical across all Pods in your cluster.
 
 *TODO: Describe what this does*
 
