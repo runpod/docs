@@ -8,7 +8,7 @@ description: Learn how to deploy an Instant Cluster and use it to fine-tune a la
 
 This tutorial demonstrates how to use Instant Clusters with [Axolotl](https://axolotl.ai/) to fine-tune large language models (LLMs) across multiple GPUs. By leveraging PyTorch's distributed training capabilities and RunPod's high-speed networking infrastructure, you can significantly accelerate your training process compared to single-GPU setups.
 
-Follow the steps below to deploy your Cluster and start training your models efficiently.
+Follow the steps below to deploy a cluster and start training your models efficiently.
 
 ## Step 1: Deploy an Instant Cluster
 
@@ -19,7 +19,7 @@ Follow the steps below to deploy your Cluster and start training your models eff
 
 ## Step 2: Set up Axolotl on each Pod
 
-1. Click your Cluster to expand the list of Pods.
+1. Click your cluster to expand the list of Pods.
 2. Click on a Pod, for example `CLUSTERNAME-pod-0`, to expand the Pod.
 3. Click **Connect**, then click **Web Terminal**.
 4. Clone the Axolotl repository into the Pod's main directory:

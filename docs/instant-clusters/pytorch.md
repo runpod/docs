@@ -8,7 +8,7 @@ description: Learn how to deploy an Instant Cluster and run a multi-node process
 
 This tutorial demonstrates how to use Instant Clusters with [PyTorch](http://pytorch.org) to run distributed workloads across multiple GPUs. By leveraging PyTorch's distributed processing capabilities and RunPod's high-speed networking infrastructure, you can significantly accelerate your training process compared to single-GPU setups. 
 
-Follow the steps below to deploy your Cluster and start running distributed PyTorch workloads efficiently.
+Follow the steps below to deploy a cluster and start running distributed PyTorch workloads efficiently.
 
 ## Step 1: Deploy an Instant Cluster
 

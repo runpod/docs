@@ -24,8 +24,9 @@ All accounts have a default spending limit. To deploy a larger cluster, submit a
 
 Get started with Instant Clusters by following a step-by-step tutorial for your preferred framework:
 
-- [Deploy an Instant Cluster with PyTorch](/instant-clusters/pytorch)
-- [Deploy an Instant Cluster with Axolotl](/instant-clusters/axolotl)
+- [Deploy an Instant Cluster with PyTorch](/instant-clusters/pytorch).
+- [Deploy an Instant Cluster with Axolotl](/instant-clusters/axolotl).
+- [Deploy an Instant Cluster with Slurm](/instant-clusters/axolotl).
 
 ## Use cases for Instant Clusters
 

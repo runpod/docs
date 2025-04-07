@@ -8,366 +8,142 @@ description: Learn how to deploy an Instant Cluster and set up SLURM for distrib
 
 This tutorial demonstrates how to use Instant Clusters with [SLURM](https://slurm.schedmd.com/) (Simple Linux Utility for Resource Management) to manage and schedule distributed workloads across multiple nodes. SLURM is a popular open-source job scheduler that provides a framework for job management, scheduling, and resource allocation in high-performance computing environments. By leveraging SLURM on RunPod's high-speed networking infrastructure, you can efficiently manage complex workloads across multiple GPUs.
 
-Follow the steps below to deploy your Cluster and start running distributed SLURM workloads efficiently.
+Follow the steps below to deploy a cluster and start running distributed SLURM workloads efficiently.
 
 ## Step 1: Deploy an Instant Cluster
 
 1. Open the [Instant Clusters page](https://www.runpod.io/console/cluster) on the RunPod web interface.
 2. Click **Create Cluster**.
-3. Use the UI to name and configure your Cluster. For this walkthrough, keep **Pod Count** at **2** and select the option for **16x H100 SXM** GPUs. Keep the **Pod Template** at its default setting (RunPod PyTorch).
+3. Use the UI to name and configure your cluster. For this walkthrough, keep **Pod Count** at **2** and select the option for **16x H100 SXM** GPUs. Keep the **Pod Template** at its default setting (RunPod PyTorch).
 4. Click **Deploy Cluster**. You should be redirected to the Instant Clusters page after a few seconds.
-
-<!-- TODO: Grab the host name and IP address -->
 
 ## Step 2: Clone the SLURM demo into each Pod
 
 1. Click your Cluster to expand the list of Pods.
 2. Click on a Pod, for example `CLUSTERNAME-pod-0`, to expand the Pod.
 3. Click **Connect**, then click **Web Terminal**.
-4. Run this command to clone a the SLURM demo files into the Pod's main directory:
+4. Run this command to clone the SLURM demo files into the Pod's main directory:
 
 ```bash
-git clone TODO
+git clone https://github.com/pandyamarut/dotfiles.git
+cd dotfiles/runpod/slurm_example
 ```
 
-Repeat these steps for **each Pod** in your Cluster.
-
-## Step 3: Run the setup script
-
-Create and run this setup script on **each node** to prepare the environment:
+5. Run this command to the scripts executable:
 
 ```bash
-#!/bin/bash
-
-# 1) Setup linux dependencies
-su -c 'apt-get update && apt-get install -y sudo'
-sudo apt-get install -y less nano htop ncdu nvtop lsof rsync btop jq
-
-# 2) Setup virtual environment
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source $HOME/.local/bin/env
-uv python install 3.11
-uv venv
-source .venv/bin/activate
-uv pip install ipykernel simple-gpu-scheduler # Useful for RunPod with multi-GPUs
-python -m ipykernel install --user --name=venv # Required for virtual environment to show up in Jupyter Notebooks within VS Code.
-
-# 3) Setup dotfiles and ZSH (optional)
-mkdir -p git && cd git
-git clone https://github.com/jplhughes/dotfiles.git
-cd dotfiles
-./install.sh --zsh --tmux
-chsh -s /usr/bin/zsh
-./deploy.sh
-cd ..
-
-# 4) Setup github (optional)
-# echo ./scripts/setup_github.sh "<YOUR_GITHUB_EMAIL>" "<YOUR_NAME>"
+chmod +x create_gres_conf.sh create_slurm_conf.sh install.sh setup.sh test_batch.sh
 ```
 
-Save this as `setup.sh`, make it executable with `chmod +x setup.sh`, and run it on each node.
+Repeat these steps for **each Pod** in your cluster.
 
-## Step 4: SLURM Configuration Scripts
+## Step 3: Overview of SLURM configuration scripts
 
-Create a directory for the installation scripts:
+The repository contains several essential scripts for setting up SLURM. Let's examine what each script does:
+
+1. `setup.sh`: Prepares the Pod environment with necessary dependencies and utilities for SLURM and distributed computing.
+1. `install.sh`: The primary installation script that sets up MUNGE authentication, configures SLURM, and prepares the environment.
+1. `create_gres_conf.sh`: Generates the SLURM Generic Resource (GRES) configuration file that defines GPU resources for each node.
+1. `create_slurm_conf.sh`: Creates the main SLURM configuration file with cluster settings, node definitions, and partition setup.
+1. `test_batch.sh`: A sample SLURM job script for testing cluster functionality.
+
+## Step 4: Run setup.sh
+
+Run `setup.sh` to prepare your Pod environment for each node:
 
 ```bash
-mkdir rp_install
-cd rp_install
-
+./setup.h
 ```
 
-### Create GRES Configuration Script
+TODO: WHAT THIS DOES
 
-Create a file named `create_gres_conf.sh` with the following content:
+## Step 4: Get the hostname and IP address for each Pod
+
+Before running the installation script, you need to get the hostname and IP address for each Pod. **On each Pod:**
+
+1. Run this command to get the IP address of the node:
+
+    ```bash
+    echo $NODE_ADDR
+    ```
+
+    If this outputs `10.65.0.2`, this is the **primary node**. If it outputs `10.65.0.3`, this is the **secondary node**. 
+
+2. Run this command to get the Pod's hostname:
+
+    ```bash
+    echo $HOSTNAME
+    ```
+
+    This should output a string of random numbers and letters, similar to:
+
+    ```bash
+    4f653f31b496
+    ```
+
+3. Make a note of the hostname for the primary (`$NODE_ADDR` = `10.65.0.2`) and secondary (`$NODE_ADDR` = `10.65.0.3`) nodes.
+
+## Step 5: Install SLURM on each Pod
+
+Now run the installation script on each Pod.
 
 ```bash
-#!/bin/bash
-
-if [ -z "$1" ]; then
-    echo "Usage: $0 <hostname>"
-    exit 1
-fi
-
-HOSTNAME=$1
-
-cat <<EOL
-NodeName=$HOSTNAME Name=gpu File=/dev/nvidia[0-7]
-EOL
-
+./install.sh "[MUNGE_SECRET_KEY]" [HOSTNAME_PRIMARY] [HOSTNAME_SECONDARY] `10.65.0.2` `10.65.0.3`
 ```
 
-### Create SLURM Configuration Script
+Replace:
+- `[HOSTNAME_PRIMARY]` with the hostname of the primary node (`$NODE_ADDR` = `10.65.0.2`)
+- `[HOSTNAME_SECONDARY]` with the hostname of the secondary node (`$NODE_ADDR` = `10.65.0.3`).
+- `[MUNGE_SECRET_KEY]` with any secure random string (like a password). The secret key is used for authentication between nodes, and must be identical across all Pods in your cluster.
 
-Create a file named `create_slurm_conf.sh` with the following content:
+TODO: WHAT THIS DOES
 
-```bash
-#!/bin/bash
+## Step 5: Start SLURM services
 
-# Check if both hostnames are provided
-[ -z "$1" ] && echo "Error: hostname1 is not set." >&2 && exit 1
-[ -z "$2" ] && echo "Error: hostname2 is not set." >&2 && exit 1
-[ -z "$3" ] && echo "Error: hostname1_ip is not set." >&2 && exit 1
-[ -z "$4" ] && echo "Error: hostname2_ip is not set." >&2 && exit 1
-
-HOSTNAME1=$1
-HOSTNAME2=$2
-HOSTNAME1_IP=$3
-HOSTNAME2_IP=$4
-
-num_cpus=$(nproc --all)
-num_sockets=$(lscpu | grep "Socket(s):" | awk '{print $2}')
-num_cores_per_socket=$(lscpu | grep "Core(s) per socket:" | awk '{print $4}')
-num_threads_per_core=$(lscpu | grep "Thread(s) per core:" | awk '{print $4}')
-total_memory=$(free -m | grep Mem: | awk '{print $2}')
-
-cat <<EOL
-ClusterName=localcluster
-SlurmctldHost=$HOSTNAME1
-MpiDefault=none
-ProctrackType=proctrack/linuxproc
-ReturnToService=2
-SlurmctldPidFile=/var/run/slurmctld.pid
-SlurmctldPort=6817
-SlurmdPidFile=/var/run/slurmd.pid
-SlurmdPort=6818
-SlurmdSpoolDir=/var/lib/slurm-llnl/slurmd
-SlurmUser=slurm
-StateSaveLocation=/var/lib/slurm-llnl/slurmctld
-SwitchType=switch/none
-TaskPlugin=task/none
-
-# TIMERS
-InactiveLimit=0
-KillWait=30
-MinJobAge=300
-SlurmctldTimeout=120
-SlurmdTimeout=300
-Waittime=0
-# SCHEDULING
-SchedulerType=sched/backfill
-SelectType=select/cons_tres
-SelectTypeParameters=CR_Core
-
-# AccountingStoragePort=
-AccountingStorageType=accounting_storage/none
-JobCompType=jobcomp/none
-JobAcctGatherFrequency=30
-JobAcctGatherType=jobacct_gather/none
-SlurmctldDebug=info
-SlurmctldLogFile=/var/log/slurm-llnl/slurmctld.log
-SlurmdDebug=info
-SlurmdLogFile=/var/log/slurm-llnl/slurmd.log
-
-GresTypes=gpu
-NodeName=$HOSTNAME1 CPUs=$num_cpus Boards=$num_sockets Sockets=$num_sockets CoresPerSocket=$num_cores_per_socket ThreadsPerCore=$num_threads_per_core RealMemory=$total_memory Gres=gpu:8 State=UNKNOWN
-NodeName=$HOSTNAME2 CPUs=$num_cpus Boards=$num_sockets Sockets=$num_sockets CoresPerSocket=$num_cores_per_socket ThreadsPerCore=$num_threads_per_core RealMemory=$total_memory Gres=gpu:8 State=UNKNOWN
-
-PartitionName=gpupart Nodes=$HOSTNAME1,$HOSTNAME2 Default=YES MaxTime=INFINITE State=UP
-EOL
-
-```
-
-### Create Main Installation Script
-
-Create a file named `install.sh` with the following content:
-
-```bash
-#!/bin/bash
-
-[ -z "$1" ] && echo "Error: MUNGE_KEY_STR is not set." >&2 && exit 1
-[ -z "$2" ] && echo "Error: HOSTNAME1 is not set." >&2 && exit 1
-[ -z "$3" ] && echo "Error: HOSTNAME2 is not set." >&2 && exit 1
-[ -z "$4" ] && echo "Error: HOSTNAME1_IP is not set." >&2 && exit 1
-[ -z "$5" ] && echo "Error: HOSTNAME2_IP is not set." >&2 && exit 1
-
-MUNGE_KEY_STR=$1
-HOSTNAME1=$2
-HOSTNAME2=$3
-HOSTNAME1_IP=$4
-HOSTNAME2_IP=$5
-
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-
-# Install SLURM
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y slurm-wlm slurm-client munge locales
-
-# Set locale
-sudo locale-gen en_GB.UTF-8
-sudo update-locale LANG=en_GB.UTF-8
-export LANG=en_GB.UTF-8
-export LC_ALL=en_GB.UTF-8
-
-current_hostname=$(hostname)
-if [ "$current_hostname" == "$HOSTNAME1" ]; then
-    echo "$HOSTNAME2_IP $HOSTNAME2" | sudo tee -a /etc/hosts
-elif [ "$current_hostname" == "$HOSTNAME2" ]; then
-    echo "$HOSTNAME1_IP $HOSTNAME1" | sudo tee -a /etc/hosts
-else
-    echo "Error: current hostname is not $HOSTNAME1 or $HOSTNAME2" >&2 && exit 1
-fi
-
-# ================================================
-# munge setup
-# ================================================
-
-# Create munge user and group
-getent passwd munge
-getent group munge
-sudo groupadd -r munge
-sudo useradd -r -g munge -s /sbin/nologin munge
-# Add slurm user to munge group
-sudo usermod -aG munge slurm
-
-# Create munge directories and set permissions
-for dir in /var/log/munge /var/lib/munge /etc/munge /var/run/munge /run/munge; do
-    sudo mkdir -p $dir
-    sudo chown -R munge:munge $dir
-    sudo chmod -R 755 $dir
-done
-
-echo -n "$MUNGE_KEY_STR" | sha256sum | awk '{print $1}' > /etc/munge/munge.key
-sudo chmod 400 /etc/munge/munge.key
-sudo chown munge:munge /etc/munge/munge.key
-
-# Start munge service
-sudo /usr/sbin/munged --force
-
-# Set permissions for munge socket
-if [ ! -f /run/munge/munge.socket.2 ]; then
-    sudo chmod 777 /run/munge/munge.socket.2
-fi
-
-if munge -n | unmunge; then
-    echo "Munge is working correctly."
-else
-    echo "Error: Munge is not working correctly." >&2
-    exit 1
-fi
-
-# ================================================
-# Slurm setup
-# ================================================
-
-# Create slurm directories and set permissions
-for dir in /etc/slurm /etc/slurm-llnl /var/spool/slurm /var/log/slurm-llnl /var/spool/slurm/ctld /var/lib/slurm-llnl /var/lib/slurm-llnl/slurmctld /var/spool/slurmd /var/lib/slurm-llnl/slurmd /var/log/slurm; do
-    sudo mkdir -p $dir
-    sudo chown -R slurm:slurm $dir
-    sudo chmod -R 755 $dir
-done
-
-# Create slurm.conf
-bash $SCRIPT_DIR/create_slurm_conf.sh $HOSTNAME1 $HOSTNAME2 $HOSTNAME1_IP $HOSTNAME2_IP > /etc/slurm-llnl/slurm.conf
-bash $SCRIPT_DIR/create_gres_conf.sh $current_hostname > /etc/slurm-llnl/gres.conf
-sudo ln -s /etc/slurm-llnl/slurm.conf /etc/slurm/slurm.conf
-sudo ln -s /etc/slurm-llnl/gres.conf /etc/slurm/gres.conf
-
-echo "Now run the following command to start the slurm services:"
-echo "sudo slurmctld -D"
-echo "sudo slurmd -D"
-```
-
-## Step X: Installation and Setup
-
-1. Make all scripts executable:
-
-```bash
-chmod +x create_gres_conf.sh create_slurm_conf.sh install.sh
-
-```
-
-2. Run the installation script on each node, using the same munge key string for all nodes:
-
-```bash
-bash install.sh "[YOUR_MUNGE_KEY]" [HOSTNAME1] [HOSTNAME2] [HOSTNAME1_IP] [HOSTNAME2_IP]
-
-```
-
-Replacing each placeholder with the appropriate value:
-
-- `[YOUR_MUNGE_KEY]`: A secret string used to create the MUNGE key
-- `hostname1`: The hostname of the first (primary) node
-- `hostname2`: The hostname of the second node.
-- `hostname1_ip`: The IP address of the first node.
-- `hostname2_ip`: The IP address of the second node.
-
-You can find hostnames and IP addresses in `/etc/hosts` on each machine. Run this command at the root of each node:
-
-```bash
-cat etc/hosts
-```
-
-You should see output similar to this:
-
-```bash
-127.0.0.1       localhost
-::1     localhost ip6-localhost ip6-loopback
-fe00::0 ip6-localnet
-ff00::0 ip6-mcastprefix
-ff02::1 ip6-allnodes
-ff02::2 ip6-allrouters
-172.18.0.2      d3d512c9aaf6
-10.65.0.2       d3d512c9aaf6
-10.65.1.2       d3d512c9aaf6
-10.65.2.2       d3d512c9aaf6
-10.65.3.2       d3d512c9aaf6
-10.65.4.2       d3d512c9aaf6
-10.65.5.2       d3d512c9aaf6
-10.65.6.2       d3d512c9aaf6
-10.65.7.2       d3d512c9aaf6
-```
-
-The hostname for this Pod is: `TODO`, and the IP address is `TODO`
-
-## Step 4: Start SLURM Services
-
-### On the Master Node:
-
-Run both commands:
+1. On the primary node (`$NODE_ADDR` = `10.65.0.2`), run both SLURM services:
 
 ```bash
 sudo slurmctld -D
-sudo slurmd -D
-
 ```
 
-### On Worker Nodes:
-
-Run only the slurmd daemon:
+2. Use the web interface to open a second terminal on the primary node and run:
 
 ```bash
 sudo slurmd -D
-
 ```
 
-![Screenshot 2025-03-27 at 5.12.51 PM.png](attachment:f04cc306-4dfd-4355-b170-a19eba46f4bb:Screenshot_2025-03-27_at_5.12.51_PM.png)
+3. On the secondary node (`$NODE_ADDR` = `10.65.0.3`), run:
 
-## Step 5: Verify Cluster Setup
+```bash
+sudo slurmd -D
+```
+
+After running these commands, you should see output indicating that the services have started successfully. The `-D` flag keeps the services running in the foreground, so each command needs its own terminal.
+
+## Step 6: Test your SLURM Cluster
 
 Check the status of your nodes:
 
 ```bash
-sinfo 
-
-# Healthy nodes are typically in idle, alloc, or mix states.
-
+sinfo
 ```
+
+You should see output showing both nodes in your cluster, with a state of "idle" if everything is working correctly.
 
 Test GPU availability across nodes:
 
 ```bash
 srun --nodes=2 --gres=gpu:1 nvidia-smi -L
-
 ```
 
-![Screenshot 2025-03-27 at 5.11.25 PM.png](attachment:d79a7158-5f86-44c5-8c2a-b4091ba69a71:Screenshot_2025-03-27_at_5.11.25_PM.png)
+This command should list one GPU from each of your two nodes.
 
-## Step 6: Submit a Test Job
+## Step 7: Submit a test job
 
-Create a test batch script named `test_batch.sh`:
+Create a test job script:
 
 ```bash
+cat > test_batch.sh << 'EOL'
 #!/bin/bash
 #SBATCH --partition=gpupart
 #SBATCH --nodes=2
@@ -375,33 +151,22 @@ Create a test batch script named `test_batch.sh`:
 #SBATCH --output=test_simple_%j.out
 
 srun hostname
+EOL
 
+chmod +x test_batch.sh
 ```
 
 Submit the job:
 
 ```bash
 sbatch test_batch.sh
-
 ```
 
-Check the output file `test_simple_*.out` to verify that the job ran successfully.
+Check the output file that is created (`test_simple_[JOBID].out`) to see the hostnames of both nodes, confirming that your job ran successfully across the cluster.
 
-![Screenshot 2025-03-27 at 3.22.25 PM.png](attachment:8b42e131-973e-4049-930b-a0c545d43810:Screenshot_2025-03-27_at_3.22.25_PM.png)
+## Step 8: Clean up
 
-## Troubleshooting
-
-If you encounter issues:
-
-1. Check the SLURM logs in `/var/log/slurm-llnl/`
-2. Ensure Munge is running correctly on all nodes
-3. Verify network connectivity between nodes
-4. Make sure hostnames and IP addresses are correctly configured
-
-
-## Step 5: Clean up
-
-If you no longer need your Cluster, make sure you return to the [Instant Clusters page](https://www.runpod.io/console/cluster) and delete your Cluster to avoid incurring extra charges.
+If you no longer need your cluster, make sure you return to the [Instant Clusters page](https://www.runpod.io/console/cluster) and delete your cluster to avoid incurring extra charges.
 
 :::note
 
@@ -411,15 +176,12 @@ You can monitor your cluster usage and spending using the **Billing Explorer** a
 
 ## Next steps
 
-Now that you've successfully deployed and tested a PyTorch distributed application on an Instant Cluster, you can:
+Now that you've successfully deployed and tested a SLURM cluster on RunPod, you can:
 
-- **Adapt your own PyTorch code** to run on the Cluster by modifying the distributed initialization in your scripts.
-- **Scale your training** by adjusting the number of Pods in your Cluster to handle larger models or datasets.
+- **Adapt your own distributed workloads** to run using SLURM job scripts.
+- **Scale your cluster** by adjusting the number of Pods to handle larger models or datasets.
 - **Try different frameworks** like [Axolotl](/instant-clusters/axolotl) for fine-tuning large language models.
-- **Optimize performance** by experimenting with different distributed training strategies like Data Parallel (DP), Distributed Data Parallel (DDP), or Fully Sharded Data Parallel (FSDP).
+- **Optimize performance** by experimenting with different distributed training strategies.
 
-For more information on distributed training with PyTorch, refer to the [PyTorch Distributed Training documentation](https://pytorch.org/tutorials/beginner/dist_overview.html).
-
-
-For more information and examples, check:
-https://github.com/pandyamarut/dotfiles/tree/master/runpod/slurm_example
+For more SLURM examples and configurations, check out:
+[SLURM Example Repository](https://github.com/pandyamarut/dotfiles/tree/master/runpod/slurm_example).
