@@ -34,7 +34,7 @@ Repeat these steps for **each Pod** in your cluster.
 
 Let's look at the code in our `main.py` file:
 
-```python
+```python title="main.py"
 import os
 import torch
 import torch.distributed as dist
@@ -80,7 +80,7 @@ This is the minimal code necessary for initializing a distributed environment. T
 
 Run this command in the web terminal of **each Pod** to start the PyTorch process:
 
-```bash
+```bash title="launcher.sh"
 export NCCL_DEBUG=WARN
 torchrun \
   --nproc_per_node=$NUM_TRAINERS \
