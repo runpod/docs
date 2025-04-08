@@ -111,19 +111,19 @@ This script automates the complex process of configuring a two-node SLURM cluste
 
 ## Step 5: Start SLURM services
 
-1. On the primary node (`$NODE_ADDR` = `10.65.0.2`), run both SLURM services:
+1. **On the primary node** (`$NODE_ADDR` = `10.65.0.2`), run both SLURM services:
 
     ```bash
     sudo slurmctld -D
     ```
 
-2. Use the web interface to open a second terminal on the primary node and run:
+2. Use the web interface to open a second terminal **on the primary node** and run:
 
     ```bash
     sudo slurmd -D
     ```
 
-3. On the secondary node (`$NODE_ADDR` = `10.65.0.3`), run:
+3. **On the secondary node** (`$NODE_ADDR` = `10.65.0.3`), run:
 
     ```bash
     sudo slurmd -D
@@ -133,7 +133,7 @@ After running these commands, you should see output indicating that the services
 
 ## Step 6: Test your SLURM Cluster
 
-1. Run this command on one node to check the status of your nodes:
+1. Run this command **on the primary node** to check the status of your nodes:
 
     ```bash
     sinfo
@@ -149,29 +149,13 @@ After running these commands, you should see output indicating that the services
 
     This command should list one GPU from each of your two nodes.
 
-## Step 7: Submit a SLURM job script
+## Step 7: Submit the SLURM job script
 
-1. Create a SLURM job script to test your cluster:
+Run the following command **on the primary node** (`$NODE_ADDR` = `10.65.0.2`) to submit the test job script and confirm that your cluster is working properly:
 
-    ```bash
-    cat > test_batch.sh << 'EOL'
-    #!/bin/bash
-    #SBATCH --partition=gpupart
-    #SBATCH --nodes=2
-    #SBATCH --time=00:02:00
-    #SBATCH --output=test_simple_%j.out
-
-    srun hostname
-    EOL
-
-    chmod +x test_batch.sh
-    ```
-
-2. Submit the job:
-
-    ```bash
-    sbatch test_batch.sh
-    ```
+```bash
+sbatch test_batch.sh
+```
 
 Check the output file created by the test (`test_simple_[JOBID].out`) and look for the hostnames of both nodes. This confirms that the job ran successfully across the cluster.
 
