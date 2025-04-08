@@ -211,7 +211,7 @@ curl -X POST https://api.runpod.ai/v2/{endpoint_id}/status/{job_id} \
 </TabItem>
 </Tabs>
 
-## Retry a Job
+## Retry a job
 
 To retry a job that has failed or encountered an error, send a POST request to `/retry/{job_id}` with the Job ID.
 The system will automatically requeue and retry the job.
