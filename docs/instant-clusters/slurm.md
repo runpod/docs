@@ -10,6 +10,12 @@ This tutorial demonstrates how to use Instant Clusters with [SLURM](https://slur
 
 Follow the steps below to deploy a cluster and start running distributed SLURM workloads efficiently.
 
+## Requirements
+
+- You've created a [RunPod account](https://www.runpod.io/console/home) and funded it with sufficient credits.
+- You have basic familiarity with Linux command line.
+- You're comfortable working with [Pods](/pods/overview) and understand the basics of [SLURM](https://slurm.schedmd.com/).
+
 ## Step 1: Deploy an Instant Cluster
 
 1. Open the [Instant Clusters page](https://www.runpod.io/console/cluster) on the RunPod web interface.
