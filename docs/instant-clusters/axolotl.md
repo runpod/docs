@@ -47,7 +47,7 @@ Follow the steps below to deploy a cluster and start training your models effici
     cd examples/llama-3
     ```
 
-Repeat these steps for **each Pod** in your Cluster.
+Repeat these steps for **each Pod** in your cluster.
 
 ## Step 3: Start the training process on each Pod
 
@@ -90,11 +90,11 @@ Congrats! You've successfully trained a model using Axolotl on an Instant Cluste
 
 ## Step 4: Clean up
 
-If you no longer need your Cluster, make sure you return to the [Instant Clusters page](https://www.runpod.io/console/cluster) and delete your Cluster to avoid incurring extra charges.
+If you no longer need your cluster, make sure you return to the [Instant Clusters page](https://www.runpod.io/console/cluster) and delete your cluster to avoid incurring extra charges.
 
 :::note
 
-You can monitor your Cluster usage and spending using the **Billing Explorer** at the bottom of the [Billing page](https://www.runpod.io/console/user/billing) section under the **Cluster** tab.
+You can monitor your cluster usage and spending using the **Billing Explorer** at the bottom of the [Billing page](https://www.runpod.io/console/user/billing) section under the **Cluster** tab.
 
 :::
 
@@ -103,7 +103,7 @@ You can monitor your Cluster usage and spending using the **Billing Explorer** a
 Now that you've successfully deployed and tested an Axolotl distributed training job on an Instant Cluster, you can:
 
 - **Fine-tune your own models** by modifying the configuration files in Axolotl to suit your specific requirements.
-- **Scale your training** by adjusting the number of Pods in your Cluster (and the size of their containers and volumes) to handle larger models or datasets.
+- **Scale your training** by adjusting the number of Pods in your cluster (and the size of their containers and volumes) to handle larger models or datasets.
 - **Try different optimization techniques** such as DeepSpeed, FSDP (Fully Sharded Data Parallel), or other distributed training strategies.
 
 For more information on fine-tuning with Axolotl, refer to the [Axolotl documentation](https://github.com/OpenAccess-AI-Collective/axolotl).

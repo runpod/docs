@@ -19,7 +19,7 @@ Follow the steps below to deploy a cluster and start running distributed PyTorch
 
 ## Step 2: Clone the PyTorch demo into each Pod
 
-1. Click your Cluster to expand the list of Pods.
+1. Click your cluster to expand the list of Pods.
 2. Click on a Pod, for example `CLUSTERNAME-pod-0`, to expand the Pod.
 3. Click **Connect**, then click **Web Terminal**.
 4. In the terminal that opens, run this command to clone a basic `main.py` file into the Pod's main directory:
@@ -28,7 +28,7 @@ Follow the steps below to deploy a cluster and start running distributed PyTorch
     git clone https://github.com/murat-runpod/torch-demo.git
     ```
 
-Repeat these steps for **each Pod** in your Cluster.
+Repeat these steps for **each Pod** in your cluster.
 
 ## Step 3: Examine the main.py file
 
@@ -106,7 +106,7 @@ Running on rank 14/15 (local rank: 6), device: cuda:6
 Running on rank 10/15 (local rank: 2), device: cuda:2
 ```
 
-The first number refers to the global rank of the thread, spanning from `0` to `WORLD_SIZE-1` (`WORLD_SIZE` = the total number of GPUs in the Cluster). In our example there are two Pods of eight GPUs, so the global rank spans from 0-15. The second number is the local rank, which defines the order of GPUs within a single Pod (0-7 for this example).
+The first number refers to the global rank of the thread, spanning from `0` to `WORLD_SIZE-1` (`WORLD_SIZE` = the total number of GPUs in the cluster). In our example there are two Pods of eight GPUs, so the global rank spans from 0-15. The second number is the local rank, which defines the order of GPUs within a single Pod (0-7 for this example).
 
 The specific number and order of ranks may be different in your terminal, and the global ranks listed will be different for each Pod.
 
@@ -116,7 +116,7 @@ This diagram illustrates how local and global ranks are distributed across multi
 
 ## Step 5: Clean up
 
-If you no longer need your Cluster, make sure you return to the [Instant Clusters page](https://www.runpod.io/console/cluster) and delete your Cluster to avoid incurring extra charges.
+If you no longer need your cluster, make sure you return to the [Instant Clusters page](https://www.runpod.io/console/cluster) and delete your cluster to avoid incurring extra charges.
 
 :::note
 
@@ -128,10 +128,9 @@ You can monitor your cluster usage and spending using the **Billing Explorer** a
 
 Now that you've successfully deployed and tested a PyTorch distributed application on an Instant Cluster, you can:
 
-- **Adapt your own PyTorch code** to run on the Cluster by modifying the distributed initialization in your scripts.
-- **Scale your training** by adjusting the number of Pods in your Cluster to handle larger models or datasets.
+- **Adapt your own PyTorch code** to run on the cluster by modifying the distributed initialization in your scripts.
+- **Scale your training** by adjusting the number of Pods in your cluster to handle larger models or datasets.
 - **Try different frameworks** like [Axolotl](/instant-clusters/axolotl) for fine-tuning large language models.
 - **Optimize performance** by experimenting with different distributed training strategies like Data Parallel (DP), Distributed Data Parallel (DDP), or Fully Sharded Data Parallel (FSDP).
 
 For more information on distributed training with PyTorch, refer to the [PyTorch Distributed Training documentation](https://pytorch.org/tutorials/beginner/dist_overview.html).
-

@@ -70,12 +70,12 @@ The following environment variables are available in all Pods:
 | `PRIMARY_ADDR` / `MASTER_ADDR` | The address of the primary Pod.                                               |
 | `PRIMARY_PORT` / `MASTER_PORT` | The port of the primary Pod (all ports are available).                        |
 | `NODE_ADDR`                    | The static IP of this Pod within the cluster network.                         |
-| `NODE_RANK`                    | The Cluster (i.e., global) rank assigned to this Pod (0 for the primary Pod). |
-| `NUM_NODES`                    | The number of Pods in the Cluster.                                            |
+| `NODE_RANK`                    | The cluster (i.e., global) rank assigned to this Pod (0 for the primary Pod). |
+| `NUM_NODES`                    | The number of Pods in the cluster.                                            |
 | `NUM_TRAINERS`                 | The number of GPUs per Pod.                                                   |
 | `HOST_NODE_ADDR`               | Defined as `PRIMARY_ADDR:PRIMARY_PORT` for convenience.                       |
-| `WORLD_SIZE`                   | The total number of GPUs in the Cluster (`NUM_NODES` * `NUM_TRAINERS`).       |
+| `WORLD_SIZE`                   | The total number of GPUs in the cluster (`NUM_NODES` * `NUM_TRAINERS`).       |
 
-Each Pod receives a static IP (`NODE_ADDR`) on the overlay network. When a Cluster is deployed, the system designates one Pod as the primary node by setting the `PRIMARY_ADDR` and `PRIMARY_PORT` environment variables. This simplifies working with multiprocessing libraries that require a primary node.
+Each Pod receives a static IP (`NODE_ADDR`) on the overlay network. When a cluster is deployed, the system designates one Pod as the primary node by setting the `PRIMARY_ADDR` and `PRIMARY_PORT` environment variables. This simplifies working with multiprocessing libraries that require a primary node.
 
 The variables `MASTER_ADDR`/`PRIMARY_ADDR` and `MASTER_PORT`/`PRIMARY_PORT` are equivalent. The `MASTER_*` variables provide compatibility with tools that expect these legacy names.

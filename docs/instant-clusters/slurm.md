@@ -19,23 +19,26 @@ Follow the steps below to deploy a cluster and start running distributed SLURM w
 
 ## Step 2: Clone the SLURM demo into each Pod
 
+To connect to a Pod:
+
 1. On the Instant Clusters page, click on the cluster you created to expand the list of Pods.
 2. Click on a Pod, for example `CLUSTERNAME-pod-0`, to expand the Pod.
-3. Click **Connect**, then click **Web Terminal**.
-4. In the terminal that opens, run this command to clone the SLURM demo files into the Pod's main directory:
+
+**On each Pod:**
+
+1. Click **Connect**, then click **Web Terminal**.
+2. In the terminal that opens, run this command to clone the SLURM demo files into the Pod's main directory:
 
     ```bash
-    git clone https://github.com/pandyamarut/dotfiles.git
-    cd dotfiles/runpod/slurm_example
+    https://github.com/pandyamarut/slurm_example.git
+    cd slurm_example
     ```
 
-5. Run this command to the scripts executable:
+3. Run this command to the scripts executable:
 
     ```bash
     chmod +x create_gres_conf.sh create_slurm_conf.sh install.sh setup.sh test_batch.sh
     ```
-
-Repeat these steps for **each Pod** in your cluster.
 
 ## Step 3: Overview of SLURM demo scripts
 
@@ -47,19 +50,27 @@ The repository contains several essential scripts for setting up SLURM. Let's ex
 - `install.sh`: The primary installation script that sets up MUNGE authentication, configures SLURM, and prepares the environment.
 - `test_batch.sh`: A sample SLURM job script for testing cluster functionality.
 
-## Step 4: Run setup.sh
+## Step 4: Run the setup script
 
-Run `setup.sh` to prepare your Pod environment for each node:
+Run `setup.sh` **on each Pod** to prepare the development environment.
 
 ```bash
 ./setup.h
 ```
 
-*TODO: Describe what this does*
+This script prepares the Pod development environment by installing Linux dependencies and setting up the Python virtual environment with `uv` (a [Python package manager](https://github.com/astral-sh/uv)) and Python 3.11.
+
+Uncomment the last line of `setup.h` if you want to setup GitHub on your Pods (run this command):
+
+```bash
+echo ./scripts/setup_github.sh "<YOUR_GITHUB_EMAIL>" "<YOUR_NAME>"
+```
 
 ## Step 4: Get the hostname and IP address for each Pod
 
-Before running the installation script, you need to get the hostname and IP address for each Pod. **On each Pod:**
+Before running the installation script, you'll need to get the hostname and IP address for each Pod.
+
+**On each Pod:**
 
 1. Run this command to get the IP address of the node:
 
@@ -85,7 +96,7 @@ Before running the installation script, you need to get the hostname and IP addr
 
 ## Step 5: Install SLURM on each Pod
 
-Now run the installation script on each Pod:
+Now run the installation script **on each Pod**:
 
 ```bash
 ./install.sh "[MUNGE_SECRET_KEY]" [HOSTNAME_PRIMARY] [HOSTNAME_SECONDARY] `10.65.0.2` `10.65.0.3`
@@ -96,7 +107,7 @@ Replace:
 - `[HOSTNAME_PRIMARY]` with the hostname of the primary node (`$NODE_ADDR` = `10.65.0.2`)
 - `[HOSTNAME_SECONDARY]` with the hostname of the secondary node (`$NODE_ADDR` = `10.65.0.3`).
 
-*TODO: Describe what this does*
+This script automates the complex process of configuring a two-node SLURM cluster with GPU support, handling everything from system dependencies to authentication and resource configuration. It implements the necessary setup for both the primary (i.e. master/control) and secondary (i.e compute/worker) nodes.
 
 ## Step 5: Start SLURM services
 
@@ -119,8 +130,6 @@ Replace:
     ```
 
 After running these commands, you should see output indicating that the services have started successfully. The `-D` flag keeps the services running in the foreground, so each command needs its own terminal.
-
-*TODO: Describe what this does*
 
 ## Step 6: Test your SLURM Cluster
 
