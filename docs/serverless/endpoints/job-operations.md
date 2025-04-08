@@ -211,6 +211,38 @@ curl -X POST https://api.runpod.ai/v2/{endpoint_id}/status/{job_id} \
 </TabItem>
 </Tabs>
 
+## Retry a Job
+
+To retry a job that has failed or encountered an error, send a POST request to `/retry/{job_id}` with the Job ID.
+The system will automatically requeue and retry the job.
+
+- You can retry any job with a `FAILED` or `TIMED_OUT` status, as long as the job hasn’t expired.
+- Jobs submitted via `/run` expire 30 minutes after completion.
+- Jobs submitted via `/runsync` expire 1 minute after completion.
+- When a job is retried, the previous output is removed. If you call `/status` right after the retry, it will return no output until the new job run is complete.
+
+<Tabs>
+  <TabItem value="curl" label="cURL" default>
+
+```bash
+curl -X POST https://api.runpod.ai/v2/{endpoint_id}/retry/{job_id} \
+    -H 'Authorization: Bearer ${API_KEY}'
+```
+
+    </TabItem>
+
+<TabItem value="output" label="Output">
+
+```json
+{
+  "id": "60902e6c-08a1-426e-9cb9-9eaec90f5e2b-u1",
+  "status": "IN_QUEUE"
+}
+```
+
+</TabItem>
+</Tabs>
+
 ## Stream results
 
 For jobs that produce output incrementally, the stream endpoint allows you to receive results as they are generated.
@@ -270,21 +302,27 @@ RunPod's Endpoints facilitate submitting jobs and retrieving outputs.
 Access these endpoints at: `https://api.runpod.ai/v2/{endpoint_id}/{operation}`
 
 - `/run`
+
   - 1000 requests per 10 seconds, 200 concurrent
 
 - `/runsync`
+
   - 2000 requests per 10 seconds, 400 concurrent
 
 - `/status`, `/status-sync`, `/stream`
+
   - 2000 requests per 10 seconds, 400 concurrent
 
 - `/cancel`
+
   - 100 requests per 10 seconds, 20 concurrent
 
 - `/purge-queue`
+
   - 2 requests per 10 seconds
 
 - `/openai/*`
+
   - 2000 requests per 10 seconds, 400 concurrent
 
 - `/requests`
