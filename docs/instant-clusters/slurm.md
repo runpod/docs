@@ -193,6 +193,3 @@ Now that you've successfully deployed and tested a SLURM cluster on RunPod, you 
 - **Scale your cluster** by adjusting the number of Pods to handle larger models or datasets.
 - **Try different frameworks** like [Axolotl](/instant-clusters/axolotl) for fine-tuning large language models.
 - **Optimize performance** by experimenting with different distributed training strategies.
-
-For more SLURM examples and configurations, check out:
-[SLURM Example Repository](https://github.com/pandyamarut/dotfiles/tree/master/runpod/slurm_example).
