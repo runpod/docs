@@ -107,4 +107,4 @@ Ready to get started with RunPod Serverless?
 - [Try a Quick Deploy model](/serverless/quick-deploys).
 - [Deploy large language models in minutes with vLLM](/serverless/workers/vllm/overview).
 - [Learn about handler functions](/serverless/workers/handlers/overview).
-- [Learn about Endpoints](/serverless/endpoints/overview).
+- [Learn about endpoints](/serverless/endpoints/overview).
