@@ -82,7 +82,7 @@ Deploy a pre-built endpoint specifically designed for large language models:
 
 ## How requests work
 
-When a user/client sends a request to your endpoint:
+When a user/client sends a request to your Serverless endpoint:
 
 1. If no workers are active, RunPod automatically starts one (cold start).
 2. The request is queued until a worker is available.
