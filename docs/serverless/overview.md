@@ -42,11 +42,29 @@ def handler(event):
     return result
 ```
 
-Learn more 
+## How requests work
+
+When a user/client sends a request to your Serverless endpoint:
+
+1. If no workers are active, RunPod automatically starts one (cold start).
+2. The request is queued until a worker is available.
+3. Your handler function processes the request.
+4. The result is returned to the user/client.
+5. Workers remain active for a period to handle additional requests.
+6. Idle workers eventually shut down if no new requests arrive.
+
+## Common use cases
+
+* **AI inference**: Deploy machine learning models that respond to user queries.
+* **Batch processing**: Process large datasets in parallel.
+* **API backends**: Create scalable APIs for computationally intensive operations.
+* **Media processing**: Handle video transcoding, image generation, or audio processing.
+* **Scientific computing**: Run simulations, data analysis, or other specialized workloads.
+
 
 ## Get started with Serverless
 
-RunPod offers multiple ways to get started with Serverless:
+There are multiple ways to get started with Serverless:
 
 ### Custom endpoints
 
@@ -79,25 +97,6 @@ Deploy a pre-built endpoint specifically designed for large language models:
 4. Deploy with with a single click.
 
 [Get started with vLLM endpoints →](/serverless/workers/vllm/get-started)
-
-## How requests work
-
-When a user/client sends a request to your Serverless endpoint:
-
-1. If no workers are active, RunPod automatically starts one (cold start).
-2. The request is queued until a worker is available.
-3. Your handler function processes the request.
-4. The result is returned to the user/client.
-5. Workers remain active for a period to handle additional requests.
-6. Idle workers eventually shut down if no new requests arrive.
-
-## Common use cases
-
-* **AI inference**: Deploy machine learning models that respond to user queries.
-* **Batch processing**: Process large datasets in parallel.
-* **API backends**: Create scalable APIs for computationally intensive operations.
-* **Media processing**: Handle video transcoding, image generation, or audio processing.
-* **Scientific computing**: Run simulations, data analysis, or other specialized workloads.
 
 ## Next Steps
 
