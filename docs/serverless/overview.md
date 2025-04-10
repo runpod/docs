@@ -28,7 +28,7 @@ An [endpoint](/serverless/endpoints/overview) is the access point for your Serve
 
 ### Handler functions
 
-[Handler functions](/serverless/handlers/overview) are the core of your Serverless application. These are the functions that process incoming requests and return results. They follow a simple pattern:
+[Handler functions](/serverless/workers/handlers/overview) are the core of your Serverless application. These are the functions that process incoming requests and return results. They follow a simple pattern:
 
 ```python
 def handler(event):
@@ -48,6 +48,16 @@ Learn more
 
 RunPod offers multiple ways to get started with Serverless:
 
+### Custom endpoints
+
+For complete control over your application logic:
+
+1. Write your own handler function in Python.
+2. Package it in a Docker container.
+3. Deploy it using the RunPod console.
+
+[Get started with custom endpoints →](/serverless/get-started)
+
 ### Quick Deploys
 
 [Quick Deploys](/serverless/quick-deploys) are the fastest way to deploy popular AI models with minimal configuration:
@@ -58,16 +68,6 @@ RunPod offers multiple ways to get started with Serverless:
 4. Deploy with a single click.
 
 [Get started with Quick Deploys →](/serverless/quick-deploys)
-
-### Custom endpoints
-
-For complete control over your application logic:
-
-1. Write your own handler function in Python.
-2. Package it in a Docker container.
-3. Deploy it using the RunPod console.
-
-[Get started with custom endpoints →](/serverless/get-started)
 
 ### vLLM endpoints
 
@@ -106,6 +106,5 @@ Ready to get started with RunPod Serverless?
 - [Deploy your first Serverless endpoint](/serverless/get-started).
 - [Try a Quick Deploy model](/serverless/quick-deploys).
 - [Deploy large language models in minutes with vLLM](/serverless/workers/vllm/overview).
-- [Learn more about the Serverless programming model](/serverless/architecture).
 - [Learn about handler functions](/serverless/workers/handlers/overview).
 - [Learn about Endpoints](/serverless/endpoints/overview).
