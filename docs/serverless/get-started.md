@@ -1,5 +1,5 @@
 ---
-title: "Create an endpoint"
+title: "Get started"
 sidebar_position: 2
 description: Create and deploy your first custom Serverless endpoint. Learn to create a handler, test it locally, build a Docker image, deploy an endpoint, and send requests with this step-by-step tutorial.
 ---
@@ -30,7 +30,7 @@ In this tutorial you'll learn how to:
 ## Requirements
 
 - You've created a RunPod account.
-- You have [Python 3.x](https://www.python.org/downloads/) and [Docker](https://docs.docker.com/get-started/get-docker/) installed on your local machine and configured for your command line.
+- You've installed [Python 3.x](https://www.python.org/downloads/) and [Docker](https://docs.docker.com/get-started/get-docker/) on your local machine and configured them for your command line.
 
 ## Step 1: Create a Python virtual environment
 
