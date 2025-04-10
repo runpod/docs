@@ -7,7 +7,7 @@ description: Create and deploy your first custom Serverless endpoint. Learn to c
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Create a custom Serverless endpoint
+# Get started with Serverless
 
 Learn how to create, deploy, and test your first custom Serverless endpoint.
 
@@ -234,7 +234,7 @@ When the workers have finished processing your request, you should see output on
 
 ## Next steps
 
-Nice job, you've successfully deployed and tested your first Serverless endpoint! 
+Congratulations, you've successfully deployed and tested your first Serverless endpoint!
 
 Now that you've learned the basics, you're ready to:
 

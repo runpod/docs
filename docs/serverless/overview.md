@@ -4,7 +4,7 @@ description: "Use Serverless to scale your machine learning workloads, with flex
 sidebar_position: 1
 ---
 
-## Serverless overview
+# Serverless overview
 
 RunPod Serverless is a cloud computing platform that lets you run AI models and compute-intensive workloads without managing servers. You only pay for the actual compute time you use, with no idle costs when your application isn't processing requests.
 
