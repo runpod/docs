@@ -1,7 +1,7 @@
 ---
-title: "Get started"
+title: "Create an endpoint"
 sidebar_position: 2
-description: Deploy your first custom Serverless endpoint. Learn to build a Docker image, deploying an endpoint, and sending requests with this comprehensive guide.
+description: Create and deploy your first custom Serverless endpoint. Learn to create a handler, test it locally, build a Docker image, deploy an endpoint, and send requests with this step-by-step tutorial.
 ---
 
 import Tabs from '@theme/Tabs';
@@ -19,7 +19,7 @@ For an even faster start, you can clone the [worker-basic](https://github.com/ru
 
 ## What you'll learn
 
-This tutorial will teach you how to:
+In this tutorial you'll learn how to:
 
 - Set up your development environment.
 - Create a handler file.
@@ -76,7 +76,7 @@ Create a file named `rp_handler.py` and add the following code:
 
 ```python title="rp_handler.py"
 import runpod
-import time
+import time  
 
 def handler(event):
     """
@@ -88,29 +88,44 @@ def handler(event):
     Returns:
         Any: The result to be returned to the client
     """
-    # Extract input data
-    input_data = event['input']
-    prompt = input_data.get('prompt')
-    seconds = input_data.get('seconds', 0)
-
-    # Simulate processing time
-    time.sleep(seconds)
     
-    # Convert the input string to upper case (this is where you should add your own logic)
-    result = prompt.upper() 
+    # Extract input data
+    print(f"Worker Start")
+    input = event['input']
+    
+    prompt = input.get('prompt')  
+    seconds = input.get('seconds', 0)  
 
-    return result
+    print(f"Received prompt: {prompt}")
+    print(f"Sleeping for {seconds} seconds...")
+    
+    # You can replace this sleep call with your Python function to generate images, text, or run any machine learning workload
+    time.sleep(seconds)  
+    
+    return prompt 
 
 # Start the Serverless function when the script is run
 if __name__ == '__main__':
-    runpod.serverless.start({'handler': handler})
+    runpod.serverless.start({'handler': handler })
 ```
 
-This is a bare-bones handler that will process a JSON `input` object and output a `prompt` string in uppercase characters.
+This is a bare-bones handler that processes a JSON object and outputs a `prompt` string contained in the `input` object. You can replace the `time.sleep(seconds)` call with your own Python code for generating images, text, or running any machine learning workload.
+
+## Step 3: Create a test input file
+
+You'll need to create an input file to properly test your handler locally. Create a file named `test_input.json` and add the following code:
+
+```json title="test_input.json"
+{
+    "input": {
+        "prompt": "Hey there!"
+    }
+}
+```
 
 ## Step 4: Test your handler locally
 
-Run your handler to verify it works correctly:
+Run your handler to verify that it works correctly:
 
 ```bash
 python rp_handler.py
@@ -121,13 +136,17 @@ You should see output similar to this:
 ```
 --- Starting Serverless Worker |  Version 1.7.9 ---
 INFO   | Using test_input.json as job input.
-DEBUG  | Retrieved local job: {'input': {'instruction': 'create a image', 'seconds': 15}, 'id': 'local_test'}
+DEBUG  | Retrieved local job: {'input': {'prompt': 'Hey there!'}, 'id': 'local_test'}
 INFO   | local_test | Started.
-DEBUG  | local_test | Handler output: created a image
-DEBUG  | local_test | run_job return: {'output': 'created a image'}
+Worker Start
+Received prompt: Hey there!
+Sleeping for 0 seconds...
+DEBUG  | local_test | Handler output: Hey there!
+DEBUG  | local_test | run_job return: {'output': 'Hey there!'}
 INFO   | Job local_test completed successfully.
-INFO   | Job result: {'output': 'created a image'}
+INFO   | Job result: {'output': 'Hey there!'}
 INFO   | Local testing complete, exiting.
+(venv) moking@Mos-MacBook-Pro-2 serverless-test % 
 ```
 
 ## Step 5: Create a Dockerfile
@@ -198,7 +217,7 @@ On the left you should see the default test request:
 }
 ```
 
-Leave the default input as-is and click **Run**. It will take some time for your workers to initialize.
+Leave the default input as is and click **Run**. It will take some time for your workers to initialize.
 
 When the workers have finished processing your request, you should see output on the right side of the page similar to this:
 
@@ -207,7 +226,7 @@ When the workers have finished processing your request, you should see output on
 "delayTime": 15088,
 "executionTime": 60,
 "id": "04f01223-4aa2-40df-bdab-37e5caa43cbe-u1",
-"output": "HELLO WORLD",
+"output": "Hello World",
 "status": "COMPLETED",
 "workerId": "uhbbfre73gqjwh"
 }
@@ -219,8 +238,8 @@ Nice job, you've successfully deployed and tested your first Serverless endpoint
 
 Now that you've learned the basics, you're ready to:
 
-- [Rapidly deploy large language models](/serverless/workers/vllm/get-started) from Hugging Face as Serverless endpoints.
-- [Manage your Serverless endpoints](/serverless/endpoints/manage-endpoints) using the web interface.
-- Learn how to create more advanced [handler functions](/serverless/workers/handlers/overview).
+- [Deploy large language models from Hugging Face as Serverless endpoints](/serverless/workers/vllm/get-started).
+- [Manage your Serverless endpoints  using the web interface.](/serverless/endpoints/manage-endpoints).
+- [Create more advanced handler functions](/serverless/workers/handlers/overview).
 - [Deploy your endpoints with GitHub](/serverless/github-integration).
-- Learn more about [local testing](/serverless/workers/development/local-testing).
+- [Learn more about local testing](/serverless/workers/development/local-testing).

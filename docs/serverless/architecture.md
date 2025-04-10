@@ -10,8 +10,6 @@ This page explains the overall architecture of the Serverless platform, and give
 
 Understanding the architecture and programming model of Serverless allows you to build efficient and scalable applications. The platform's flexible design supports a wide range of workloads, from simple API endpoints to complex AI inference and training services.
 
-By following the patterns and best practices outlined in this document, you can leverage the full power of Serverless to build high-performance, cost-effective, and scalable applications.
-
 ## Serverless programming model
 
 Serverless follows an event-driven programming model where your code responds to triggers (HTTP requests) and processes data without managing the underlying infrastructure. This section explains the key concepts and patterns for developing applications on Serverless.
@@ -55,8 +53,8 @@ if __name__ == "__main__":
 
 When your handler function is invoked, it receives an event object containing:
 
-- **input**: The input data provided by the caller
-- **id**: A unique identifier for the request
+- **input**: The input data provided by the caller.
+- **id**: A unique identifier for the request.
 
 The `input` field contains the data sent to your endpoint. You have full control over its structure, but it should be JSON-serializable.
 
@@ -66,31 +64,8 @@ Your handler function can return any JSON-serializable data, which will be deliv
 
 - Simple values (strings, numbers, booleans).
 - Complex objects (dictionaries, lists).
-- Stream results using Python generators.
-- File data using base64 encoding.
-
-### Streaming results
-
-For long-running operations, you can stream partial results back to the caller:
-
-```python
-import runpod
-
-def handler(event):
-    # For large operations that take time, you can yield partial results
-    for i in range(10):
-        # Process some data
-        partial_result = {"progress": (i + 1) * 10, "data": f"Chunk {i}"}
-        
-        # Yield intermediate results
-        yield partial_result
-    
-    # Return the final result
-    return {"status": "complete"}
-
-if __name__ == "__main__":
-    runpod.serverless.start({"handler": handler})
-```
+- [Streaming results](/sdks/python/endpoints#streaming).
+- File data (using base64 encoding).
 
 ## Serverless architecture
 
@@ -98,20 +73,19 @@ Serverless is built on a distributed architecture designed for performance, scal
 
 ### Key components
 
-1. **Serverless endpoints**: The REST API endpoints that serve your application and receive client requests.
-2. **Serverless workers**: Container instances that execute your code when triggered by requests.
+1. **Endpoints**: The REST API endpoints that serve your application and receive client requests.
+2. **Workers**: Container instances that execute your code when triggered by requests.
 3. **Queue system**: Buffers requests when workers are busy to ensure reliable job processing.
-4. **Job manager**: Handles job lifecycle including execution, monitoring, and result delivery.
-5. **Storage system**: Manages temporary storage for request/response data (retained for 30 minutes).
-6. **Network volumes**: Optional persistent storage that can be shared across workers.
+
 
 ### Request flow
 
 1. **Request submission**: A client sends a request to the RunPod API (`https://api.runpod.ai/v2/{endpoint_id}/{operation}`).
-2. **Request queuing**: If no workers are available, the request is placed in a queue.
-3. **Worker assignment**: An available worker is assigned to process the request.
-4. **Code execution**: Your handler function executes in the worker container.
-5. **Result delivery**: The result is returned to the client (synchronously or asynchronously).
+2. **Request queue**: If not workers are available, the request is placed in a queue.
+3. **Cold start**: RunPod automatically start workers as needed.
+4. **Worker assignment**: An available worker is assigned to process the request.
+5. **Code execution**: Your handler function executes in the worker container.
+6. **Result delivery**: The result is returned to the client (synchronously or asynchronously).
 
 ```plaintext
 ┌─────────┐     ┌─────────────┐     ┌──────────────┐     ┌─────────┐
