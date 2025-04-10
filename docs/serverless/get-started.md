@@ -29,7 +29,7 @@ In this tutorial you'll learn how to:
 
 ## Requirements
 
-- You've created a RunPod account.
+- You've [created a RunPod account](/get-started/manage-accounts).
 - You've installed [Python 3.x](https://www.python.org/downloads/) and [Docker](https://docs.docker.com/get-started/get-docker/) on your local machine and configured them for your command line.
 
 ## Step 1: Create a Python virtual environment
@@ -232,9 +232,9 @@ When the workers have finished processing your request, you should see output on
 }
 ```
 
-## Next steps
-
 Congratulations, you've successfully deployed and tested your first Serverless endpoint!
+
+## Next steps
 
 Now that you've learned the basics, you're ready to:
 
