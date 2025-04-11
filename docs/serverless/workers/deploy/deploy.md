@@ -1,5 +1,5 @@
 ---
-title: "Package and deploy an image"
+title: "Deploy a worker image"
 description: "Package your Handler Function into a Docker image for scalable Serverless Worker deployment, leveraging Dockerfiles and Configurable Endpoints for efficient deployment. Learn how to build, push, and integrate your image for continuous integration and testing."
 sidebar_position: 2
 ---

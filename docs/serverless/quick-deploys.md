@@ -1,13 +1,8 @@
 ---
 title: Quick Deploys
-id: quick-deploys
 sidebar_position: 2
-description: "Quickly deploy custom Endpoints of popular models with minimal configuration through the web interface, following a simple 5-step process. Customize your deployments and utilize CI/CD features with RunPod's GitHub repositories and Handler Functions."
+description: "Quickly deploy Serverless endpoints using popular AI models with minimal configuration through the web interface, following a simple 5-step process. Customize your deployments using RunPod's GitHub repositories and Handler Functions."
 ---
-
-Quick Deploys lets you deploy custom Endpoints of popular models with minimal configuration.
-
-You can find [Quick Deploys](https://www.runpod.io/console/serverless) and their descriptions in the Web interface.
 
 ## How to do I get started with Quick Deploys?
 
@@ -22,7 +17,7 @@ You can get started by following the steps below:
 
 Your Endpoint Id is now created and you can use it in your application.
 
-## Customizing your Functions
+## Customize your AI endpoint
 
 To customize AI Endpoints, visit the [RunPod GitHub repositories](https://github.com/runpod-workers).
 Here, you can fork the programming and compute model templates.
