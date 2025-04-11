@@ -104,8 +104,8 @@ Deploy a pre-built endpoint specifically designed for large language models:
 
 Ready to get started with RunPod Serverless?
 
-- [Deploy your first Serverless endpoint](/serverless/get-started).
-- [Try a Quick Deploy model](/serverless/quick-deploys).
-- [Deploy large language models in minutes with vLLM](/serverless/workers/vllm/overview).
-- [Learn about handler functions](/serverless/workers/handlers/overview).
-- [Learn about endpoints](/serverless/endpoints/overview).
+- [Deploy your first Serverless endpoint.](/serverless/get-started)
+- [Try a Quick Deploy model.](/serverless/quick-deploys)
+- [Deploy large language models in minutes with vLLM.](/serverless/workers/vllm/overview)
+- [Learn about handler functions.](/serverless/workers/handlers/overview)
+- [Learn about endpoints.](/serverless/endpoints/overview)
