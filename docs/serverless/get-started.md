@@ -223,12 +223,12 @@ When the workers have finished processing your request, you should see output on
 
 ```json
 {
-"delayTime": 15088,
-"executionTime": 60,
-"id": "04f01223-4aa2-40df-bdab-37e5caa43cbe-u1",
-"output": "Hello World",
-"status": "COMPLETED",
-"workerId": "uhbbfre73gqjwh"
+    "delayTime": 15088,
+    "executionTime": 60,
+    "id": "04f01223-4aa2-40df-bdab-37e5caa43cbe-u1",
+    "output": "Hello World",
+    "status": "COMPLETED",
+    "workerId": "uhbbfre73gqjwh"
 }
 ```
 
