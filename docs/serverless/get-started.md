@@ -239,7 +239,7 @@ Congratulations, you've successfully deployed and tested your first Serverless e
 Now that you've learned the basics, you're ready to:
 
 - [Deploy large language models from Hugging Face as Serverless endpoints](/serverless/workers/vllm/get-started).
-- [Manage your Serverless endpoints  using the web interface.](/serverless/endpoints/manage-endpoints).
+- [Manage your Serverless endpoints  using the web interface](/serverless/endpoints/manage-endpoints).
 - [Create more advanced handler functions](/serverless/workers/handlers/overview).
 - [Deploy your endpoints with GitHub](/serverless/github-integration).
 - [Learn more about local testing](/serverless/workers/development/local-testing).
