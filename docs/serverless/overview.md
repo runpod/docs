@@ -30,16 +30,20 @@ An [endpoint](/serverless/endpoints/overview) is the access point for your Serve
 
 [Handler functions](/serverless/workers/handlers/overview) are the core of your Serverless application. These are the functions that process incoming requests and return results. They follow a simple pattern:
 
-```python
+```python # rp_handler.py
+import runpod  # Required
+
 def handler(event):
     # Extract input data
     input_data = event["input"]
     
-    # Process the input
+    # Process the input (replace this with your own code)
     result = process_data(input_data)
     
     # Return the result
     return result
+
+runpod.serverless.start({"handler": handler})  # Required
 ```
 
 ## How requests work
