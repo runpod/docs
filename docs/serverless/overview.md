@@ -53,6 +53,8 @@ When a user/client sends a request to your Serverless endpoint:
 5. Workers remain active for a period to handle additional requests.
 6. Idle workers eventually shut down if no new requests arrive.
 
+<img src="/img/docs/serverless-request-flow.png" width="800" alt="A diagram demonstrating the Serverless endpoint request flow"/>
+
 ## Common use cases
 
 * **AI inference**: Deploy machine learning models that respond to user queries.
