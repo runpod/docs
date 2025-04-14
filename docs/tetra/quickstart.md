@@ -38,7 +38,7 @@ First, let's install Tetra and set up your virtual environment:
 
 1. Run this command to clone the Tetra repository:
     ```bash
-    git clone tetra-rp && cd tetra-rp
+    git clone git clone https://github.com/runpod/tetra-rp.git && cd tetra-rp
     ```
 
 2. Install dependencies with poetry:
@@ -224,7 +224,7 @@ GPU device count: 1
 GPU device name: NVIDIA GeForce RTX 4090
 ```
 
-## 9. Understand what's happening
+## Step 9: Understand what's happening
 
 When you run this script:
 
@@ -238,23 +238,24 @@ When you run this script:
 
 ## Step 10: Run multiple operations in parallel
 
-Now let's see how easy it is to run multiple remote operations in paralell. First, replace the `main` function with this code:
+Now you'll see how easy it is to run multiple remote operations in paralell. First, replace your `main` function with this code:
 
 ```python
 async def main():
     # Run multiple matrix operations in parallel
     print("Starting large matrix operations on GPU...")
-    # Define different matrix sizes to test
-    sizes = [500, 1000, 2000]
     
     # Run all matrix operations in parallel
-    results = await asyncio.gather(*[
-        tetra_matrix_operations(size) for size in sizes
-    ])
+    results = await asyncio.gather(
+        tetra_matrix_operations(500),
+        tetra_matrix_operations(1000),
+        tetra_matrix_operations(2000)
+    )
 
+    print("\nMatrix operations results:")
     # Print the results for each matrix size
-    for size, result in zip(sizes, results):
-        print(f"\nMatrix size: {size}x{size}")
+    for r in results:
+        print(f"\nMatrix size: {result['matrix_size']}x{result['matrix_size']}")
         print(f"Result shape: {result['result_shape']}")
         print(f"Result mean: {result['result_mean']:.4f}")
         print(f"Result standard deviation: {result['result_std']:.4f}")
@@ -301,11 +302,11 @@ Result mean: 500.1321
 Result standard deviation: 9.8879
 ```
 
-This demonstrates how Tetra can efficiently handle multiple GPU operations simultaneously.
+That's all it takes to run multiple operations in parallel!
 
 ## Next steps
 
-Nicely done, you've successfuly used Tetra to seamlessly run GPU workloads using RunPod resources!
+Nicely done, you've successfuly used Tetra to seamlessly run a GPU workload using RunPod resources!
 
 Now that you've learned the basics of Tetra, you can:
 

@@ -6,19 +6,31 @@ sidebar_position: 1
 
 # Tetra overview
 
-Tetra is a Python SDK that streamlines the development and deployment of multi-model AI workflows on RunPod's [Serverless](/serverless/overview) infrastructure. It provides an abstraction layer that enables you to define, execute, and monitor sophisticated AI pipelines through a declarative interface, eliminating infrastructure overhead.
+Tetra is a Python SDK that streamlines the development and deployment of AI workflows on RunPod's [Serverless](/serverless/overview) infrastructure. It provides an abstraction layer that enables you to define, execute, and monitor sophisticated AI pipelines through a declarative interface, eliminating infrastructure overhead.
 
 ## Why use Tetra?
 
-* **Simplified workflow development**: Define AI pipelines in pure Python with minimal configuration, focusing on your logic rather than infrastructure details.
-* **Optimized resource utilization**: Specify hardware requirements at the function level for precise control over GPU and CPU allocation.
-* **Seamless deployment**: Automatically handle the RunPod Serverless infrastructure setup, worker communication, and data transfer.
-* **Reduced development overhead**: Skip the tedious process of writing application code, building Docker containers, and managing endpoints for each worker.
-* **Intuitive programming model**: Use familiar Python decorators to mark functions for remote execution.
+Tetra provides several advantages over vanilla Serverless:
+
+- **Simplified workflow development**: Define AI pipelines in pure Python with minimal configuration, focusing on your logic rather than infrastructure details.
+- **Optimized resource utilization**: Specify hardware requirements at the function level for precise control over GPU and CPU allocation.
+- **Seamless deployment**: Tetra automatically handles RunPod Serverless infrastructure setup, worker communication, and data transfer.
+- **Reduced development overhead**: Skip the tedious process of writing application code, building Docker containers, and managing endpoints for each worker.
+- **Intuitive programming model**: Use familiar Python decorators to mark functions for remote execution.
+
+## Get started with Tetra
+
+You can get started with Tetra in minutes by following this [step-by-step tutorial](/tetra/quickstart).
+
+You can also start by cloning the tetra-rp repository and running the examples inside:
+
+```
+git clone https://github.com/runpod/tetra-rp.git
+```
 
 ## Key concepts
 
-### Resource configurations
+### Resource configuration
 
 Tetra allows explicit specification of hardware requirements at the function level through the `ServerlessResource` object. This provides granular control over:
 
@@ -141,62 +153,15 @@ When you execute a Tetra workflow:
 
 ## Common use cases
 
-* **Multi-modal AI pipelines**: Combine text, image, and audio models in unified workflows.
-* **Distributed model training**: Scale model training across multiple GPU workers.
-* **AI research experimentation**: Quickly prototype and test complex model combinations.
-* **Production inference systems**: Deploy sophisticated, multi-stage inference pipelines.
-* **Data processing workflows**: Process large datasets using distributed resources.
-
-## Tetra vs. traditional RunPod Serverless
-
-| Aspect | Traditional Serverless | Tetra |
-|--------|------------------------|-------|
-| Development Process | Write handler, build Docker, create endpoint | Write Python functions with decorators |
-| Infrastructure Management | Manual endpoint configuration | Automatic resource provisioning |
-| Worker Communication | Manage manually | Automatic data transfer between functions |
-| Development Overhead | High (Docker, endpoints per worker) | Low (pure Python development) |
-| Deployment Speed | Multiple manual steps | Automatic deployment from code |
-| Resource Control | Endpoint-level | Function-level granularity |
-
-## Get started with Tetra
-
-Getting started with Tetra is straightforward:
-
-1. Install Tetra and set up your environment:
-   ```bash
-   pip install tetra
-   ```
-
-2. Create your first remote function:
-   ```python
-   from tetra import remote, ServerlessResource
-   
-   resource = ServerlessResource(
-       templateId="your_template_id",
-       name="my-first-worker"
-   )
-   
-   @remote(resource_config=resource)
-   def hello_tetra(name):
-       return f"Hello, {name} from Tetra!"
-   
-   async def main():
-       result = await hello_tetra("World")
-       print(result)
-   
-   if __name__ == "__main__":
-       import asyncio
-       asyncio.run(main())
-   ```
-
-3. Run your code and watch Tetra handle the infrastructure automatically.
+- **Multi-modal AI pipelines**: Combine text, image, and audio models in unified workflows.
+- **Distributed model training**: Scale model training across multiple GPU workers.
+- **AI research experimentation**: Quickly prototype and test complex model combinations.
+- **Production inference systems**: Deploy sophisticated, multi-stage inference pipelines.
+- **Data processing workflows**: Process large datasets using distributed resources.
 
 ## Next steps
 
 Ready to streamline your AI workflow development with Tetra?
 
 - [Follow the quickstart guide to deploy your first workflow.](/tetra/quickstart)
-- [Learn about advanced Tetra configurations and resource optimization.](/tetra/advanced-config)
-- [Explore example workflows for common AI use cases.](/tetra/examples)
-- [Read the complete API reference.](/docs/tetra/api-reference)
-- [Join the Tetra community and get support.](/docs/tetra/community)
+- [Clone the tetra-rp repository and test the workloads in the examples folder.](https://github.com/runpod/tetra-rp)
