@@ -139,8 +139,6 @@ When you execute a Tetra workflow:
    - Results are returned to your local environment.
 4. Data flows between functions according to your workflow definition.
 
-<img src="https://www.runpod.io/blog-content/tetra-workflow.png" width="800" alt="A diagram showing the Tetra workflow execution process"/>
-
 ## Common use cases
 
 * **Multi-modal AI pipelines**: Combine text, image, and audio models in unified workflows.
