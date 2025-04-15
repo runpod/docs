@@ -36,17 +36,20 @@ Tetra lets you specificy hardware requirements at the function level through the
 - Worker scaling limits.
 - Template selection.
 
+For example:
+
 ```python
 from tetra import ServerlessResource
 
 # Configure a GPU endpoint
 gpu_config = ServerlessResource(
     templateId="abc123",  # GPU template ID
-    gpuIds="any",
-    workersMax=5, # Scale up to 5 workers
+    gpuIds="any", # Use any available GPU
+    workersMax=5, # Scales up to 5 workers
     name="parallel-processor" # Name of the endpoint that will be created or used
 )
 
+# Configure a CPU endpoint
 cpu_resource = ServerlessResource(
     templateId="def456",  # CPU template ID
     workersMax=1 
