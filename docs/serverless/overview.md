@@ -107,42 +107,6 @@ When a user/client sends a request to your Serverless endpoint:
 * **Media processing**: Handle video transcoding, image generation, or audio processing.
 * **Scientific computing**: Run simulations, data analysis, or other specialized workloads.
 
-## Get started with Serverless
-
-There are multiple ways to get started with Serverless:
-
-### Quick Deploys
-
-[Quick Deploys](/serverless/quick-deploys) are the fastest way to deploy popular AI models with minimal configuration:
-
-1. Go to the [Serverless page](https://www.runpod.io/console/serverless) in the RunPod console.
-2. Select a Quick Deploy from the menu and click **configure**.
-3. Select your GPU type and worker settings.
-4. Deploy with a single click.
-
-[Get started with Quick Deploys →](/serverless/quick-deploys)
-
-### vLLM endpoints
-
-Deploy a pre-built endpoint specifically designed for large language models:
-
-1. Use pre-built Docker images optimized for LLMs.
-2. Choose any [Hugging Face](https://huggingface.co/models) model.
-3. Configure with simple environment variables.
-4. Deploy with with a single click.
-
-[Get started with vLLM endpoints →](/serverless/workers/vllm/get-started)
-
-### Custom endpoints
-
-For complete control over your application logic:
-
-1. Write your own handler function in Python.
-2. Package it in a Docker container.
-3. Deploy it using the RunPod console.
-
-[Get started with custom endpoints →](/serverless/get-started)
-
 ## Next Steps
 
 Ready to get started with RunPod Serverless?
