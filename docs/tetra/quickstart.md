@@ -1,6 +1,6 @@
 ---
 title: Quickstart
-description: ""
+description: "Learn how to set up your Tetra development environment to seamlessly run AI workloads using RunPod Serverless resources."
 sidebar_position: 2
 ---
 
@@ -15,6 +15,7 @@ Tetra is a Python SDK that simplifies the deployment AI workflows on RunPod by a
 In this tutorial you'll learn how to:
 
 - Set up your development environment for Tetra.
+- Configure a [Serverless endpoint](/serverless/endpoints/overview) using a `ServerlessResource` object.
 - Create and define remote functions with the `@remote` decorator.
 - Deploy a GPU-based Tetra workload using RunPod resources.
 - Pass data between your local environment and remote workers.
@@ -28,20 +29,20 @@ In this tutorial you'll learn how to:
 
 :::note
 
-If you have a later version of Python installed, you can use [penv](https://github.com/pyenv/pyenv) to switch to an earlier one.
+If you have a later version of Python installed (> 3.12), you can use [pyenv](https://github.com/pyenv/pyenv) to switch to an earlier one.
 
 :::
 
 ## Step 1: Install Tetra
 
-First, let's install Tetra and set up your virtual environment:
+First, let's clone the Tetra repo and set up your virtual environment:
 
 1. Run this command to clone the Tetra repository:
     ```bash
-    git clone git clone https://github.com/runpod/tetra-rp.git && cd tetra-rp
+    git clone https://github.com/runpod/tetra-rp.git && cd tetra-rp
     ```
 
-2. Install dependencies with poetry:
+2. Install dependencies with Poetry:
     ```bash
     poetry install
     ```
@@ -55,15 +56,27 @@ First, let's install Tetra and set up your virtual environment:
 
 You'll need to add your [RunPod API key](/get-started/api-keys) to your development environment before you can use Tetra to run your workloads.
 
-Run this command to create a `.env` file in your project root, replacing [YOUR_API_KEY] with your API key:
+Run this command to create a `.env` file, replacing [YOUR_API_KEY] with your RunPod API key:
 
 ```bash
 touch .env && echo "RUNPOD_API_KEY=[YOUR_API_KEY]" > .env
 ```
 
+:::note
+
+You can create this in your project's root directory or in the `/examples` folder. Just make sure your `.env` file is in the same folder as the Python file you create in the next step.
+
+:::
+
 ## Step 3: Create your project file
 
-Now you can start building your Tetra project. Create a new file called `matrix_gpu_example.py` in the same folder as the `.env` file you just created, and open it in your code editor. You'll build this file step-by-step.
+Now you're ready to start building your Tetra project. Create a new file called `matrix_operations.py` in the same directory as your `.env` file:
+
+```bash
+touch matrix_operations.py
+```
+
+Open this file in your preferred code editor. We'll walk through building it out step-by-step, implementing a simple matrix multiplication example that demonstrates Tetra's remote execution and parallel processing capabilities.
 
 ## Step 4: Add imports and load .env file
 
@@ -84,7 +97,7 @@ This imports:
 - `dotenv`: Helps load environment variables from your `.env` file, including your RunPod API key.
 - `remote` and `ServerlessResource`: The core Tetra components you'll use to define remote functions and their resource requirements.
 
-The `load_dotenv()` call reads your API key from the `.env` file and makes it available to Tetra.
+`load_dotenv()` reads your API key from the `.env` file and makes it available to Tetra.
 
 ## Step 5: Add Serverless endpoint configuration
 
@@ -93,8 +106,8 @@ Next, let's define the Serverless endpoint configuration for our Tetra workload:
 ```python
 # Configuration for a Serverless endpoint using GPU workers
 gpu_config = ServerlessResource(
-    templateId="[YOUR_TEMPLATE_ID]",  # Replace with your template ID
-    gpuIds="any",  # Use any available GPU
+    templateId="[YOUR_TEMPLATE_ID]", # Replace with your template ID
+    gpuIds="any", # Use any available GPU
     workersMax=1,
     name="tetra_gpu", 
 )
@@ -105,7 +118,9 @@ This `ServerlessResource` object defines:
 - `templateId`: The RunPod template ID to use (you'll replace this with your actual template ID).
 - `gpuIds="any"`: The GPU IDs that can be used by workers on this endpoint. This configuration allows the endpoint to use any GPUs that are available. You can also replace `any` with a comma-separated list of [GPU IDs](/references/gpu-types).
 - `workersMax=1`: Sets the maximum number of worker instances to 1.
-- `name="tetra_gpu"`: The name of the endpoint that will be created and used on the RunPod web interface. If an endpoint of this name already exists, Tetra will reuse it instead of creating a new one.
+- `name="tetra_gpu"`: The name of the endpoint that will be created/used on the RunPod web interface.
+
+If you run a Tetra function that uses an identical `ServerlessResource` configuration to a prior run, RunPod will reuse your existing endpoint rather than creating a new one. However, if any configuration values have changed (not just the `name` parameter), a new endpoint will be created to match your updated requirements.
 
 ## Step 6: Define your remote function
 
@@ -116,15 +131,14 @@ Now, let's define the function that will run on the GPU worker:
     resource_config=gpu_config,
     dependencies=["numpy", "torch"]
 )
-def tetra_matrix_operations(size=1000):
+def tetra_matrix_operations(size):
     """Perform large matrix operations using NumPy and check GPU availability."""
     import numpy as np
     import torch
     
-    # Check if GPU is available
-    gpu_available = torch.cuda.is_available()
-    device_count = torch.cuda.device_count() if gpu_available else 0
-    device_name = torch.cuda.get_device_name(0) if gpu_available else "N/A"
+    # Get GPU count and name
+    device_count = torch.cuda.device_count()
+    device_name = torch.cuda.get_device_name(0)
     
     # Create large random matrices
     A = np.random.rand(size, size)
@@ -138,7 +152,6 @@ def tetra_matrix_operations(size=1000):
         "result_shape": C.shape,
         "result_mean": float(np.mean(C)),
         "result_std": float(np.std(C)),
-        "gpu_available": gpu_available,
         "device_count": device_count,
         "device_name": device_name
     }
@@ -151,7 +164,7 @@ Let's break down this function:
   - `dependencies=["numpy", "torch"]`: Lists the Python packages that must be installed on the remote worker.
 
 - The `tetra_matrix_operations` function itself:
-  - Checks if a GPU is available using PyTorch's CUDA utilities.
+  - Gets GPU details using PyTorch's CUDA utilities.
   - Creates two large random matrices using NumPy.
   - Performs matrix multiplication.
   - Returns statistics about the result and information about the GPU.
@@ -160,7 +173,7 @@ Notice that we import `numpy` and `torch` inside the function, not at the top of
 
 ## Step 7: Add the main function
 
-Finally, add the main function to execute your GPU workload:
+Finally, add this `main` function to execute your GPU workload:
 
 ```python
 async def main():
@@ -185,21 +198,28 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-This main function:
-- Calls the remote function with `await`, which runs it asynchronously.
+This `main` function:
+
+- Calls the remote function with `await`, which runs it asynchronously on RunPod's infrastructure.
 - Prints the results of the matrix operations.
 - Displays information about the GPU that was used.
 
-The `asyncio.run(main())` line runs the asynchronous main function.
+The `asyncio.run(main())` line is Python's standard way to execute an asynchronous `main` function from synchronous code. It creates an event loop, runs the `main function until completion, and then closes the loop.
 
-All code outside of the `@remote` decorated function runs on your local machine. This main function serves as the interface between your local environment and RunPod's infrastructure, allowing you to send input data to remote functions and process their returned results. The `await` keyword handles the asynchronous communication, making the remote execution feel seamless.
+All code outside of the `@remote` decorated function runs on your local machine. The `main` function acts as a bridge between your local environment and RunPod's cloud infrastructure, allowing you to:
+
+- Send input data to remote functions (in this case, the matrix size parameter)
+- Wait for remote execution to complete without blocking your local process
+- Process the returned results locally once they're available
+
+The `await` keyword is crucial here—it pauses execution of the `main` function until the remote operation completes, but doesn't block the entire Python process. This asynchronous pattern enables efficient resource utilization while maintaining a simple, sequential coding style.
 
 ## Step 8: Run your GPU example
 
 Now you're ready to run the example:
 
 ```bash
-python matrix_gpu_example.py
+python matrix_operations.py
 ```
 
 You should see output similar to this:
@@ -224,6 +244,22 @@ GPU device count: 1
 GPU device name: NVIDIA GeForce RTX 4090
 ```
 
+:::tip
+
+If you're having trouble running your code due to authentication issues:
+1. Verify your `.env` file is in the same directory as your `matrix_operations.py` file.
+2. Check that the API key in your `.env` file is correct and properly formatted.
+3. Alternatively, you can set the API key directly in your terminal with:
+   ```bash
+   export RUNPOD_API_KEY=[YOUR_API_KEY]
+   ```
+4. For Windows users:
+   ```cmd
+   set RUNPOD_API_KEY=[YOUR_API_KEY]
+   ```
+
+:::
+
 ## Step 9: Understand what's happening
 
 When you run this script:
@@ -232,13 +268,13 @@ When you run this script:
 2. It installs the required dependencies (NumPy and PyTorch) on the worker.
 3. Your `tetra_matrix_operations` function runs on the remote worker.
 4. The function creates and multiplies large matrices, then calculates statistics.
-5. It also checks for GPU availability using PyTorch.
-6. The results are returned to your local environment.
-7. Your main function displays those results.
+5. Your local `main` function receives these results and displays them in your terminal.
 
 ## Step 10: Run multiple operations in parallel
 
-Now you'll see how easy it is to run multiple remote operations in paralell. First, replace your `main` function with this code:
+Now let's see how easy it is to run multiple remote operations in paralell using Tetra.
+
+First, replace your `main` function with this code:
 
 ```python
 async def main():
@@ -254,26 +290,22 @@ async def main():
 
     print("\nMatrix operations results:")
     # Print the results for each matrix size
-    for r in results:
+    for result in results:
         print(f"\nMatrix size: {result['matrix_size']}x{result['matrix_size']}")
         print(f"Result shape: {result['result_shape']}")
         print(f"Result mean: {result['result_mean']:.4f}")
         print(f"Result standard deviation: {result['result_std']:.4f}")
-    
-    # Print GPU information (using the first result since it's the same for all)
-    print("\nGPU Information:")
-    if results[0]['gpu_available']:
-        print(f"GPU device count: {results[0]['device_count']}")
-        print(f"GPU device name: {results[0]['device_name']}")
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Now you're ready to run the example again:
+This new `main` function demonstrates Tetra's ability to run multiple operations in parallel using `asyncio.gather()`. Instead of running one matrix operation at a time, we're now launching three operations with different matrix sizes (500, 1000, and 2000) simultaneously. This parallel execution significantly improves efficiency when you have multiple independent tasks that can run concurrently, making better use of available GPU resources.
+
+Try running the example again:
 
 ```bash
-python matrix_gpu_example.py
+python matrix_operations.py
 ```
 
 You should now see results for all three matrix sizes after the operations have completed:
@@ -301,8 +333,6 @@ Result shape: (2000, 2000)
 Result mean: 500.1321
 Result standard deviation: 9.8879
 ```
-
-That's all it takes to run multiple operations in parallel!
 
 ## Next steps
 

@@ -1,6 +1,6 @@
 ---
 title: Overview
-description: ""
+description: "Tetra is a Python SDK that streamlines the development and deployment of AI workflows on RunPod's Serverless infrastructure."
 sidebar_position: 1
 ---
 
@@ -38,8 +38,6 @@ Tetra allows explicit specification of hardware requirements at the function lev
 * Worker scaling limits
 * Template selection
 * Memory requirements
-
-CPU example:
 
 ```python
 from tetra import ServerlessResource
