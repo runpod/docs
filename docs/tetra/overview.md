@@ -30,7 +30,7 @@ Tetra provides several advantages over vanilla Serverless:
 
 ### Resource configuration
 
-Tetra lets you specificy hardware requirements at the function level through the `ServerlessResource` object. This provides granular control over:
+Tetra lets you specify hardware requirements at the function level through the `ServerlessResource` object. This provides granular control over:
 
 - GPU/CPU allocation.
 - Worker scaling limits.
@@ -46,13 +46,13 @@ gpu_config = ServerlessResource(
     templateId="abc123",  # GPU template ID
     gpuIds="any", # Use any available GPU
     workersMax=5, # Scales up to 5 workers
-    name="parallel-processor" # Name of the endpoint that will be created or used
+    name="parallel-processor", # Name of the endpoint that will be created or used
 )
 
 # Configure a CPU endpoint
 cpu_resource = ServerlessResource(
     templateId="def456",  # CPU template ID
-    workersMax=1 
+    workersMax=1 ,
     name="data-processor", # Name of the endpoint that will be created or used
 )
 ```
@@ -74,7 +74,7 @@ def process_image(image_data):
     return results
 ```
 
-### Transfer data between RunPod and your local machine
+### Remote/local data transfer
 
 Tetra makes it easy to pass data between your local environment and RunPod's infrastructure. The remote function can accept any serializable Python objects as input and return them as output:
 

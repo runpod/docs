@@ -190,9 +190,8 @@ async def main():
     
     # Print GPU information
     print("\nGPU Information:")
-    if result['gpu_available']:
-        print(f"GPU device count: {result['device_count']}")
-        print(f"GPU device name: {result['device_name']}")
+    print(f"GPU device count: {result['device_count']}")
+    print(f"GPU device name: {result['device_name']}")
 
 if __name__ == "__main__":
     asyncio.run(main())
@@ -272,7 +271,7 @@ When you run this script:
 
 ## Step 10: Run multiple operations in parallel
 
-Now let's see how easy it is to run multiple remote operations in paralell using Tetra.
+Now let's see how easy it is to run multiple remote operations in parallel using Tetra.
 
 First, replace your `main` function with this code:
 
