@@ -22,7 +22,7 @@ RunPod Serverless offers three ways to deploy your workloads, each designed for 
 
 ### 1. Quick Deploys
 
-**Best for**: Getting popular AI models running quickly with minimal setup
+**Best for**: Getting popular AI models running quickly with minimal setup.
 
 Quick Deploys are pre-configured templates for popular AI models that you can deploy with just a few clicks:
 * No coding required
