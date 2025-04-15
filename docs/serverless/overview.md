@@ -16,6 +16,46 @@ RunPod Serverless is a cloud computing platform that lets you run AI models and 
 * **Cost efficiency**: Pay only for what you use, with per-second billing and no costs when idle.
 * **Fast deployment**: Get your code running in the cloud in minutes with minimal configuration.
 
+## Deployment options
+
+RunPod Serverless offers three ways to deploy your workloads, each designed for different use cases:
+
+### 1. Quick Deploys
+
+**Best for**: Getting popular AI models running quickly with minimal setup
+
+Quick Deploys are pre-configured templates for popular AI models that you can deploy with just a few clicks:
+* No coding required
+* Pre-optimized configurations
+* Wide selection of popular AI models
+* Minimal technical knowledge needed
+
+[Get started with Quick Deploys →](/serverless/quick-deploys)
+
+### 2. vLLM endpoints
+
+**Best for**: Deploying and serving Large Language Models (LLMs)
+
+vLLM endpoints are specifically optimized for running LLMs:
+* Support for any Hugging Face model
+* Optimized for LLM inference
+* Simple configuration via environment variables
+* High-performance serving with vLLM
+
+[Get started with vLLM endpoints →](/serverless/workers/vllm/get-started)
+
+### 3. Custom endpoints
+
+**Best for**: Running custom code or specialized AI workloads
+
+Custom endpoints give you complete control over your application:
+* Write your own Python code
+* Package in Docker containers
+* Full flexibility for any use case
+* Custom processing logic
+
+[Get started with custom endpoints →](/serverless/get-started)
+
 ## Key concepts
 
 ### Endpoints
@@ -67,20 +107,9 @@ When a user/client sends a request to your Serverless endpoint:
 * **Media processing**: Handle video transcoding, image generation, or audio processing.
 * **Scientific computing**: Run simulations, data analysis, or other specialized workloads.
 
-
 ## Get started with Serverless
 
 There are multiple ways to get started with Serverless:
-
-### Custom endpoints
-
-For complete control over your application logic:
-
-1. Write your own handler function in Python.
-2. Package it in a Docker container.
-3. Deploy it using the RunPod console.
-
-[Get started with custom endpoints →](/serverless/get-started)
 
 ### Quick Deploys
 
@@ -103,6 +132,16 @@ Deploy a pre-built endpoint specifically designed for large language models:
 4. Deploy with with a single click.
 
 [Get started with vLLM endpoints →](/serverless/workers/vllm/get-started)
+
+### Custom endpoints
+
+For complete control over your application logic:
+
+1. Write your own handler function in Python.
+2. Package it in a Docker container.
+3. Deploy it using the RunPod console.
+
+[Get started with custom endpoints →](/serverless/get-started)
 
 ## Next Steps
 
