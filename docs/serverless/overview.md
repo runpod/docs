@@ -46,7 +46,7 @@ vLLM endpoints are specifically optimized for running LLMs:
 
 ### 3. Custom endpoints
 
-**Best for**: Running custom code or specialized AI workloads
+**Best for**: Running custom code or specialized AI workloads.
 
 Custom endpoints give you complete control over your application:
 * Write your own Python code
