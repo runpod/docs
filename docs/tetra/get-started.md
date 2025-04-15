@@ -1,10 +1,10 @@
 ---
-title: Quickstart
+title: Get started
 description: "Learn how to set up your Tetra development environment to seamlessly run AI workloads using RunPod Serverless resources."
 sidebar_position: 2
 ---
 
-# Tetra quickstart
+# Get started with Tetra
 
 Learn how to set up your Tetra development environment to seamlessly run AI workloads using [RunPod Serverless](/serverless/overview) resources.
 

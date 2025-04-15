@@ -6,7 +6,7 @@ sidebar_position: 1
 
 # Tetra overview
 
-Tetra is a Python SDK that streamlines the development and deployment of AI workflows on RunPod's [Serverless](/serverless/overview) infrastructure. It provides an abstraction layer that enables you to define, execute, and monitor sophisticated AI pipelines through a declarative interface, eliminating infrastructure overhead.
+Tetra is a Python SDK that streamlines the development and deployment of AI workflows on RunPod's [Serverless](/serverless/overview) infrastructure. It provides an abstraction layer that lets you define, execute, and monitor sophisticated AI pipelines through a declarative interface, eliminating infrastructure overhead.
 
 ## Why use Tetra?
 
@@ -16,11 +16,11 @@ Tetra provides several advantages over vanilla Serverless:
 - **Optimized resource utilization**: Specify hardware requirements at the function level for precise control over GPU and CPU allocation.
 - **Seamless deployment**: Tetra automatically handles RunPod Serverless infrastructure setup, worker communication, and data transfer.
 - **Reduced development overhead**: Skip the tedious process of writing application code, building Docker containers, and managing endpoints for each worker.
-- **Intuitive programming model**: Use familiar Python decorators to mark functions for remote execution.
+- **Intuitive programming model**: Use Python decorators to mark functions for remote execution.
 
 ## Get started with Tetra
 
-You can get started with Tetra in minutes by following this [step-by-step tutorial](/tetra/quickstart).
+You can get started with Tetra in minutes by following this [step-by-step tutorial](/tetra/get-started).
 
 You can also start by cloning the tetra-rp repository and running the examples inside:
 
@@ -32,12 +32,11 @@ git clone https://github.com/runpod/tetra-rp.git
 
 ### Resource configuration
 
-Tetra allows explicit specification of hardware requirements at the function level through the `ServerlessResource` object. This provides granular control over:
+Tetra lets you specificy hardware requirements at the function level through the `ServerlessResource` object. This provides granular control over:
 
-* GPU/CPU allocation
-* Worker scaling limits
-* Template selection
-* Memory requirements
+- GPU/CPU allocation.
+- Worker scaling limits.
+- Template selection.
 
 ```python
 from tetra import ServerlessResource
@@ -65,25 +64,27 @@ Remote functions are the building blocks of Tetra workflows. Simply mark any Pyt
 from tetra import remote
 
 @remote(
-    resource_config=gpu_config, # Uses the GPU config defined in the previous section
+    resource_config=gpu_config, # Uses a ServerlessResource object to set up an endpoint
 )
 def process_image(image_data):
 
-    # Code you add here will be run remotely using RunPod infrastructure
+    # Code you add here will be run remotely using RunPod Serverless
 
     return results
 ```
 
-### Passing data between RunPod and your local machine
+### Transfer data between RunPod and your local machine
 
 Tetra makes it easy to pass data between your local environment and RunPod's infrastructure. The remote function can accept any serializable Python objects as input and return them as output:
 
 ```python
 async def main():
-    # Code you add here will be run locally, allowing you to pass data between RunPod and your local machine.
+    # Code you add here will be run locally
+
+    image = ... # Upload an image from your local machine
 
     print("Processing image...")
-    result = await process_image(image) # This function will run remotely, using an image passed in from your local machine
+    result = await process_image(image) # Process image remotely
 
 if __name__ == "__main__":
     asyncio.run(main())
@@ -91,7 +92,7 @@ if __name__ == "__main__":
 
 ### Dependencies
 
-Specify required Python libraries directly in the `@remote` decorator, and Tetra ensures they're available in your execution environment:
+You can specify required Python dependencies for remote workers at the function level from within the `@remote` decorator, and Tetra ensures they will be installed in your execution environment:
 
 ```python
 @remote(
@@ -106,9 +107,11 @@ def model_inference(data):
     # ...
 ```
 
+Make sure to include `import` statements *inside* any remote functions that require them.
+
 ### Asynchronous execution
 
-Tetra workflows run asynchronously, making it easy to manage complex pipelines:
+Tetra workflows run asynchronously, making it easy to manage complex pipelines and run parallel processes:
 
 ```python
 @remote(...)
@@ -143,11 +146,11 @@ When you execute a Tetra workflow:
 1. The `@remote` decorator identifies functions designated for remote execution.
 2. Tetra analyzes the dependencies between functions to determine execution order.
 3. For each remote function:
-   - Tetra provisions the appropriate resources on RunPod.
+   - Tetra provisions the appropriate endpoint and worker resources on RunPod.
    - Input data is serialized and transferred to the remote worker.
    - The function executes on the remote infrastructure.
    - Results are returned to your local environment.
-4. Data flows between functions according to your workflow definition.
+4. Data flows between functions as defined by your local code.
 
 ## Common use cases
 
@@ -161,5 +164,5 @@ When you execute a Tetra workflow:
 
 Ready to streamline your AI workflow development with Tetra?
 
-- [Follow the quickstart guide to deploy your first workflow.](/tetra/quickstart)
-- [Clone the tetra-rp repository and test the workloads in the examples folder.](https://github.com/runpod/tetra-rp)
+- [Build your first Tetra workflow using this step-by-step tutorial.](/tetra/get-started)
+- [Clone the tetra-rp repository and test the files in the `/examples` folder.](https://github.com/runpod/tetra-rp)
