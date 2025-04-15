@@ -34,7 +34,7 @@ Quick Deploys are pre-configured templates for popular AI models that you can de
 
 ### 2. vLLM endpoints
 
-**Best for**: Deploying and serving Large Language Models (LLMs)
+**Best for**: Deploying and serving large language models (LLMs).
 
 vLLM endpoints are specifically optimized for running LLMs:
 * Support for any Hugging Face model
