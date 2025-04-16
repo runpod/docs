@@ -257,16 +257,16 @@ const config = {
 
         redirects: [
           {
-            to: '/docs/serverless/vllm/get-started',
-            from: '/docs/serverless/workersvllm/get-started',
+            to: '/serverless/vllm/get-started',
+            from: '/serverless/workers/vllm/get-started',
           },
         ],
         createRedirects(existingPath) {
             if (existingPath.includes('/workers/')) {
               // Redirect from /docs/team/X to /community/X and /docs/support/X to /community/X
               return [
-                existingPath.replace('/docs/serverless/vllm', '/docs/serverless/workers/vllm'),
-                existingPath.replace('/docs/serverless/handlers', '/docs/serverless/workers/handlers'),
+                existingPath.replace('/serverless/vllm', '/serverless/workers/vllm'),
+                existingPath.replace('/serverless/handlers', '/serverless/workers/handlers'),
               ];
             }
             return undefined; // Return a falsy value: no redirect created
