@@ -1,11 +1,11 @@
 ---
-title: "Local Server Flags"
+title: "Local server flags"
 description: "A comprehensive guide to all flags available when starting your RunPod local server for endpoint testing"
 sidebar_position: 1
 ---
 
-When developing RunPod serverless functions, it's crucial to test them thoroughly before deployment.
-The RunPod SDK provides a powerful local testing environment that allows you to simulate your serverless endpoints right on your development machine.
+When developing RunPod Serverless functions, it's crucial to test them thoroughly before deployment.
+The RunPod SDK provides a powerful local testing environment that allows you to simulate your Serverless endpoints right on your development machine.
 This local server eliminates the need for constant Docker container rebuilds, uploads, and endpoint updates during the development and testing phase.
 
 To facilitate this local testing environment, the RunPod SDK offers a variety of flags that allow you to customize your setup.
@@ -20,7 +20,7 @@ By using these flags, you can create a local environment that closely mimics the
 
 This guide provides a comprehensive overview of all available flags, their purposes, and how to use them effectively in your local testing workflow.
 
-## Basic Usage
+## Basic usage
 
 To start your local server with additional flags, use the following format:
 
@@ -30,7 +30,7 @@ python your_function.py [flags]
 
 Replace `your_function.py` with the name of your Python file containing the RunPod handler.
 
-## Available Flags
+## Available flags
 
 ### --rp_serve_api
 
@@ -138,6 +138,6 @@ python main.py --rp_serve_api \
 
 This command starts the local server on port `8080` with 4 concurrent workers, sets the log level to `DEBUG`, and provides test input data.
 
-These flags provide powerful tools for customizing your local testing environment. By using them effectively, you can simulate various scenarios, debug issues, and ensure your serverless functions are robust and ready for deployment to the RunPod cloud.
+These flags provide powerful tools for customizing your local testing environment. By using them effectively, you can simulate various scenarios, debug issues, and ensure your Serverless functions are robust and ready for deployment to the RunPod cloud.
 
 For more detailed information on each flag and advanced usage scenarios, refer to the individual tutorials in this documentation.

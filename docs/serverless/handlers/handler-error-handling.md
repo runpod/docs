@@ -1,5 +1,5 @@
 ---
-title: Handling Errors
+title: Handling errors
 description: "Learn how to handle exceptions and implement custom error responses in your RunPod SDK handler function, including how to validate input and return customized error messages."
 sidebar_position: 4
 ---
