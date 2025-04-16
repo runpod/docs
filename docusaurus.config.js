@@ -255,35 +255,20 @@ const config = {
       "@docusaurus/plugin-client-redirects",
       {
 
-        // redirects: [
-        //   {
-        //     to: '/serverless/vllm/get-started',
-        //     from: '/serverless/workers/vllm/get-started',
-        //   },
-        // ],
-        // createRedirects(existingPath) {
-        //     if (existingPath.includes('/workers/')) {
-        //       // Redirect from /docs/team/X to /community/X and /docs/support/X to /community/X
-        //       return [
-        //         existingPath.replace('/vllm', '/workers/vllm'),
-        //         existingPath.replace('/handlers', '/workers/handlers'),
-        //       ];
-        //     }
-        //     return undefined; // Return a falsy value: no redirect created
-        //   },
-
           createRedirects(existingPath) {
             const redirects = [];
+            // Redirect from /serverless/workers/vllm/ to /serverless/vllm/ 
             if (existingPath.startsWith("/serverless/vllm/")) {
               redirects.push(existingPath.replace("/serverless/vllm/", "/serverless/workers/vllm/"));
             }
+            // Redirect from /serverless/workers/handlers/ to /serverless/handlers/
             else if (existingPath.startsWith("/serverless/handlers/")) {
               redirects.push(existingPath.replace("/serverless/handlers/", "/serverless/workers/handlers/"));
             }
+            // Redirect from /serverless/workers/development/ to /serverless/development/
             else if (existingPath.startsWith("/serverless/development/")) {
               redirects.push(existingPath.replace("/serverless/development/", "/serverless/workers/development/"));
             }
-
             return redirects;
           },
 
