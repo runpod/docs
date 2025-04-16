@@ -39,7 +39,7 @@ Inputs and outputs are retained for a maximum of 30 minutes for asynchronous req
 
 Dive deeper into what you can achieve with RunPod Endpoints through the following resources:
 
-- [Use the vLLM Worker](/serverless/workers/vllm/overview): Learn how to deploy a vLLM Worker as a Serverless Endpoint, with detailed guides on configuration and sending requests.
+- [Use the vLLM Worker](/serverless/vllm/overview): Learn how to deploy a vLLM Worker as a Serverless Endpoint, with detailed guides on configuration and sending requests.
 - [Invoke Jobs](/serverless/endpoints/job-operations): Learn how to submit jobs to your serverless workers, with detailed guides on both asynchronous and synchronous operations.
 - [Send Requests](/serverless/endpoints/send-requests): Discover how to communicate with your endpoints, including tips on structuring requests for optimal performance.
 - [Manage Endpoints](/serverless/endpoints/manage-endpoints): Find out how to manage your endpoints effectively, from deployment to scaling and monitoring.

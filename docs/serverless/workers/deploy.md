@@ -9,7 +9,7 @@ This is accomplished by defining a Docker file to import everything required to 
 
 :::note
 
-For deploying large language models (LLMs), you can use the [Configurable Endpoints](/serverless/workers/vllm/configurable-endpoints) feature instead of working directly with Docker.
+For deploying large language models (LLMs), you can use the [Configurable Endpoints](/serverless/vllm/configurable-endpoints) feature instead of working directly with Docker.
 
 Configurable Endpoints simplify the deployment process by allowing you to select a pre-configured template and customize it according to your needs.
 
@@ -45,7 +45,7 @@ ADD handler.py .
 CMD [ "python", "-u", "/handler.py" ]
 ```
 
-To build and push the image, review the steps in [Get started](/serverless/workers/overview).
+To build and push the image, review the steps in [Get started](/serverless/overview).
 
 > 🚧 If your handler requires external files such as model weights, be sure to cache them into your docker image. You are striving for a completely self-contained worker that doesn't need to download or fetch external files to run.
 

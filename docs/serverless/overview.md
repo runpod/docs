@@ -42,7 +42,7 @@ vLLM endpoints are specifically optimized for running LLMs:
 * Simple configuration via environment variables
 * High-performance serving with vLLM
 
-[Get started with vLLM endpoints →](/serverless/workers/vllm/get-started)
+[Get started with vLLM endpoints →](/serverless/vllm/get-started)
 
 ### 3. Custom endpoints
 
@@ -64,11 +64,11 @@ An [endpoint](/serverless/endpoints/overview) is the access point for your Serve
 
 ### Workers
 
-[Workers](/serverless/workers/overview) are the container instances that execute your code when requests arrive at your endpoint. RunPod automatically manages worker lifecycle, starting them when needed and stopping them when idle to optimize resource usage.
+[Workers](/serverless/overview) are the container instances that execute your code when requests arrive at your endpoint. RunPod automatically manages worker lifecycle, starting them when needed and stopping them when idle to optimize resource usage.
 
 ### Handler functions
 
-[Handler functions](/serverless/workers/handlers/overview) are the core of your Serverless application. These are the functions that process incoming requests and return results. They follow a simple pattern:
+[Handler functions](/serverless/handlers/overview) are the core of your Serverless application. These are the functions that process incoming requests and return results. They follow a simple pattern:
 
 ```python # rp_handler.py
 import runpod  # Required
@@ -113,6 +113,6 @@ Ready to get started with RunPod Serverless?
 
 - [Deploy your first Serverless endpoint.](/serverless/get-started)
 - [Try a Quick Deploy model.](/serverless/quick-deploys)
-- [Deploy large language models in minutes with vLLM.](/serverless/workers/vllm/overview)
-- [Learn about handler functions.](/serverless/workers/handlers/overview)
+- [Deploy large language models in minutes with vLLM.](/serverless/vllm/overview)
+- [Learn about handler functions.](/serverless/handlers/overview)
 - [Learn about endpoints.](/serverless/endpoints/overview)

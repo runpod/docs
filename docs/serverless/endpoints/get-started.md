@@ -66,4 +66,4 @@ Now that you have successfully launched an endpoint using a template, you can:
 
 If the models provided aren't enough, you can write your own customize Function Handler:
 
-- [Customize the Handler Function](/serverless/workers/handlers/overview)
+- [Customize the Handler Function](/serverless/handlers/overview)

@@ -76,7 +76,7 @@ Follow these steps to run the vLLM Worker on a Serverless Endpoint:
 Once the Endpoint initializes, you can send requests to your [Endpoint](/serverless/endpoints/get-started).
 Continue to the [Send a request](#send-a-request) section.
 
-For a complete list of available environment variables, see the [vLLM Worker variables](/serverless/workers/vllm/environment-variables).
+For a complete list of available environment variables, see the [vLLM Worker variables](/serverless/vllm/environment-variables).
 
 ## Send a request
 
@@ -262,4 +262,4 @@ If you encounter issues deploying or using vLLM Workers, check the following:
 - Verify that you are using the correct CUDA version for your selected GPU.
 - If using a gated model, ensure your Hugging Face token is valid and has access to the model.
 
-To learn more about managing your Serverless Endpoints, see the [Manage Endpoints](/serverless/endpoints/manage-endpoints) guide. For a complete reference of the vLLM Worker environment variables, see the [vLLM Worker variables](/serverless/workers/vllm/environment-variables) documentation.
+To learn more about managing your Serverless Endpoints, see the [Manage Endpoints](/serverless/endpoints/manage-endpoints) guide. For a complete reference of the vLLM Worker environment variables, see the [vLLM Worker variables](/serverless/vllm/environment-variables) documentation.
