@@ -36,14 +36,7 @@ To connect to a Pod:
 2. In the terminal that opens, run this command to clone the SLURM demo files into the Pod's main directory:
 
     ```bash
-    https://github.com/pandyamarut/slurm_example.git
-    cd slurm_example
-    ```
-
-3. Run this command to the scripts executable:
-
-    ```bash
-    chmod +x create_gres_conf.sh create_slurm_conf.sh install.sh setup.sh test_batch.sh
+    git clone https://github.com/pandyamarut/slurm_example.git && cd slurm_example
     ```
 
 ## Step 3: Overview of SLURM demo scripts
@@ -72,7 +65,7 @@ Uncomment the last line of `setup.h` if you want to setup GitHub on your Pods (r
 echo ./scripts/setup_github.sh "<YOUR_GITHUB_EMAIL>" "<YOUR_NAME>"
 ```
 
-## Step 4: Get the hostname and IP address for each Pod
+## Step 5: Get the hostname and IP address for each Pod
 
 Before running the installation script, you'll need to get the hostname and IP address for each Pod.
 
@@ -92,20 +85,16 @@ Before running the installation script, you'll need to get the hostname and IP a
     echo $HOSTNAME
     ```
 
-    This should output a string of random numbers and letters, similar to:
-
-    ```bash
-    4f653f31b496
-    ```
+    This will display a unique alphanumeric identifier (e.g., `4f653f31b496`) that represents your Pod's hostname.
 
 3. Make a note of the hostname for the primary (`$NODE_ADDR` = `10.65.0.2`) and secondary (`$NODE_ADDR` = `10.65.0.3`) nodes.
 
-## Step 5: Install SLURM on each Pod
+## Step 6: Install SLURM on each Pod
 
 Now run the installation script **on each Pod**:
 
 ```bash
-./install.sh "[MUNGE_SECRET_KEY]" [HOSTNAME_PRIMARY] [HOSTNAME_SECONDARY] `10.65.0.2` `10.65.0.3`
+./install.sh "[MUNGE_SECRET_KEY]" [HOSTNAME_PRIMARY] [HOSTNAME_SECONDARY] 10.65.0.2 10.65.0.3
 ```
 
 Replace:
@@ -115,29 +104,29 @@ Replace:
 
 This script automates the complex process of configuring a two-node SLURM cluster with GPU support, handling everything from system dependencies to authentication and resource configuration. It implements the necessary setup for both the primary (i.e. master/control) and secondary (i.e compute/worker) nodes.
 
-## Step 5: Start SLURM services
+## Step 7: Start SLURM services
 
 1. **On the primary node** (`$NODE_ADDR` = `10.65.0.2`), run both SLURM services:
 
     ```bash
-    sudo slurmctld -D
+    slurmctld -D
     ```
 
 2. Use the web interface to open a second terminal **on the primary node** and run:
 
     ```bash
-    sudo slurmd -D
+    slurmd -D
     ```
 
 3. **On the secondary node** (`$NODE_ADDR` = `10.65.0.3`), run:
 
     ```bash
-    sudo slurmd -D
+    slurmd -D
     ```
 
 After running these commands, you should see output indicating that the services have started successfully. The `-D` flag keeps the services running in the foreground, so each command needs its own terminal.
 
-## Step 6: Test your SLURM Cluster
+## Step 8: Test your SLURM Cluster
 
 1. Run this command **on the primary node** to check the status of your nodes:
 
@@ -153,9 +142,9 @@ After running these commands, you should see output indicating that the services
     srun --nodes=2 --gres=gpu:1 nvidia-smi -L
     ```
 
-    This command should list one GPU from each of your two nodes.
+    This command should list all GPUs across both nodes.
 
-## Step 7: Submit the SLURM job script
+## Step 9: Submit the SLURM job script
 
 Run the following command **on the primary node** (`$NODE_ADDR` = `10.65.0.2`) to submit the test job script and confirm that your cluster is working properly:
 
@@ -165,7 +154,7 @@ sbatch test_batch.sh
 
 Check the output file created by the test (`test_simple_[JOBID].out`) and look for the hostnames of both nodes. This confirms that the job ran successfully across the cluster.
 
-## Step 8: Clean up
+## Step 10: Clean up
 
 If you no longer need your cluster, make sure you return to the [Instant Clusters page](https://www.runpod.io/console/cluster) and delete your cluster to avoid incurring extra charges.
 
