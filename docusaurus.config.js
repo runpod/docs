@@ -265,8 +265,8 @@ const config = {
             if (existingPath.includes('/workers/')) {
               // Redirect from /docs/team/X to /community/X and /docs/support/X to /community/X
               return [
-                existingPath.replace('/serverless/vllm', '/serverless/workers/vllm'),
-                existingPath.replace('/serverless/handlers', '/serverless/workers/handlers'),
+                existingPath.replace('/vllm', '/workers/vllm'),
+                existingPath.replace('/handlers', '/workers/handlers'),
               ];
             }
             return undefined; // Return a falsy value: no redirect created
