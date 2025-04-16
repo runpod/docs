@@ -8,10 +8,10 @@ import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
 This page provides instructions on job operations using the Runpod Endpoint.
-You can invoke a job to run Endpoints the way you would interact with an API, get a status of a job, purge your job queue, and more with operations.
+You can invoke a job to run endpoints the way you would interact with an API, get a status of a job, purge your job queue, and more with operations.
 
 The following guide demonstrates how to use cURL to interact with an Endpoint.
-You can also use the following SDK to interact with Endpoints programmatically:
+You can also use the following SDK to interact with endpoints programmatically:
 
 - [Python SDK](/sdks/python/endpoints)
 
@@ -298,7 +298,7 @@ The maximum size for a payload that can be sent using yield to stream results is
 
 ## Rate Limits
 
-RunPod's Endpoints facilitate submitting jobs and retrieving outputs.
+RunPod's endpoints facilitate submitting jobs and retrieving outputs.
 Access these endpoints at: `https://api.runpod.ai/v2/{endpoint_id}/{operation}`
 
 - `/run`
