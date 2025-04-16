@@ -25,9 +25,9 @@ An endpoint refers to a specific REST API (URL) provided by RunPod that your app
 
 A handler is a function you create that takes in submitted inputs, processes them (like generating images, text, or audio), and returns the final output.
 
-## Serverless [SDK](https://github.com/runpod/runpod-python?tab=readme-ov-file#--serverless-worker-sdk)
+## Serverless SDK
 
-A Python package used when creating a handler function. This package helps your code receive requests from our serverless system, triggers your handler function to execute, and returns the function's result back to the Serverless system.
+The [Serverless SDK](https://github.com/runpod/runpod-python?tab=readme-ov-file#--serverless-worker-sdk) is a Python package used when creating a handler function. This package helps your code receive requests from our serverless system, triggers your handler function to execute, and returns the function's result back to the Serverless system.
 
 ## Endpoint settings
 
@@ -45,9 +45,9 @@ You can disable this setting, but we highly recommend keeping it enabled. The de
 
 Default: 600 seconds (10 minutes)
 
-### Job [TTL](/serverless/endpoints/send-requests#execution-policies) (Time-To-Live)
+### Job TTL (Time-To-Live)
 
-Defines the maximum time a job can remain in the queue before it's automatically terminated. This parameter ensures that jobs don't stay in the queue indefinitely. You should set this if your job runs longer than 24 hours or if you want to remove job data as soon as it is finished.
+[Job TTL](/serverless/endpoints/send-requests#execution-policies) defines the maximum time a job can remain in the queue before it's automatically terminated. This parameter ensures that jobs don't stay in the queue indefinitely. You should set this if your job runs longer than 24 hours or if you want to remove job data as soon as it is finished.
 
 Minimum value: 10,000 milliseconds (10 seconds)
 Default value: 86,400,000 milliseconds (24 hours)
