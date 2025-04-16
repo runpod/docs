@@ -8,7 +8,9 @@ sidebar_position: 1
 
 Tetra is a Python SDK that streamlines the development and deployment of AI workflows on RunPod's [Serverless](/serverless/overview) infrastructure. It provides an abstraction layer that lets you define, execute, and monitor sophisticated AI pipelines through a declarative interface, eliminating infrastructure overhead.
 
-You can get started with Tetra in minutes by following this [step-by-step tutorial](/tetra/get-started).
+## Get started
+
+Learn how to code Tetra workflows in serial and parallel by following this [step-by-step tutorial](/tetra/get-started).
 
 You can also start by cloning the Tetra repository and running the examples inside:
 
