@@ -251,6 +251,34 @@ const config = {
         apiKey: "phc_1ku7R949l2D5wsXgMCBNSRIVRMiAn8FyKFNoJWDCcOb",
       },
     ],
+    [
+      "@docusaurus/plugin-client-redirects",
+      {
+
+        redirects: [
+          // /docs/oldDoc -> /docs/newDoc
+          {
+            to: '/docs/serverless/vllm/get-started',
+            from: '/docs/serverless/workersvllm/get-started',
+          },
+          // Redirect from multiple old paths to the new path
+          {
+            to: '/docs/newDoc2',
+            from: ['/docs/oldDocFrom2019', '/docs/legacyDocFrom2016'],
+          },
+        ],
+        createRedirects(existingPath) {
+            if (existingPath.includes('/workers/')) {
+              // Redirect from /docs/team/X to /community/X and /docs/support/X to /community/X
+              return [
+                existingPath.replace('/docs/serverless/vllm', '/docs/serverless/workers/vllm'),
+                existingPath.replace('/docs/serverless/handlers', '/docs/serverless/workers/handlers'),
+              ];
+            }
+            return undefined; // Return a falsy value: no redirect created
+          },
+        },
+    ]
   ],
 };
 
