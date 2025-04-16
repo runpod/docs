@@ -20,39 +20,40 @@ RunPod Serverless is a cloud computing platform that lets you run AI models and 
 
 RunPod Serverless offers three ways to deploy your workloads, each designed for different use cases:
 
-### 1. Quick Deploys
+### Quick Deploys
 
 **Best for**: Getting popular AI models running quickly with minimal setup.
 
 Quick Deploys are pre-configured templates for popular AI models that you can deploy with just a few clicks:
-* No coding required
-* Pre-optimized configurations
-* Wide selection of popular AI models
-* Minimal technical knowledge needed
+* No coding required.
+* Pre-optimized configurations.
+* Wide selection of popular AI models.
+* Minimal technical knowledge needed.
 
 [Get started with Quick Deploys →](/serverless/quick-deploys)
 
-### 2. vLLM endpoints
+### vLLM endpoints
 
 **Best for**: Deploying and serving large language models (LLMs).
 
 vLLM endpoints are specifically optimized for running LLMs:
-* Support for any [Hugging Face model](https://huggingface.co/models)
-* Optimized for LLM inference
-* Simple configuration via environment variables
-* High-performance serving with vLLM
+* Support for any [Hugging Face model](https://huggingface.co/models).
+* Optimized for LLM inference.
+* Simple configuration via environment variables.
+* High-performance serving with vLLM.
 
 [Get started with vLLM endpoints →](/serverless/vllm/get-started)
 
-### 3. Custom endpoints
+### Custom endpoints
 
 **Best for**: Running custom code or specialized AI workloads.
 
 Custom endpoints give you complete control over your application:
-* Write your own Python code
-* Package in Docker containers
-* Full flexibility for any use case
-* Custom processing logic
+
+* Write your own Python code.
+* Package in Docker containers.
+* Full flexibility for any use case.
+* Custom processing logic.
 
 [Get started with custom endpoints →](/serverless/get-started)
 

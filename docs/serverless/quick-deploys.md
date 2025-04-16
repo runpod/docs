@@ -1,5 +1,5 @@
 ---
-title: Quick Deploys
+title: Quick Deploy an endpoint
 sidebar_position: 2
 description: "Quickly deploy Serverless endpoints using popular AI models with minimal configuration through the web interface, following a simple 5-step process. Customize your deployments using RunPod's GitHub repositories and Handler Functions."
 ---

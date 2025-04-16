@@ -1,5 +1,5 @@
 ---
-title: "Get started"
+title: "Create a custom endpoint"
 sidebar_position: 2
 description: Create and deploy your first custom Serverless endpoint. Learn to create a handler, test it locally, build a Docker image, deploy an endpoint, and send requests with this step-by-step tutorial.
 ---
@@ -7,7 +7,7 @@ description: Create and deploy your first custom Serverless endpoint. Learn to c
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Get started with Serverless
+# Create a custom endpoint
 
 Learn how to create, deploy, and test your first custom Serverless endpoint.
 
