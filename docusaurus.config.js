@@ -255,12 +255,12 @@ const config = {
       "@docusaurus/plugin-client-redirects",
       {
 
-        redirects: [
-          {
-            to: '/serverless/vllm/get-started',
-            from: '/serverless/workers/vllm/get-started',
-          },
-        ],
+        // redirects: [
+        //   {
+        //     to: '/serverless/vllm/get-started',
+        //     from: '/serverless/workers/vllm/get-started',
+        //   },
+        // ],
         // createRedirects(existingPath) {
         //     if (existingPath.includes('/workers/')) {
         //       // Redirect from /docs/team/X to /community/X and /docs/support/X to /community/X
@@ -277,21 +277,13 @@ const config = {
             if (existingPath.startsWith("/serverless/vllm/")) {
               redirects.push(existingPath.replace("/serverless/vllm/", "/serverless/workers/vllm/"));
             }
+            else if (existingPath.startsWith("/serverless/handlers/")) {
+              redirects.push(existingPath.replace("/serverless/handlers/", "/serverless/workers/handlers/"));
+            }
+            else if (existingPath.startsWith("/serverless/development/")) {
+              redirects.push(existingPath.replace("/serverless/development/", "/serverless/workers/development/"));
+            }
 
-
-            // else if (existingPath.startsWith("/guides/legacy/")) {
-            //   // Redirect /contracts/v1/guides/** to /guides/legacy/**
-            //   redirects.push(existingPath.replace("/guides/legacy/", "/contracts/v1/guides/"));
-            // } else if (existingPath.startsWith("/reference/lockup/")) {
-            //   // Redirect /contracts/v2/reference/** to /reference/lockup/**
-            //   redirects.push(existingPath.replace("/reference/lockup/", "/contracts/v2/reference/"));
-            // } else if (existingPath.startsWith("/reference/legacy/")) {
-            //   // Redirect /contracts/v1/** to /reference/legacy/**
-            //   redirects.push(existingPath.replace("/reference/legacy/", "/contracts/v1/"));
-            // } else if (existingPath.startsWith("/guides/lockup/examples/")) {
-            //   // Redirect /contracts/v2/guides/** to /guides/lockup/examples/**
-            //   redirects.push(existingPath.replace("/guides/lockup/examples/", "/contracts/v2/guides/"));
-            // }
             return redirects;
           },
 
