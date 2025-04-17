@@ -1,25 +1,25 @@
 ---
-title: "Endpoint configurations"
-sidebar_position: 1
-description: Configure your Endpoint settings to optimize performance and cost, including GPU selection, worker count, idle timeout, and advanced options like data centers, network volumes, and scaling strategies.
+title: "Endpoint settings"
+sidebar_position: 8
+description: Configure your endpoint settings to optimize performance and cost, including GPU selection, worker count, idle timeout, and advanced options like data centers, network volumes, and scaling strategies.
 ---
 
-The following are configurable settings within an Endpoint.
+The following are configurable settings within an endpoint.
 
 ## Endpoint Name
 
-Create a name you'd like to use for the Endpoint configuration.
-The resulting Endpoint is assigned a random ID to be used for making calls.
+Create a name you'd like to use for the endpoint configuration.
+The resulting endpoint is assigned a random ID to be used for making calls.
 
 The name is only visible to you.
 
 ## GPU Selection
 
-Select one or more GPUs that you want your Endpoint to run on. RunPod matches you with GPUs in the order that you select them, so the first GPU type that you select is prioritized, then the second, and so on. Selecting multiple GPU types can help you get a worker more quickly, especially if your first selection is an in-demand GPU.
+Select one or more GPUs that you want your endpoint to run on. RunPod matches you with GPUs in the order that you select them, so the first GPU type that you select is prioritized, then the second, and so on. Selecting multiple GPU types can help you get a worker more quickly, especially if your first selection is an in-demand GPU.
 
 ## Active (Min) Workers
 
-Setting the active workers to 1 or more ensures you have “always on” workers, ready to respond to job requests without cold start delays.
+Setting the active workers to 1 or more ensures you have "always on" workers, ready to respond to job requests without cold start delays.
 
 Default: 0
 
@@ -72,9 +72,24 @@ The amount of time a worker remains running after completing its current request
 
 Default: 5 seconds
 
+## Execution Timeout
+
+The maximum time a job can run before the system terminates the worker. This prevents "bad" jobs from running indefinitely and draining your credit.
+
+You can disable this setting, but we highly recommend keeping it enabled. The default maximum value is 24 hours, but if you need a longer duration, you can use job TTL to override it.
+
+Default: 600 seconds (10 minutes)
+
+## Job TTL (Time-To-Live)
+
+[Job TTL](/serverless/endpoints/send-requests#execution-policies) defines the maximum time a job can remain in the queue before it's automatically terminated. This parameter ensures that jobs don't stay in the queue indefinitely. You should set this if your job runs longer than 24 hours or if you want to remove job data as soon as it is finished.
+
+Minimum value: 10,000 milliseconds (10 seconds)
+Default value: 86,400,000 milliseconds (24 hours)
+
 ## FlashBoot
 
-FlashBoot is RunPod’s magic solution for reducing the average cold-start times on your endpoint. It works probabilistically. When your endpoint has consistent traffic, your workers have a higher chance of benefiting from FlashBoot for faster spin-ups. However, if your endpoint isn’t receiving frequent requests, FlashBoot has fewer opportunities to optimize performance. There’s no additional cost associated with FlashBoot.
+FlashBoot is RunPod's magic solution for reducing the average cold-start times on your endpoint. It works probabilistically. When your endpoint has consistent traffic, your workers have a higher chance of benefiting from FlashBoot for faster spin-ups. However, if your endpoint isn't receiving frequent requests, FlashBoot has fewer opportunities to optimize performance. There's no additional cost associated with FlashBoot.
 
 ## Advanced
 
@@ -106,8 +121,12 @@ This will limit the availability of cards, as your endpoint workers will be lock
 - **Request Count** scaling strategy adjusts worker numbers according to total requests in the queue and in progress. It automatically adds workers as the number of requests increases, ensuring tasks are handled efficiently.
 
 ```text
-_Total Workers Formula: Math.ceil((requestsInQueue + requestsInProgress) / <set request count)_
+_Total Workers Formula: Math.ceil((requestsInQueue + requestsInProgress) / <set request count>_
 ```
+
+### Expose HTTP/TCP ports
+
+We allow direct communication with your worker using its public IP and port. This is especially useful for real-time applications that require minimal latency. Check out this [WebSocket example](https://github.com/runpod-workers/worker-websocket) to see how it works!
 
 ### GPU Types
 
@@ -116,7 +135,7 @@ Default: `4090` | `A4000` | `A4500`
 
 <details>
 <summary>
-What's the difference between GPU models.
+What's the difference between GPU models?
 </summary>
 A100s are about 2-3x faster than A5000s and also allow double the VRAM with very high bandwidth throughout. 3090s and A5000s are 1.5-2x faster than A4000s. Sometimes, it may make more sense to use 24 GB even if you don't need it compared to 16 GB due to faster response times. Depending on the nature of the task, it's also possible that execution speeds may be bottlenecked and not significantly improved simply by using a higher-end card. Do your own calculations and experimentation to determine out what's most cost-effective for your workload and task type.
 

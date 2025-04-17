@@ -137,4 +137,4 @@ Exceeding limits returns a `429` error.
 `/run` - 1000 requests/10s, max 200 concurrent
 `/runsync` - 2000 requests/10s, max 400 concurrent
 
-For more information, see [Job operations](/serverless/references/operations).
+For more information, see [Job operations](/serverless/endpoints/operations).

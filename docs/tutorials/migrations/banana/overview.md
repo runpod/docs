@@ -182,7 +182,7 @@ Banana uses a `banana_config.json` file which contains things like Idle Timeout,
 
 **Idle Timeout**
 
-RunPod allows you to set an [Idle Timeout](/serverless/references/endpoint-configurations#idle-timeout) when creating the Endpoint.
+RunPod allows you to set an [Idle Timeout](/serverless/endpoints/endpoint-configurations#idle-timeout) when creating the endpoint.
 The default value is 5 seconds.
 
 **Inference Timeout**
@@ -193,8 +193,8 @@ For runs that take longer than 30 seconds to execute, you should use the `sync` 
 
 **Max Replicas**
 
-When creating a Worker in RunPod, you can set the max Workers that will scale up depending on the amount of Worker sent to your Endpoint.
-For more information, see [Scale Type](/serverless/references/endpoint-configurations#scale-type).
+When creating a Worker in RunPod, you can set the max Workers that will scale up depending on the amount of Worker sent to your endpoint.
+For more information, see [Scale Type](/serverless/endpoints/endpoint-configurations#scale-type).
 
 :::note
 

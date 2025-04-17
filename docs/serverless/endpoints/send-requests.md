@@ -1,16 +1,85 @@
 ---
 title: "Send a request"
-description: "Learn how to construct a JSON request body to send to your custom endpoint, including optional inputs for webhooks, execution policies, and S3-compatible storage, to optimize job execution and resource management."
-sidebar_position: 4
+description: "Learn how to send requests to your Serverless endpoint, including constructing JSON request bodies, testing with the UI, using cURL, and configuring optional inputs for webhooks, execution policies, and S3-compatible storage."
+sidebar_position: 3
 ---
 
-Before sending a job request, ensure you have deployed your custom endpoint.
+# Send a request to a Serverless endpoint
 
-Let's start by constructing our request body to send to the endpoint.
+After you've deployed an endpoint, you can send requests to test and use it. This guide covers different ways to send requests and configure them.
 
-## JSON Request Body
+## Test your endpoint through the UI
 
-You can make requests to your endpoint with JSON. Your request must include a JSON object containing an `input` key. For example, if your handler requires an input prompt, you might send in something like this:
+To test your endpoint, click the **Requests** tab in the endpoint detail page:
+
+<img src="/img/docs/serverless-get-started-endpoint-details.png" width="900" alt="Screenshot of the endpoint details page."/>
+
+On the left you should see the default test request:
+
+```json
+{
+    "input": {
+        "prompt": "Hello World"
+    }
+}
+```
+
+If your endpoint is configured to accept input in this form (i.e., the handler function is configured to look for the `"prompt"` key in the input object), you can click **Run** to test . It will take some time for your workers to initialize.
+
+When the workers have finished processing your request, you should see output on the right side of the page similar to this:
+
+
+
+1. From the Serverless endpoint detail page in the [RunPod console](https://www.runpod.io/console/serverless), select **Requests**.
+
+2. Select **Run**.
+3. You should see a successful response with the following:
+
+```json
+{
+  "id": "6de99fd1-4474-4565-9243-694ffeb65218-u1",
+  "status": "IN_QUEUE"
+}
+```
+
+After a few minutes, the stream will show the full response.
+
+## Send a request using cURL
+
+You can send requests to your endpoint using cURL or any HTTP client. Here's an example:
+
+```curl
+curl --request POST \
+     --url https://api.runpod.ai/v2/${endpoint_id}/runsync \
+     --header "accept: application/json" \
+     --header "authorization: ${YOUR_API_KEY}" \
+     --header "content-type: application/json" \
+     --data '
+{
+  "input": {
+    "prompt": "A coffee cup.",
+    "height": 512,
+    "width": 512,
+    "num_outputs": 1,
+    "num_inference_steps": 50,
+    "guidance_scale": 7.5,
+    "scheduler": "KLMS"
+  }
+}
+'
+```
+
+Where `endpoint_id` is the name of your endpoint and `YOUR_API_KEY` is your API key.
+
+:::note
+
+Depending on any modifications you made to your handler function, you may need to modify the request.
+
+:::
+
+## JSON request body structure
+
+Your request must include a JSON object containing an `input` key. For example, if your handler requires an input prompt, you might send in something like this:
 
 ```json
 {
@@ -20,7 +89,7 @@ You can make requests to your endpoint with JSON. Your request must include a JS
 }
 ```
 
-## Optional Inputs
+## Optional inputs
 
 Along with an input key, you can include other top-level inputs to access different functions. If a key is passed in at the top level and not included in the body of your request, it will be discarded and unavailable to your handler.
 
@@ -32,7 +101,7 @@ The following optional inputs are available to all endpoints regardless of the w
 
 ### Webhooks
 
-To see notifications for completed jobs, pass a URL in the top level of the request:
+To receive notifications for completed jobs, pass a URL in the top level of the request:
 
 ```json
 {
@@ -45,11 +114,9 @@ Your webhook endpoint should respond with a `200` status to acknowledge the succ
 
 A `POST` request goes to your URL when the job is complete. This request contains the same information as fetching the results from the `/status/{job_id}` endpoint.
 
-### Execution Policies
+### Execution policies
 
-By default, if a job remains `IN_PROGRESS` for longer than 10 minutes without completion, it's automatically terminated.
-
-This default behavior keeps a hanging request from draining your account credits.
+By default, if a job remains `IN_PROGRESS` for longer than 10 minutes without completion, it's automatically terminated. This default behavior keeps a hanging request from draining your account credits.
 
 To customize the management of job lifecycles and resource consumption, the following policies can be configured:
 
@@ -78,7 +145,7 @@ You can still overwrite the value for individual requests with `executionTimeout
 
 By configuring the execution timeout, priority, and TTL policies, you have more control over job execution and efficient system resource management.
 
-### S3-Compatible Storage
+### S3-compatible storage
 
 Pass in the credentials for S3-compatible object storage as follows:
 
@@ -98,6 +165,15 @@ The configuration only passes to the worker. It is not returned as part of the j
 
 :::note
 
-The serverless worker must contain logic that allows it to use this input. If you build a custom endpoint and request s3Config in the job input, your worker is ultimately responsible for using the information passed in to upload the output.
+The Serverless worker must contain logic that allows it to use this input. If you build a custom endpoint and request s3Config in the job input, your worker is ultimately responsible for using the information passed in to upload the output.
 
 :::
+
+## Next steps
+
+Now that you've learned how to send requests to your endpoint, you can:
+
+- [Invoke jobs](/serverless/endpoints/job-operations)
+- [Create more advanced handler functions](/serverless/handlers/overview)
+- [Learn about local testing](/serverless/development/local-testing)
+- [Deploy your endpoints with GitHub](/serverless/github-integration)

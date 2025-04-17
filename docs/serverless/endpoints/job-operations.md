@@ -1,23 +1,20 @@
 ---
-title: Job operations
-description: "Learn how to use the Runpod Endpoint to manage job operations, including running, checking status, purging queues, and streaming results, with cURL and SDK examples."
-sidebar_position: 2
+title: Manage job operations
+description: "Learn how to use the Runpod endpoint to manage job operations, including running, checking status, purging queues, and streaming results, with cURL and SDK examples."
+sidebar_position: 4
 ---
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-This page provides instructions on job operations using the Runpod Endpoint.
+This page provides instructions on job operations using the Runpod endpoint.
 You can invoke a job to run endpoints the way you would interact with an API, get a status of a job, purge your job queue, and more with operations.
 
-The following guide demonstrates how to use cURL to interact with an Endpoint.
-You can also use the following SDK to interact with endpoints programmatically:
-
-- [Python SDK](/sdks/python/endpoints)
+The following guide demonstrates how to use cURL to interact with an endpoint. You can also use the [Python SDK](/sdks/python/endpoints) to interact with endpoints programmatically.
 
 For information on sending requests, see [Send a request](/serverless/endpoints/send-requests).
 
-## Asynchronous Endpoints
+## Asynchronous endpoints
 
 Asynchronous endpoints are designed for long-running tasks. When you submit a job through these endpoints, you receive a Job ID in response.
 You can use this Job ID to check the status of your job at a later time, allowing your application to continue processing without waiting for the job to complete immediately.
@@ -47,7 +44,7 @@ curl -X POST https://api.runpod.ai/v2/{endpoint_id}/run \
 </TabItem>
 </Tabs>
 
-## Synchronous Endpoints
+## Synchronous endpoints
 
 Synchronous endpoints are ideal for short-lived tasks where immediate results are necessary.
 Unlike asynchronous calls, synchronous endpoints wait for the job to complete and return the result directly in the response.
@@ -83,7 +80,7 @@ curl -X POST https://api.runpod.ai/v2/{endpoint_id}/runsync \
   </TabItem>
 </Tabs>
 
-## Health Endpoint
+## Health endpoint
 
 The `/health` endpoint provides insights into the operational status of the endpoint, including the number of workers available and job statistics.
 This information can be used to monitor the health and performance of the API, helping you manage workload and troubleshoot issues more effectively.
@@ -121,7 +118,7 @@ curl --request GET \
 </TabItem>
 </Tabs>
 
-## Cancel Job
+## Cancel job
 
 To cancel a job in progress, specify the `cancel` parameter with the endpoint ID and the job ID.
 
@@ -148,7 +145,7 @@ curl -X POST https://api.runpod.ai/v2/{endpoint_id}/cancel/{job_id} \
 </TabItem>
 </Tabs>
 
-## Purge Queue Endpoint
+## Purge queue endpoint
 
 The `/purge-queue` endpoint allows you to clear all jobs that are currently in the queue.
 This operation does not affect jobs that are already in progress.
@@ -177,7 +174,7 @@ curl -X POST https://api.runpod.ai/v2/{endpoint_id}/purge-queue \
 </TabItem>
 </Tabs>
 
-## Check Job Status
+## Check job status
 
 To track the progress or result of an asynchronous job, you can check its status using the Job ID.
 This endpoint provides detailed information about the job, including its current status, execution time, and the output if the job has completed.
@@ -216,7 +213,7 @@ curl -X POST https://api.runpod.ai/v2/{endpoint_id}/status/{job_id} \
 To retry a job that has failed or encountered an error, send a POST request to `/retry/{job_id}` with the Job ID.
 The system will automatically requeue and retry the job.
 
-- You can retry any job with a `FAILED` or `TIMED_OUT` status, as long as the job hasn’t expired.
+- You can retry any job with a `FAILED` or `TIMED_OUT` status, as long as the job hasn't expired.
 - Jobs submitted via `/run` expire 30 minutes after completion.
 - Jobs submitted via `/runsync` expire 1 minute after completion.
 - When a job is retried, the previous output is removed. If you call `/status` right after the retry, it will return no output until the new job run is complete.
@@ -296,7 +293,7 @@ The maximum size for a payload that can be sent using yield to stream results is
 
 :::
 
-## Rate Limits
+## Rate limits
 
 RunPod's endpoints facilitate submitting jobs and retrieving outputs.
 Access these endpoints at: `https://api.runpod.ai/v2/{endpoint_id}/{operation}`
@@ -334,4 +331,4 @@ Retrieve results from `/status` within 30 minutes for privacy protection.
 
 :::
 
-For reference information on Endpoints, see [Endpoint Operations](/serverless/references/operations.md).
+For reference information on endpoints, see [Endpoint operations](/serverless/endpoints/operations).

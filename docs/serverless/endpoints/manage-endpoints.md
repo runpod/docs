@@ -1,7 +1,7 @@
 ---
 title: "Manage endpoints"
 description: "Learn to create, edit, and manage Serverless endpoints, including adding network volumes and setting GPU prioritization, with step-by-step guides and tutorials."
-sidebar_position: 10
+sidebar_position: 2
 ---
 
 Learn to manage Serverless endpoints.

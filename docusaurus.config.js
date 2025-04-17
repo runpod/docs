@@ -254,27 +254,33 @@ const config = {
     [
       "@docusaurus/plugin-client-redirects",
       {
-
-          createRedirects(existingPath) {
-            const redirects = [];
-            // Redirect from /serverless/workers/vllm/ to /serverless/vllm/ 
-            if (existingPath.startsWith("/serverless/vllm/")) {
-              redirects.push(existingPath.replace("/serverless/vllm/", "/serverless/workers/vllm/"));
-            }
-            // Redirect from /serverless/workers/handlers/ to /serverless/handlers/
-            else if (existingPath.startsWith("/serverless/handlers/")) {
-              redirects.push(existingPath.replace("/serverless/handlers/", "/serverless/workers/handlers/"));
-            }
-            // Redirect from /serverless/workers/development/ to /serverless/development/
-            else if (existingPath.startsWith("/serverless/development/")) {
-              redirects.push(existingPath.replace("/serverless/development/", "/serverless/workers/development/"));
-            }
-            return redirects;
-          },
-
+        createRedirects(existingPath) {
+          const redirects = [];
+          // Redirect from /serverless/workers/vllm/ to /serverless/vllm/ 
+          if (existingPath.startsWith("/serverless/vllm/")) {
+            redirects.push(existingPath.replace("/serverless/vllm/", "/serverless/workers/vllm/"));
+          }
+          // Redirect from /serverless/workers/handlers/ to /serverless/handlers/
+          else if (existingPath.startsWith("/serverless/handlers/")) {
+            redirects.push(existingPath.replace("/serverless/handlers/", "/serverless/workers/handlers/"));
+          }
+          // Redirect from /serverless/workers/development/ to /serverless/development/
+          else if (existingPath.startsWith("/serverless/development/")) {
+            redirects.push(existingPath.replace("/serverless/development/", "/serverless/workers/development/"));
+          }
+          if (existingPath.includes('/serverless/endpoints/')) {
+            redirects.push(existingPath.replace('/serverless/endpoints/', '/serverless/references/'));
+          }
+          return redirects;
         },
 
-        
+        redirects: [
+          {
+            to: '/serverless/endpoints/send-requests',
+            from: '/serverless/endpoints/get-started',
+          },
+        ]
+      },
     ]
   ],
 };
