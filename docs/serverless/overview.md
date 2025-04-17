@@ -65,7 +65,7 @@ An [endpoint](/serverless/endpoints/overview) is the access point for your Serve
 
 ### Workers
 
-[Workers](/serverless/overview) are the container instances that execute your code when requests arrive at your endpoint. RunPod automatically manages worker lifecycle, starting them when needed and stopping them when idle to optimize resource usage.
+[Workers](/serverless/workers/overview) are the container instances that execute your code when requests arrive at your endpoint. RunPod automatically manages worker lifecycle, starting them when needed and stopping them when idle to optimize resource usage.
 
 ### Handler functions
 
@@ -98,7 +98,7 @@ When a user/client sends a request to your Serverless endpoint:
 5. Workers remain active for a period to handle additional requests.
 6. Idle workers eventually shut down if no new requests arrive.
 
-<img src="/img/docs/serverless-request-flow.png" width="800" alt="A diagram demonstrating the Serverless endpoint request flow"/>
+<img src="/img/docs/serverless-request-flow.png" width="800" alt="Diagram showing the complete flow of a request through a Serverless endpoint, from initial request to response"/>
 
 ## Common use cases
 

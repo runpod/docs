@@ -27,7 +27,7 @@ A handler is a function you create that takes in submitted inputs, processes the
 
 ## Serverless SDK
 
-The [Serverless SDK](https://github.com/runpod/runpod-python?tab=readme-ov-file#--serverless-worker-sdk) is a Python package used when creating a handler function. This package helps your code receive requests from our serverless system, triggers your handler function to execute, and returns the function's result back to the Serverless system.
+The [Serverless SDK](https://github.com/runpod/runpod-python) is a Python package used when creating a handler function. This package helps your code receive requests from our serverless system, triggers your handler function to execute, and returns the function's result back to the serverless system.
 
 # Pod
 
@@ -39,13 +39,14 @@ GPU instances that run in T3/T4 data centers, providing high reliability and sec
 
 GPU instances connect individual compute providers to consumers through a vetted, secure peer-to-peer system.
 
-## Datacenter
+## Data center
 
 A data center is a secure location where RunPod's cloud computing services, such as Secure Cloud and GPU instances, are hosted. These data centers are equipped with redundancy and data backups to ensure the safety and reliability of your data.
 
 ## GPU instance
 
-GPU instance is a container-based GPU instance that you can deploy.
+A GPU instance is a container-based compute resource that you can deploy.
+
 These instances spin up in seconds using both public and private repositories.
 They are available in two different types:
 

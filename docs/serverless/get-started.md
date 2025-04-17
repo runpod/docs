@@ -146,7 +146,6 @@ DEBUG  | local_test | run_job return: {'output': 'Hey there!'}
 INFO   | Job local_test completed successfully.
 INFO   | Job result: {'output': 'Hey there!'}
 INFO   | Local testing complete, exiting.
-(venv) moking@Mos-MacBook-Pro-2 serverless-test % 
 ```
 
 ## Step 5: Create a Dockerfile
@@ -185,7 +184,7 @@ CMD ["python3", "-u", "rp_handler.py"]
 1. Then push the image to your container registry:
 
     ```bash
-    docker push yourusername/yourrepo:yourtag
+    docker push yourusername/serverless-test:latest
     ```
 
 ## Step 7: Deploy your endpoint using the web interface
@@ -193,8 +192,8 @@ CMD ["python3", "-u", "rp_handler.py"]
 1. Go to the [Serverless section](https://www.runpod.io/console/serverless) of the RunPod web interface.
 2. Click **New Endpoint**.
 3. Under **Custom Source**, select **Docker Image**, then click **Next**.
-4. In the **Container Image** field, enter your Docker image URL: `docker.io/[YOUR_USERNAME]/serverless-test:latest`
-5. Enter a name for your endpoint (or leave the randomly generated name in place).
+4. In the **Container Image** field, enter your Docker image URL: `docker.io/yourusername/serverless-test:latest`
+5. (Optional) Enter a custom name for your endpoint, or use the randomly generated name.
 6. Under **Worker Configuration**, check the box for **16 GB** GPUs.
 7. Leave the rest of the settings at their defaults.
 8. Click **Create Endpoint**.

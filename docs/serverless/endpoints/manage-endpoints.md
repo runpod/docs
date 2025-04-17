@@ -48,7 +48,7 @@ Changes will take effect over time as each worker is updated to the new configur
 
 > **Tip**: To force an immediate configuration update, temporarily set **Max Workers** to 0, click **Update**, then restore your desired worker count and update again.
 
-## Add a network volumes
+## Add a network volume
 
 Attach persistent storage to share data across workers:
 
