@@ -2,6 +2,7 @@
 title: Overview
 sidebar_position: 1
 description: "Deploy and manage Serverless workers with RunPod endpoints, featuring asynchronous and synchronous operations, scalability, and flexibility for modern computing tasks."
+pagination_prev: null
 ---
 
 # Endpoints overview
@@ -45,7 +46,7 @@ Whether you're processing large datasets, running AI inference, or performing co
 Understanding these fundamental concepts will help you work effectively with Serverless endpoints:
 
 - **Endpoints**: A URL that serves as the entry point for your Serverless worker, allowing you to send requests and receive responses.
-- **Request**: The HTTP request that a user sends to an endpoint, which can include parameters, payloads, and headers that define what the endpoint should process.
+- **Request**: An HTTP request that you send to an endpoint, which can include parameters, payloads, and headers that define what the endpoint should process. For example, a `POST` request to run a job, or a `GET` requests to check status of a job or endpoint health.
 - **Jobs**: When a request is sent to an endpoint, it creates a job that gets processed by a worker. Jobs can be either synchronous (immediate response) or asynchronous (background processing).
 - **Worker**: The containerized environment that executes your Handler code, providing the compute resources (CPU, GPU, memory) needed to process requests.
 - **Handlers**: The code that processes incoming requests and returns responses. Handlers define the business logic of your endpoint.

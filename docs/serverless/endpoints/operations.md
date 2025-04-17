@@ -41,6 +41,12 @@ Requests will receive a `429 (Too Many Requests)` status if:
 - Queue size exceeds 50 jobs AND
 - Queue size exceeds endpoint.WorkersMax * 500
 
+:::tip
+
+You can use the `/status` operation to configure the time-to-live (TTL) for an individual job by appending a TTL parameter when checking the status of a job. For example, `https://api.runpod.ai/v2/{endpoint_id}/status/{job_id}?ttl=6000` sets the TTL for the job to 6 seconds. Use this when you want to tell the system to remove a job result sooner than the default retention time.
+
+:::
+
 ## Additional operations
 
 - `/cancel/{job_id}`

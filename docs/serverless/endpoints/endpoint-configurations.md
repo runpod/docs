@@ -87,6 +87,12 @@ Default: 600 seconds (10 minutes)
 Minimum value: 10,000 milliseconds (10 seconds)
 Default value: 86,400,000 milliseconds (24 hours)
 
+:::tip
+
+You can use the `/status` operation to configure the time-to-live (TTL) for an individual job by appending a TTL parameter when checking the status of a job. For example, `https://api.runpod.ai/v2/{endpoint_id}/status/{job_id}?ttl=6000` sets the TTL for the job to 6 seconds. Use this when you want to tell the system to remove a job result sooner than the default retention time.
+
+:::
+
 ## FlashBoot
 
 FlashBoot is RunPod's magic solution for reducing the average cold-start times on your endpoint. It works probabilistically. When your endpoint has consistent traffic, your workers have a higher chance of benefiting from FlashBoot for faster spin-ups. However, if your endpoint isn't receiving frequent requests, FlashBoot has fewer opportunities to optimize performance. There's no additional cost associated with FlashBoot.
