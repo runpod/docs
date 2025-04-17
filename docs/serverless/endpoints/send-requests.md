@@ -1,10 +1,10 @@
 ---
-title: "Send a request"
+title: "Send requests"
 description: "Learn how to send requests to your Serverless endpoint, including constructing JSON request bodies, testing with the UI, using cURL, and configuring optional inputs for webhooks, execution policies, and S3-compatible storage."
 sidebar_position: 3
 ---
 
-# Send a request to an endpoint
+# Send requests to an endpoint
 
 After you've created an endpoint, you can send requests to test and use it. This guide covers different ways to send requests and configure them.
 
