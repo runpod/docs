@@ -2,7 +2,6 @@
 title: Overview
 sidebar_position: 1
 description: "Deploy and manage Serverless workers with RunPod endpoints, featuring asynchronous and synchronous operations, scalability, and flexibility for modern computing tasks."
-pagination_prev: null
 ---
 
 # Endpoints overview
