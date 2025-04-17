@@ -279,6 +279,10 @@ const config = {
             to: '/serverless/endpoints/send-requests',
             from: '/serverless/endpoints/get-started',
           },
+          {
+            to: '/serverless/endpoints/job-operations',
+            from: '/serverless/endpoints/operations',
+          },
         ]
       },
     ]

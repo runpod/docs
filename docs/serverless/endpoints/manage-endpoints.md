@@ -27,7 +27,7 @@ You can enable or disable particular GPU types using the **Advanced > Enabled GP
 
 :::
 
-After deployment, your endpoint will initialize and be ready to receive requests. You can monitor the deployment status on the endpoint details page, which shows worker status and initialization progress. Once active, your endpoint will display a unique API URL (`https://api.runpod.ai/v2/{endpoint_id}/`) that you can use to send requests. For information on how to interact with your endpoint, see [Endpoint operations](/serverless/endpoints/operations) and [Job operations](/serverless/endpoints/job-operations).
+After deployment, your endpoint will initialize and be ready to receive requests. You can monitor the deployment status on the endpoint details page, which shows worker status and initialization progress. Once active, your endpoint will display a unique API URL (`https://api.runpod.ai/v2/{endpoint_id}/`) that you can use to send requests. For information on how to interact with your endpoint, see [Job operations](/serverless/endpoints/job-operations).
 
 ## Edit an endpoint
 

@@ -69,7 +69,8 @@ For a detailed explanation of all the configurable options for an endpoint, see 
 Dive deeper into what you can achieve with RunPod endpoints through the following resources:
 
 - [Create a vLLM endpoint](/serverless/vllm/overview): Learn how to deploy a vLLM worker as a Serverless endpoint, with detailed guides on configuration and sending requests.
-- [Invoke jobs](/serverless/endpoints/job-operations): Learn how to submit jobs to your Serverless workers, with detailed guides on both asynchronous and synchronous operations.
+- [Manage jobs](/serverless/endpoints/job-operations): Learn how to submit jobs to your Serverless workers, with detailed guides on both asynchronous and synchronous operations.
 - [Send requests](/serverless/endpoints/send-requests): Discover how to communicate with your endpoints, including tips on structuring requests for optimal performance.
 - [Manage endpoints](/serverless/endpoints/manage-endpoints): Find out how to manage your endpoints effectively, from deployment to scaling and monitoring.
-- [Endpoint operations](/serverless/endpoints/operations): Access a comprehensive list of operations supported by RunPod endpoints, including detailed documentation and examples.
+
+For more information on endpoint management, see [Manage endpoints](/serverless/endpoints/manage-endpoints).

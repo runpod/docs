@@ -1,38 +1,90 @@
 ---
 title: Manage job operations
-description: "Learn how to use the Runpod endpoint to manage job operations, including running, checking status, purging queues, and streaming results, with cURL and SDK examples."
+description: "Learn how to effectively manage RunPod Serverless jobs throughout their lifecycle, from submission to completion, using asynchronous and synchronous endpoints, status tracking, cancellation, and streaming capabilities."
 sidebar_position: 4
 ---
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-This page provides instructions on job operations using the Runpod endpoint.
-You can invoke a job to run endpoints the way you would interact with an API, get a status of a job, purge your job queue, and more with operations.
+# Manage job operations
 
-The following guide demonstrates how to use cURL to interact with an endpoint. You can also use the [Python SDK](/sdks/python/endpoints) to interact with endpoints programmatically.
+RunPod's job operations allow you to control the complete lifecycle of your Serverless workloads. This guide demonstrates how to submit, monitor, manage, and retrieve results from jobs running on your RunPod endpoints.
 
-For information on sending requests, see [Send a request](/serverless/endpoints/send-requests).
+## Job operation overview
 
-## Asynchronous endpoints
+- **`/run`**: Submit an asynchronous job that processes in the background while you receive an immediate job ID.
+- **`/runsync`**: Submit a synchronous job and wait for the complete results in a single response.
+- **`/status`**: Check the current status, execution details, and results of a previously submitted job.
+- **`/stream`**: Receive incremental results from a job as they become available.
+- **`/cancel`**: Stop a job that is in progress or waiting in the queue.
+- **`/retry`**: Requeue a failed or timed-out job using the same job ID and input parameters.
+- **`/purge-queue`**: Clear all pending jobs from the queue without affecting jobs already in progress.
+- **`/health`**: Monitor the operational status of your endpoint, including worker and job statistics.
 
-Asynchronous endpoints are designed for long-running tasks. When you submit a job through these endpoints, you receive a Job ID in response.
-You can use this Job ID to check the status of your job at a later time, allowing your application to continue processing without waiting for the job to complete immediately.
-This approach is particularly useful for tasks that require significant processing time or when you want to manage multiple jobs concurrently.
+## Submitting jobs
+
+RunPod offers two primary methods for submitting jobs, each suited for different use cases.
+
+### Asynchronous jobs (`/run`)
+
+Use asynchronous jobs for longer-running tasks that don't require immediate results. This approach returns immediately with a job ID and then processes the job in the background. This approach is particularly useful for operations that require significant processing time, or when you want to manage multiple jobs concurrently.
+
+- **Payload limit**: 10 MB
+- **Job availability**: Results are available for 30 minutes after completion
 
 <Tabs>
   <TabItem value="curl" label="cURL" default>
 
 ```bash
+# Submit an asynchronous job
 curl -X POST https://api.runpod.ai/v2/{endpoint_id}/run \
     -H 'Content-Type: application/json' \
     -H 'Authorization: Bearer ${API_KEY}' \
     -d '{"input": {"prompt": "Your prompt"}}'
 ```
 
-    </TabItem>
+  </TabItem>
+  <TabItem value="python" label="Python">
 
-<TabItem value="output" label="Output">
+```python
+import requests
+
+def submit_async_job(endpoint_id, api_key, input_data):
+    """
+    Submit an asynchronous job to a RunPod endpoint.
+    
+    Args:
+        endpoint_id: Your RunPod endpoint ID
+        api_key: Your RunPod API key
+        input_data: Dictionary containing the job input
+        
+    Returns:
+        Dictionary containing job ID and status
+    """
+    url = f"https://api.runpod.ai/v2/{endpoint_id}/run"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    payload = {"input": input_data}
+    
+    response = requests.post(url, headers=headers, json=payload)
+    return response.json()
+
+# Example usage
+if __name__ == "__main__":
+    endpoint_id = "your-endpoint-id"
+    api_key = "your-api-key"
+    input_data = {"prompt": "Your prompt"}
+    
+    result = submit_async_job(endpoint_id, api_key, input_data)
+    print(f"Job ID: {result['id']}")
+    print(f"Status: {result['status']}")
+```
+
+  </TabItem>
+  <TabItem value="output" label="Response">
 
 ```json
 {
@@ -41,32 +93,63 @@ curl -X POST https://api.runpod.ai/v2/{endpoint_id}/run \
 }
 ```
 
-</TabItem>
+  </TabItem>
 </Tabs>
 
-## Synchronous endpoints
+### Synchronous jobs (`/runsync`)
 
-Synchronous endpoints are ideal for short-lived tasks where immediate results are necessary.
-Unlike asynchronous calls, synchronous endpoints wait for the job to complete and return the result directly in the response.
-This method is suitable for operations that are expected to complete quickly and where the client can afford to wait for the result.
+Use synchronous jobs for shorter tasks where you need immediate results. Synchronous jobs waits for job completion before returning the complete result in a single response. This simplifies your code by eliminating the need for status polling, which works best for quick operations (under 30 seconds).
+
+- **Payload limit**: 20 MB
+- **Job availability**: Results are available for 60 seconds after completion
 
 <Tabs>
   <TabItem value="curl" label="cURL" default>
 
 ```bash
+# Submit a synchronous job
 curl -X POST https://api.runpod.ai/v2/{endpoint_id}/runsync \
     -H 'Content-Type: application/json' \
     -H 'Authorization: Bearer ${API_KEY}' \
     -d '{"input": {"prompt": "Your prompt"}}'
 ```
 
-    </TabItem>
+  </TabItem>
+  <TabItem value="python" label="Python">
 
-<TabItem value="output" label="Output">
+```python
+import requests
+
+def submit_sync_job(endpoint_id, api_key, input_data):
+    """
+    Submit a synchronous job to a RunPod endpoint.
+    
+    Args:
+        endpoint_id: Your RunPod endpoint ID
+        api_key: Your RunPod API key
+        input_data: Dictionary containing the job input
+        
+    Returns:
+        Dictionary containing complete job results
+    """
+    url = f"https://api.runpod.ai/v2/{endpoint_id}/runsync"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    payload = {"input": input_data}
+    
+    response = requests.post(url, headers=headers, json=payload)
+    return response.json()
+```
+
+  </TabItem>
+  <TabItem value="output" label="Response">
+
 ```json
 {
-  "delayTime": 824,
-  "executionTime": 3391,
+  "delayTime": 824,      // Time in queue (ms)
+  "executionTime": 3391, // Processing time (ms)
   "id": "sync-79164ff4-d212-44bc-9fe3-389e199a5c15",
   "output": [
     {
@@ -77,124 +160,61 @@ curl -X POST https://api.runpod.ai/v2/{endpoint_id}/runsync \
   "status": "COMPLETED"
 }
 ```
+
   </TabItem>
 </Tabs>
 
-## Health endpoint
+## Monitoring jobs
 
-The `/health` endpoint provides insights into the operational status of the endpoint, including the number of workers available and job statistics.
-This information can be used to monitor the health and performance of the API, helping you manage workload and troubleshoot issues more effectively.
+### Checking job status (`/status`)
 
-<Tabs>
-  <TabItem value="curl" label="cURL" default>
+For asynchronous jobs, you can check the status at any time using the job ID. The status endpoint provides:
 
-```bash
-curl --request GET \
-     --url https://api.runpod.ai/v2/{endpoint_id}/health \
-     --header 'accept: application/json' \
-     --header 'Authorization: Bearer ${API_KEY}'
-```
-
-    </TabItem>
-
-<TabItem value="output" label="Output">
-
-```json
-{
-  "jobs": {
-    "completed": 1,
-    "failed": 5,
-    "inProgress": 0,
-    "inQueue": 2,
-    "retried": 0
-  },
-  "workers": {
-    "idle": 0,
-    "running": 0
-  }
-}
-```
-
-</TabItem>
-</Tabs>
-
-## Cancel job
-
-To cancel a job in progress, specify the `cancel` parameter with the endpoint ID and the job ID.
+- Current job state (`IN_QUEUE`, `IN_PROGRESS`, `COMPLETED`, `FAILED`, etc.).
+- Execution statistics (queue delay, processing time).
+- Job output (if completed).
 
 <Tabs>
   <TabItem value="curl" label="cURL" default>
 
 ```bash
-curl -X POST https://api.runpod.ai/v2/{endpoint_id}/cancel/{job_id} \
-    -H 'Content-Type: application/json' \
+# Check job status
+curl -X GET https://api.runpod.ai/v2/{endpoint_id}/status/{job_id} \
     -H 'Authorization: Bearer ${API_KEY}'
 ```
 
-    </TabItem>
+  </TabItem>
+  <TabItem value="python" label="Python">
 
-<TabItem value="output" label="Output">
+```python
+import requests
+
+def check_job_status(endpoint_id, job_id, api_key):
+    """
+    Check the status of a RunPod job.
+    
+    Args:
+        endpoint_id: Your RunPod endpoint ID
+        job_id: The ID of the job to check
+        api_key: Your RunPod API key
+        
+    Returns:
+        Dictionary containing job status and results (if complete)
+    """
+    url = f"https://api.runpod.ai/v2/{endpoint_id}/status/{job_id}"
+    headers = {"Authorization": f"Bearer {api_key}"}
+    
+    response = requests.get(url, headers=headers)
+    return response.json()
+```
+
+  </TabItem>
+  <TabItem value="output" label="Response">
 
 ```json
 {
-  "id": "724907fe-7bcc-4e42-998d-52cb93e1421f-u1",
-  "status": "CANCELLED"
-}
-```
-
-</TabItem>
-</Tabs>
-
-## Purge queue endpoint
-
-The `/purge-queue` endpoint allows you to clear all jobs that are currently in the queue.
-This operation does not affect jobs that are already in progress.
-It is a useful tool for managing your job queue, especially in situations where you need to reset or clear pending tasks due to operational changes or errors.
-
-<Tabs>
-  <TabItem value="curl" label="cURL" default>
-
-```bash
-curl -X POST https://api.runpod.ai/v2/{endpoint_id}/purge-queue \
-    -H 'Content-Type: application/json' \
-    -H 'Authorization: Bearer ${API_KEY}'
-```
-
-    </TabItem>
-
-<TabItem value="output" label="Output">
-
-```json
-{
-  "removed": 2,
-  "status": "completed"
-}
-```
-
-</TabItem>
-</Tabs>
-
-## Check job status
-
-To track the progress or result of an asynchronous job, you can check its status using the Job ID.
-This endpoint provides detailed information about the job, including its current status, execution time, and the output if the job has completed.
-
-<Tabs>
-  <TabItem value="curl" label="cURL" default>
-
-```bash
-curl -X POST https://api.runpod.ai/v2/{endpoint_id}/status/{job_id} \
-    -H 'Authorization: Bearer ${API_KEY}'
-```
-
-    </TabItem>
-
-<TabItem value="output" label="Output">
-
-```json
-{
-  "delayTime": 31618,
-  "executionTime": 1437,
+  "delayTime": 31618,     // Time in queue (ms)
+  "executionTime": 1437,  // Processing time (ms)
   "id": "60902e6c-08a1-426e-9cb9-9eaec90f5e2b-u1",
   "output": {
     "input_tokens": 22,
@@ -205,58 +225,59 @@ curl -X POST https://api.runpod.ai/v2/{endpoint_id}/status/{job_id} \
 }
 ```
 
-</TabItem>
+  </TabItem>
 </Tabs>
 
-## Retry a job
+:::tip
 
-To retry a job that has failed or encountered an error, send a POST request to `/retry/{job_id}` with the Job ID.
-The system will automatically requeue and retry the job.
+You can use the `/status` operation to configure the time-to-live (TTL) for an individual job by appending a TTL parameter when checking the status of a job. For example, `https://api.runpod.ai/v2/{endpoint_id}/status/{job_id}?ttl=6000` sets the TTL for the job to 6 seconds. Use this when you want to tell the system to remove a job result sooner than the default retention time.
 
-- You can retry any job with a `FAILED` or `TIMED_OUT` status, as long as the job hasn't expired.
-- Jobs submitted via `/run` expire 30 minutes after completion.
-- Jobs submitted via `/runsync` expire 1 minute after completion.
-- When a job is retried, the previous output is removed. If you call `/status` right after the retry, it will return no output until the new job run is complete.
+:::
+
+### Streaming results (`/stream`)
+
+For jobs that generate output incrementally or for very large outputs, use the stream endpoint to receive partial results as they become available. This is especially useful for:
+
+- Text generation tasks where you want to display output as it's created
+- Long-running jobs where you want to show progress
+- Large outputs that benefit from incremental processing
 
 <Tabs>
   <TabItem value="curl" label="cURL" default>
 
 ```bash
-curl -X POST https://api.runpod.ai/v2/{endpoint_id}/retry/{job_id} \
+# Stream job results
+curl -X GET https://api.runpod.ai/v2/{endpoint_id}/stream/{job_id} \
     -H 'Authorization: Bearer ${API_KEY}'
 ```
 
-    </TabItem>
+  </TabItem>
+  <TabItem value="python" label="Python">
 
-<TabItem value="output" label="Output">
+```python
+import requests
 
-```json
-{
-  "id": "60902e6c-08a1-426e-9cb9-9eaec90f5e2b-u1",
-  "status": "IN_QUEUE"
-}
+def stream_job_results(endpoint_id, job_id, api_key):
+    """
+    Stream results from a RunPod job.
+    
+    Args:
+        endpoint_id: Your RunPod endpoint ID
+        job_id: The ID of the job to stream
+        api_key: Your RunPod API key
+        
+    Returns:
+        List of partial results
+    """
+    url = f"https://api.runpod.ai/v2/{endpoint_id}/stream/{job_id}"
+    headers = {"Authorization": f"Bearer {api_key}"}
+    
+    response = requests.get(url, headers=headers)
+    return response.json()
 ```
 
-</TabItem>
-</Tabs>
-
-## Stream results
-
-For jobs that produce output incrementally, the stream endpoint allows you to receive results as they are generated.
-This is particularly useful for tasks that involve continuous data processing or where immediate partial results are beneficial.
-
-<Tabs>
-  <TabItem value="curl" label="cURL" default>
-
-```bash
-curl -X POST https://api.runpod.ai/v2/{endpoint_id}/stream/{job_id} \
-    -H 'Content-Type: application/json' \
-    -H 'Authorization: Bearer ${API_KEY}'
-```
-
-    </TabItem>
-
-<TabItem value="output" label="Output">
+  </TabItem>
+  <TabItem value="output" label="Response">
 
 ```json
 [
@@ -279,57 +300,294 @@ curl -X POST https://api.runpod.ai/v2/{endpoint_id}/stream/{job_id} \
       "output_tokens": 1,
       "text": [" How"]
     }
+  },
+  {
+    // Additional stream chunks...
   }
-  // omitted for brevity
 ]
 ```
 
-</TabItem>
+  </TabItem>
 </Tabs>
 
 :::note
 
-The maximum size for a payload that can be sent using yield to stream results is 1 MB.
+The maximum size for a single streamed payload chunk is 1 MB. Larger outputs will be split across multiple chunks.
 
 :::
 
-## Rate limits
+### Endpoint health monitoring (`/health`)
 
-RunPod's [endpoint operations](/serverless/endpoints/operations) facilitate submitting jobs and retrieving outputs.
+The health endpoint provides a quick overview of your endpoint's operational status. Use it to monitor worker availability, track job queue status, identify potential bottlenecks, and determine if scaling adjustments are needed.
 
-Access these endpoints at: `https://api.runpod.ai/v2/{endpoint_id}/{operation}`
+<Tabs>
+  <TabItem value="curl" label="cURL" default>
 
-- `/run`
+```bash
+# Check endpoint health
+curl -X GET https://api.runpod.ai/v2/{endpoint_id}/health \
+    -H 'Authorization: Bearer ${API_KEY}'
+```
 
-  - 1000 requests per 10 seconds, 200 concurrent
+  </TabItem>
+  <TabItem value="python" label="Python">
 
-- `/runsync`
+```python
+import requests
 
-  - 2000 requests per 10 seconds, 400 concurrent
+def check_endpoint_health(endpoint_id, api_key):
+    """
+    Check the health of a RunPod endpoint.
+    
+    Args:
+        endpoint_id: Your RunPod endpoint ID
+        api_key: Your RunPod API key
+        
+    Returns:
+        Dictionary containing endpoint health information
+    """
+    url = f"https://api.runpod.ai/v2/{endpoint_id}/health"
+    headers = {"Authorization": f"Bearer {api_key}"}
+    
+    response = requests.get(url, headers=headers)
+    return response.json()
+```
 
-- `/status`, `/status-sync`, `/stream`
+  </TabItem>
+  <TabItem value="output" label="Response">
 
-  - 2000 requests per 10 seconds, 400 concurrent
+```json
+{
+  "jobs": {
+    "completed": 1,
+    "failed": 5,
+    "inProgress": 0,
+    "inQueue": 2,
+    "retried": 0
+  },
+  "workers": {
+    "idle": 0,
+    "running": 0
+  }
+}
+```
 
-- `/cancel`
+  </TabItem>
+</Tabs>
 
-  - 100 requests per 10 seconds, 20 concurrent
+## Managing jobs
 
-- `/purge-queue`
+### Cancelling jobs (`/cancel`)
 
-  - 2 requests per 10 seconds
+Cancel jobs that are no longer needed or taking too long to complete. This operation stops jobs that are in progress, removes jobs from the queue if they are not yet started, and returns immediately with the job's canceled status. 
 
-- `/openai/*`
+<Tabs>
+  <TabItem value="curl" label="cURL" default>
 
-  - 2000 requests per 10 seconds, 400 concurrent
+```bash
+# Cancel a job
+curl -X POST https://api.runpod.ai/v2/{endpoint_id}/cancel/{job_id} \
+    -H 'Authorization: Bearer ${API_KEY}'
+```
 
-- `/requests`
-  - 10 requests per 10 seconds, 2 concurrent
+  </TabItem>
+  <TabItem value="python" label="Python">
 
-:::note
+```python
+import requests
 
-Retrieve results from `/status` within 30 minutes for privacy protection.
+def cancel_job(endpoint_id, job_id, api_key):
+    """
+    Cancel a RunPod job.
+    
+    Args:
+        endpoint_id: Your RunPod endpoint ID
+        job_id: The ID of the job to cancel
+        api_key: Your RunPod API key
+        
+    Returns:
+        Dictionary containing job status after cancellation
+    """
+    url = f"https://api.runpod.ai/v2/{endpoint_id}/cancel/{job_id}"
+    headers = {"Authorization": f"Bearer {api_key}"}
+    
+    response = requests.post(url, headers=headers)
+    return response.json()
+```
+
+  </TabItem>
+  <TabItem value="output" label="Response">
+
+```json
+{
+  "id": "724907fe-7bcc-4e42-998d-52cb93e1421f-u1",
+  "status": "CANCELLED"
+}
+```
+
+  </TabItem>
+</Tabs>
+
+### Retrying failed jobs (`/retry`)
+
+Retry jobs that have failed or timed out without having to submit a new job request. This operation maintains the same job ID for tracking and requeues the job with the original input parameters, removing the previous output (if any). It can only be used for jobs with a `FAILED` or `TIMED_OUT` status.
+
+<Tabs>
+  <TabItem value="curl" label="cURL" default>
+
+```bash
+# Retry a failed job
+curl -X POST https://api.runpod.ai/v2/{endpoint_id}/retry/{job_id} \
+    -H 'Authorization: Bearer ${API_KEY}'
+```
+
+  </TabItem>
+  <TabItem value="python" label="Python">
+
+```python
+import requests
+
+def retry_job(endpoint_id, job_id, api_key):
+    """
+    Retry a failed or timed-out RunPod job.
+    
+    Args:
+        endpoint_id: Your RunPod endpoint ID
+        job_id: The ID of the job to retry
+        api_key: Your RunPod API key
+        
+    Returns:
+        Dictionary containing job ID and new status
+    """
+    url = f"https://api.runpod.ai/v2/{endpoint_id}/retry/{job_id}"
+    headers = {"Authorization": f"Bearer {api_key}"}
+    
+    response = requests.post(url, headers=headers)
+    return response.json()
+```
+
+  </TabItem>
+  <TabItem value="output" label="Response">
+
+```json
+{
+  "id": "60902e6c-08a1-426e-9cb9-9eaec90f5e2b-u1",
+  "status": "IN_QUEUE"
+}
+```
+
+  </TabItem>
+</Tabs>
+
+:::important
+
+Job results expire after a set period:
+
+- Asynchronous jobs (`/run`): Results available for 30 minutes
+- Synchronous jobs (`/runsync`): Results available for 1 minute
+
+Once expired, jobs cannot be retried.
 
 :::
 
-For reference information on endpoints, see [Endpoint operations](/serverless/endpoints/operations).
+### Purging the queue (`/purge-queue`)
+
+Clear all pending jobs from the queue when you need to reset or cancel multiple jobs at once. This is useful for error recovery, clearing outdated requests, resetting after configuration changes, and managing resource allocation.
+
+<Tabs>
+  <TabItem value="curl" label="cURL" default>
+
+```bash
+# Purge the job queue
+curl -X POST https://api.runpod.ai/v2/{endpoint_id}/purge-queue \
+    -H 'Authorization: Bearer ${API_KEY}'
+```
+
+  </TabItem>
+  <TabItem value="python" label="Python">
+
+```python
+import requests
+
+def purge_queue(endpoint_id, api_key):
+    """
+    Purge all queued jobs for a RunPod endpoint.
+    
+    Args:
+        endpoint_id: Your RunPod endpoint ID
+        api_key: Your RunPod API key
+        
+    Returns:
+        Dictionary with number of removed jobs and status
+    """
+    url = f"https://api.runpod.ai/v2/{endpoint_id}/purge-queue"
+    headers = {"Authorization": f"Bearer {api_key}"}
+    
+    response = requests.post(url, headers=headers)
+    return response.json()
+```
+
+  </TabItem>
+  <TabItem value="output" label="Response">
+
+```json
+{
+  "removed": 2,
+  "status": "completed"
+}
+```
+
+  </TabItem>
+</Tabs>
+
+:::caution
+
+The purge-queue operation only affects jobs waiting in the queue. Jobs already in progress will continue to run.
+
+:::
+
+## Rate limits and quotas
+
+RunPod enforces rate limits to ensure fair platform usage. These limits apply per endpoint and operation:
+
+| Operation | Method | Rate Limit | Concurrent Limit |
+|-----------|--------|------------|------------------|
+| `/run` | POST | 1000 requests per 10 seconds | 200 concurrent |
+| `/runsync` | POST | 2000 requests per 10 seconds | 400 concurrent |
+| `/status`, `/status-sync`, `/stream` | GET/POST | 2000 requests per 10 seconds | 400 concurrent |
+| `/cancel` | POST | 100 requests per 10 seconds | 20 concurrent |
+| `/purge-queue` | POST | 2 requests per 10 seconds | N/A |
+| `/openai/*` | POST | 2000 requests per 10 seconds | 400 concurrent |
+| `/requests` | GET | 10 requests per 10 seconds | 2 concurrent |
+
+Requests will receive a `429 (Too Many Requests)` status if:
+- Queue size exceeds 50 jobs AND
+- Queue size exceeds endpoint.WorkersMax * 500
+
+Exceeding these limits will result in HTTP 429 (Too Many Requests) responses. Implement appropriate retry logic with exponential backoff in your applications to handle rate limiting gracefully.
+
+## Best practices
+
+- **Use asynchronous endpoints** for jobs that take more than a few seconds to complete.
+- **Implement polling with backoff** when checking status of asynchronous jobs.
+- **Set appropriate timeouts** in your client applications.
+- **Monitor endpoint health** regularly to detect issues early.
+- **Implement error handling** for all API calls.
+- **Use webhooks** for notification-based workflows instead of polling.
+- **Cancel unneeded jobs** to free up resources and reduce costs.
+
+## Troubleshooting
+
+| Issue | Possible Causes | Solutions |
+|-------|-----------------|-----------|
+| Job stuck in queue | No available workers, max workers limit reached | Increase max workers, check endpoint health |
+| Timeout errors | Job takes longer than execution timeout | Increase timeout in job policy, optimize job processing |
+| Failed jobs | Worker errors, input validation issues | Check logs, verify input format, retry with fixed input |
+| Rate limiting | Too many requests in short time | Implement backoff strategy, batch requests when possible |
+| Missing results | Results expired | Retrieve results within expiration window (30 min for async, 1 min for sync) |
+
+## Related resources
+
+- [Send requests to endpoints](/serverless/endpoints/send-requests)
+- [Python SDK for endpoints](/sdks/python/endpoints)
+- [Endpoint configurations](/serverless/endpoints/endpoint-configurations)
