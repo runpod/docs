@@ -4,9 +4,11 @@ description: "RunPod's endpoints enable job submission and output retrieval, usi
 sidebar_position: 5
 ---
 
-RunPod's endpoints facilitate submitting jobs and retrieving outputs. Access these endpoints at: `https://api.runpod.ai/v2/{endpoint_id}/{operation}`
+RunPod's endpoints allow you to submit jobs and retrieve outputs.
 
-### /run
+Access these endpoints at: `https://api.runpod.ai/v2/{endpoint_id}/{operation}`
+
+## /run
 
 - **Method**: `POST`
 - **Description**: Asynchronous endpoint for submitting jobs
@@ -15,7 +17,7 @@ RunPod's endpoints facilitate submitting jobs and retrieving outputs. Access the
 - **Rate Limit**: 1000 requests per 10 seconds, 200 concurrent
 - **Job Availability**: 30 minutes after completion
 
-### /runsync
+## /runsync
 
 - **Method**: `POST`
 - **Description**: Synchronous endpoint for shorter running jobs
@@ -24,13 +26,7 @@ RunPod's endpoints facilitate submitting jobs and retrieving outputs. Access the
 - **Rate Limit**: 2000 requests per 10 seconds, 400 concurrent
 - **Job Availability**: 60 seconds after completion
 
-### Queue Limits
-
-- Requests will receive a `429 (Too Many Requests)` status if:
-  - Queue size exceeds 50 jobs AND
-  - Queue size exceeds endpoint.WorkersMax * 500
-
-### Status and Stream Operations
+## /status and /stream
 
 All status and stream operations share a rate limit of 2000 requests per 10 seconds, 400 concurrent:
 
@@ -41,7 +37,11 @@ All status and stream operations share a rate limit of 2000 requests per 10 seco
 - `/stream/{job_id}` - Stream results from generator-type handlers
   - Methods: `GET` | `POST`
 
-### Additional Operations
+Requests will receive a `429 (Too Many Requests)` status if:
+- Queue size exceeds 50 jobs AND
+- Queue size exceeds endpoint.WorkersMax * 500
+
+## Additional operations
 
 - `/cancel/{job_id}`
   - **Method**: `POST`
@@ -60,4 +60,4 @@ All status and stream operations share a rate limit of 2000 requests per 10 seco
   - **Method**: `GET`
   - **Rate Limit**: 10 requests per 10 seconds, 2 concurrent
 
-To see how to run these Endpoint Operations, see [Invoke a Job](/serverless/endpoints/job-operations).
+To learn how to run these endpoint operations, see [Manage job operations](/serverless/endpoints/job-operations).

@@ -1,5 +1,5 @@
 ---
-title: "Endpoint settings"
+title: "Endpoint configurations"
 sidebar_position: 8
 description: Configure your endpoint settings to optimize performance and cost, including GPU selection, worker count, idle timeout, and advanced options like data centers, network volumes, and scaling strategies.
 ---
