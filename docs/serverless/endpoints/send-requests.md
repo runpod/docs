@@ -4,13 +4,14 @@ description: "Learn how to send requests to your Serverless endpoint, including 
 sidebar_position: 3
 ---
 
-# Send a request to a Serverless endpoint
+# Send a request to an endpoint
 
-After you've deployed an endpoint, you can send requests to test and use it. This guide covers different ways to send requests and configure them.
+After you've created an endpoint, you can send requests to test and use it. This guide covers different ways to send requests and configure them.
 
-## Test your endpoint through the UI
+## Test your endpoint using the RunPod console
 
-To test your endpoint, click the **Requests** tab in the endpoint detail page:
+To test your endpoint, select the **Requests** tab in the Serverless endpoint detail page on the [RunPod console](https://www.runpod.io/console/serverless):
+
 
 <img src="/img/docs/serverless-get-started-endpoint-details.png" width="900" alt="Screenshot of the endpoint details page."/>
 
@@ -24,16 +25,9 @@ On the left you should see the default test request:
 }
 ```
 
-If your endpoint is configured to accept input in this form (i.e., the handler function is configured to look for the `"prompt"` key in the input object), you can click **Run** to test . It will take some time for your workers to initialize.
+If your endpoint is configured to accept input in this form (i.e., the handler function knows to look for the `prompt` key in the `input` object), you can click **Run** to test it. It will take some time for your workers to initialize.
 
 When the workers have finished processing your request, you should see output on the right side of the page similar to this:
-
-
-
-1. From the Serverless endpoint detail page in the [RunPod console](https://www.runpod.io/console/serverless), select **Requests**.
-
-2. Select **Run**.
-3. You should see a successful response with the following:
 
 ```json
 {
@@ -42,7 +36,7 @@ When the workers have finished processing your request, you should see output on
 }
 ```
 
-After a few minutes, the stream will show the full response.
+After a few minutes, the stream will show a completion response, or if the endpoint is not configured correctly, error logs.
 
 ## Send a request using cURL
 
@@ -173,7 +167,7 @@ The Serverless worker must contain logic that allows it to use this input. If yo
 
 Now that you've learned how to send requests to your endpoint, you can:
 
-- [Invoke jobs](/serverless/endpoints/job-operations)
+- [Manage jobs](/serverless/endpoints/job-operations)
 - [Create more advanced handler functions](/serverless/handlers/overview)
 - [Learn about local testing](/serverless/development/local-testing)
 - [Deploy your endpoints with GitHub](/serverless/github-integration)

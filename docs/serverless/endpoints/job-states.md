@@ -1,10 +1,10 @@
 ---
-title: "Monitoring endpoints"
+title: "Endpoint monitoring"
 description: "Learn how to monitor your RunPod endpoints, including job states, performance metrics, and system health indicators to effectively manage and optimize your serverless workloads."
 sidebar_position: 9
 ---
 
-Monitoring your endpoints is crucial for understanding their performance, identifying potential issues, and optimizing your serverless workloads. This guide covers the key aspects of endpoint monitoring, including job states and endpoint metrics.
+Monitoring your endpoints is crucial for understanding their performance, identifying potential issues, and optimizing your serverless workloads. This page covers the key aspects of endpoint monitoring, including job states and endpoint metrics.
 
 ## Request job states
 

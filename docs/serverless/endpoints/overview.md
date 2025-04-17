@@ -4,21 +4,53 @@ sidebar_position: 1
 description: "Deploy and manage Serverless workers with RunPod endpoints, featuring asynchronous and synchronous operations, scalability, and flexibility for modern computing tasks."
 ---
 
-RunPod endpoints serve as the gateway to deploying and managing your Serverless workers.
-These endpoints allow for flexible interaction with a variety of models, supporting both asynchronous and synchronous operations tailored to your computational needs.
-Whether you're processing large data sets, requiring immediate results, or scheduling tasks to run in the background, RunPod's API endpoints provide the versatility and scalability essential for modern computing tasks.
+# Endpoints overview
+
+Endpoints are the foundation of RunPod Serverless, serving as the gateway for deploying and managing your Serverless workers. They provide a consistent API interface that allows your applications to interact with powerful computational resources on demand.
+
+## What are endpoints?
+
+RunPod endpoints are REST APIs that execute your code in response to HTTP requests. Each endpoint:
+
+- Provides a unique URL for sending requests
+- Manages the lifecycle of Serverless workers
+- Handles job queuing, execution, and result delivery
+- Supports both synchronous and asynchronous operations
+- Automatically scales based on demand
+
+Whether you're processing large datasets, running AI inference, or performing compute-intensive tasks, endpoints give you the flexibility to deploy and scale your workloads without managing infrastructure.
 
 ## Key features
 
-- **Asynchronous and synchronous jobs:** Choose the execution mode that best fits your workflow, whether it's a task that runs in the background or one that delivers immediate results.
-- **Serverless workers:** Deploy your computational tasks without worrying about server management, enjoying the benefits of a fully managed infrastructure.
-- **Scalability and flexibility:** Easily scale your operations up or down based on demand, with the flexibility to handle various computational loads.
+### Execution modes
 
-<img src="/img/docs/serverless-request-flow.png" width="800" alt="A diagram demonstrating the Serverless endpoint request flow"/>
+- **Asynchronous processing**: Submit jobs that run in the background and check results later, ideal for long-running tasks
+- **Synchronous operations**: Receive immediate results in the same request, perfect for interactive applications
+- **Streaming responses**: Get partial results as they're generated for real-time applications
+
+### Deployment and scaling
+
+- **Auto-scaling workers**: Automatically scale from zero to hundreds of workers based on demand
+- **Worker configuration**: Customize worker count, GPU allocation, and memory settings
+- **GPU prioritization**: Specify preferred GPU types in order of priority
+
+### Integration options
+
+- **Webhook notifications**: Configure endpoints to call your webhook when jobs complete
+- **S3-compatible storage**: Integrate with object storage for larger inputs and outputs
+- **Execution policies**: Control job timeouts, priority levels, and queue time-to-live
 
 ## Key concepts
 
-Check out these two links for fundamental endpoint concepts, including key definitions and basic settings.
+Understanding these fundamental concepts will help you work effectively with Serverless endpoints:
+
+- **Endpoints**: A URL that serves as the entry point for your Serverless worker, allowing you to send requests and receive responses.
+- **Request**: The HTTP request that a user sends to an endpoint, which can include parameters, payloads, and headers that define what the endpoint should process.
+- **Jobs**: When a request is sent to an endpoint, it creates a job that gets processed by a worker. Jobs can be either synchronous (immediate response) or asynchronous (background processing).
+- **Worker**: The containerized environment that executes your Handler code, providing the compute resources (CPU, GPU, memory) needed to process requests.
+- **Handlers**: The code that processes incoming requests and returns responses. Handlers define the business logic of your endpoint.
+
+<img src="/img/docs/serverless-request-flow.png" width="800" alt="A diagram demonstrating the Serverless endpoint request flow"/>
 
 ## Create a custom endpoint
 
