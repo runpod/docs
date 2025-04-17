@@ -1,5 +1,5 @@
 ---
-title: Manage job operations
+title: Endpoint operations
 description: "Learn how to effectively manage RunPod Serverless jobs throughout their lifecycle, from submission to completion, using asynchronous and synchronous endpoints, status tracking, cancellation, and streaming capabilities."
 sidebar_position: 4
 ---
@@ -7,11 +7,11 @@ sidebar_position: 4
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Manage job operations
+# Endpoint operations
 
-RunPod's job operations allow you to control the complete lifecycle of your Serverless workloads. This guide demonstrates how to submit, monitor, manage, and retrieve results from jobs running on your RunPod endpoints.
+RunPod's endpoint operations allow you to control the complete lifecycle of your Serverless workloads. This guide demonstrates how to submit, monitor, manage, and retrieve results from jobs running on your Serverless endpoints.
 
-## Job operation overview
+## Operation overview
 
 - **`/run`**: Submit an asynchronous job that processes in the background while you receive an immediate job ID.
 - **`/runsync`**: Submit a synchronous job and wait for the complete results in a single response.
