@@ -1,46 +1,66 @@
 ---
 title: Overview
 sidebar_position: 1
-description: "Deploy and manage serverless workers with RunPod Endpoints, featuring asynchronous and synchronous operations, scalability, and flexibility for modern computing tasks."
+description: "Deploy and manage Serverless workers with RunPod endpoints, featuring asynchronous and synchronous operations, scalability, and flexibility for modern computing tasks."
 ---
 
-RunPod Endpoints serve as the gateway to deploying and managing your Serverless Workers.
-These endpoints allow for flexible interaction with a variety of models, supporting both asynchronous and synchronous operations tailored to your computational needs.
-Whether you're processing large data sets, requiring immediate results, or scheduling tasks to run in the background, RunPod's API Endpoints provide the versatility and scalability essential for modern computing tasks.
+# Endpoints overview
 
-### Key features
+Endpoints are the foundation of RunPod Serverless, serving as the gateway for deploying and managing your Serverless workers. They provide a consistent API interface that allows your applications to interact with powerful computational resources on demand.
 
-- **Asynchronous and synchronous jobs:** Choose the execution mode that best fits your workflow, whether it's a task that runs in the background or one that delivers immediate results.
-- **Serverless Workers:** Deploy your computational tasks without worrying about server management, enjoying the benefits of a fully managed infrastructure.
-- **Scalability and flexibility:** Easily scale your operations up or down based on demand, with the flexibility to handle various computational loads.
+Whether you're processing large datasets, running AI inference, or performing compute-intensive tasks, endpoints give you the flexibility to deploy and scale your workloads.
 
-### Key Concepts
+## What are endpoints?
 
-Check out these two links for fundamental endpoint concepts, including key definitions and basic settings.
+RunPod endpoints are RESTful APIs that accept HTTP requests, execute your code, and return the result via HTTP response. Each endpoint provides a unique URL and abstracts away the complexity of managing infrastructure. Behind the scenes, RunPod handles the entire lifecycle of Serverless workers, including job queuing, execution, and result delivery, so you can focus on your code, not the infrastructure.
 
-- [Glossary](../../glossary.md)
-- [Settings](../references/endpoint-configurations.md)
+## Key features
 
-### Getting started
+### Execution modes
 
-Before you begin, ensure you have obtained your [RunPod API key](/get-started/api-keys).
-This key is essential for authentication, billing, and accessing the API.
+Serverless offers **asynchronous processing** via the `/run` endpoint operation, which lets you submit jobs that run in the background and check results later, making this ideal for long-running tasks.
 
-You can find your API key in the [user settings section](https://www.runpod.io/console/user/settings) of your RunPod account.
+It also provides **synchronous operations** through the `/runsync` endpoint operation, allowing you to receive immediate results in the same request, which is perfect for interactive applications.
 
-:::note
+To learn more, see [Endpoint operations](/serverless/endpoints/operations).
 
-**Privacy and security:** RunPod prioritizes your data's privacy and security.
-Inputs and outputs are retained for a maximum of 30 minutes for asynchronous requests and 1 minute for synchronous requests to protect your information.
+### Deployment and scaling
 
-:::
+RunPod endpoints are **auto-scaling**, automatically scaling from zero to hundreds of workers based on demand. You can **customize your endpoint configuration** to adjust the minimum and maximum worker count, GPU allocation, and memory settings. The system also offers **GPU prioritization**, allowing you to specify preferred GPU types in order of priority.
 
-### Exploring RunPod Endpoints
+To learn more, see [Endpoint configurations](/serverless/endpoints/endpoint-configurations).
 
-Dive deeper into what you can achieve with RunPod Endpoints through the following resources:
+### Integration options
 
-- [Use the vLLM Worker](/serverless/workers/vllm/overview): Learn how to deploy a vLLM Worker as a Serverless Endpoint, with detailed guides on configuration and sending requests.
-- [Invoke Jobs](/serverless/endpoints/job-operations): Learn how to submit jobs to your serverless workers, with detailed guides on both asynchronous and synchronous operations.
-- [Send Requests](/serverless/endpoints/send-requests): Discover how to communicate with your endpoints, including tips on structuring requests for optimal performance.
-- [Manage Endpoints](/serverless/endpoints/manage-endpoints): Find out how to manage your endpoints effectively, from deployment to scaling and monitoring.
-- [Endpoint Operations](/serverless/references/operations): Access a comprehensive list of operations supported by RunPod Endpoints, including detailed documentation and examples.
+RunPod endpoints support [webhook notifications](/serverless/endpoints/send-requests#webhook-notifications), allowing you to configure endpoints to call your webhook when jobs complete.
+
+It also includes [S3-compatible storage integration](/serverless/endpoints/send-requests#s3-compatible-storage-integration) for working with object storage for larger inputs and outputs.
+
+## Key concepts
+
+Understanding these fundamental concepts will help you work effectively with Serverless endpoints:
+
+An **endpoint** is a RESTful API, which provides a URL that serves as the entry point for your Serverless worker, allowing you to send requests and receive responses.
+
+A **request** is an HTTP request that you send to an endpoint, which can include parameters, payloads, and headers that define what the endpoint should process. For example, a `POST` request to run a job, or a `GET` request to check status of a job or endpoint health.
+
+When a request is sent to an endpoint, it creates a **job** that gets processed by a worker. **Jobs** can be either synchronous (immediate response) or asynchronous (background processing).
+
+A **worker** is the containerized environment that executes your handler code, providing the compute resources (CPU, GPU, memory) needed to process requests.
+
+The **handler** is the code that processes incoming requests and returns responses, defining the business logic of your endpoint.
+
+<img src="/img/docs/serverless-request-flow.png" width="800" alt="A diagram demonstrating the Serverless endpoint request flow"/>
+
+## Getting started
+
+[Follow this step-by-step guide](/serverless/get-started) to create your first custom endpoint. This tutorial walks you through the process of setting up your development environment, creating a handler file, testing your endpoint locally, building and deploying a worker image, and sending endpoint requests using the RunPod console.
+
+## Next steps
+
+Dive deeper into what you can achieve with RunPod Serverless endpoints:
+
+- [Learn how to deploy a vLLM worker as a Serverless endpoint.](/serverless/vllm/overview)
+- [Learn how to submit jobs to your Serverless workers.](/serverless/endpoints/operations)
+- [Send requests to your endpoints programmatically.](/serverless/endpoints/send-requests)
+- [Learn how to manage your endpoints using the RunPod console.](/serverless/endpoints/manage-endpoints)

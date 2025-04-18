@@ -1,5 +1,5 @@
 ---
-title: Quick Deploys
+title: Quick Deploy an endpoint
 sidebar_position: 2
 description: "Quickly deploy Serverless endpoints using popular AI models with minimal configuration through the web interface, following a simple 5-step process. Customize your deployments using RunPod's GitHub repositories and Handler Functions."
 ---
@@ -25,4 +25,4 @@ Here, you can fork the programming and compute model templates.
 Begin with the [worker-template](https://github.com/runpod-workers/worker-template) and modify it as needed.
 These RunPod workers incorporate CI/CD features to streamline your project setup.
 
-For detailed guidance on customizing your interaction Endpoints, refer to [Handler Functions](/serverless/workers/handlers/overview).
+For detailed guidance on customizing your interaction Endpoints, refer to [Handler Functions](/serverless/handlers/overview).

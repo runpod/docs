@@ -1,5 +1,5 @@
 ---
-title: "Asynchronous Handler"
+title: "Asynchronous handler"
 id: "handler-async"
 sidebar_position: 3
 description: "RunPod supports asynchronous handlers in Python, enabling efficient handling of tasks with non-blocking operations, such as processing large datasets, API interactions, or I/O-bound operations, boosting efficiency, scalability, and flexibility."
@@ -7,7 +7,7 @@ description: "RunPod supports asynchronous handlers in Python, enabling efficien
 
 RunPod supports the use of asynchronous handlers, enabling efficient handling of tasks that benefit from non-blocking operations. This feature is particularly useful for tasks like processing large datasets, interacting with APIs, or handling I/O-bound operations.
 
-## Writing asynchronous Handlers
+## Writing asynchronous handlers
 
 Asynchronous handlers in RunPod are written using Python's `async` and `await` syntax. Below is a sample implementation of an asynchronous generator handler. This example demonstrates how you can yield multiple outputs over time, simulating tasks such as processing data streams or generating responses incrementally.
 
@@ -35,7 +35,7 @@ runpod.serverless.start(
 )
 ```
 
-### Benefits of asynchronous Handlers
+### Benefits of asynchronous handlers
 
 - **Efficiency**: Asynchronous handlers can perform non-blocking operations, allowing for more tasks to be handled concurrently.
 - **Scalability**: They are ideal for scaling applications, particularly when dealing with high-frequency requests or large-scale data processing.

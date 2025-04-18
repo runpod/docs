@@ -20,39 +20,40 @@ RunPod Serverless is a cloud computing platform that lets you run AI models and 
 
 RunPod Serverless offers three ways to deploy your workloads, each designed for different use cases:
 
-### 1. Quick Deploys
+### Quick Deploys
 
 **Best for**: Getting popular AI models running quickly with minimal setup.
 
 Quick Deploys are pre-configured templates for popular AI models that you can deploy with just a few clicks:
-* No coding required
-* Pre-optimized configurations
-* Wide selection of popular AI models
-* Minimal technical knowledge needed
+* No coding required.
+* Pre-optimized configurations.
+* Wide selection of popular AI models.
+* Minimal technical knowledge needed.
 
 [Get started with Quick Deploys →](/serverless/quick-deploys)
 
-### 2. vLLM endpoints
+### vLLM endpoints
 
 **Best for**: Deploying and serving large language models (LLMs).
 
 vLLM endpoints are specifically optimized for running LLMs:
-* Support for any [Hugging Face model](https://huggingface.co/models)
-* Optimized for LLM inference
-* Simple configuration via environment variables
-* High-performance serving with vLLM
+* Support for any [Hugging Face model](https://huggingface.co/models).
+* Optimized for LLM inference.
+* Simple configuration via environment variables.
+* High-performance serving with vLLM.
 
-[Get started with vLLM endpoints →](/serverless/workers/vllm/get-started)
+[Get started with vLLM endpoints →](/serverless/vllm/get-started)
 
-### 3. Custom endpoints
+### Custom endpoints
 
 **Best for**: Running custom code or specialized AI workloads.
 
 Custom endpoints give you complete control over your application:
-* Write your own Python code
-* Package in Docker containers
-* Full flexibility for any use case
-* Custom processing logic
+
+* Write your own Python code.
+* Package in Docker containers.
+* Full flexibility for any use case.
+* Custom processing logic.
 
 [Get started with custom endpoints →](/serverless/get-started)
 
@@ -68,7 +69,7 @@ An [endpoint](/serverless/endpoints/overview) is the access point for your Serve
 
 ### Handler functions
 
-[Handler functions](/serverless/workers/handlers/overview) are the core of your Serverless application. These are the functions that process incoming requests and return results. They follow a simple pattern:
+[Handler functions](/serverless/handlers/overview) are the core of your Serverless application. These are the functions that process incoming requests and return results. They follow a simple pattern:
 
 ```python # rp_handler.py
 import runpod  # Required
@@ -93,11 +94,11 @@ When a user/client sends a request to your Serverless endpoint:
 1. If no workers are active, RunPod automatically starts one (cold start).
 2. The request is queued until a worker is available.
 3. Your handler function processes the request.
-4. The result is returned to the user/client.
+4. The result is returned to the user/client after they call `/status` (see [Job operations](/serverless/endpoints/operations)).
 5. Workers remain active for a period to handle additional requests.
 6. Idle workers eventually shut down if no new requests arrive.
 
-<img src="/img/docs/serverless-request-flow.png" width="800" alt="A diagram demonstrating the Serverless endpoint request flow"/>
+<img src="/img/docs/serverless-request-flow.png" width="800" alt="Diagram showing the complete flow of a request through a Serverless endpoint, from initial request to response"/>
 
 ## Common use cases
 
@@ -113,6 +114,6 @@ Ready to get started with RunPod Serverless?
 
 - [Deploy your first Serverless endpoint.](/serverless/get-started)
 - [Try a Quick Deploy model.](/serverless/quick-deploys)
-- [Deploy large language models in minutes with vLLM.](/serverless/workers/vllm/overview)
-- [Learn about handler functions.](/serverless/workers/handlers/overview)
+- [Deploy large language models in minutes with vLLM.](/serverless/vllm/overview)
+- [Learn about handler functions.](/serverless/handlers/overview)
 - [Learn about endpoints.](/serverless/endpoints/overview)

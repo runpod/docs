@@ -1,5 +1,5 @@
 ---
-title: Handling Errors
+title: Handling errors
 description: "Learn how to handle exceptions and implement custom error responses in your RunPod SDK handler function, including how to validate input and return customized error messages."
 sidebar_position: 4
 ---
@@ -37,4 +37,4 @@ Be cautious with `try/except` blocks in your handler function. Avoid suppressing
 
 :::
 
-One design pattern to consider, is to [Refresh your Worker](/serverless/workers/handlers/handler-additional-controls#refresh-worker) when an error occurs.
+One design pattern to consider, is to [Refresh your Worker](/serverless/handlers/handler-additional-controls#refresh-worker) when an error occurs.

@@ -29,7 +29,7 @@ To start using Mods, follow these step-by-step instructions:
 
      ```yml
      runpod:
-       # https://docs.runpod.io/serverless/workers/vllm/openai-compatibility
+       # https://docs.runpod.io/serverless/vllm/openai-compatibility
        base-url: https://api.runpod.ai/v2/${YOUR_ENDPOINT}/openai/v1
        api-key:
        api-key-env: RUNPOD_API_KEY

@@ -1,12 +1,12 @@
 ---
-title: "502 Errors"
+title: "502 errors"
 id: "troubleshooting-502-errors"
 description: "Troubleshoot 502 errors in your deployed pod by checking GPU attachment, pod logs, and official template instructions to resolve issues and enable seamless access."
 ---
 
 502 errors can occur when users attempt to access a program running on a specific port of a deployed pod and the program isn't running or has encountered an error. This document provides guidance to help you troubleshoot this error.
 
-### Check Your Pod's GPU
+### Check your Pod's GPU
 
 The first step to troubleshooting a 502 error is to check whether your pod has a GPU attached.
 
@@ -18,7 +18,7 @@ If a GPU is attached, you will see it under the Pods screen (e.g. 1 x A6000). If
 
 ![](/img/docs/fb4c0dd-image.png)
 
-### Check Your Pod's Logs
+### Check your Pod's logs
 
 After confirming that your pod has a GPU attached, the next step is to check your pod's logs for any errors.
 
@@ -27,7 +27,7 @@ After confirming that your pod has a GPU attached, the next step is to check you
 2. ![](/img/docs/3500eba-image.png)\
    **Look for errors**: Browse through the logs to find any error messages that may provide clues about why you're experiencing a 502 error.
 
-### Verify Additional Steps for Official Templates
+### Verify additional steps for official templates
 
 In some cases, for our official templates, the user interface does not work right away and may require additional steps to be performed by the user.
 

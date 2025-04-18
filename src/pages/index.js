@@ -69,7 +69,7 @@ const ActionCards = [
       "Make inference requests via API",
     ],
     cta: "Deploy vLLM",
-    url: "/serverless/workers/vllm/get-started",
+    url: "/serverless/vllm/get-started",
     color: "primary",
   },
   {
