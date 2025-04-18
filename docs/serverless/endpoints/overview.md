@@ -24,21 +24,25 @@ Whether you're processing large datasets, running AI inference, or performing co
 
 ### Execution modes
 
-- **Asynchronous processing**: Submit jobs that run in the background and check results later, ideal for long-running tasks
-- **Synchronous operations**: Receive immediate results in the same request, perfect for interactive applications
-- **Streaming responses**: Get partial results as they're generated for real-time applications
+- **Asynchronous processing (`/run`)**: Submit jobs that run in the background and check results later, ideal for long-running tasks.
+- **Synchronous operations (`/runsync`)**: Receive immediate results in the same request, perfect for interactive applications.
+- **Streaming responses (`/stream`)**: Get partial results as they're generated for real-time applications.
+
+To learn more, see [Endpoint operations](/serverless/endpoints/operations).
 
 ### Deployment and scaling
 
-- **Auto-scaling workers**: Automatically scale from zero to hundreds of workers based on demand
-- **Worker configuration**: Customize worker count, GPU allocation, and memory settings
-- **GPU prioritization**: Specify preferred GPU types in order of priority
+- **Auto-scaling workers**: Automatically scale from zero to hundreds of workers based on demand.
+- **Worker configuration**: Customize worker count, GPU allocation, and memory settings.
+- **GPU prioritization**: Specify preferred GPU types in order of priority.
 
 ### Integration options
 
-- **Webhook notifications**: Configure endpoints to call your webhook when jobs complete
-- **S3-compatible storage**: Integrate with object storage for larger inputs and outputs
-- **Execution policies**: Control job timeouts, priority levels, and queue time-to-live
+- **Webhook notifications**: Configure endpoints to call your webhook when jobs complete.
+- **S3-compatible storage**: Integrate with object storage for larger inputs and outputs.
+- **Execution policies**: Control job timeouts, priority levels, and queue time-to-live.
+
+
 
 ## Key concepts
 
@@ -52,25 +56,23 @@ Understanding these fundamental concepts will help you work effectively with Ser
 
 <img src="/img/docs/serverless-request-flow.png" width="800" alt="A diagram demonstrating the Serverless endpoint request flow"/>
 
-## Create a custom endpoint
+## Getting started
 
-Ready to create your first endpoint? Follow our step-by-step guide to [create a custom endpoint](/serverless/get-started) that walks you through:
+Ready to create your first endpoint? Follow this step-by-step guide to [create a custom endpoint](/serverless/get-started) that walks you through:
 
-- Setting up your development environment
-- Creating a handler file
-- Testing your endpoint locally
-- Building and deploying your Docker image
-- Sending requests to your endpoint
+- Setting up your development environment.
+- Creating a handler file.
+- Testing your endpoint locally.
+- Building and deploying your Docker image.
+- Sending requests to your endpoint.
 
-For a detailed explanation of all the configurable options for an endpoint, see [Endpoint settings](/serverless/endpoints/endpoint-configurations.md).
+For a detailed explanation of all the configurable settings for an endpoint, see [Endpoint configurations](/serverless/endpoints/endpoint-configurations.md).
 
 ## Next steps
 
-Dive deeper into what you can achieve with RunPod endpoints through the following resources:
+Dive deeper into what you can achieve with RunPod Serverless endpoints:
 
-- [Create a vLLM endpoint](/serverless/vllm/overview): Learn how to deploy a vLLM worker as a Serverless endpoint, with detailed guides on configuration and sending requests.
-- [Manage jobs](/serverless/endpoints/job-operations): Learn how to submit jobs to your Serverless workers, with detailed guides on both asynchronous and synchronous operations.
-- [Send requests](/serverless/endpoints/send-requests): Discover how to communicate with your endpoints, including tips on structuring requests for optimal performance.
-- [Manage endpoints](/serverless/endpoints/manage-endpoints): Find out how to manage your endpoints effectively, from deployment to scaling and monitoring.
-
-For more information on endpoint management, see [Manage endpoints](/serverless/endpoints/manage-endpoints).
+- [Learn how to deploy a vLLM worker as a Serverless endpoint.](/serverless/vllm/overview)
+- [Learn how to submit jobs to your Serverless workers.](/serverless/endpoints/operations)
+- [Send requests to your endpoints programmatically.](/serverless/endpoints/send-requests)
+- [Learn how to manage your endpoints using the RunPod console.](/serverless/endpoints/manage-endpoints)

@@ -14,7 +14,7 @@ The name you assign to your endpoint for easy identification in your dashboard. 
 
 ### GPU selection
 
-Choose one or more GPU types for your endpoint in order of preference. RunPod will prioritize allocating the first GPU type in your list and fall back to subsequent GPU types if your first choice is unavailable. Selecting multiple GPU types improves availability, especially for high-demand GPUs.
+Choose one or more GPU types for your endpoint in order of preference. RunPod prioritizes allocating the first GPU type in your list and falls back to subsequent GPU types if your first choice is unavailable. Selecting multiple GPU types improves availability, especially for high-demand GPUs.
 
 ### Worker configuration
 
@@ -54,7 +54,7 @@ The amount of time workers keep running without an active request (you are charg
 
 #### Execution timeout
 
-The maximum time a job can run before automatic termination. This prevents runaway jobs from consuming excessive resources. You can disable this setting, but we highly recommend keeping it enabled.
+The maximum time a job can run before automatic termination. This prevents runaway jobs from consuming excessive resources. You can turn off this setting, but we highly recommend keeping it on.
 
 - **Default**: 600 seconds (10 minutes)
 - **Maximum**: 24 hours (can be extended using job TTL)
@@ -88,7 +88,7 @@ Control which data centers can deploy and cache your workers. Allowing multiple 
 
 ### Network volumes
 
-Attach persistent storage to your workers.  Network volumes have higher latency than local storage, and restrict workers to the data center containing your volume. However, they are very useful for sharing large models or data between workers on an endpoint.
+Attach persistent storage to your workers. Network volumes have higher latency than local storage, and restrict workers to the data center containing your volume. However, they're very useful for sharing large models or data between workers on an endpoint.
 
 See [Create a network volume](/pods/storage/create-network-volumes) for more information.
 

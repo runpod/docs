@@ -280,8 +280,8 @@ const config = {
             from: '/serverless/endpoints/get-started',
           },
           {
-            to: '/serverless/endpoints/job-operations',
-            from: '/serverless/endpoints/operations',
+            to: '/serverless/endpoints/operations',
+            from: '/serverless/endpoints/job-operations',
           },
         ]
       },

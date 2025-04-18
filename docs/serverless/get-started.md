@@ -237,8 +237,8 @@ Congratulations, you've successfully deployed and tested your first Serverless e
 
 Now that you've learned the basics, you're ready to:
 
-- [Deploy large language models from Hugging Face as Serverless endpoints.](/serverless/vllm/get-started)
-- [Manage your Serverless endpoints  using the web interface.](/serverless/endpoints/manage-endpoints)
+- [Send endpoint requests using cURL and the Serverless SDK.](/serverless/endpoints/send-requests)
+- [Learn how to use endpoint operations like `/run` and `/status`.](/serverless/endpoints/operations)
+- [Manage your Serverless endpoints using the RunPod console.](/serverless/endpoints/manage-endpoints)
 - [Create more advanced handler functions.](/serverless/handlers/overview)
-- [Deploy your endpoints with GitHub.](/serverless/github-integration)
 - [Learn more about local testing.](/serverless/development/local-testing)

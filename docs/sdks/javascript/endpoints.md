@@ -626,7 +626,7 @@ console.log(result);
 </TabItem>
 </Tabs>
 
-For more information, see [Execution policy](/serverless/endpoints/job-operations).
+For more information, see [Execution policy](/serverless/endpoints/operations).
 
 ## Purge queue
 

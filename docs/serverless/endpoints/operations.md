@@ -562,7 +562,7 @@ RunPod enforces rate limits to ensure fair platform usage. These limits apply pe
 
 Requests will receive a `429 (Too Many Requests)` status if:
 - Queue size exceeds 50 jobs AND
-- Queue size exceeds endpoint.WorkersMax * 500
+- Queue size exceeds `endpoint.WorkersMax * 500`
 
 Exceeding these limits will result in HTTP 429 (Too Many Requests) responses. Implement appropriate retry logic with exponential backoff in your applications to handle rate limiting gracefully.
 
@@ -573,7 +573,7 @@ Exceeding these limits will result in HTTP 429 (Too Many Requests) responses. Im
 - **Set appropriate timeouts** in your client applications.
 - **Monitor endpoint health** regularly to detect issues early.
 - **Implement error handling** for all API calls.
-- **Use webhooks** for notification-based workflows instead of polling.
+- **Use webhooks** for notification-based workflows instead of polling. See [Send requests](/serverless/endpoints/send-requests#webhook-notifications) for implementation details.
 - **Cancel unneeded jobs** to free up resources and reduce costs.
 
 ## Troubleshooting
@@ -588,6 +588,6 @@ Exceeding these limits will result in HTTP 429 (Too Many Requests) responses. Im
 
 ## Related resources
 
-- [Send requests to endpoints](/serverless/endpoints/send-requests)
-- [Python SDK for endpoints](/sdks/python/endpoints)
-- [Endpoint configurations](/serverless/endpoints/endpoint-configurations)
+- [Send requests to endpoints.](/serverless/endpoints/send-requests)
+- [Python SDK for endpoints.](/sdks/python/endpoints)
+- [Endpoint configurations.](/serverless/endpoints/endpoint-configurations)

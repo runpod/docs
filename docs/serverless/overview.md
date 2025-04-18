@@ -94,7 +94,7 @@ When a user/client sends a request to your Serverless endpoint:
 1. If no workers are active, RunPod automatically starts one (cold start).
 2. The request is queued until a worker is available.
 3. Your handler function processes the request.
-4. The result is returned to the user/client after they call `/status` (see [Job operations](/serverless/endpoints/job-operations)).
+4. The result is returned to the user/client after they call `/status` (see [Job operations](/serverless/endpoints/operations)).
 5. Workers remain active for a period to handle additional requests.
 6. Idle workers eventually shut down if no new requests arrive.
 

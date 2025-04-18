@@ -17,7 +17,7 @@ Before sending requests, it's important to understand the basic structure. All r
 
 1. Include an `input` object that contains the parameters for your worker's [handler function](/serverless/handler/).
 2. Be formatted as valid JSON.
-3. Include your API key for authentication.
+3. Include your API key for authentication (unless sent from the RunPod console).
 
 ### Basic request structure
 
@@ -233,7 +233,7 @@ The S3 integration works with any S3-compatible storage provider, not just AWS S
 
 ## Asynchronous vs. synchronous requests
 
-RunPod endpoints support two types of requests: synchronous and asynchronous. To learn about them in more detail, see [Endpoint operations](/serverless/endpoints/job-operations).
+RunPod endpoints support two types of requests: synchronous and asynchronous. To learn about them in more detail, see [Endpoint operations](/serverless/endpoints/operations).
 
 ### Synchronous requests (`/runsync`)
 
@@ -281,7 +281,7 @@ Implementing proper error handling and retry logic will make your integrations m
 
 Now that you've learned how to send requests to your endpoint, you can:
 
-- [Manage job operations.](/serverless/endpoints/job-operations)
+- [Manage job operations.](/serverless/endpoints/operations)
 - [Create more advanced handler functions.](/serverless/handlers/overview)
 - [Learn about local testing.](/serverless/development/local-testing)
 - [Deploy your endpoints with GitHub.](/serverless/github-integration)

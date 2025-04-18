@@ -21,13 +21,13 @@ Create a new Serverless endpoint through the RunPod web interface:
 
 :::tip
 
-You can optimize cost and availability by specifying GPU preferences in order of priority. RunPod will attempt to allocate your first choice GPU. If unavailable, it will automatically use the next GPU in your priority list, ensuring your workloads run on the best available resources.
+You can optimize cost and availability by specifying GPU preferences in order of priority. RunPod attempts to allocate your first choice GPU. If unavailable, it automatically uses the next GPU in your priority list, ensuring your workloads run on the best available resources.
 
 You can enable or disable particular GPU types using the **Advanced > Enabled GPU Types** section.
 
 :::
 
-After deployment, your endpoint will initialize and be ready to receive requests. You can monitor the deployment status on the endpoint details page, which shows worker status and initialization progress. Once active, your endpoint will display a unique API URL (`https://api.runpod.ai/v2/{endpoint_id}/`) that you can use to send requests. For information on how to interact with your endpoint, see [Job operations](/serverless/endpoints/job-operations).
+After deployment, your endpoint takes time to initialize before it is ready to process requests. You can monitor the deployment status on the endpoint details page, which shows worker status and initialization progress. Once active, your endpoint displays a unique API URL (`https://api.runpod.ai/v2/{endpoint_id}/`) that you can use to send requests. For information on how to interact with your endpoint, see [Endpoint operations](/serverless/endpoints/operations).
 
 ## Edit an endpoint
 
@@ -44,7 +44,7 @@ You can modify your endpoint's configuration at any time:
    - Storage
 5. Click **Save Endpoint** to apply your changes.
 
-Changes will take effect over time as each worker is updated to the new configuration.
+Changes take effect over time as each worker is updated to the new configuration.
 
 > **Tip**: To force an immediate configuration update, temporarily set **Max Workers** to 0, click **Update**, then restore your desired worker count and update again.
 
@@ -82,7 +82,7 @@ After confirmation, the endpoint will be removed from your account, and you'll n
 
 ## Next steps
 
-- Learn how to [send requests to your endpoints](/serverless/endpoints/send-requests)
-- Explore advanced [job operations](/serverless/endpoints/job-operations)
-- Set up [webhooks and integrations](/serverless/endpoints/send-requests#webhook-integration)
-- Optimize your endpoints for [cost and performance](/serverless/endpoints/endpoint-configurations)
+- [Learn how to send requests to your endpoints.](/serverless/endpoints/send-requests)
+- [Explore advanced endpoint operations.](/serverless/endpoints/operations)
+- [Optimize your endpoints for cost and performance.](/serverless/endpoints/endpoint-configurations)
+- [Learn about endpoint job states and metrics.](/serverless/endpoints/job-states)
