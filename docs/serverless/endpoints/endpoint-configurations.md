@@ -20,17 +20,15 @@ Choose one or more GPU types for your endpoint in order of preference. RunPod pr
 
 #### Active (min) workers
 
-Sets the minimum number of workers that remain running at all times.
+Sets the minimum number of workers that remain running at all times. Setting this at one or higher eliminates cold start delays for faster response times. Active workers incur charges immediately, but receive up to 30% discount from regular pricing.
 
-- **Default**: 0 (scales to zero when idle)
-
-Setting this at one or higher eliminates cold start delays for faster response times. Active workers incur charges immediately, but receive up to 30% discount from regular pricing.
+Default: 0
 
 #### Max workers
 
 The maximum number of concurrent workers your endpoint can scale to.
 
-- **Default**: 3
+Default: 3
 
 :::tip
 
@@ -42,7 +40,7 @@ We recommend that you set this value 20% higher than your expected maximum concu
 
 The number of GPUs assigned to each worker instance.
 
-- **Default**: 1
+Default: 1
 
 ### Timeout settings
 
@@ -50,21 +48,21 @@ The number of GPUs assigned to each worker instance.
 
 The amount of time workers keep running without an active request (you are charged for active and idle workers at the same rate). An idle timeout of at least 5 seconds is recommended to minimize cold starts. Longer timeouts reduce cold starts for intermittent traffic but increase costs.
 
-- **Default**: 5 seconds
+Default: 5 seconds
 
 #### Execution timeout
 
 The maximum time a job can run before automatic termination. This prevents runaway jobs from consuming excessive resources. You can turn off this setting, but we highly recommend keeping it on.
 
-- **Default**: 600 seconds (10 minutes)
-- **Maximum**: 24 hours (can be extended using job TTL)
+Default: 600 seconds (10 minutes)
+Maximum: 24 hours (can be extended using job TTL)
 
 #### Job TTL (time-to-live)
 
 The maximum time a job remains in the queue before automatic termination.
 
-- **Default**: 86,400,000 milliseconds (24 hours)
-- **Minimum**: 10,000 milliseconds (10 seconds)
+Default: 86,400,000 milliseconds (24 hours)
+Minimum: 10,000 milliseconds (10 seconds)
 
 See [Execution policies](/serverless/endpoints/send-requests#execution-policies) for more information.
 
@@ -84,7 +82,7 @@ FlashBoot is RunPod's solution for reducing the average cold-start times on your
 
 Control which data centers can deploy and cache your workers. Allowing multiple data centers improves availability, while using a network volume restricts your endpoint to a single data center.
 
-- **Default**: All data centers
+Default: All data centers
 
 ### Network volumes
 
