@@ -1,5 +1,5 @@
 ---
-title: Concurrent Handlers
+title: Concurrent handlers
 description: "RunPod's concurrency functionality enables efficient task handling through asynchronous requests, allowing a single worker to manage multiple tasks concurrently. The concurrency_modifier configures the worker's concurrency level to optimize resource consumption and performance."
 ---
 
@@ -11,7 +11,7 @@ Serverless architectures allow each worker to process multiple requests simultan
 
 The `concurrency_modifier` is a configuration option within `runpod.serverless.start` that dynamically adjusts a worker's concurrency level. This adjustment enables the optimization of resource consumption and performance by regulating the number of tasks a worker can handle concurrently.
 
-### Step 1: Define an asynchronous Handler function
+### Step 1: Define an asynchronous handler function
 
 Create an asynchronous function dedicated to processing incoming requests.
 This function should efficiently yield results, ideally in batches, to enhance throughput.
@@ -56,9 +56,9 @@ def adjust_concurrency(current_concurrency):
     return current_concurrency
 ```
 
-### Step 3: Initialize the serverless function
+### Step 3: Initialize the Serverless function
 
-Start the serverless function with the defined handler and `concurrency_modifier` to enable dynamic concurrency adjustment.
+Start the Serverless function with the defined handler and `concurrency_modifier` to enable dynamic concurrency adjustment.
 
 ```python
 runpod.serverless.start(
@@ -73,7 +73,7 @@ runpod.serverless.start(
 
 ## Example code
 
-Here is an example demonstrating the setup for a RunPod serverless function capable of handling multiple concurrent requests.
+Here is an example demonstrating the setup for a RunPod Serverless function capable of handling multiple concurrent requests.
 
 ```python
 import runpod
@@ -121,10 +121,10 @@ def update_request_rate():
     request_rate = random.randint(20, 100)
 
 
-# Start the serverless function with the handler and concurrency modifier
+# Start the Serverless function with the handler and concurrency modifier
 runpod.serverless.start(
     {"handler": process_request, "concurrency_modifier": adjust_concurrency}
 )
 ```
 
-Using the `concurrency_modifier` in RunPod, serverless functions can efficiently handle multiple requests concurrently, optimizing resource usage and improving performance. This approach allows for scalable and responsive serverless applications.
+Using the `concurrency_modifier` in RunPod, Serverless functions can efficiently handle multiple requests concurrently, optimizing resource usage and improving performance. This approach allows for scalable and responsive Serverless applications.
