@@ -36,7 +36,7 @@ You can modify your endpoint's configuration at any time:
 1. Navigate to the [Serverless section](https://www.runpod.io/console/serverless) in the RunPod console.
 2. Click the three dots in the bottom right corner of the endpoint you want to modify.
 3. Click **Edit Endpoint**.
-4. Update any configuration parameters as needed:
+4. Update any [configuration parameters](/serverless/endpoints/endpoint-configurations) as needed:
    - Endpoint name
    - Worker configuration
    - Docker configuration (container image or version)
