@@ -12,11 +12,11 @@ Endpoints are the foundation of RunPod Serverless, serving as the gateway for de
 
 RunPod endpoints are REST APIs that execute your code in response to HTTP requests. Each endpoint:
 
-- Provides a unique URL for sending requests
-- Manages the lifecycle of Serverless workers
-- Handles job queuing, execution, and result delivery
-- Supports both synchronous and asynchronous operations
-- Automatically scales based on demand
+- Provides a unique URL for sending requests.
+- Manages the lifecycle of Serverless workers.
+- Handles job queuing, execution, and result delivery.
+- Supports both synchronous and asynchronous operations.
+- Automatically scales based on demand.
 
 Whether you're processing large datasets, running AI inference, or performing compute-intensive tasks, endpoints give you the flexibility to deploy and scale your workloads without managing infrastructure.
 
@@ -26,7 +26,6 @@ Whether you're processing large datasets, running AI inference, or performing co
 
 - **Asynchronous processing (`/run`)**: Submit jobs that run in the background and check results later, ideal for long-running tasks.
 - **Synchronous operations (`/runsync`)**: Receive immediate results in the same request, perfect for interactive applications.
-- **Streaming responses (`/stream`)**: Get partial results as they're generated for real-time applications.
 
 To learn more, see [Endpoint operations](/serverless/endpoints/operations).
 
