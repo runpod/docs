@@ -15,7 +15,7 @@ After deploying a Serverless endpoint, you need to know how to interact with it 
 
 Before sending requests, it's important to understand the basic structure. All requests to RunPod endpoints must:
 
-1. Include an `input` object that contains the parameters for your worker's [handler function](/serverless/handler/).
+1. Include an `input` object that contains the parameters for your worker's [handler function](/serverless/handlers/overview).
 2. Be formatted as valid JSON.
 3. Include your API key for authentication (unless sent from the RunPod console).
 
