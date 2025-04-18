@@ -27,4 +27,4 @@ You can find endpoint metrics in the **Metrics** tab of the Serverless endpoint 
 - **Cold start time**: Cold start time measures how long it takes to wake up a worker. This includes the time needed to start the container, load the model into GPU VRAM, and get the worker ready to process a job. Displays the P70, P90, and P98 cold start times for your endpoint.
 - **Cold start count**: Displays the number of cold starts your endpoint has during a given period. The fewer, the better, as fewer cold starts mean faster response times.
 - **WebhookRequest responses**: Displays the number of webhook requests sent and their corresponding responses, including success and failure counts.
-- **Worker states**: Displays the number of workers that are [running, idle, throttled, etc.](/serverless/workers) across the selected time interval.
+- **Worker states**: Displays the number of workers that are [running, idle, throttled, etc.](/serverless/workers/overview) across the selected time interval.
