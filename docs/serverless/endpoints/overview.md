@@ -8,11 +8,11 @@ description: "Deploy and manage Serverless workers with RunPod endpoints, featur
 
 Endpoints are the foundation of RunPod Serverless, serving as the gateway for deploying and managing your Serverless workers. They provide a consistent API interface that allows your applications to interact with powerful computational resources on demand.
 
+Whether you're processing large datasets, running AI inference, or performing compute-intensive tasks, endpoints give you the flexibility to deploy and scale your workloads.
+
 ## What are endpoints?
 
-RunPod endpoints are REST APIs that execute your code in response to HTTP requests. Each endpoint provides a unique URL for sending requests. They manage the lifecycle of Serverless workers, handle job queuing, execution, and result delivery.
-
-Whether you're processing large datasets, running AI inference, or performing compute-intensive tasks, endpoints give you the flexibility to deploy and scale your workloads without managing infrastructure.
+RunPod endpoints are RESTful APIs that accept HTTP requests, execute your code, and return the result via HTTP response. Each endpoint provides a unique URL and abstracts away the complexity of managing infrastructure. Behind the scenes, RunPod handles the entire lifecycle of Serverless workers, including job queuing, execution, and result delivery, so you can focus on your code, not the infrastructure.
 
 ## Key features
 
@@ -40,7 +40,7 @@ It also includes [S3-compatible storage integration](/serverless/endpoints/send-
 
 Understanding these fundamental concepts will help you work effectively with Serverless endpoints:
 
-An **endpoint** is a URL that serves as the entry point for your Serverless worker, allowing you to send requests and receive responses.
+An **endpoint** is a RESTful API, which provides a URL that serves as the entry point for your Serverless worker, allowing you to send requests and receive responses.
 
 A **request** is an HTTP request that you send to an endpoint, which can include parameters, payloads, and headers that define what the endpoint should process. For example, a `POST` request to run a job, or a `GET` request to check status of a job or endpoint health.
 

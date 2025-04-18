@@ -46,9 +46,9 @@ Default: 1
 
 #### Idle timeout
 
-The amount of time workers keep running without an active request (you are charged for active and idle workers at the same rate). An idle timeout of at least 5 seconds is recommended to minimize cold starts. Longer timeouts reduce cold starts for intermittent traffic but increase costs.
+The amount of time that a worker continues running after completing a request. You’re still charged for this time, even if the worker isn’t actively processing any requests.
 
-Default: 5 seconds
+By default, the idle timeout is set to 5 seconds to help avoid frequent start/stop cycles and reduce the likelihood of cold starts. Setting a longer idle timeout can help minimize cold starts for intermittent traffic, but it may also increase your costs
 
 #### Execution timeout
 
@@ -96,7 +96,7 @@ See [Create a network volume](/pods/storage/create-network-volumes) for more inf
 
 Adds workers based on request wait times.
 
-The queue delay scaling strategy adjusts worker numbers based on request wait times. With zero workers initially, the first request adds one worker. Subsequent requests add workers only after waiting in the queue for 4 seconds.
+The queue delay scaling strategy adjusts worker numbers based on request wait times. Workers are added if requests spend more than X seconds in the queue, where X is a threshold you define. By default, this threshold is set at 4 seconds.
 
 #### Request count
 
@@ -115,6 +115,14 @@ Here you can specify which [GPU types](/references/gpu-types) to use within your
 ### CUDA version selection
 
 Specify which CUDA versions can be used with your workload to ensures your code runs on compatible GPU hardware RunPod will match your workload to GPU instances with the selected CUDA versions.
+
+:::tip
+
+CUDA is generally backward compatible, so we recommend that you check for the version you need and any higher versions. For example, if your code requires CUDA 12.4, you should also try running it on 12.5, 12.6, and so on.
+
+Limiting your endpoint to just one or two CUDA versions can significantly reduce GPU availability. RunPod continuously updates GPU drivers to support the latest CUDA versions, so keeping more CUDA versions selected gives you access to more resources.
+
+:::
 
 ## Best practices
 

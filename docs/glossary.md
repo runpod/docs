@@ -41,7 +41,7 @@ GPU instances connect individual compute providers to consumers through a vetted
 
 ## Data center
 
-A data center is a secure location where RunPod's cloud computing services, such as Secure Cloud and GPU instances, are hosted. These data centers are equipped with redundancy and data backups to ensure the safety and reliability of your data.
+A data center is a secure location where RunPod's cloud computing services, such as GPU instances and storage instances, are hosted. These data centers are equipped with redundant power, multiple ISP connections, and data backups to ensure the safety and reliability of your compute services and data.
 
 ## GPU instance
 

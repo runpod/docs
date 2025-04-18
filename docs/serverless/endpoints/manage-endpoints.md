@@ -46,7 +46,11 @@ You can modify your endpoint's configuration at any time:
 
 Changes take effect over time as each worker is updated to the new configuration.
 
-> **Tip**: To force an immediate configuration update, temporarily set **Max Workers** to 0, click **Update**, then restore your desired worker count and update again.
+:::tip
+
+To force an immediate configuration update, temporarily set **Max Workers** to 0, trigger the **Release**, then restore your desired worker count and update again.
+
+:::
 
 ## Add a network volume
 
