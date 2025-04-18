@@ -28,7 +28,7 @@ To learn more, see [Endpoint operations](/serverless/endpoints/operations).
 
 RunPod endpoints are **auto-scaling**, automatically scaling from zero to hundreds of workers based on demand. You can **customize your endpoint configuration** to adjust the minimum and maximum worker count, GPU allocation, and memory settings. The system also offers **GPU prioritization**, allowing you to specify preferred GPU types in order of priority.
 
-To learn more, see [Endpoint configurations](/serverless/endpoints/configurations).
+To learn more, see [Endpoint configurations](/serverless/endpoints/endpoint-configurations).
 
 ### Integration options
 
