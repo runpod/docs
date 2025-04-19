@@ -8,7 +8,7 @@ description: Learn how to deploy an Instant Cluster and use it to fine-tune a la
 
 This tutorial demonstrates how to use Instant Clusters with [Axolotl](https://axolotl.ai/) to fine-tune large language models (LLMs) across multiple GPUs. By leveraging PyTorch's distributed training capabilities and RunPod's high-speed networking infrastructure, you can significantly accelerate your training process compared to single-GPU setups.
 
-Follow the steps below to deploy your Cluster and start training your models efficiently.
+Follow the steps below to deploy a cluster and start training your models efficiently.
 
 ## Step 1: Deploy an Instant Cluster
 
@@ -19,35 +19,35 @@ Follow the steps below to deploy your Cluster and start training your models eff
 
 ## Step 2: Set up Axolotl on each Pod
 
-1. Click your Cluster to expand the list of Pods.
+1. Click your cluster to expand the list of Pods.
 2. Click on a Pod, for example `CLUSTERNAME-pod-0`, to expand the Pod.
 3. Click **Connect**, then click **Web Terminal**.
-4. Clone the Axolotl repository into the Pod's main directory:
+4. In the terminal that opens, run this command to clone the Axolotl repository into the Pod's main directory:
 
-```bash
-git clone https://github.com/axolotl-ai-cloud/axolotl
-```
+    ```bash
+    git clone https://github.com/axolotl-ai-cloud/axolotl
+    ```
 
 5. Navigate to the `axolotl` directory:
 
-```bash
-cd axolotl
-```
+    ```bash
+    cd axolotl
+    ```
 
 6. Install the required packages:
 
-```bash
-pip3 install -U packaging setuptools wheel ninja
-pip3 install --no-build-isolation -e '.[flash-attn,deepspeed]'
-```
+    ```bash
+    pip3 install -U packaging setuptools wheel ninja
+    pip3 install --no-build-isolation -e '.[flash-attn,deepspeed]'
+    ```
 
 7. Navigate to the `examples/llama-3` directory:
 
-```bash
-cd examples/llama-3
-```
+    ```bash
+    cd examples/llama-3
+    ```
 
-Repeat these steps for **each Pod** in your Cluster.
+Repeat these steps for **each Pod** in your cluster.
 
 ## Step 3: Start the training process on each Pod
 
@@ -90,11 +90,11 @@ Congrats! You've successfully trained a model using Axolotl on an Instant Cluste
 
 ## Step 4: Clean up
 
-If you no longer need your Cluster, make sure you return to the [Instant Clusters page](https://www.runpod.io/console/cluster) and delete your Cluster to avoid incurring extra charges.
+If you no longer need your cluster, make sure you return to the [Instant Clusters page](https://www.runpod.io/console/cluster) and delete your cluster to avoid incurring extra charges.
 
 :::note
 
-You can monitor your Cluster usage and spending using the **Billing Explorer** at the bottom of the [Billing page](https://www.runpod.io/console/user/billing) section under the **Cluster** tab.
+You can monitor your cluster usage and spending using the **Billing Explorer** at the bottom of the [Billing page](https://www.runpod.io/console/user/billing) section under the **Cluster** tab.
 
 :::
 
@@ -103,7 +103,7 @@ You can monitor your Cluster usage and spending using the **Billing Explorer** a
 Now that you've successfully deployed and tested an Axolotl distributed training job on an Instant Cluster, you can:
 
 - **Fine-tune your own models** by modifying the configuration files in Axolotl to suit your specific requirements.
-- **Scale your training** by adjusting the number of Pods in your Cluster (and the size of their containers and volumes) to handle larger models or datasets.
+- **Scale your training** by adjusting the number of Pods in your cluster (and the size of their containers and volumes) to handle larger models or datasets.
 - **Try different optimization techniques** such as DeepSpeed, FSDP (Fully Sharded Data Parallel), or other distributed training strategies.
 
 For more information on fine-tuning with Axolotl, refer to the [Axolotl documentation](https://github.com/OpenAccess-AI-Collective/axolotl).
