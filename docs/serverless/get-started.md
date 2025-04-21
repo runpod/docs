@@ -172,7 +172,7 @@ CMD ["python3", "-u", "rp_handler.py"]
 1. Build your Docker image, specifying the platform for RunPod deployment, replacing `[YOUR_USERNAME] with your Docker username:
 
     ```bash
-    docker build --platform linux/amd64 --tag [YOUR_USERNAME]/serverless-test.
+    docker build --platform linux/amd64 --tag [YOUR_USERNAME]/serverless-test .
     ```
 
     :::note
