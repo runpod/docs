@@ -229,6 +229,7 @@ const config = {
       "data-project-logo": "https://avatars.githubusercontent.com/u/95939477?s=200&v=4",
       async: true,
     },
+    
     {
       src: "https://scripts.simpleanalyticscdn.com/latest.js",
       async: true,
@@ -248,7 +249,8 @@ const config = {
     [
       "posthog-docusaurus",
       {
-        apiKey: "phc_1ku7R949l2D5wsXgMCBNSRIVRMiAn8FyKFNoJWDCcOb",
+        apiKey: process.env.POSTHOG_API_KEY || "phc_1ku7R949l2D5wsXgMCBNSRIVRMiAn8FyKFNoJWDCcOb",
+        enableInDevelopment: true,
       },
     ],
   ],
