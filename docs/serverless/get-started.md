@@ -187,18 +187,43 @@ CMD ["python3", "-u", "rp_handler.py"]
     docker push yourusername/serverless-test:latest
     ```
 
-## Step 7: Deploy your endpoint using the web interface
+## Step 7: Deploy your endpoint
+
+You have a few  options for deploying your custom endpoint:
+
+### Option 1: Deploy using a Docker image
 
 1. Go to the [Serverless section](https://www.runpod.io/console/serverless) of the RunPod web interface.
 2. Click **New Endpoint**.
 3. Under **Custom Source**, select **Docker Image**, then click **Next**.
-4. In the **Container Image** field, enter your Docker image URL: `docker.io/yourusername/serverless-test:latest`
+4. In the **Container Image** field, enter your Docker image URL: `docker.io/yourusername/serverless-test:latest`.
 5. (Optional) Enter a custom name for your endpoint, or use the randomly generated name.
 6. Under **Worker Configuration**, check the box for **16 GB** GPUs.
 7. Leave the rest of the settings at their defaults.
 8. Click **Create Endpoint**.
 
 You should be automatically redirected to a dedicated detail page for your new endpoint.
+
+### Option 2: Deploy using a GitHub repository
+
+1. Go to the [Serverless section](https://www.runpod.io/console/serverless) of the RunPod web interface.
+2. Click **New Endpoint**.
+3. Under **Custom Source**, select **GitHub Repository**.
+4. You will be prompted to connect your GitHub account if you haven't done so already.
+5. Once connected, select the repository that contains your Dockerfile and handler code.
+6. Specify the branch you want to use for deployment.
+7. (Optional) Enter a custom name for your endpoint, or use the randomly generated name.
+8. Under **Worker Configuration**, check the box for **16 GB** GPUs.
+9. Leave the rest of the settings at their defaults.
+10. Click **Create Endpoint**.
+
+The system will automatically build your Docker image from the specified GitHub repository and deploy your endpoint.
+
+You should be automatically redirected to a dedicated detail page for your new endpoint.
+
+:::note
+For more information on GitHub integration, [read more here](/serverless/github-integration).
+:::
 
 ## Step 8: Test your endpoint on RunPod
 
