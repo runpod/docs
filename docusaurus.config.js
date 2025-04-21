@@ -206,7 +206,7 @@ const config = {
     },
     docs: {
       sidebar: {
-        hideable: true,
+        hideable: false,
       },
     },
     /* announcementBar: {
@@ -283,6 +283,18 @@ const config = {
             to: '/serverless/endpoints/operations',
             from: '/serverless/endpoints/job-operations',
           },
+          {
+            to: '/references/glossary',
+            from: '/glossary',
+          },
+          {
+            to: '/references/billing-information',
+            from: '/get-started/billing-information',
+          },
+          {
+            to: '/references/referrals',
+            from: '/get-started/referrals',
+          }
         ]
       },
     ]

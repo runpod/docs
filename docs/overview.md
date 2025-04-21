@@ -1,5 +1,5 @@
 ---
-title: Overview
+title: Introduction
 description: "RunPod is a cloud computing platform for AI, machine learning, and general compute, offering GPU and CPU resources, serverless computing, and a Command Line Interface for easy deployment and development."
 sidebar_position: 1
 ---
