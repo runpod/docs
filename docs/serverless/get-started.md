@@ -187,7 +187,7 @@ CMD ["python3", "-u", "rp_handler.py"]
     docker push yourusername/serverless-test:latest
     ```
 
-## Step 7: Deploy your endpoint
+## Step 7: Deploy your endpoint using the web interface
 
 You have a few  options for deploying your custom endpoint:
 
