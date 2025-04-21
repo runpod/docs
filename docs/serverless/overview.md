@@ -108,7 +108,7 @@ When a user/client sends a request to your Serverless endpoint:
 * **Media processing**: Handle video transcoding, image generation, or audio processing.
 * **Scientific computing**: Run simulations, data analysis, or other specialized workloads.
 
-## Next Steps
+## Next steps
 
 Ready to get started with RunPod Serverless?
 
