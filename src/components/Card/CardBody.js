@@ -1,0 +1,43 @@
+// src/components/Card/CardBody.js
+import React from 'react';
+import clsx from 'clsx';
+
+const CardBody = ({
+  className,
+  style,
+  children,
+  textAlign = 'left',
+  variant,
+  transform,
+  breakWord = false,
+  truncate = false,
+  weight,
+}) => {
+  // Generate class names based on props
+  const textAlignClass = textAlign ? `text--${textAlign}` : '';
+  const textVariantClass = variant ? `text--${variant}` : '';
+  const textTransformClass = transform ? `text--${transform}` : '';
+  const textBreakClass = breakWord ? 'text--break-word' : '';
+  const textTruncateClass = truncate ? 'text--truncate' : '';
+  const textWeightClass = weight ? `text--${weight.toLowerCase()}` : '';
+
+  return (
+    <div
+      className={clsx(
+        'card__body',
+        className,
+        textAlignClass,
+        textVariantClass,
+        textTransformClass,
+        textBreakClass,
+        textTruncateClass,
+        textWeightClass
+      )}
+      style={style}
+    >
+      {children}
+    </div>
+  );
+};
+
+export default CardBody;

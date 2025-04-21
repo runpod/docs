@@ -45,6 +45,8 @@ const config = {
         docs: {
           sidebarPath: require.resolve("./sidebars.js"),
           sidebarCollapsible: true,
+          breadcrumbs:false,
+          
           routeBasePath: "",
           editUrl: "https://github.com/runpod/docs/blob/main",
           /* beforeDefaultRemarkPlugins: [
@@ -206,7 +208,7 @@ const config = {
     },
     docs: {
       sidebar: {
-        hideable: true,
+        hideable: false,
       },
     },
     /* announcementBar: {

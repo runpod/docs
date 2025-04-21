@@ -29,6 +29,47 @@ Use Serverless to:
 
 ### Get started with Serverless
 
+
+<Card shadow={true}>
+  <CardHeader>Example Card in MDX</CardHeader>
+  <CardBody>
+    This is an example of using card components directly in a Markdown/MDX file.
+    
+    You can include any Markdown formatting inside the card body:
+    
+    - Bullet points
+    - **Bold text**
+    - *Italic text*
+    - [Links](https://docusaurus.io)
+    
+    ```js
+    // Even code blocks
+    const example = "This is a code example";
+    console.log(example);
+    ```
+  </CardBody>
+  <CardFooter>Card footer with additional information</CardFooter>
+</Card>
+
+<div className="row">
+  <div className="col col--6">
+    <Card shadow={true}>
+      <CardHeader>First Card</CardHeader>
+      <CardBody>
+        This card takes up half the width on larger screens.
+      </CardBody>
+    </Card>
+  </div>
+  <div className="col col--6">
+    <Card shadow={true}>
+      <CardHeader>Second Card</CardHeader>
+      <CardBody>
+        This card takes up the other half of the width.
+      </CardBody>
+    </Card>
+  </div>
+</div>
+
 - [Build your first Serverless app](/serverless/get-started)
 - [Run any LLM as an endpoint using vLLM workers](/serverless/vllm/get-started)
 - [Tutorial: Create a Serverless endpoint with Stable Diffusion](/tutorials/serverless/gpu/run-your-first)
