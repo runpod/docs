@@ -7,6 +7,12 @@ sidebar_position: 6
 
 This private networking feature enables secure communication between all Pods within your RunPod account. It creates a private, virtual network that connects your Pods, allowing them to communicate with each other as if they were on the same local network, regardless of their physical location.
 
+:::note
+
+Global networking is currently only available on NVIDIA GPU Pods.
+
+:::
+
 ## How to use it
 
 **Enable global networking**
@@ -72,8 +78,3 @@ Global networking is available across 17 data centers worldwide.
 All data centers support the global networking feature with a 100mbps link limit.
 
 :::
-
-## Current limitations
-
-- Available only on NVIDIA GPU Pods.
-- Not yet available for CPU Pods.
