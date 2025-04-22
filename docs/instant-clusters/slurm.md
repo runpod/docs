@@ -56,13 +56,11 @@ The repository contains several essential scripts for setting up SLURM. Let's ex
 
 ## Step 4: Install SLURM on each Pod
 
-Now run the installation script **on each Pod**:
+Now run the installation script **on each Pod**, replacing `[MUNGE_SECRET_KEY]` with any secure random string (like a password). The secret key is used for authentication between nodes, and must be identical across all Pods in your cluster.
 
 ```bash
 ./install.sh "[MUNGE_SECRET_KEY]" node-0 node-1 10.65.0.2 10.65.0.3```
 ```
-
-Replace `[MUNGE_SECRET_KEY]` with any secure random string (like a password). The secret key is used for authentication between nodes, and must be identical across all Pods in your cluster.
 
 This script automates the complex process of configuring a two-node SLURM cluster with GPU support, handling everything from system dependencies to authentication and resource configuration. It implements the necessary setup for both the primary (i.e. master/control) and secondary (i.e compute/worker) nodes.
 
@@ -112,7 +110,7 @@ After running these commands, you should see output indicating that the services
 
     This command should list all GPUs across both nodes.
 
-## Step 8: Submit the SLURM job script
+## Step 7: Submit the SLURM job script
 
 Run the following command **on the primary node** (`node-0`) to submit the test job script and confirm that your cluster is working properly:
 
@@ -122,7 +120,7 @@ sbatch test_batch.sh
 
 Check the output file created by the test (`test_simple_[JOBID].out`) and look for the hostnames of both nodes. This confirms that the job ran successfully across the cluster.
 
-## Step 9: Clean up
+## Step 8: Clean up
 
 If you no longer need your cluster, make sure you return to the [Instant Clusters page](https://www.runpod.io/console/cluster) and delete your cluster to avoid incurring extra charges.
 
