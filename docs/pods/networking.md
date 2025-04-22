@@ -5,39 +5,39 @@ id: networking
 sidebar_position: 6
 ---
 
-This private networking feature enables secure communication between all pods within your RunPod account. It creates a private, virtual network that connects your pods, allowing them to communicate with each other as if they were on the same local network, regardless of their physical location.
+This private networking feature enables secure communication between all Pods within your RunPod account. It creates a private, virtual network that connects your Pods, allowing them to communicate with each other as if they were on the same local network, regardless of their physical location.
 
 ## How to use it
 
 **Enable global networking**
 
 1. Go to [Pods](https://www.runpod.io/console/pods) section and select **+ Deploy**.
-2. Toggle the **Global Networking** to select pods that have global networking enabled.
+2. Toggle the **Global Networking** to select Pods that have global networking enabled.
 3. Configure your GPUs and select **Deploy**.
 
 **Access the private network**
 
-- Each pod with global networking enabled will be assigned a private IP address.
-- The private IP address is referenced via the DNS record for the pod using the pattern: `$podid.runpod.internal`
-- The DNS record will be displayed on the pod details card after the pod is created.
+- Each Pod with global networking enabled will be assigned a private IP address.
+- The private IP address is referenced via the DNS record for the Pod using the pattern: `$podid.runpod.internal`
+- The DNS record will be displayed on the Pod details card after the Pod is created.
 
 **Run services**
 
-Start your services on the pods as usual. They will be accessible to other pods on the private network without needing to explicitly expose ports.
-To test connectivity between pods, open a terminal and run: `ping podid.runpod.internal`
+Start your services on the Pods as usual. They will be accessible to other Pods on the private network without needing to explicitly expose ports.
+To test connectivity between Pods, open a terminal and run: `ping podid.runpod.internal`
 
 **Public access** (if needed)
 
-For services that need to be publicly accessible, you still need to expose ports as usual when creating the pod.
-Consider using a "gateway" pod that exposes public endpoints and then communicates with your private pods.
+For services that need to be publicly accessible, you still need to expose ports as usual when creating the Pod.
+Consider using a "gateway" Pod that exposes public endpoints and then communicates with your private Pods.
 
 **Security best practices**
 
-Keep sensitive services (like databases) on private pods without exposing any public ports.
+Keep sensitive services (like databases) on private Pods without exposing any public ports.
 
 :::note
 
-Global networking provides a 100mbps link between pods and allows for secure, private communication within your account's infrastructure, but it doesn't increase overall throughput between pods.
+Global networking provides a 100mbps link between Pods and allows for secure, private communication within your account's infrastructure, but it doesn't increase overall throughput between Pods.
 
 :::
 
@@ -75,5 +75,5 @@ All data centers support the global networking feature with a 100mbps link limit
 
 ## Current limitations
 
-- Available only on NVIDIA GPU pods.
-- Not yet available for CPU pods.
+- Available only on NVIDIA GPU Pods.
+- Not yet available for CPU Pods.
