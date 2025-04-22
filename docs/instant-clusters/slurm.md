@@ -54,31 +54,7 @@ The repository contains several essential scripts for setting up SLURM. Let's ex
 - `install.sh`: The primary installation script that sets up MUNGE authentication, configures SLURM, and prepares the environment.
 - `test_batch.sh`: A sample SLURM job script for testing cluster functionality.
 
-## Step 4: Get the hostname and IP address for each Pod
-
-Before running the installation script, you'll need to get the hostname and IP address for each Pod.
-
-**On each Pod:**
-
-1. Run this command to get the IP address of the node:
-
-    ```bash
-    echo $NODE_ADDR
-    ```
-
-    If this outputs `10.65.0.2`, this is the **primary node**. If it outputs `10.65.0.3`, this is the **secondary node**. 
-
-2. Run this command to get the Pod's hostname:
-
-    ```bash
-    echo $HOSTNAME
-    ```
-
-    This will display a unique alphanumeric identifier (e.g., `4f653f31b496`) that represents your Pod's hostname.
-
-3. Make a note of the hostname for the primary (`$NODE_ADDR` = `10.65.0.2`) and secondary (`$NODE_ADDR` = `10.65.0.3`) nodes.
-
-## Step 5: Install SLURM on each Pod
+## Step 4: Install SLURM on each Pod
 
 Now run the installation script **on each Pod**:
 
@@ -90,9 +66,15 @@ Replace `[MUNGE_SECRET_KEY]` with any secure random string (like a password). Th
 
 This script automates the complex process of configuring a two-node SLURM cluster with GPU support, handling everything from system dependencies to authentication and resource configuration. It implements the necessary setup for both the primary (i.e. master/control) and secondary (i.e compute/worker) nodes.
 
-## Step 6: Start SLURM services
+## Step 5: Start SLURM services
 
-1. **On the primary node** (`$NODE_ADDR` = `10.65.0.2`), run both SLURM services:
+:::tip
+
+If you're not sure which Pod is the primary node, run the command `echo $HOSTNAME` on the web terminal of each Pod and look for `node-0`.
+
+:::
+
+1. **On the primary node** (`node-0`), run both SLURM services:
 
     ```bash
     slurmctld -D
@@ -104,7 +86,7 @@ This script automates the complex process of configuring a two-node SLURM cluste
     slurmd -D
     ```
 
-3. **On the secondary node** (`$NODE_ADDR` = `10.65.0.3`), run:
+3. **On the secondary node** (`node-1`), run:
 
     ```bash
     slurmd -D
@@ -112,9 +94,9 @@ This script automates the complex process of configuring a two-node SLURM cluste
 
 After running these commands, you should see output indicating that the services have started successfully. The `-D` flag keeps the services running in the foreground, so each command needs its own terminal.
 
-## Step 7: Test your SLURM Cluster
+## Step 6: Test your SLURM Cluster
 
-1. Run this command **on the primary node** to check the status of your nodes:
+1. Run this command **on the primary node** (`node-0`) to check the status of your nodes:
 
     ```bash
     sinfo
@@ -132,7 +114,7 @@ After running these commands, you should see output indicating that the services
 
 ## Step 8: Submit the SLURM job script
 
-Run the following command **on the primary node** (`$NODE_ADDR` = `10.65.0.2`) to submit the test job script and confirm that your cluster is working properly:
+Run the following command **on the primary node** (`node-0`) to submit the test job script and confirm that your cluster is working properly:
 
 ```bash
 sbatch test_batch.sh
