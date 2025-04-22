@@ -126,6 +126,13 @@ const config = {
           label: "Tutorials",
         },
         {
+          type: "docSidebar",
+          position: "left",
+          sidebarId: "sdkSidebar",
+          collapsed: false,
+          label: "SDKs",
+        },
+        {
           href: "https://rest.runpod.io/v1/docs",
           label: "API",
           position: "left",
@@ -206,7 +213,7 @@ const config = {
     },
     docs: {
       sidebar: {
-        hideable: true,
+        hideable: false,
       },
     },
     /* announcementBar: {
@@ -268,8 +275,11 @@ const config = {
           else if (existingPath.startsWith("/serverless/development/")) {
             redirects.push(existingPath.replace("/serverless/development/", "/serverless/workers/development/"));
           }
-          if (existingPath.includes('/serverless/endpoints/')) {
+          else if (existingPath.includes('/serverless/endpoints/')) {
             redirects.push(existingPath.replace('/serverless/endpoints/', '/serverless/references/'));
+          }
+          else if (existingPath.includes('/tutorials/serverless/')) {
+            redirects.push(existingPath.replace('tutorials/serverless/', 'tutorials/serverless/gpu/'));
           }
           return redirects;
         },
@@ -282,6 +292,26 @@ const config = {
           {
             to: '/serverless/endpoints/operations',
             from: '/serverless/endpoints/job-operations',
+          },
+          {
+            to: '/references/glossary',
+            from: '/glossary',
+          },
+          {
+            to: '/references/billing-information',
+            from: '/get-started/billing-information',
+          },
+          {
+            to: '/references/referrals',
+            from: '/get-started/referrals',
+          },
+          {
+            to: '/tutorials/introduction/overview',
+            from: '/tutorials/overview',
+          },
+          {
+            to: '/tutorials/serverless/run-ollama-inference',
+            from: '/tutorials/serverless/gpu/run-ollama-inference',
           },
         ]
       },
