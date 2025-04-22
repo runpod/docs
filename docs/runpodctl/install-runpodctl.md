@@ -1,5 +1,5 @@
 ---
-title: Installing runpodctl
+title: Install runpodctl
 description: "Get started with runpodctl, an open-source CLI, to work with Pods and RunPod projects. Install and configure the tool, then verify the installation and API key setup to start using runpodctl."
 sidebar_position: 2
 ---
@@ -7,11 +7,13 @@ sidebar_position: 2
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-runpodctl is an [open-source command-line interface (CLI)](https://github.com/runpod/runpodctl). You can use runpodctl to work with Pods and RunPod projects.
+RunPod CLI is an [open-source](https://github.com/runpod/runpodctl) command-line interface (CLI) for managing Pods and RunPod projects.
 
-When you create a Pod, it comes with runpodctl installed and configured with a Pod-scoped API key. You can also run runpodctl locally.
+When you create a Pod, it comes with `runpodctl` installed and configured with a Pod-scoped API key. You can also install and run `runpodctl` locally.
 
-To install runpodctl on your local machine, run the appropriate command for your operating system.
+## Step 1: Install RunPod CLI locally
+
+To install `runpodctl` on your local machine, run one of the commands below based on your operating system:
 
 <Tabs>
   <TabItem value="mac" label="macOS">
@@ -37,34 +39,40 @@ wget https://github.com/runpod/runpodctl/releases/download/v1.14.3/runpodctl-win
 </TabItem>
 </Tabs>
 
-## Configuring runpodctl
+This installs RunPod CLI globally on your system, so you can run `runpodctl` commands from any directory.
 
-Before you can use runpodctl, you must configure an API key. To create a new API key, complete the following steps:
+## Step 2: Create an API key
 
-1. In the web interface, go to your [**Settings**](https://www.runpod.io/console/user/settings).
-2. Expand **API Keys** and click the **+ API Key** button.
-3. Select **Read** or **Read & Write** permissions.
-4. Click **Create**.
+Before you can use `runpodctl`, you must configure it with an [API key](/get-started/api-keys). Follow these steps to create a new API key:
 
-:::note
+1. In the web interface, go to the [Settings page](https://www.runpod.io/console/user/settings).
+2. Expand the **API Keys** section and click the **Create API Key** button.
+3. Give your key a name and set its permissions. If you want to [manage Pods](/runpodctl/manage-pods) locally, your key will need **READ/WRITE** permissions (or **ALL**).
+4. Click **Create**, then click on your newly-generated key to copy it to your clipboard.
 
-Keep your API key secret. Anyone with the key can gain full access to your account.
+:::warning
+
+RunPod does not store your API key, so you may wish to save it elsewhere. Treat your API key like a password and don't share it with anyone.
 
 :::
 
-Now that you've created an API key, run the following command to add it to runpodctl:
+## Step 3: Add your API key to runpodctl
+
+Now that you've created an API key, run the following command to add it to `runpodctl`, replacing `[API_KEY]` with the key you just created:
 
 ```bash
-runpodctl config --apiKey your-api-key
+runpodctl config --apiKey [API_KEY]
 ```
 
-You should see something similar to the following output:
+After running the command, you should see a confirmation message similar to this:
 
 ```bash
 saved apiKey into config file: /Users/runpod/.runpod/config.toml
 ```
 
-Now that you've configured an API key, check that runpodctl installed successfully. Run the following command:
+## Step 4: Verify installation
+
+Now that you've added your API key, verify that `runpodctl` installed successfully by running this command:
 
 ```bash
 runpodctl version
@@ -73,11 +81,13 @@ runpodctl version
 You should see which version is installed.
 
 ```bash
-runpodctl v1.13.0
+runpodctl v1.14.4
 ```
 
-If at any point you need help with a command, you can use the `--help` flag to see documentation on the command you're running.
+## Next steps
 
-```bash
-runpodctl --help
-```
+Now that you have successfully installed and configured `runpodctl`, you can:
+
+- [Manage your Pods](/runpodctl/manage-pods) from the command line.
+- [Transfer files](/runpodctl/transfer-files) between your local machine and Pods.
+- [Use projects](/runpodctl/projects/overview) to streamline endpoint development.

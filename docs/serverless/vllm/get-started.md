@@ -9,7 +9,7 @@ import TabItem from '@theme/TabItem';
 
 RunPod provides a simple way to run large language models (LLMs) as Serverless Endpoints.
 vLLM Workers are pre-built Docker images that you can configure entirely within the RunPod UI.
-This tutorial will guide you through deploying an OpenAI compatible Endpoint with a vLLM inference engine on RunPod.
+This tutorial will guide you through deploying an OpenAI compatible endpoint with a vLLM inference engine on RunPod.
 
 ## Prerequisites
 
@@ -26,7 +26,7 @@ You can use RunPod's Web UI to deploy a vLLM Worker with a model directly from H
 1. Log in to your RunPod account and go to the [Serverless page](https://www.runpod.io/console/serverless).
 2. Under **Quick Deploy**, find **Serverless vLLM** and choose **Start**.
 
-You will now enter the vLLM module. Follow the on-screen instructions to add your LLM as a Serverless Endpoint:
+You will now enter the vLLM module. Follow the on-screen instructions to add your LLM as a Serverless endpoint:
 
 1. Select a vLLM version.
 2. Add a Hugging Face model (e.g., `openchat/openchat-3.5-0106`).
@@ -38,7 +38,7 @@ On the **vLLM parameters** page, provide additional parameters and options for y
 1. In **LLM Settings**, enter **8192** for the **Max Model Length** parameter.
 2. Review your options and choose **Next**.
 
-On the **Endpoint parameters** page, configure your deployment:
+On the **endpoint Parameters** page, configure your deployment:
 
 1. Specify your GPU configuration for your Worker.
 2. Configure your Worker deployment.
@@ -48,19 +48,19 @@ On the **Endpoint parameters** page, configure your deployment:
 
 4. Select **Deploy**.
 
-Once the Endpoint initializes, you can send requests to your [Endpoint](/serverless/endpoints/get-started).
+Once the endpoint initializes, you can send requests to your [endpoint](/serverless/endpoints/get-started).
 Continue to the [Send a request](#send-a-request) section.
 
 ## Deploy using the Worker image
 
 One advantage of deploying your model with the vLLM Worker is the minimal configuration required. For most models, you only need to provide the pre-built vLLM Worker image name and the LLM model name.
 
-Follow these steps to run the vLLM Worker on a Serverless Endpoint:
+Follow these steps to run the vLLM Worker on a Serverless endpoint:
 
 1. Log in to the [RunPod Serverless console](https://www.runpod.io/console/serverless).
-2. Select **+ New Endpoint**.
+2. Select **+ New endpoint**.
 3. Provide the following:
-   - Endpoint name
+   - endpoint name
    - Select a GPU (filter for CUDA 12.1.0+ support under the **Advanced** tab if needed)
    - Configure the number of Workers
    - (Optional) Select **FlashBoot** to speed up Worker startup times
@@ -73,20 +73,20 @@ Follow these steps to run the vLLM Worker on a Serverless Endpoint:
      - `HF_TOKEN`: (Optional) Your Hugging Face API token for private models
 4. Select **Deploy**.
 
-Once the Endpoint initializes, you can send requests to your [Endpoint](/serverless/endpoints/get-started).
+Once the endpoint initializes, you can send requests to your [endpoint](/serverless/endpoints/get-started).
 Continue to the [Send a request](#send-a-request) section.
 
-For a complete list of available environment variables, see the [vLLM Worker variables](/serverless/workers/vllm/environment-variables).
+For a complete list of available environment variables, see the [vLLM Worker variables](/serverless/vllm/environment-variables).
 
 ## Send a request
 
-This section walks you through sending a request to your Serverless Endpoint.
+This section walks you through sending a request to your Serverless endpoint.
 The vLLM Worker can use any Hugging Face model and is compatible with OpenAI's API.
 If you have the OpenAI library installed, you can continue using it with the vLLM Worker. See the [OpenAI documentation](https://platform.openai.com/docs/libraries/) for more information.
 
 ### Environment setup
 
-Set the `RUNPOD_ENDPOINT_ID` and `RUNPOD_API_KEY` environment variables with your Endpoint ID and API Key.
+Set the `RUNPOD_ENDPOINT_ID` and `RUNPOD_API_KEY` environment variables with your endpoint ID and API Key.
 
 <Tabs>
   <TabItem value="macos" label="macOS" default>
@@ -258,8 +258,8 @@ curl -X POST "https://api.runpod.ai/v2/yf2k4t0vl3ciaf/run" \
 If you encounter issues deploying or using vLLM Workers, check the following:
 
 - Ensure your RunPod API Key has the necessary permissions to deploy and access Serverless Endpoints.
-- Double-check that you have set the correct environment variables for your Endpoint ID and API Key.
+- Double-check that you have set the correct environment variables for your endpoint ID and API Key.
 - Verify that you are using the correct CUDA version for your selected GPU.
 - If using a gated model, ensure your Hugging Face token is valid and has access to the model.
 
-To learn more about managing your Serverless Endpoints, see the [Manage Endpoints](/serverless/endpoints/manage-endpoints) guide. For a complete reference of the vLLM Worker environment variables, see the [vLLM Worker variables](/serverless/workers/vllm/environment-variables) documentation.
+To learn more about managing your Serverless endpoints, see the [Manage Endpoints](/serverless/endpoints/manage-endpoints) guide. For a complete reference of the vLLM Worker environment variables, see the [vLLM Worker variables](/serverless/vllm/environment-variables) documentation.

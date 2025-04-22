@@ -126,6 +126,13 @@ const config = {
           label: "Tutorials",
         },
         {
+          type: "docSidebar",
+          position: "left",
+          sidebarId: "sdkSidebar",
+          collapsed: false,
+          label: "SDKs",
+        },
+        {
           href: "https://rest.runpod.io/v1/docs",
           label: "API",
           position: "left",
@@ -206,7 +213,7 @@ const config = {
     },
     docs: {
       sidebar: {
-        hideable: true,
+        hideable: false,
       },
     },
     /* announcementBar: {
@@ -251,6 +258,64 @@ const config = {
         apiKey: "phc_1ku7R949l2D5wsXgMCBNSRIVRMiAn8FyKFNoJWDCcOb",
       },
     ],
+    [
+      "@docusaurus/plugin-client-redirects",
+      {
+        createRedirects(existingPath) {
+          const redirects = [];
+          // Redirect from /serverless/workers/vllm/ to /serverless/vllm/ 
+          if (existingPath.startsWith("/serverless/vllm/")) {
+            redirects.push(existingPath.replace("/serverless/vllm/", "/serverless/workers/vllm/"));
+          }
+          // Redirect from /serverless/workers/handlers/ to /serverless/handlers/
+          else if (existingPath.startsWith("/serverless/handlers/")) {
+            redirects.push(existingPath.replace("/serverless/handlers/", "/serverless/workers/handlers/"));
+          }
+          // Redirect from /serverless/workers/development/ to /serverless/development/
+          else if (existingPath.startsWith("/serverless/development/")) {
+            redirects.push(existingPath.replace("/serverless/development/", "/serverless/workers/development/"));
+          }
+          else if (existingPath.includes('/serverless/endpoints/')) {
+            redirects.push(existingPath.replace('/serverless/endpoints/', '/serverless/references/'));
+          }
+          else if (existingPath.includes('/tutorials/serverless/')) {
+            redirects.push(existingPath.replace('tutorials/serverless/', 'tutorials/serverless/gpu/'));
+          }
+          return redirects;
+        },
+
+        redirects: [
+          {
+            to: '/serverless/endpoints/send-requests',
+            from: '/serverless/endpoints/get-started',
+          },
+          {
+            to: '/serverless/endpoints/operations',
+            from: '/serverless/endpoints/job-operations',
+          },
+          {
+            to: '/references/glossary',
+            from: '/glossary',
+          },
+          {
+            to: '/references/billing-information',
+            from: '/get-started/billing-information',
+          },
+          {
+            to: '/references/referrals',
+            from: '/get-started/referrals',
+          },
+          {
+            to: '/tutorials/introduction/overview',
+            from: '/tutorials/overview',
+          },
+          {
+            to: '/tutorials/serverless/run-ollama-inference',
+            from: '/tutorials/serverless/gpu/run-ollama-inference',
+          },
+        ]
+      },
+    ]
   ],
 };
 

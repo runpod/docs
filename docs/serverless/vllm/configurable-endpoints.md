@@ -1,9 +1,9 @@
 ---
-title: Configurable Endpoints
-description: "Deploy large language models with ease using RunPod's Configurable Endpoints feature, leveraging vLLM to simplify model loading, hardware configuration, and execution, allowing you to focus on model selection and customization."
+title: Configurable endpoints
+description: "Deploy large language models with ease using RunPod's configurable endpoints, leveraging vLLM to simplify model loading, hardware configuration, and execution, allowing you to focus on model selection and customization."
 ---
 
-RunPod's Configurable Endpoints feature leverages vLLM to enable the deployment of any large language model.
+RunPod's configurable endpoints feature leverages vLLM to enable the deployment of any large language model.
 
 When you select the **Serverless vLLM** option, RunPod utilizes vLLM's capabilities to load and run the specified Hugging Face model.
 By integrating vLLM into the configurable endpoints, RunPod simplifies the process of deploying and running large language models.
@@ -28,7 +28,7 @@ Focus on selecting your desired model and customizing the template parameters, w
       4. Review the **Environment Variables**.
 5. Select **Deploy**.
 
-Your LLM is now deployed to an Endpoint.
+Your LLM is now deployed to an endpoint.
 You can now use the API to interact with your model.
 
 :::note

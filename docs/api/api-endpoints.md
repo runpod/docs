@@ -1,6 +1,6 @@
 ---
-title: "API Endpoints"
-description: "Unlock the power of RunPod's API Endpoints, manage models without managing pods, and retrieve results via the status endpoint within 30 minutes for privacy protection; rate limits enforced per user."
+title: "API endpoints"
+description: "Unlock the power of RunPod's API endpoints, manage models without managing pods, and retrieve results via the status endpoint within 30 minutes for privacy protection; rate limits enforced per user."
 sidebar_position: 1
 ---
 
@@ -13,8 +13,8 @@ We don't keep your inputs or outputs longer than that to protect your privacy!
 
 :::
 
-API Endpoints are Endpoints managed by RunPod that you can use to interact with your favorite models without managing the pods yourself.
-These Endpoints are available to all users.
+API endpoints are endpoints managed by RunPod that you can use to interact with your favorite models without managing the pods yourself.
+These endpoints are available to all users.
 
 ## Overview
 
@@ -22,13 +22,13 @@ The API Endpoint implementation works asynchronously as well as synchronous.
 
 Let's take a look at the differences between the two different implementations.
 
-### Asynchronous Endpoints
+### Asynchronous endpoints
 
 Asynchronous endpoints are useful for long-running jobs that you don't want to wait for. You can submit a job and then check back later to see if it's done.
 When you fire an Asynchronous request with the API Endpoint, your input parameters are sent to our endpoint and you immediately get a response with a unique job ID.
 You can then query the response by passing the job ID to the status endpoint. The status endpoint will give you the job results when completed.
 
-### Synchronous Endpoints
+### Synchronous endpoints
 
 Synchronous endpoints are useful for short-running jobs that you want to wait for.
 You can submit a job and get the results back immediately.
@@ -137,4 +137,4 @@ Exceeding limits returns a `429` error.
 `/run` - 1000 requests/10s, max 200 concurrent
 `/runsync` - 2000 requests/10s, max 400 concurrent
 
-For more information, see [Job operations](/serverless/references/operations).
+For more information, see [Job operations](/serverless/endpoints/operations).

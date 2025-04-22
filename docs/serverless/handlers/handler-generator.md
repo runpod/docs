@@ -1,5 +1,5 @@
 ---
-title: "Generator Handler"
+title: "Generator handler"
 description: "RunPod offers real-time streaming for Language Model tasks, providing users with instant updates on job outputs. Two types of generator functions are supported, including regular and async generators, with the option to enable aggregate streaming for seamless access to results."
 sidebar_position: 2
 ---
@@ -24,6 +24,6 @@ runpod.serverless.start(
 )
 ```
 
-### Return aggregate Stream
+### Return aggregate stream
 
 By default, when a generator handler is running, the fractional outputs will only be available at the `/stream` endpoint, if you would also like the outputs to be available from the `/run` and `/runsync` endpoints you will need to set `return_aggregate_stream` to True when starting your handler.

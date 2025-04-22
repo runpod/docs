@@ -1,10 +1,10 @@
 ---
-title: "Deploying with GitHub"
-sidebar_position: 3
+title: "Deploy with GitHub"
+sidebar_position: 4
 description: Get started by deploying a Worker and integrating it with GitHub
 ---
 
-RunPod manages the container registry and docker build process, enabling seamless integration with your developer workflow.
+RunPod manages the container registry and Docker build process, enabling seamless integration with your developer workflow.
 
 1. Pulls your code and Dockerfile
 2. Builds the container image using layer caching for speed
@@ -15,7 +15,7 @@ This integration enables you to focus on development while RunPod handles the in
 
 :::note
 
-You must use [RunPod](/serverless/workers/development/overview) Python library to develop your Serverless worker.
+You must use [RunPod](/serverless/development/overview) Python library to develop your Serverless worker.
 
 :::
 
