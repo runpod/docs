@@ -126,6 +126,13 @@ const config = {
           label: "Tutorials",
         },
         {
+          type: "docSidebar",
+          position: "left",
+          sidebarId: "sdkSidebar",
+          collapsed: false,
+          label: "SDKs",
+        },
+        {
           href: "https://rest.runpod.io/v1/docs",
           label: "API",
           position: "left",
