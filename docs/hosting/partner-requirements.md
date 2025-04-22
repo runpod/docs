@@ -1,4 +1,8 @@
-# RunPod Secure Cloud Partner Requirements - Release 2025
+---
+title: "Secure Cloud partner requirements"
+---
+
+# RunPod Secure Cloud partner requirements (2025)
 
 # Introduction
 

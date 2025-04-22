@@ -15,7 +15,7 @@ This integration enables you to focus on development while RunPod handles the in
 
 :::note
 
-You must use [RunPod](/serverless/workers/development/overview) Python library to develop your Serverless worker.
+You must use [RunPod](/serverless/development/overview) Python library to develop your Serverless worker.
 
 :::
 

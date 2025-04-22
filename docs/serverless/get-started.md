@@ -1,5 +1,5 @@
 ---
-title: "Get started"
+title: "Create a custom endpoint"
 sidebar_position: 2
 description: Create and deploy your first custom Serverless endpoint. Learn to create a handler, test it locally, build a Docker image, deploy an endpoint, and send requests with this step-by-step tutorial.
 ---
@@ -7,7 +7,7 @@ description: Create and deploy your first custom Serverless endpoint. Learn to c
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Get started with Serverless
+# Create a custom endpoint
 
 Learn how to create, deploy, and test your first custom Serverless endpoint.
 
@@ -146,7 +146,6 @@ DEBUG  | local_test | run_job return: {'output': 'Hey there!'}
 INFO   | Job local_test completed successfully.
 INFO   | Job result: {'output': 'Hey there!'}
 INFO   | Local testing complete, exiting.
-(venv) moking@Mos-MacBook-Pro-2 serverless-test % 
 ```
 
 ## Step 5: Create a Dockerfile
@@ -173,7 +172,7 @@ CMD ["python3", "-u", "rp_handler.py"]
 1. Build your Docker image, specifying the platform for RunPod deployment, replacing `[YOUR_USERNAME] with your Docker username:
 
     ```bash
-    docker build --platform linux/amd64 --tag [YOUR_USERNAME]/serverless-test.
+    docker build --platform linux/amd64 --tag [YOUR_USERNAME]/serverless-test .
     ```
 
     :::note
@@ -185,21 +184,46 @@ CMD ["python3", "-u", "rp_handler.py"]
 1. Then push the image to your container registry:
 
     ```bash
-    docker push yourusername/yourrepo:yourtag
+    docker push yourusername/serverless-test:latest
     ```
 
 ## Step 7: Deploy your endpoint using the web interface
 
+You have a few  options for deploying your custom endpoint:
+
+### Option 1: Deploy using a Docker image
+
 1. Go to the [Serverless section](https://www.runpod.io/console/serverless) of the RunPod web interface.
 2. Click **New Endpoint**.
 3. Under **Custom Source**, select **Docker Image**, then click **Next**.
-4. In the **Container Image** field, enter your Docker image URL: `docker.io/[YOUR_USERNAME]/serverless-test:latest`
-5. Enter a name for your endpoint (or leave the randomly generated name in place).
+4. In the **Container Image** field, enter your Docker image URL: `docker.io/yourusername/serverless-test:latest`.
+5. (Optional) Enter a custom name for your endpoint, or use the randomly generated name.
 6. Under **Worker Configuration**, check the box for **16 GB** GPUs.
 7. Leave the rest of the settings at their defaults.
 8. Click **Create Endpoint**.
 
 You should be automatically redirected to a dedicated detail page for your new endpoint.
+
+### Option 2: Deploy using a GitHub repository
+
+1. Go to the [Serverless section](https://www.runpod.io/console/serverless) of the RunPod web interface.
+2. Click **New Endpoint**.
+3. Under **Custom Source**, select **GitHub Repository**.
+4. You will be prompted to connect your GitHub account if you haven't done so already.
+5. Once connected, select the repository that contains your Dockerfile and handler code.
+6. Specify the branch you want to use for deployment.
+7. (Optional) Enter a custom name for your endpoint, or use the randomly generated name.
+8. Under **Worker Configuration**, check the box for **16 GB** GPUs.
+9. Leave the rest of the settings at their defaults.
+10. Click **Create Endpoint**.
+
+The system will automatically build your Docker image from the specified GitHub repository and deploy your endpoint.
+
+You should be automatically redirected to a dedicated detail page for your new endpoint.
+
+:::note
+For more information on GitHub integration, [read more here](/serverless/github-integration).
+:::
 
 ## Step 8: Test your endpoint on RunPod
 
@@ -238,8 +262,8 @@ Congratulations, you've successfully deployed and tested your first Serverless e
 
 Now that you've learned the basics, you're ready to:
 
-- [Deploy large language models from Hugging Face as Serverless endpoints.](/serverless/workers/vllm/get-started)
-- [Manage your Serverless endpoints  using the web interface.](/serverless/endpoints/manage-endpoints)
-- [Create more advanced handler functions.](/serverless/workers/handlers/overview)
-- [Deploy your endpoints with GitHub.](/serverless/github-integration)
-- [Learn more about local testing.](/serverless/workers/development/local-testing)
+- [Send endpoint requests using cURL and the Serverless SDK.](/serverless/endpoints/send-requests)
+- [Learn how to use endpoint operations like `/run` and `/status`.](/serverless/endpoints/operations)
+- [Manage your Serverless endpoints using the RunPod console.](/serverless/endpoints/manage-endpoints)
+- [Create more advanced handler functions.](/serverless/handlers/overview)
+- [Learn more about local testing.](/serverless/development/local-testing)
