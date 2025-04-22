@@ -23,7 +23,7 @@ Follow the steps below to deploy a cluster and start running distributed SLURM w
 3. Use the UI to name and configure your cluster. For this walkthrough, keep **Pod Count** at **2** and select the option for **16x H100 SXM** GPUs. Keep the **Pod Template** at its default setting (RunPod PyTorch).
 4. Click **Deploy Cluster**. You should be redirected to the Instant Clusters page after a few seconds.
 
-## Step 2: Clone the SLURM demo into each Pod
+## Step 2: Clone demo and install SLURM on each Pod
 
 To connect to a Pod:
 
@@ -39,33 +39,22 @@ To connect to a Pod:
     git clone https://github.com/pandyamarut/slurm_example.git && cd slurm_example
     ```
 
+3. Run this command to install SLURM:
+
+    ```bash
+    apt update && apt install -y slurm-wlm slurm-client munge
+    ```
+
 ## Step 3: Overview of SLURM demo scripts
 
 The repository contains several essential scripts for setting up SLURM. Let's examine what each script does:
 
-- `setup.sh`: Prepares the Pod environment with necessary dependencies and utilities for SLURM and distributed computing.
 - `create_gres_conf.sh`: Generates the SLURM Generic Resource (GRES) configuration file that defines GPU resources for each node.
 - `create_slurm_conf.sh`: Creates the main SLURM configuration file with cluster settings, node definitions, and partition setup.
 - `install.sh`: The primary installation script that sets up MUNGE authentication, configures SLURM, and prepares the environment.
 - `test_batch.sh`: A sample SLURM job script for testing cluster functionality.
 
-## Step 4: Run the setup script
-
-Run `setup.sh` **on each Pod** to prepare the development environment.
-
-```bash
-./setup.h
-```
-
-This script prepares the Pod development environment by installing Linux dependencies and setting up the Python virtual environment with `uv` (a [Python package manager](https://github.com/astral-sh/uv)) and Python 3.11.
-
-Uncomment the last line of `setup.h` if you want to setup GitHub on your Pods (run this command):
-
-```bash
-echo ./scripts/setup_github.sh "<YOUR_GITHUB_EMAIL>" "<YOUR_NAME>"
-```
-
-## Step 5: Get the hostname and IP address for each Pod
+## Step 4: Get the hostname and IP address for each Pod
 
 Before running the installation script, you'll need to get the hostname and IP address for each Pod.
 
@@ -89,7 +78,7 @@ Before running the installation script, you'll need to get the hostname and IP a
 
 3. Make a note of the hostname for the primary (`$NODE_ADDR` = `10.65.0.2`) and secondary (`$NODE_ADDR` = `10.65.0.3`) nodes.
 
-## Step 6: Install SLURM on each Pod
+## Step 5: Install SLURM on each Pod
 
 Now run the installation script **on each Pod**:
 
@@ -104,7 +93,7 @@ Replace:
 
 This script automates the complex process of configuring a two-node SLURM cluster with GPU support, handling everything from system dependencies to authentication and resource configuration. It implements the necessary setup for both the primary (i.e. master/control) and secondary (i.e compute/worker) nodes.
 
-## Step 7: Start SLURM services
+## Step 6: Start SLURM services
 
 1. **On the primary node** (`$NODE_ADDR` = `10.65.0.2`), run both SLURM services:
 
@@ -126,7 +115,7 @@ This script automates the complex process of configuring a two-node SLURM cluste
 
 After running these commands, you should see output indicating that the services have started successfully. The `-D` flag keeps the services running in the foreground, so each command needs its own terminal.
 
-## Step 8: Test your SLURM Cluster
+## Step 7: Test your SLURM Cluster
 
 1. Run this command **on the primary node** to check the status of your nodes:
 
@@ -144,7 +133,7 @@ After running these commands, you should see output indicating that the services
 
     This command should list all GPUs across both nodes.
 
-## Step 9: Submit the SLURM job script
+## Step 8: Submit the SLURM job script
 
 Run the following command **on the primary node** (`$NODE_ADDR` = `10.65.0.2`) to submit the test job script and confirm that your cluster is working properly:
 
@@ -154,7 +143,7 @@ sbatch test_batch.sh
 
 Check the output file created by the test (`test_simple_[JOBID].out`) and look for the hostnames of both nodes. This confirms that the job ran successfully across the cluster.
 
-## Step 10: Clean up
+## Step 9: Clean up
 
 If you no longer need your cluster, make sure you return to the [Instant Clusters page](https://www.runpod.io/console/cluster) and delete your cluster to avoid incurring extra charges.
 
