@@ -27,28 +27,26 @@ Use Serverless to:
 - Build and expose **REST API endpoints** with autoscaling.
 - Queue jobs efficiently **without managing infrastructure**.
 
-### Get started with Serverless
+Get started with Serverless:
 
-- [Build your first Serverless app](/serverless/get-started)
-- [Run any LLM as an endpoint using vLLM workers](/serverless/vllm/get-started)
-- [Tutorial: Create a Serverless endpoint with Stable Diffusion](/tutorials/serverless/gpu/run-your-first)
+- [Build your first Serverless app.](/serverless/get-started)
+- [Run any LLM as an endpoint using vLLM workers.](/serverless/vllm/get-started)
+- [Tutorial: Create a Serverless endpoint with Stable Diffusion.](/tutorials/serverless/gpu/run-your-first)
 
 ## Pods
 
 [Pods](/pods/overview) allow you to run **containerized workloads** on dedicated GPU or CPU instances.
 
-RunPod offers two types of Pods:
+RunPod offers [two types of Pods](/references/faq/#secure-cloud-vs-community-cloud).
 
 - **Secure Cloud:** Operates in T3/T4 data centers, providing high reliability and security.
 - **Community Cloud**: Connects individual compute providers to users through a vetted, secure peer-to-peer system.
 
-For more info, see [Secure Cloud vs. Community Cloud](/references/faq/#secure-cloud-vs-community-cloud).
+Get started with Pods:
 
-### Get started with Pods
-
-- [Deploy your first Pod](/get-started)
-- [Choose the right Pod](/pods/choose-a-pod)
-- [Tutorial: Connect to a Pod instance with VSCode](/tutorials/pods/connect-to-vscode)
+- [Deploy your first Pod.](/get-started)
+- [Choose the right Pod.](/pods/choose-a-pod)
+- [Tutorial: Connect to a Pod instance with VSCode.](/tutorials/pods/connect-to-vscode)
 
 ## RunPod CLI
 
