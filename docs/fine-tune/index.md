@@ -1,5 +1,5 @@
 ---
-title: Fine Tune a model
+title: Fine-tune a model
 description: "Learn how to Fine Tune a model using Axolotl"
 sidebar_position: 1
 ---
