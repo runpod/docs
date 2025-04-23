@@ -51,27 +51,26 @@ For more detailed information or support, please [contact our customer service t
 
 ## Available data centers
 
-Global networking is available across 17 data centers worldwide.
+Global networking is available across 16 data centers worldwide.
 
 | Region ID | Geographic Location | 
 |-----------|---------------------|
-| CA-MTL-3 | Montreal, Canada |
-| EU-CZ-1 | Prague, Czech Republic |
-| EU-FR-1 | Paris, France |
-| EU-NL-1 | Amsterdam, Netherlands |
-| EU-SE-1 | Stockholm, Sweden |
-| EUR-IS-2 | Reykjavik, Iceland |
-| OC-AU-1 | Sydney, Australia |
-| US-CA-2 | Silicon Valley, California |
-| US-DE-1 | Newark, Delaware |
-| US-GA-1 | Marietta, Georgia |
-| US-GA-2 | Marietta, Georgia |
-| US-IL-1 | Chicago, Illinois |
-| US-KS-2 | Kansas City, Kansas |
-| US-NC-1 | Raleigh-Durham, North Carolina |
-| US-TX-3 | Dallas, Texas |
-| US-TX-4 | Houston, Texas |
-| US-WA-1 | Seattle, Washington |
+| CA-MTL-3 | Canada |
+| EU-CZ-1 | Czech Republic |
+| EU-FR-1 | France |
+| EU-NL-1 | Netherlands |
+| EU-SE-1 | Sweden |
+| EUR-IS-2 | Iceland |
+| OC-AU-1 | Australia |
+| US-CA-2 | California |
+| US-GA-1 | Georgia |
+| US-GA-2 | Georgia |
+| US-IL-1 | Illinois |
+| US-KS-2 | Kansas |
+| US-NC-1 | North Carolina |
+| US-TX-3 | Texas |
+| US-TX-4 | Texas |
+| US-WA-1 | Washington |
 
 :::note
 
