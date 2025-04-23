@@ -212,7 +212,7 @@ const config = {
      announcementBar: {
       id: "h200s",
       content:
-        "Deploy your workloads on H200s for 10x the performance of A10. <a href=\"https://www.runpod.io/console/deploy?gpu=H200+SXM\">Learn more</a>.",
+        "Deploy your workloads on H200s for 1.4x the performance of H100. <a href=\"https://www.runpod.io/console/deploy?gpu=H200+SXM\">Learn more</a>.",
       backgroundColor: "#004a7f",
       textColor: "#ffffff",
       isCloseable: true,
