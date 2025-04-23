@@ -216,15 +216,15 @@ const config = {
         hideable: false,
       },
     },
-    /* announcementBar: {
-      id: "ollama-cpu",
+     announcementBar: {
+      id: "h200s",
       content:
-        "Checkout our new Serverless CPU by running <a href=\"https://docs.runpod.io/tutorials/serverless/cpu/run-ollama-inference/\">inference with Ollama</a>.",
+        "Deploy your workloads on H200s for 10x the performance of A10G. <a href=\"https://www.runpod.io/console/deploy?gpu=H200+SXM\">Learn more</a>.",
       backgroundColor: "#004a7f",
       textColor: "#ffffff",
       isCloseable: true,
     },
-    */
+
   },
 
   scripts: [
