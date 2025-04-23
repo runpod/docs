@@ -32,11 +32,7 @@ Tetra provides several advantages over vanilla Serverless:
 
 ### Resource configuration
 
-Tetra lets you specify hardware requirements at the function level through the `ServerlessResource` object. This provides granular control over:
-
-- GPU/CPU allocation.
-- Worker scaling limits.
-- Template selection.
+Tetra lets you specify hardware requirements at the function level through the `ServerlessResource` object. This provides granular control over GPU/CPU allocation and worker scaling.limits.
 
 For example:
 
@@ -45,7 +41,6 @@ from tetra import ServerlessResource
 
 # Configure a GPU endpoint
 gpu_config = ServerlessResource(
-    templateId="abc123",  # GPU template ID
     gpuIds="any", # Use any available GPU
     workersMax=5, # Scales up to 5 workers
     name="parallel-processor", # Name of the endpoint that will be created or used
@@ -53,7 +48,6 @@ gpu_config = ServerlessResource(
 
 # Configure a CPU endpoint
 cpu_resource = ServerlessResource(
-    templateId="def456",  # CPU template ID
     workersMax=1 ,
     name="data-processor", # Name of the endpoint that will be created or used
 )

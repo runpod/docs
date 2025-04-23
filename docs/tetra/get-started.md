@@ -106,7 +106,6 @@ Next, let's define the Serverless endpoint configuration for our Tetra workload:
 ```python
 # Configuration for a Serverless endpoint using GPU workers
 gpu_config = ServerlessResource(
-    templateId="[YOUR_TEMPLATE_ID]", # Replace with your template ID
     gpuIds="any", # Use any available GPU
     workersMax=1,
     name="tetra_gpu", 
@@ -115,7 +114,6 @@ gpu_config = ServerlessResource(
 
 This `ServerlessResource` object defines:
 
-- `templateId`: The RunPod template ID to use (you'll replace this with your actual template ID).
 - `gpuIds="any"`: The GPU IDs that can be used by workers on this endpoint. This configuration allows the endpoint to use any GPUs that are available. You can also replace `any` with a comma-separated list of [GPU IDs](/references/gpu-types).
 - `workersMax=1`: Sets the maximum number of worker instances to 1.
 - `name="tetra_gpu"`: The name of the endpoint that will be created/used on the RunPod web interface.
