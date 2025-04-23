@@ -52,7 +52,7 @@ Default: 3
 
 :::warning
 
-Setting max workers to 1 restricts your deployment to a single machine, creating potential bottlenecks if that worker becomes unavailable or overloaded.
+Setting max workers to 1 restricts your deployment to a single machine, creating potential bottlenecks if that machine becomes unavailable.
 
 We recommend setting your max worker count approximately 20% higher than your expected maximum concurrency. This headroom allows for smoother scaling during traffic spikes and helps prevent request throttling.
 
@@ -184,7 +184,7 @@ Specify which CUDA versions can be used with your workload to ensures your code 
 
 :::tip
 
-CUDA is generally backward compatible, so we recommend that you check for the version you need and any higher versions. For example, if your code requires CUDA 12.4, you should also try running it on 12.5, 12.6, and so on.
+CUDA versions are generally backward compatible, so we recommend that you check for the version you need and any higher versions. For example, if your code requires CUDA 12.4, you should also try running it on 12.5, 12.6, and so on.
 
 Limiting your endpoint to just one or two CUDA versions can significantly reduce GPU availability. RunPod continuously updates GPU drivers to support the latest CUDA versions, so keeping more CUDA versions selected gives you access to more resources.
 
