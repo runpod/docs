@@ -53,7 +53,7 @@ You can build your `hub.json` from scratch, or use [this template](#hubjson-temp
 | --- | --- | --- | --- |
 | `runsOn` | Machine type | Yes | `"GPU"` or `"CPU"` |
 | `containerDiskInGb` | Container disk space allocation | Yes | Integer (GB) |
-| `cpuFlavor`  | CPU configuration | Only if `runsOn` is `"CPU"`  | Valid CPU flavor string |
+| `cpuFlavor`  | CPU configuration | Only if `runsOn` is `"CPU"`  | Valid CPU flavor string. For a complete list of available CPU flavors, see [CPU Types](https://docs.runpod.io/references/cpu-types) |
 | `gpuCount` | Number of GPUs | Only if `runsOn` is `"GPU"` | Integer |
 | `gpuIds` | GPU pool specification | Only if `runsOn` is `"GPU"` | Comma-separated pool IDs (e.g., `"ADA_24"`) or GPU IDs (e.g., `"RTX A4000"`) with optional GPU ID negations (e.g., `"-NVIDIA RTX 4090"`). For a complete list of available GPUs, see [GPU Types](https://docs.runpod.io/references/gpu-types). |
 | `allowedCudaVersions` | Supported CUDA versions | No | Array of version strings |
@@ -200,8 +200,6 @@ Here’s an example `hub.json` file that you can use as a starting point:
     "runsOn": "GPU",
     "containerDiskInGb": 20,
 
-    "cpuFlavor": "cpu5-8-12",
-
     "gpuCount": 1,
     "gpuIds": "RTX A4000,-NVIDIA RTX 4090",
     "allowedCudaVersions": [
@@ -298,6 +296,7 @@ Each test case should include:
 | --- | --- | --- | --- |
 | `gpuTypeId` | GPU type for testing | Only for GPU tests | Valid GPU ID |
 | `gpuCount` | Number of GPUs | Only for GPU tests | Integer |
+| `cpuFlavor` | CPU configuration for testing | Only for CPU tests | Valid CPU flavor string |
 | `env` | Test environment variables | No | Array of key-value pairs |
 | `allowedCudaVersions` | Supported CUDA versions | No | Array of version strings |
 
