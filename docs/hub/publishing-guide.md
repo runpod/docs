@@ -4,130 +4,35 @@ description: "Learn how to configure your repository for the RunPod Hub with hub
 sidebar_position: 3
 ---
 
-# Hub repo configuration guide
+# Hub publishing guide
 
-This guide will help you create the necessary configuration files to add your repo to the RunPod Hub.
+Before adding a repo to the [RunPod Hub](https://www.runpod.io/console/hub), you need to create two files:
 
-## Overview
-
-Before adding a repository to the [RunPod Hub](https://www.runpod.io/console/hub), you need to create two files:
-
-1. **`hub.json`** - Defines metadata and deployment settings.
-2. **`tests.json`** - Specifies how to test your listing.
+1. `hub.json` - Defines metadata and deployment settings.
+2. `tests.json` - Specifies how to test your listing.
 
 These files should be placed in the `.runpod` directory at the root of your repository. This directory takes precedence over the root directory, allowing you to override common files like `Dockerfile` and `README.md` specifically for the Hub.
 
-## Publish your repo to the RunPod Hub
-
-After creating these configuration files:
+## Steps to publish your repo
 
 1. Create a `.runpod` directory in the root directory of your repo.
-1. Place your `hub.json` and `tests.json` files in the `.runpod` directory.
-2. Ensure your repository has a `handler.py`, `Dockerfile` (if not already set up for RunPod Serverless), and a `README.md` file in either the `.runpod` or root directory.
-3. Create a new GitHub release (the Hub indexes releases, not commits).
-4. Click **Add Your Repo** in the top-right of the RunPod console [Hub page](https://www.runpod.io/console/hub).
-5. Enter your GitHub repo URL.
-6. Follow the UI flow to add your repo to the Hub.
+2. Use the reference guides below to create `hub.json` and `tests.json` files in the `.runpod` directory.
+3. Ensure your repository contains a `handler.py`, `Dockerfile` (if not already set up for [RunPod Serverless](/serverless/overview)), and a `README.md` file in either the `.runpod` or root directory.
+4. Create a new GitHub release (the Hub indexes releases, not commits).
+5. Click **Add Your Repo** in the top-right of the RunPod console [Hub page](https://www.runpod.io/console/hub).
+6. Enter your GitHub repo URL.
+7. Follow the UI flow to add your repo to the Hub.
+8. (Optional) Copy/paste the RunPod badge into your GitHub README.md file to allow users instantly deploy your repo from GitHub.
 
-The badge will show "pending" during build/test and update after approval.
+The Hub status badge will show "pending" during build/test and update after approval.
 
-For updates, simply **create a new GitHub release**, and your listing will be automatically indexed and built, usually within an hour.
+To update your repo, just **create a new GitHub release**, and your listing will be automatically indexed and built, usually within an hour.
 
-## hub.json example
+## hub.json reference
 
 The `hub.json` file defines how your listing appears and functions in the Hub.
 
-Here’s an example `hub.json` file:
-
-```json title="hub.json"
-{
-  "title": "Your Tool's Name",
-  "description": "A brief explanation of what your tool does",
-  "type": "serverless",
-  "category": "language",
-  "iconUrl": "https://your-icon-url.com/icon.png",
-
-  "config": {
-    "runsOn": "GPU",
-    "containerDiskInGb": 20,
-
-    "cpuFlavor": "cpu5-8-12",
-
-    "gpuCount": 1,
-    "gpuIds": "RTX A4000,-NVIDIA RTX 4090",
-    "allowedCudaVersions": [
-      "12.8", "12.7", "12.6", "12.5", "12.4",
-      "12.3", "12.2", "12.1", "12.0"
-    ],
-
-    "presets": [
-      {
-        "name": "Preset Name",
-        "defaults": {
-          "STRING_ENV_VAR": "value1",
-          "INT_ENV_VAR": 10,
-          "BOOL_ENV_VAR": true
-        }
-      }
-    ],
-
-    "env": [
-      {
-        "key": "STATIC_ENV_VAR",
-        "value": "static_value"
-      },
-      {
-        "key": "STRING_EVN_VAR",
-        "input": {
-          "name": "User-friendly Name",
-          "type": "string",
-          "description": "Description of this input",
-          "default": "default value",
-          "advanced": false
-        }
-      },
-      {
-        "key": "OPTION_ENV_VAR",
-        "input": {
-          "name": "Select Option",
-          "type": "string",
-          "description": "Choose from available options",
-          "options": [
-            {"label": "Option 1", "value": "value1"},
-            {"label": "Option 2", "value": "value2"}
-          ],
-          "default": "value1"
-        }
-      },
-      {
-        "key": "INT_ENV_VAR",
-        "input": {
-          "name": "Numeric Value",
-          "type": "number",
-          "description": "Enter a number",
-          "min": 1,
-          "max": 100,
-          "default": 50
-        }
-      },
-      {
-        "key": "BOOL_ENV_VAR",
-        "input": {
-          "type": "boolean",
-          "name": "Enable Feature",
-          "description": "Toggle this feature on/off",
-          "default": false,
-          "trueValue": "enabled",
-          "falseValue": "disabled"
-        }
-      }
-    ]
-  }
-}
-
-```
-
-## hub.json fields
+You can build your `hub.json` from scratch, or use [this template](#hubjson-template) as a starting point.
 
 ### General metadata
 
@@ -245,7 +150,6 @@ Environment variables can be defined in several ways:
       }
     }
     ```
-    
 
 Advanced options will be hidden by default. Hide an option by setting: `"advanced": true` .
 
@@ -278,11 +182,126 @@ Presets allow you to define groups of default environment variable values. For e
 ]
 ```
 
-## tests.json example
+## hub.json template
 
-The `tests.json` file defines test cases to validate your tool's functionality. Tests are executed during the build step after [a release has been created](https://www.notion.so/Hub-Configuration-JSON-Reference-Guide-1caff732fc348087b479f5e96c1c2768?pvs=21). A test is considered valid by the Hub if the endpoint returns a [200 response](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/200).
+Here’s an example `hub.json` file that you can use as a starting point:
 
-Here’s an example `tests.json` file:
+```json title="hub.json"
+{
+  "title": "Your Tool's Name",
+  "description": "A brief explanation of what your tool does",
+  "type": "serverless",
+  "category": "language",
+  "iconUrl": "https://your-icon-url.com/icon.png",
+
+  "config": {
+    "runsOn": "GPU",
+    "containerDiskInGb": 20,
+
+    "cpuFlavor": "cpu5-8-12",
+
+    "gpuCount": 1,
+    "gpuIds": "RTX A4000,-NVIDIA RTX 4090",
+    "allowedCudaVersions": [
+      "12.8", "12.7", "12.6", "12.5", "12.4",
+      "12.3", "12.2", "12.1", "12.0"
+    ],
+
+    "presets": [
+      {
+        "name": "Preset Name",
+        "defaults": {
+          "STRING_ENV_VAR": "value1",
+          "INT_ENV_VAR": 10,
+          "BOOL_ENV_VAR": true
+        }
+      }
+    ],
+
+    "env": [
+      {
+        "key": "STATIC_ENV_VAR",
+        "value": "static_value"
+      },
+      {
+        "key": "STRING_EVN_VAR",
+        "input": {
+          "name": "User-friendly Name",
+          "type": "string",
+          "description": "Description of this input",
+          "default": "default value",
+          "advanced": false
+        }
+      },
+      {
+        "key": "OPTION_ENV_VAR",
+        "input": {
+          "name": "Select Option",
+          "type": "string",
+          "description": "Choose from available options",
+          "options": [
+            {"label": "Option 1", "value": "value1"},
+            {"label": "Option 2", "value": "value2"}
+          ],
+          "default": "value1"
+        }
+      },
+      {
+        "key": "INT_ENV_VAR",
+        "input": {
+          "name": "Numeric Value",
+          "type": "number",
+          "description": "Enter a number",
+          "min": 1,
+          "max": 100,
+          "default": 50
+        }
+      },
+      {
+        "key": "BOOL_ENV_VAR",
+        "input": {
+          "type": "boolean",
+          "name": "Enable Feature",
+          "description": "Toggle this feature on/off",
+          "default": false,
+          "trueValue": "enabled",
+          "falseValue": "disabled"
+        }
+      }
+    ]
+  }
+}
+
+```
+
+## tests.json reference
+
+The `tests.json` file defines test cases to validate your tool's functionality. Tests are executed during the build step after [a release has been created](#publish-your-repo-to-the-runpod-hub). A test is considered valid by the Hub if the endpoint returns a [200 response](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/200).
+
+You can build your `tests.json` from scratch, or use [this template](#testsjson-template) as a starting point.
+
+### Test cases
+
+Each test case should include:
+
+| Field | Description | Required | Values |
+| --- | --- | --- | --- |
+| `name` | Test identifier | Yes | String |
+| `input` | Raw job input payload | Yes | Object |
+| `timeout` | Max execution time | No | Integer (milliseconds) |
+
+### Test environment configuration
+
+| Field | Description | Required | Values |
+| --- | --- | --- | --- |
+| `gpuTypeId` | GPU type for testing | Only for GPU tests | Valid GPU ID |
+| `gpuCount` | Number of GPUs | Only for GPU tests | Integer |
+| `env` | Test environment variables | No | Array of key-value pairs |
+| `allowedCudaVersions` | Supported CUDA versions | No | Array of version strings |
+
+## tests.json template
+
+Here’s an example `tests.json` file that you can use as a starting point:
 
 ```json title="tests.json"
 {
@@ -313,24 +332,3 @@ Here’s an example `tests.json` file:
 }
 
 ```
-
-## tests.json fields
-
-### Test cases
-
-Each test case should include:
-
-| Field | Description | Required | Values |
-| --- | --- | --- | --- |
-| `name` | Test identifier | Yes | String |
-| `input` | Raw job input payload | Yes | Object |
-| `timeout` | Max execution time | No | Integer (milliseconds) |
-
-### Test environment configuration
-
-| Field | Description | Required | Values |
-| --- | --- | --- | --- |
-| `gpuTypeId` | GPU type for testing | Only for GPU tests | Valid GPU ID |
-| `gpuCount` | Number of GPUs | Only for GPU tests | Integer |
-| `env` | Test environment variables | No | Array of key-value pairs |
-| `allowedCudaVersions` | Supported CUDA versions | No | Array of version strings |

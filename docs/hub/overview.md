@@ -10,65 +10,64 @@ The RunPod Hub solves a critical problem for AI developers and teams: finding an
 
 Whether you're a developer looking to **share your work** or a user seeking **pre-configured solutions**, the Hub makes discovering and deploying AI projects seamless and efficient.
 
-
+<img src="/img/docs/hub-homepage.png" width="900" alt="Screenshot of the Hub page in the RunPod console"/>
 
 ## What is the Hub?
 
 The RunPod Hub is a centralized repository that enables users to **discover, share, and deploy pre-configured AI repos** optimized for RunPod's [Serverless infrastructure](/serverless/overview/). It serves as a catalog of vetted, open-source repositories that can be deployed with minimal setup, creating a collaborative ecosystem for AI developers and users.
 
-## How does the Hub work?
-
-The Hub operates through several key components working together:
-
-1. **Repository integration**: The Hub connects with GitHub repositories, using releases (not commits) as the basis for versioning and updates.
-2. **Configuration system**: Repositories use standardized configuration files (`hub.json` and `tests.json`) in a `.runpod` directory to define metadata, hardware requirements, and test procedures. See [Hub Configuration: JSON Reference Guide](https://www.notion.so/Hub-Configuration-JSON-Reference-Guide-1caff732fc348087b479f5e96c1c2768?pvs=21) to learn more.
-3. **Automated build pipeline**: When a repository is submitted or updated, the Hub automatically scans, builds, and tests it to ensure it works correctly on RunPod’s infrastructure.
-4. **Continuous release monitoring**: The system regularly checks for new releases in registered repositories and rebuilds them when updates are detected.
-5. **Deployment interface**: Users can browse repos, customize parameters, and deploy them to RunPod infrastructure with minimal configuration.
+## Why use the Hub?
 
 The Hub simplifies the entire lifecycle of repo sharing and deployment, from initial submission through testing, discovery, and usage.
 
-## For Hub users
+### For Hub users
 
-- **Find production-ready solutions**: Discover vetted, open-source repositories optimized for RunPod with minimal setup required.
+- **Find production-ready AI solutions**: Discover vetted, open-source repositories optimized for RunPod with minimal setup required.
 - **Deploy in one click**: Go from discovery to running services in minutes, not days.
 - **Customize to your needs**: RunPod Hub repos expose configurable parameters for fine-tuning without diving into code.
 - **Save development time**: Leverage community innovations instead of building from scratch.
 
-## For Hub creators
+### For Hub creators
 
 - **Showcase your work**: Share your projects with the broader AI community.
 - **Maintain control**: Your GitHub repo remains the source of truth, while the Hub automatically detects new releases.
-- **Earn revenue**: Build your reputation and earn revenue from creating high-quality, widely-used repos.
 - **Streamline your workflow**: Automated building and testing ensures your releases work as expected.
 
-## Get started
+## How does it work?
+
+The Hub operates through several key components working together:
+
+1. **Repository integration**: The Hub connects with GitHub repositories, using releases (not commits) as the basis for versioning and updates.
+2. **Configuration system**: Repositories use standardized configuration files (`hub.json` and `tests.json`) in a `.runpod` directory to define metadata, hardware requirements, and test procedures. See the [publishing guide](/hub/publishing-guide) to learn more.
+3. **Automated build pipeline**: When a repository is submitted or updated, the Hub automatically scans, builds, and tests it to ensure it works correctly on RunPod’s infrastructure.
+4. **Continuous release monitoring**: The system regularly checks for new releases in registered repositories and rebuilds them when updates are detected.
+5. **Deployment interface**: Users can browse repos, customize parameters, and deploy them to RunPod infrastructure with minimal configuration.
+
+## Getting started
+
+Whether you're an established developer or about to test your first model, getting started is easy.
 
 ### Deploy a repo from the Hub
 
 You can deploy a repo from the Hub in seconds:
 
-1. Navigate to the [Hub page](https://www.runpod.io/console/hub) on the RunPod console.
+1. Navigate to the [Hub page](https://www.runpod.io/console/hub) in the RunPod console.
 2. Browse the collection and select a repo that matches your needs.
 3. Review the repo details, including hardware requirements and available configuration options to ensure compatibility with your use case.
 4. Click the **Deploy** button in the top-right of the repo page. You can also use the dropdown menu to deploy an older version.
 5. Click **Create Endpoint**
 
-
-
-When you're ready, simply click "Deploy" and customize any settings you wish to change from the defaults.
-
 Within minutes, you'll have access to your new Serverless endpoint, ready for integration with your applications or experimentation.
 
 ### Publish your own repo
 
-Sharing your work through the Hub starts with preparing your GitHub repository with a working serverless implementation.
+Sharing your work through the Hub starts with preparing your GitHub repository with a working [RunPod Serverless](/serverless/overview) implementation. After that:
 
-You'll need to add configuration files in a `.runpod` directory following the guidelines documented here [Hub Configuration: JSON Reference Guide](https://www.notion.so/Hub-Configuration-JSON-Reference-Guide-1caff732fc348087b479f5e96c1c2768?pvs=21) 
+1. Add the required configuration files in a `.runpod` directory, following the instructions in the [Hub publishing guide](/hub/publishing-guide).
+2. Create a GitHub release to establish a versioned snapshot.
+3. Submit your repository to the Hub through the RunPod console, where it will undergo automated building and testing before becoming available to the community.
 
-Once your repository is properly set up, create a GitHub release to establish a versioned snapshot.
-
-Finally, submit your repository to the Hub through the RunPod console, where it will undergo automated building and testing before becoming available to the community.
+To learn more, see the [Hub publishing guide](/hub/publishing-guide)
 
 ## Use cases
 

@@ -20,17 +20,19 @@ RunPod Serverless is a cloud computing platform that lets you run AI models and 
 
 RunPod Serverless offers three ways to deploy your workloads, each designed for different use cases:
 
-### Quick Deploys
+### RunPod Hub
 
-**Best for**: Getting popular AI models running quickly with minimal setup.
+**Best for**: Instantly deploying preconfigured AI models.
 
-Quick Deploys are pre-configured templates for popular AI models that you can deploy with just a few clicks:
-* No coding required.
-* Pre-optimized configurations.
-* Wide selection of popular AI models.
-* Minimal technical knowledge needed.
+You can deploy a Serverless endpoint from a repo in the [RunPod Hub](/hub/overview) in seconds:
 
-[Get started with Quick Deploys →](/serverless/quick-deploys)
+1. Navigate to the [Hub page](https://www.runpod.io/console/hub) in the RunPod console.
+2. Browse the collection and select a repo that matches your needs.
+3. Review the repo details, including hardware requirements and available configuration options to ensure compatibility with your use case.
+4. Click the **Deploy** button in the top-right of the repo page. You can also use the dropdown menu to deploy an older version.
+5. Click **Create Endpoint**
+
+[Deploy a repo from the RunPod Hub →](https://www.runpod.io/console/hub)
 
 ### vLLM endpoints
 
@@ -42,7 +44,7 @@ vLLM endpoints are specifically optimized for running LLMs:
 * Simple configuration via environment variables.
 * High-performance serving with vLLM.
 
-[Get started with vLLM endpoints →](/serverless/vllm/get-started)
+[Deploy a vLLM endpoint →](/serverless/vllm/get-started)
 
 ### Custom endpoints
 
@@ -55,7 +57,7 @@ Custom endpoints give you complete control over your application:
 * Full flexibility for any use case.
 * Custom processing logic.
 
-[Get started with custom endpoints →](/serverless/get-started)
+[Create your first custom endpoint →](/serverless/get-started)
 
 ## Key concepts
 
