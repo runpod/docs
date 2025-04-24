@@ -60,7 +60,8 @@ The **handler** is the code that processes incoming requests and returns respons
 
 Dive deeper into what you can achieve with RunPod Serverless endpoints:
 
-- [Learn how to deploy a vLLM worker as a Serverless endpoint.](/serverless/vllm/overview)
-- [Learn how to submit jobs to your Serverless workers.](/serverless/endpoints/operations)
+- [Deploy a vLLM worker as a Serverless endpoint.](/serverless/vllm/overview)
+- [Submit jobs to your Serverless workers.](/serverless/endpoints/operations)
 - [Send requests to your endpoints programmatically.](/serverless/endpoints/send-requests)
-- [Learn how to manage your endpoints using the RunPod console.](/serverless/endpoints/manage-endpoints)
+- [Manage your endpoints using the RunPod console.](/serverless/endpoints/manage-endpoints)
+- [Configure your endpoints for optimal performance and cost.](/serverless/endpoints/endpoint-configurations)

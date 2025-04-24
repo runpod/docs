@@ -13,13 +13,13 @@ Explore how to run and deploy AI applications using RunPod's Serverless platform
 
 ### GPUs
 
-- [Generate images with SDXL Turbo](/tutorials/serverless/gpu/generate-sdxl-turbo): Learn how to build a web application using RunPod's Serverless Workers and SDXL Turbo from Stability AI, a fast text-to-image model, and send requests to an Endpoint to generate images from text-based inputs.
-- [Run Google's Gemma model](/tutorials/serverless/gpu/run-gemma-7b): Deploy Google's Gemma model on RunPod's vLLM Worker, create a Serverless Endpoint, and interact with the model using OpenAI APIs and Python.
-- [Run your first serverless endpoint with Stable Diffusion](/tutorials/serverless/gpu/run-your-first): Use RunPod's Stable Diffusion v1 inference endpoint to generate images, set up your serverless worker, start a job, check job status, and retrieve results.
+- [Generate images with SDXL Turbo](/tutorials/serverless/generate-sdxl-turbo): Learn how to build a web application using RunPod's Serverless Workers and SDXL Turbo from Stability AI, a fast text-to-image model, and send requests to an Endpoint to generate images from text-based inputs.
+- [Run Google's Gemma model](/tutorials/serverless/run-gemma-7b): Deploy Google's Gemma model on RunPod's vLLM Worker, create a Serverless Endpoint, and interact with the model using OpenAI APIs and Python.
+- [Run your first serverless endpoint with Stable Diffusion](/tutorials/serverless/run-your-first): Use RunPod's Stable Diffusion v1 inference endpoint to generate images, set up your serverless worker, start a job, check job status, and retrieve results.
 
 ### CPUs
 
-- [Run an Ollama Server on a RunPod CPU](/tutorials/serverless/cpu/run-ollama-inference): Set up and run an Ollama server on RunPod CPU for inference with this step-by-step tutorial.
+- [Run an Ollama Server on a RunPod CPU](/tutorials/serverless/run-ollama-inference): Set up and run an Ollama server on RunPod CPU for inference with this step-by-step tutorial.
 
 ## Pods
 
