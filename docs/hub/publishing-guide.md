@@ -13,10 +13,12 @@ Before adding a repo to the [RunPod Hub](https://www.runpod.io/console/hub), you
 
 These files should be placed in the `.runpod` directory at the root of your repository. This directory takes precedence over the root directory, allowing you to override common files like `Dockerfile` and `README.md` specifically for the Hub.
 
-## Steps to publish your repo
+## How to publish your repo
 
-1. Create a `.runpod` directory in the root directory of your repo.
-2. Use the reference guides below to create `hub.json` and `tests.json` files in the `.runpod` directory.
+Follow these steps to add your GitHub repo to the Hub:
+
+1. Create a `.runpod` folder in the root directory of your repo.
+2. Use the reference guides below to create `hub.json` and `tests.json` files in the `.runpod` folder.
 3. Ensure your repository contains a `handler.py`, `Dockerfile` (if not already set up for [RunPod Serverless](/serverless/overview)), and a `README.md` file in either the `.runpod` or root directory.
 4. Create a new GitHub release (the Hub indexes releases, not commits).
 5. Click **Add Your Repo** in the top-right of the RunPod console [Hub page](https://www.runpod.io/console/hub).
@@ -53,7 +55,7 @@ You can build your `hub.json` from scratch, or use [this template](#hubjson-temp
 | `containerDiskInGb` | Container disk space allocation | Yes | Integer (GB) |
 | `cpuFlavor`  | CPU configuration | Only if `runsOn` is `"CPU"`  | Valid CPU flavor string |
 | `gpuCount` | Number of GPUs | Only if `runsOn` is `"GPU"` | Integer |
-| `gpuIds` | GPU pool specification | Only if `runsOn` is `"GPU"` | Comma-separated GPU IDs (e.g., `"RTX A4000"``) with optional GPU ID negations (e.g., `"-NVIDIA RTX 4090"`). For a complete list of available GPUs, see [GPU Types](https://docs.runpod.io/references/gpu-types). |
+| `gpuIds` | GPU pool specification | Only if `runsOn` is `"GPU"` | Comma-separated pool IDs (e.g., `"ADA_24"`) or GPU IDs (e.g., `"RTX A4000"`) with optional GPU ID negations (e.g., `"-NVIDIA RTX 4090"`). For a complete list of available GPUs, see [GPU Types](https://docs.runpod.io/references/gpu-types). |
 | `allowedCudaVersions` | Supported CUDA versions | No | Array of version strings |
 | `env`  | Environment variable definitions | No | Object ([see below](https://www.notion.so/Hub-Configuration-JSON-Reference-Guide-1caff732fc348087b479f5e96c1c2768?pvs=21)) |
 | `presets`  | Default environment variable values | No | Object ([see below](https://www.notion.so/Hub-Configuration-JSON-Reference-Guide-1caff732fc348087b479f5e96c1c2768?pvs=21)) |

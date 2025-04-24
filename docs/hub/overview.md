@@ -1,20 +1,17 @@
 ---
 title: "Overview"
-description: ""
+description: "The RunPod Hub is a centralized repository for discovering, sharing, and deploying preconfigured AI repos optimized for RunPod's Serverless infrastructure."
 sidebar_position: 1
 ---
 
 # RunPod Hub overview
 
-The RunPod Hub solves a critical problem for AI developers and teams: finding and deploying **ready-to-use AI repositories** without the hassle of complex setup.
+The RunPod Hub is a centralized repository that enables users to **discover, share, and deploy preconfigured AI repos** optimized for RunPod's [Serverless infrastructure](/serverless/overview/). It serves as a catalog of vetted, open-source repositories that can be deployed with minimal setup, creating a collaborative ecosystem for AI developers and users.
 
-Whether you're a developer looking to **share your work** or a user seeking **pre-configured solutions**, the Hub makes discovering and deploying AI projects seamless and efficient.
+
+Whether you're a developer looking to **share your work** or a user seeking **preconfigured solutions**, the Hub makes discovering and deploying AI projects seamless and efficient.
 
 <img src="/img/docs/hub-homepage.png" width="900" alt="Screenshot of the Hub page in the RunPod console"/>
-
-## What is the Hub?
-
-The RunPod Hub is a centralized repository that enables users to **discover, share, and deploy pre-configured AI repos** optimized for RunPod's [Serverless infrastructure](/serverless/overview/). It serves as a catalog of vetted, open-source repositories that can be deployed with minimal setup, creating a collaborative ecosystem for AI developers and users.
 
 ## Why use the Hub?
 
@@ -33,11 +30,11 @@ The Hub simplifies the entire lifecycle of repo sharing and deployment, from ini
 - **Maintain control**: Your GitHub repo remains the source of truth, while the Hub automatically detects new releases.
 - **Streamline your workflow**: Automated building and testing ensures your releases work as expected.
 
-## How does it work?
+## How it works
 
 The Hub operates through several key components working together:
 
-1. **Repository integration**: The Hub connects with GitHub repositories, using releases (not commits) as the basis for versioning and updates.
+1. **Repository integration**: The Hub connects with GitHub repositories, using GitHub releases (not commits) as the basis for versioning and updates.
 2. **Configuration system**: Repositories use standardized configuration files (`hub.json` and `tests.json`) in a `.runpod` directory to define metadata, hardware requirements, and test procedures. See the [publishing guide](/hub/publishing-guide) to learn more.
 3. **Automated build pipeline**: When a repository is submitted or updated, the Hub automatically scans, builds, and tests it to ensure it works correctly on RunPod’s infrastructure.
 4. **Continuous release monitoring**: The system regularly checks for new releases in registered repositories and rebuilds them when updates are detected.
@@ -45,7 +42,7 @@ The Hub operates through several key components working together:
 
 ## Getting started
 
-Whether you're an established developer or about to test your first model, getting started is easy.
+Whether you're a veteran developer who wants to share your work or a newcomer exploring AI models for the first time, the RunPod Hub makes getting started quick and straightforward.
 
 ### Deploy a repo from the Hub
 
@@ -57,17 +54,19 @@ You can deploy a repo from the Hub in seconds:
 4. Click the **Deploy** button in the top-right of the repo page. You can also use the dropdown menu to deploy an older version.
 5. Click **Create Endpoint**
 
-Within minutes, you'll have access to your new Serverless endpoint, ready for integration with your applications or experimentation.
+Within minutes you'll have access to a new Serverless endpoint, ready for integration with your applications or experimentation.
 
 ### Publish your own repo
 
-Sharing your work through the Hub starts with preparing your GitHub repository with a working [RunPod Serverless](/serverless/overview) implementation. After that:
+Sharing your work through the Hub starts with preparing your GitHub repository with a working [Serverless endpoint](/serverless/overview) implementation, comprised of a [handler function](/serverless/handlers/overview) and `Dockerfile`. To learn how to create your first endpoint, [follow this guide](/serverless/get-started).
+
+Once your endpoint is ready to share:
 
 1. Add the required configuration files in a `.runpod` directory, following the instructions in the [Hub publishing guide](/hub/publishing-guide).
 2. Create a GitHub release to establish a versioned snapshot.
 3. Submit your repository to the Hub through the RunPod console, where it will undergo automated building and testing before becoming available to the community.
 
-To learn more, see the [Hub publishing guide](/hub/publishing-guide)
+To learn more, see the [Hub publishing guide](/hub/publishing-guide).
 
 ## Use cases
 
@@ -83,7 +82,7 @@ Individual developers benefit from the ability to experiment with different AI m
 
 ### For enterprises and teams
 
-Enterprises and teams can accelerate their development cycle by using pre-built repos instead of creating everything from scratch. The Hub reduces infrastructure complexity by providing standardized deployment configurations, allowing technical teams to focus on their core business logic rather than spending time configuring infrastructure and dependencies.
+Enterprises and teams can accelerate their development cycle by using preconfigured repos instead of creating everything from scratch. The Hub reduces infrastructure complexity by providing standardized deployment configurations, allowing technical teams to focus on their core business logic rather than spending time configuring infrastructure and dependencies.
 
 ## Join the community
 
