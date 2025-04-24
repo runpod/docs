@@ -1,0 +1,336 @@
+---
+title: "Publish a repo"
+description: "Learn how to configure your repository for the RunPod Hub with hub.json and tests.json files, including metadata, deployment settings, and test specifications."
+sidebar_position: 3
+---
+
+# Hub repo configuration guide
+
+This guide will help you create the necessary configuration files to add your repo to the RunPod Hub.
+
+## Overview
+
+Before adding a repository to the [RunPod Hub](https://www.runpod.io/console/hub), you need to create two files:
+
+1. **`hub.json`** - Defines metadata and deployment settings.
+2. **`tests.json`** - Specifies how to test your listing.
+
+These files should be placed in the `.runpod` directory at the root of your repository. This directory takes precedence over the root directory, allowing you to override common files like `Dockerfile` and `README.md` specifically for the Hub.
+
+## Publish your repo to the RunPod Hub
+
+After creating these configuration files:
+
+1. Create a `.runpod` directory in the root directory of your repo.
+1. Place your `hub.json` and `tests.json` files in the `.runpod` directory.
+2. Ensure your repository has a `handler.py`, `Dockerfile` (if not already set up for RunPod Serverless), and a `README.md` file in either the `.runpod` or root directory.
+3. Create a new GitHub release (the Hub indexes releases, not commits).
+4. Click **Add Your Repo** in the top-right of the RunPod console [Hub page](https://www.runpod.io/console/hub).
+5. Enter your GitHub repo URL.
+6. Follow the UI flow to add your repo to the Hub.
+
+The badge will show "pending" during build/test and update after approval.
+
+For updates, simply **create a new GitHub release**, and your listing will be automatically indexed and built, usually within an hour.
+
+## hub.json example
+
+The `hub.json` file defines how your listing appears and functions in the Hub.
+
+Here’s an example `hub.json` file:
+
+```json title="hub.json"
+{
+  "title": "Your Tool's Name",
+  "description": "A brief explanation of what your tool does",
+  "type": "serverless",
+  "category": "language",
+  "iconUrl": "https://your-icon-url.com/icon.png",
+
+  "config": {
+    "runsOn": "GPU",
+    "containerDiskInGb": 20,
+
+    "cpuFlavor": "cpu5-8-12",
+
+    "gpuCount": 1,
+    "gpuIds": "RTX A4000,-NVIDIA RTX 4090",
+    "allowedCudaVersions": [
+      "12.8", "12.7", "12.6", "12.5", "12.4",
+      "12.3", "12.2", "12.1", "12.0"
+    ],
+
+    "presets": [
+      {
+        "name": "Preset Name",
+        "defaults": {
+          "STRING_ENV_VAR": "value1",
+          "INT_ENV_VAR": 10,
+          "BOOL_ENV_VAR": true
+        }
+      }
+    ],
+
+    "env": [
+      {
+        "key": "STATIC_ENV_VAR",
+        "value": "static_value"
+      },
+      {
+        "key": "STRING_EVN_VAR",
+        "input": {
+          "name": "User-friendly Name",
+          "type": "string",
+          "description": "Description of this input",
+          "default": "default value",
+          "advanced": false
+        }
+      },
+      {
+        "key": "OPTION_ENV_VAR",
+        "input": {
+          "name": "Select Option",
+          "type": "string",
+          "description": "Choose from available options",
+          "options": [
+            {"label": "Option 1", "value": "value1"},
+            {"label": "Option 2", "value": "value2"}
+          ],
+          "default": "value1"
+        }
+      },
+      {
+        "key": "INT_ENV_VAR",
+        "input": {
+          "name": "Numeric Value",
+          "type": "number",
+          "description": "Enter a number",
+          "min": 1,
+          "max": 100,
+          "default": 50
+        }
+      },
+      {
+        "key": "BOOL_ENV_VAR",
+        "input": {
+          "type": "boolean",
+          "name": "Enable Feature",
+          "description": "Toggle this feature on/off",
+          "default": false,
+          "trueValue": "enabled",
+          "falseValue": "disabled"
+        }
+      }
+    ]
+  }
+}
+
+```
+
+## hub.json fields
+
+### General metadata
+
+| Field | Description | Required | Values |
+| --- | --- | --- | --- |
+| `title` | Name of your tool | Yes | String |
+| `description` | Brief explanation of functionality | Yes | String |
+| `type`  | Deployment type | Yes | `"serverless"` or `"pod"`  |
+| `category` | Tool category | Yes | `"audio"`, `"embedding"`, `"language"`, `"video"`, or `"image"` |
+| `iconUrl` | URL to tool icon | No | Valid URL |
+| `config` | RunPod configuration | Yes | Object ([see below](https://www.notion.so/Hub-Configuration-JSON-Reference-Guide-1caff732fc348087b479f5e96c1c2768?pvs=21)) |
+
+### RunPod configuration
+
+| Field | Description | Required | Values |
+| --- | --- | --- | --- |
+| `runsOn` | Machine type | Yes | `"GPU"` or `"CPU"` |
+| `containerDiskInGb` | Container disk space allocation | Yes | Integer (GB) |
+| `cpuFlavor`  | CPU configuration | Only if `runsOn` is `"CPU"`  | Valid CPU flavor string |
+| `gpuCount` | Number of GPUs | Only if `runsOn` is `"GPU"` | Integer |
+| `gpuIds` | GPU pool specification | Only if `runsOn` is `"GPU"` | Comma-separated GPU IDs (e.g., `"RTX A4000"``) with optional GPU ID negations (e.g., `"-NVIDIA RTX 4090"`). For a complete list of available GPUs, see [GPU Types](https://docs.runpod.io/references/gpu-types). |
+| `allowedCudaVersions` | Supported CUDA versions | No | Array of version strings |
+| `env`  | Environment variable definitions | No | Object ([see below](https://www.notion.so/Hub-Configuration-JSON-Reference-Guide-1caff732fc348087b479f5e96c1c2768?pvs=21)) |
+| `presets`  | Default environment variable values | No | Object ([see below](https://www.notion.so/Hub-Configuration-JSON-Reference-Guide-1caff732fc348087b479f5e96c1c2768?pvs=21)) |
+
+### Environment variables
+
+Environment variables can be defined in several ways:
+
+1. **Static variables**: Direct value assignment. For example:
+    
+    ```json
+    {
+      "key": "API_KEY",
+      "value": "default-api-key-value"
+    }
+    ```
+    
+2. **String inputs**: User-entered text fields. For example:
+    
+    ```json
+    {
+      "key": "MODEL_PATH",
+      "input": {
+        "name": "Model path",
+        "type": "string",
+        "description": "Path to the model weights on disk",
+        "default": "/models/stable-diffusion-v1-5",
+        "advanced": false
+      }
+    }
+    ```
+    
+3. **Hugging Face inputs:** Fields for model selection from Hugging Face Hub. For example:
+    
+    ```json
+    {
+      "key": "HF_MODEL",
+      "input": {
+        "type": "huggingface",
+        "name": "Hugging Face Model",
+        "description": "Model organization/name as listed on Huggingface Hub",
+        "default": "runwayml/stable-diffusion-v1-5",
+      }
+    }
+    ```
+    
+4. **Option inputs**: User selected option fields. For example:
+    
+    ```json
+    {
+      "key": "PRECISION",
+      "input": {
+        "name": "Model precision",
+        "type": "string",
+        "description": "The numerical precision for model inference",
+        "options": [
+          {"label": "Full Precision (FP32)", "value": "fp32"},
+          {"label": "Half Precision (FP16)", "value": "fp16"},
+          {"label": "8-bit Quantization", "value": "int8"}
+        ],
+        "default": "fp16"
+      }
+    }
+    ```
+    
+5. **Number Inputs**: User-entered numeric fields. For example:
+    
+    ```json
+    {
+      "key": "MAX_TOKENS",
+      "input": {
+        "name": "Maximum tokens",
+        "type": "number",
+        "description": "Maximum number of tokens to generate",
+        "min": 32,
+        "max": 4096,
+        "default": 1024
+      }
+    }
+    ```
+    
+6. **Boolean Inputs**: User-toggled boolean fields. For example:
+    
+    ```json
+    {
+      "key": "USE_FLASH_ATTENTION",
+      "input": {
+        "type": "boolean",
+        "name": "Flash attention",
+        "description": "Enable Flash Attention for faster inference on supported GPUs",
+        "default": true,
+        "trueValue": "true", 
+        "falseValue": "false"
+      }
+    }
+    ```
+    
+
+Advanced options will be hidden by default. Hide an option by setting: `"advanced": true` .
+
+### Presets
+
+Presets allow you to define groups of default environment variable values. For example:
+
+```json
+"presets": [
+  {
+    "name": "Quality Optimized",
+    "defaults": {
+      "MODEL_NAME": "runpod-stable-diffusion-xl",
+      "INFERENCE_MODE": "quality",
+      "BATCH_SIZE": 1,
+      "ENABLE_CACHING": false,
+      "USE_FLASH_ATTENTION": true
+    }
+  },
+  {
+    "name": "Performance Optimized",
+    "defaults": {
+      "MODEL_NAME": "runpod-stable-diffusion-v1-5",
+      "INFERENCE_MODE": "fast",
+      "BATCH_SIZE": 8,
+      "ENABLE_CACHING": true,
+      "USE_FLASH_ATTENTION": true
+    }
+  }
+]
+```
+
+## tests.json example
+
+The `tests.json` file defines test cases to validate your tool's functionality. Tests are executed during the build step after [a release has been created](https://www.notion.so/Hub-Configuration-JSON-Reference-Guide-1caff732fc348087b479f5e96c1c2768?pvs=21). A test is considered valid by the Hub if the endpoint returns a [200 response](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/200).
+
+Here’s an example `tests.json` file:
+
+```json title="tests.json"
+{
+  "tests": [
+    {
+      "name": "test_case_name",
+      "input": {
+        "param1": "value1",
+        "param2": "value2"
+      },
+      "timeout": 10000
+    }
+  ],
+  "config": {
+    "gpuTypeId": "NVIDIA GeForce RTX 4090",
+    "gpuCount": 1,
+    "env": [
+      {
+        "key": "TEST_ENV_VAR",
+        "value": "test_value"
+      }
+    ],
+    "allowedCudaVersions": [
+      "12.7", "12.6", "12.5", "12.4",
+      "12.3", "12.2", "12.1", "12.0", "11.7"
+    ]
+  }
+}
+
+```
+
+## tests.json fields
+
+### Test cases
+
+Each test case should include:
+
+| Field | Description | Required | Values |
+| --- | --- | --- | --- |
+| `name` | Test identifier | Yes | String |
+| `input` | Raw job input payload | Yes | Object |
+| `timeout` | Max execution time | No | Integer (milliseconds) |
+
+### Test environment configuration
+
+| Field | Description | Required | Values |
+| --- | --- | --- | --- |
+| `gpuTypeId` | GPU type for testing | Only for GPU tests | Valid GPU ID |
+| `gpuCount` | Number of GPUs | Only for GPU tests | Integer |
+| `env` | Test environment variables | No | Array of key-value pairs |
+| `allowedCudaVersions` | Supported CUDA versions | No | Array of version strings |
