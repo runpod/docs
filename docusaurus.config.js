@@ -279,7 +279,7 @@ const config = {
             redirects.push(existingPath.replace('/serverless/endpoints/', '/serverless/references/'));
           }
           else if (existingPath.includes('/tutorials/serverless/')) {
-            redirects.push(existingPath.replace('tutorials/serverless/', 'tutorials/serverless/gpu/'));
+            redirects.push(existingPath.replace('/tutorials/serverless/', '/tutorials/serverless/gpu/'));
           }
           return redirects;
         },
@@ -311,7 +311,7 @@ const config = {
           },
           {
             to: '/tutorials/serverless/run-ollama-inference',
-            from: '/tutorials/serverless/gpu/run-ollama-inference',
+            from: '/tutorials/serverless/cpu/run-ollama-inference',
           },
         ]
       },
