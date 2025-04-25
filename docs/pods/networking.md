@@ -51,7 +51,7 @@ For more detailed information or support, please [contact our customer service t
 
 ## Available data centers
 
-Global networking is available across 16 data centers worldwide.
+Global networking is available across 17 data centers worldwide.
 
 | Region ID | Geographic Location | 
 |-----------|---------------------|
