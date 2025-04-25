@@ -1,8 +1,10 @@
 ---
-title: Quick Deploy an endpoint
+title: Quick Deploy a worker
 sidebar_position: 2
-description: "Quickly deploy Serverless endpoints using popular AI models with minimal configuration through the web interface, following a simple 5-step process. Customize your deployments using RunPod's GitHub repositories and Handler Functions."
+description: "Quickly deploy a worker to a Serverless endpoint through the RunPod web interface, following a simple 5-step process. Customize your deployments using RunPod's GitHub repositories and handler functions."
 ---
+
+You can Quickly Deploy a pre-configured worker to a Serverless endpoint, enabling you to use popular AI models with minimal configuration.
 
 ## How to do I get started with Quick Deploys?
 

@@ -29,9 +29,9 @@ Use Serverless to:
 
 Get started with Serverless:
 
-- [Build your first Serverless app.](/serverless/get-started)
+- [Build a custom Serverless worker.](/serverless/get-started)
 - [Run any LLM as an endpoint using vLLM workers.](/serverless/vllm/get-started)
-- [Tutorial: Create a Serverless endpoint with Stable Diffusion.](/tutorials/serverless/run-your-first)
+- [Tutorial: Deploy a Serverless worker with Stable Diffusion.](/tutorials/serverless/run-your-first)
 
 ## Pods
 

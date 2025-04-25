@@ -4,65 +4,65 @@ sidebar_position: 1
 description: "RunPod is a cloud-based platform for managed function execution, offering fully managed infrastructure, automatic scaling, flexible language support, and seamless integration, allowing developers to focus on code and deploy it easily."
 ---
 
-A worker is a single compute resource that processes Serverless endpoint requests. Each endpoint can have multiple workers, enabling parallel processing of multiple requests simultaneously.
+# Serverless workers
 
-## Total workers
+Workers are container instances that execute your code when requests are made to your [Serverless endpoint](/serverless/endpoints/overview). They process request inputs using a [handler function](/serverless/workers/handler-functions) that you define. Serverless endpoints automatically manage the worker lifecycle, starting them when needed and stopping them when idle to optimize resource usage.
 
-The maximum number of workers available to your account. The sum of the max workers assigned across all your endpoints cannot exceed this limit. If you run out of total workers, please reach out to us by [creating a support ticket](https://contact.runpod.io/).
+<img src="/img/docs/serverless-workers-tab.png" width="1200" alt="Screenshot of the workers tab in the RunPod console."/>
 
-## Max workers
+Workers are responsible for:
 
-The upper limit on the number of workers that your endpoint can run simultaneously, not including any [extra workers](#extra-workers).
+- Processing incoming requests.
+- Executing your handler functions.
+- Managing computational resources.
+- Outputting results for your endpoint to return.
 
-Default: 3
+## Deploy a worker
 
-## Active (Min) workers
+To deploy a custom worker:
 
-“Always on” workers. Setting active workers to 1 or more ensures that a worker is always ready to respond to job requests without cold start delays.
+1. Create a [handler function](/serverless/workers/handler-functions) to process your inputs.
+2. Package your application in a Docker container or use pre-built templates.
+3. Deploy your worker to a Serverless endpoint.
 
-Default: 0
+For a full walkthrough, see [Create a custom worker](/serverless/workers/custom-worker).
 
-:::note
+You can also deploy a preconfigured working by using [Quick Deploys.](/serverless/workers/quick-deploys)
 
-Active workers incur charges as soon as you enable them (set to >0), but they come with a discount of up to 30% off the regular price.
+## Worker configurations
 
-:::
+When deploying a worker to a Serverless endpoint, you can configure various parameters:
 
-## Flex workers
+- **GPU selection**: Choose the appropriate GPU type for your workload.
+- **Worker count**: Set minimum and maximum number of workers.
+- **Memory allocation**: Configure memory available to each worker.
+- **Environment variables**: Set parameters for worker behavior.
+- **Storage options**: Add network volumes for persistent storage between workers.
 
-Flex workers are “sometimes on” workers that help scale your endpoint during traffic surges. They are often referred to as idle workers since they spend most of their time in an idle state. Once a flex worker completes a job, it transitions to idle or sleep mode to save costs. You can adjust the idle timeout to keep them running a little longer, reducing cold start delays when new requests arrive.
+To learn more, see [Endpoint configurations](/serverless/endpoints/endpoint-configurations#worker-configuration).
 
-Default: Max workers(3) - Active workers(0) = 3
+## Worker types
+- **Active (min) workers**: "Always on" workers that eliminate cold start delays. Charged immediately but with up to 30% discount. (Default: 0)
+- **Flex workers**: "Sometimes on" workers that scale during traffic surges. Transition to idle after completing jobs. (Default: Max - Active = 3)
+- **Extra workers**: Additional workers added during traffic spikes when Docker images are cached on host servers. (Default: 2)
 
-## Extra workers
+## Worker states
 
-Your workers' Docker images are cached on our RunPod's host servers, ensuring faster scalability. If you experience a traffic spike, you can increase the max number of workers, and extra workers will be immediately added as part of the flex workers to handle the increased demand.
+Workers transition through different states as they handle requests and respond to changes in traffic patterns. Understanding these states helps you monitor and troubleshoot your Serverless endpoints effectively.
 
-Default: 2
+- **Initializing**: Worker is starting up as the Docker image is downloaded and prepared. The container is starting and code is loading.
+- **Idle**: Worker is ready but not processing requests. No charges apply while idle.
+- **Running**: Worker is actively processing requests. Billing occurs per second.
+- **Throttled**: Worker is ready but temporarily unable to run due to host machine resource constraints.
+- **Outdated**: Worker is marked for replacement after endpoint updates. Continues processing current jobs during rolling updates (10% of max workers at a time).
+- **Unhealthy**: Worker has crashed due to Docker image issues, incorrect start commands, or machine problems. System automatically retries with exponential backoff for up to 7 days.
 
-## Worker wtates
+You can view the state of your workers using the **Workers** tab of a Serverless endpoint. This tab provides real-time information about each worker's current state, resource utilization, and job processing history, allowing you to monitor performance and troubleshoot issues effectively.
 
-### Initializing
+## Next steps
 
-When you create a new endpoint or release an update, RunPod needs to download and prepare the Docker image for your workers. During this process, workers remain in an initializing state until they are fully ready to handle requests.
-
-### Idle
-
-A worker is ready to handle new requests but is not actively processing any. There is no charge while a worker is idle.
-
-### Running
-
-A running worker is actively processing requests, and you are billed every second it runs. If a worker runs for less than a full second, it will be rounded up to the next whole second. For example, if a worker runs for 2.5 seconds, you will be billed for 3 seconds.
-
-### Throttled
-
-Sometimes, the machine where the worker is cached may be fully occupied by other workloads. In this case, the worker will show as throttled until resources become available.
-
-### Outdated
-
-When you update your endpoint configuration or deploy a new Docker image, existing workers are marked as outdated. These workers will continue processing their current jobs but will be gradually replaced through a rolling update, replacing 10% of max workers at a time. This ensures a smooth transition without disrupting active workloads.
-
-### Unhealthy
-
-When your container crashes, it's usually due to a bad Docker image, an incorrect start command, or occasionally a machine issue. When this happens, the worker is marked as unhealthy. Be sure to check the container logs and fix any issues causing the crash to prevent repeated failures.
-The system will automatically retry the unhealthy worker after 1 hour, continuing to retry with exponential backoff for up to 7 days. If the worker successfully takes a request from the queue during a retry attempt, it will be marked as healthy again.
+- [Create a custom worker](/serverless/get-started)
+- [Deploy large language models using vLLM](/serverless/vllm/overview)
+- [Explore Quick Deploy options](/serverless/quick-deploys)
+- [Learn about handler functions](/serverless/handlers/overview)
+- [Configure your endpoints for optimal performance](/serverless/endpoints/endpoint-configurations)

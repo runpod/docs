@@ -32,30 +32,30 @@ Quick Deploys are pre-configured templates for popular AI models that you can de
 
 [Get started with Quick Deploys →](/serverless/quick-deploys)
 
-### vLLM endpoints
+### vLLM workers
 
 **Best for**: Deploying and serving large language models (LLMs).
 
-vLLM endpoints are specifically optimized for running LLMs:
+vLLM workers are specifically optimized for running LLMs:
 * Support for any [Hugging Face model](https://huggingface.co/models).
 * Optimized for LLM inference.
 * Simple configuration via environment variables.
 * High-performance serving with vLLM.
 
-[Get started with vLLM endpoints →](/serverless/vllm/get-started)
+[Get started with vLLM workers →](/serverless/vllm/get-started)
 
-### Custom endpoints
+### Custom workers
 
 **Best for**: Running custom code or specialized AI workloads.
 
-Custom endpoints give you complete control over your application:
+Custom workers give you complete control over your application:
 
 * Write your own Python code.
 * Package in Docker containers.
 * Full flexibility for any use case.
 * Custom processing logic.
 
-[Get started with custom endpoints →](/serverless/get-started)
+[Get started with custom workers →](/serverless/get-started)
 
 ## Key concepts
 
@@ -69,13 +69,13 @@ An [endpoint](/serverless/endpoints/overview) is the access point for your Serve
 
 ### Handler functions
 
-[Handler functions](/serverless/handlers/overview) are the core of your Serverless application. These are the functions that process incoming requests and return results. They follow a simple pattern:
+[Handler functions](/serverless/handlers/overview) are the core of your Serverless application. These functions define how a worker processes incoming requests and returns results. They follow a simple pattern:
 
 ```python # rp_handler.py
 import runpod  # Required
 
 def handler(event):
-    # Extract input data
+    # Extract input data from the request
     input_data = event["input"]
     
     # Process the input (replace this with your own code)
@@ -93,7 +93,7 @@ When a user/client sends a request to your Serverless endpoint:
 
 1. If no workers are active, RunPod automatically starts one (cold start).
 2. The request is queued until a worker is available.
-3. Your handler function processes the request.
+3. A worker processes the request using your handler function.
 4. The result is returned to the user/client after they call `/status` (see [Job operations](/serverless/endpoints/operations)).
 5. Workers remain active for a period to handle additional requests.
 6. Idle workers eventually shut down if no new requests arrive.
@@ -112,7 +112,8 @@ When a user/client sends a request to your Serverless endpoint:
 
 Ready to get started with RunPod Serverless?
 
-- [Deploy your first Serverless endpoint.](/serverless/get-started)
 - [Deploy large language models in minutes with vLLM.](/serverless/vllm/overview)
+- [Create a custom worker.](/serverless/get-started)
 - [Learn more about endpoints.](/serverless/endpoints/overview)
+- [Learn more about workers.](/serverless/workers/overview)
 - [Learn more about handler functions.](/serverless/handlers/overview)

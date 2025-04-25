@@ -1,11 +1,16 @@
 ---
 title: "Deploy a worker image"
-description: "Package your Handler Function into a Docker image for scalable Serverless Worker deployment, leveraging Dockerfiles and Configurable Endpoints for efficient deployment. Learn how to build, push, and integrate your image for continuous integration and testing."
-sidebar_position: 2
+description: "Package your handler function into a Docker image for scalable Serverless worker deployment. Learn how to build, push, and integrate your image for continuous integration and testing."
+sidebar_position: 6
 ---
 
-Once you have a Handler Function, the next step is to package it into a Docker image that can be deployed as a scalable Serverless Worker.
-This is accomplished by defining a Docker file to import everything required to run your handler. Example Docker files are in the [runpod-workers](https://github.com/orgs/runpod-workers/repositories) repository on GitHub.
+# Package and deploy a worker image
+
+After you've create a handler function, the next step is to package it into a Docker image that can be deployed as a Serverless worker.
+
+This is accomplished by defining a Docker file to import everything required to run your handler.
+
+Example Docker files are in the [runpod-workers](https://github.com/orgs/runpod-workers/repositories) repository on GitHub.
 
 :::note
 
@@ -51,7 +56,7 @@ To build and push the image, review the steps in [Get started](/serverless/overv
 
 ## Continuous integrations
 
-Integrate your Handler Functions through continuous integration.
+Integrate your handler functions through continuous integration.
 
 The [Test Runner](https://github.com/runpod/test-runner) GitHub Action is used to test and integrate your Handler Functions into your applications.
 

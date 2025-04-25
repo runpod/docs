@@ -1,12 +1,12 @@
 ---
-title: "Endpoint configurations"
+title: "Endpoint configuration"
 sidebar_position: 8
 description: Configure your endpoint settings to optimize performance and cost, including GPU selection, worker count, idle timeout, and advanced options like data centers, network volumes, and scaling strategies.
 ---
 
 This guide explains all available settings and best practices for configuring RunPod Serverless endpoints, helping you optimize for performance, cost, and reliability.
 
-## Basic configurations
+## Basic configuration
 
 ### Endpoint name
 
@@ -122,7 +122,7 @@ You can use the `/status` operation to configure the time-to-live (TTL) for an i
 
 FlashBoot is RunPod's solution for reducing the average cold-start times on your endpoint. It works probabilistically. When your endpoint has consistent traffic, your workers have a higher chance of benefiting from FlashBoot for faster spin-ups. However, if your endpoint isn't receiving frequent requests, FlashBoot has fewer opportunities to optimize performance. There is no additional cost associated with FlashBoot.
 
-## Advanced configurations
+## Advanced configuration
 
 When configuring advanced settings, remember that each constraint (data center, storage, CUDA version, GPU type) may limit resource availability. For maximum availability and reliability, select all data centers and CUDA versions, and avoid network volumes unless your workload specifically requires them.
 

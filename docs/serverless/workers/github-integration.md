@@ -1,8 +1,10 @@
 ---
 title: "Deploy with GitHub"
-sidebar_position: 4
+sidebar_position: 7
 description: Get started by deploying a Worker and integrating it with GitHub
 ---
+
+# Deploy workers with GitHub
 
 RunPod manages the container registry and Docker build process, enabling seamless integration with your developer workflow.
 
