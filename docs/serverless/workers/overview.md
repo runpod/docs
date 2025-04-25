@@ -61,8 +61,8 @@ You can view the state of your workers using the **Workers** tab of a Serverless
 
 ## Next steps
 
-- [Create a custom worker](/serverless/get-started)
-- [Deploy large language models using vLLM](/serverless/vllm/overview)
-- [Explore Quick Deploy options](/serverless/quick-deploys)
-- [Learn about handler functions](/serverless/handlers/overview)
-- [Configure your endpoints for optimal performance](/serverless/endpoints/endpoint-configurations)
+- [Create a custom worker.](/serverless/get-started)
+- [Deploy large language models using vLLM.](/serverless/vllm/overview)
+- [Explore Quick Deploy options.](/serverless/quick-deploys)
+- [Learn about handler functions.](/serverless/handlers/overview)
+- [Configure your endpoints for optimal performance.](/serverless/endpoints/endpoint-configurations)

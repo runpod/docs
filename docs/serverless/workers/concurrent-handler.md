@@ -1,7 +1,7 @@
 ---
 title: "Build a concurrent handler"
 description: "Learn how to implement concurrent handlers to process multiple requests simultaneously with a single worker."
-sidebar_position: 8
+sidebar_position: 5
 ---
 
 # Build a concurrent handler

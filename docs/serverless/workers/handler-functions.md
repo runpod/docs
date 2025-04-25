@@ -13,7 +13,7 @@ Handler functions are the core of your RunPod Serverless applications. They defi
 
 :::tip
 
-If you haven't already, we recommend running through the [custom worker tutorial](/serverless/workers/create-custom-worker) before exploring this document.
+If you're new to Serverless, we recommend running through the [custom worker tutorial](/serverless/workers/create-custom-worker) before exploring this page.
 
 :::
 
@@ -48,6 +48,31 @@ runpod.serverless.start({"handler": handler})  # Required
 ```
 
 The handler takes a request, extracts the input, processes it, and returns a result. The `runpod.serverless.start()` function launches your serverless application with the specified handler.
+
+## Local testing
+
+To test your handler locally, you can:
+
+1. Create a `test_input.json` file:
+
+```json
+{
+    "input": {
+        "prompt": "Hey there!"
+    }
+}
+```
+
+2. Run your handler:
+
+```bash
+python handler.py
+```
+
+3. Or provide test input directly in the command line:
+```bash
+python handler.py --test_input '{"input": {"prompt": "Test prompt"}}'
+```
 
 ## Handler types
 
@@ -299,29 +324,6 @@ Be aware of payload size limits when designing your handler:
 - `/runsync` endpoint: 20 MB
 
 If your results exceed these limits, consider storing them in cloud storage and returning links instead.
-
-## Local testing
-
-To test your handler locally, you can:
-
-1. Create a `test_input.json` file:
-```json
-{
-    "input": {
-        "prompt": "Hey there!"
-    }
-}
-```
-
-2. Run your handler:
-```bash
-python handler.py
-```
-
-3. Or provide test input directly in the command line:
-```bash
-python handler.py --test_input '{"input": {"prompt": "Test prompt"}}'
-```
 
 ## Next steps
 

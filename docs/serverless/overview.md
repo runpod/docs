@@ -55,7 +55,7 @@ Custom workers give you complete control over your application:
 * Full flexibility for any use case.
 * Custom processing logic.
 
-[Get started with custom workers →](/serverless/get-started)
+[Get started with custom workers →](/serverless/workers/custom-worker)
 
 ## Key concepts
 

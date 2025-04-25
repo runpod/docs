@@ -1,15 +1,15 @@
 ---
-title: "Create a custom worker"
-sidebar_position: 2
+title: "Create a worker"
+sidebar_position: 3
 description: Create and deploy your first custom Serverless worker. Learn to create a handler, test it locally, build a Docker image, create an endpoint, and send requests with this step-by-step tutorial.
 ---
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Create a custom worker
+# Create a worker
 
-Learn how to create, deploy, and test your first custom Serverless worker.
+Learn how to create, deploy, and test a custom Serverless worker.
 
 :::tip
 
