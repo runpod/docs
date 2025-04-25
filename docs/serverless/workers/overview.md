@@ -19,15 +19,16 @@ Workers are responsible for:
 
 ## Deploy a worker
 
-To deploy a custom worker:
+For a step-by-step walkthrough of how to create and deploy a worker, [follow this tutorial](/serverless/workers/custom-worker).
 
-1. Create a [handler function](/serverless/workers/handler-functions) to process your inputs.
-2. Package your application in a Docker container or use pre-built templates.
-3. Deploy your worker to a Serverless endpoint.
+This guide walks you through:
 
-For a full walkthrough, see [Create a custom worker](/serverless/workers/custom-worker).
+1. Creating a [handler function](/serverless/workers/handler-functions) to process your inputs.
+2. Packaging your application in a Docker container.
+3. Deploying your worker to a Serverless endpoint.
+4. Testing your worker locally and on the RunPod console.
 
-You can also deploy a preconfigured working by using [Quick Deploys.](/serverless/workers/quick-deploys)
+You can also deploy a preconfigured worker by using [Quick Deploys.](/serverless/workers/quick-deploys)
 
 ## Worker configurations
 
@@ -39,7 +40,7 @@ When deploying a worker to a Serverless endpoint, you can configure various para
 - **Environment variables**: Set parameters for worker behavior.
 - **Storage options**: Add network volumes for persistent storage between workers.
 
-To learn more, see [Endpoint configurations](/serverless/endpoints/endpoint-configurations#worker-configuration).
+To learn more, see [Endpoint configurations](/serverless/endpoints/endpoint-configurations).
 
 ## Worker types
 - **Active (min) workers**: "Always on" workers that eliminate cold start delays. Charged immediately but with up to 30% discount. (Default: 0)
@@ -61,7 +62,7 @@ You can view the state of your workers using the **Workers** tab of a Serverless
 
 ## Next steps
 
-- [Create a custom worker.](/serverless/get-started)
+- [Create a custom worker.](/serverless/workers/custom-worker)
 - [Deploy large language models using vLLM.](/serverless/vllm/overview)
 - [Explore Quick Deploy options.](/serverless/quick-deploys)
 - [Learn about handler functions.](/serverless/handlers/overview)
