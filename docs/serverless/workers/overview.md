@@ -66,3 +66,8 @@ When you update your endpoint configuration or deploy a new Docker image, existi
 
 When your container crashes, it's usually due to a bad Docker image, an incorrect start command, or occasionally a machine issue. When this happens, the worker is marked as unhealthy. Be sure to check the container logs and fix any issues causing the crash to prevent repeated failures.
 The system will automatically retry the unhealthy worker after 1 hour, continuing to retry with exponential backoff for up to 7 days. If the worker successfully takes a request from the queue during a retry attempt, it will be marked as healthy again.
+
+:::note
+
+When you’re running a very large model or your worker has a long cold start time, you might exceed the system’s default cold start limit of 7 minutes. If that happens, your worker could be marked as unhealthy. To fix this, you can set an environment variable to override the default limit, for example, you can add RUNPOD_INIT_TIMEOUT=800 (where the value is in seconds) to allow a longer cold start time.
+:::
