@@ -13,7 +13,7 @@ Handler functions are the core of your RunPod Serverless applications. They defi
 
 :::tip
 
-If you're new to Serverless, we recommend running through the [custom worker tutorial](/serverless/workers/create-custom-worker) before exploring this page.
+If you're new to Serverless, we recommend learning how to [build your first worker](/serverless/workers/custom-worker) before exploring this page.
 
 :::
 
@@ -280,7 +280,7 @@ runpod.serverless.start(
 </TabItem>
 </Tabs>
 
-Your handler must return a dictionary that contains the `refresh_worker`. This flag will be removed before the remaining job output is returned.
+Your handler must return a dictionary that contains the `refresh_worker` flag. This flag will be removed before the remaining job output is returned.
 
 :::note
 
