@@ -82,14 +82,17 @@ Builds can have the following statuses:
 
 ## Known limitations
 
-- Private registry base images
-  At the moment, RunPod does not support privately hosted images as base images for docker build. A good workaround is to pack as much of the content in the privately hosted image into the image you are building.
+Private registry base images
 
-- GPU builds
-  Some builds require GPUs. A good example is ones that rely on the GPU build version of bitsandbytes.
+- At the moment, RunPod does not support privately hosted images as base images for docker build. A good workaround is to pack as much of the content in the privately hosted image into the image you are building.
 
-- Images only served on the RunPod platform
-  Images that are built using runpod's image builder service cannot be used anywhere else.
+GPU builds
+
+- Some builds require GPUs. A good example is ones that rely on the GPU build version of bitsandbytes.
+
+Images only served on the RunPod platform
+
+- Images that are built using runpod's image builder service cannot be used anywhere else.
 
 ## Disconnect GitHub
 
