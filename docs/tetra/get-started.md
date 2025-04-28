@@ -42,14 +42,9 @@ First, let's clone the Tetra repo and set up your virtual environment:
     git clone https://github.com/runpod/tetra-rp.git && cd tetra-rp
     ```
 
-2. Install dependencies with Poetry:
+2. Install dependencies with `pip`:
     ```bash
-    poetry install
-    ```
-
-3. Activate the virtual environment:
-    ```bash
-    $(poetry env activate)
+    pip install -r requirements.txt
     ```
 
 ## Step 2: Add your API key to the environment

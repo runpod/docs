@@ -53,6 +53,8 @@ cpu_resource = ServerlessResource(
 )
 ```
 
+See [Configuration parameters](#configuration-parameters) for a complete list of available settings.
+
 ### Remote functions
 
 Remote functions are the building blocks of Tetra workflows. Simply mark any Python function with the `@remote` decorator to designate it for execution on RunPod's infrastructure:
@@ -87,14 +89,14 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-### Dependencies
+### Dependency management
 
 You can specify required Python dependencies for remote workers at the function level from within the `@remote` decorator, and Tetra ensures they will be installed in your execution environment:
 
 ```python
 @remote(
     resource_config=gpu_resource,
-    dependencies=["torch", "transformers", "pillow"]
+    dependencies=["torch==2.0.1", "transformers", "pillow"]
 )
 def model_inference(data):
     # Libraries are automatically installed
@@ -156,6 +158,23 @@ When you execute a Tetra workflow:
 - **AI research experimentation**: Quickly prototype and test complex model combinations.
 - **Production inference systems**: Deploy sophisticated, multi-stage inference pipelines.
 - **Data processing workflows**: Process large datasets using distributed resources.
+
+## Configuration parameters
+
+| Parameter | Description | Default | Example values |
+|-----------|-------------|---------|---------------|
+| `name` | (Required) Name for your endpoint | "" | `"stable-diffusion-server"` |
+| `gpuIds` | Type of GPU to request | `"any"` | `"any"` or a list of comma-separated [GPU IDs](https://docs.runpod.io/references/gpu-types) |
+| `gpuCount` | Number of GPUs per worker | 1 | 1, 2, 4 |
+| `workersMin` | Minimum number of workers | 0 | Set to 1 for persistence |
+| `workersMax` | Maximum number of workers | 3 | Higher for more concurrency |
+| `idleTimeout` | Minutes before scaling down | 5 | 10, 30, 60 |
+| `env` | Environment variables | None | `{"HF_TOKEN": "xyz"}` |
+| `networkVolumeId` | Persistent storage ID | None | `"vol_abc123"` |
+| `executionTimeoutMs` | Max execution time (milliseconds) | 0 (no limit) | 600000 (10 min) |
+| `scalerType` | Scaling strategy | `QUEUE_DELAY` | `NONE`, `QUEUE_SIZE` |
+| `scalerValue` | Scaling parameter value | 4 | 1-10 range typical |
+| `locations` | Preferred data center locations | None | `"us-east,eu-central"` |
 
 ## Next steps
 
