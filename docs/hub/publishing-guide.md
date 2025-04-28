@@ -26,9 +26,9 @@ Follow these steps to add your GitHub repo to the Hub:
 7. Follow the UI flow to add your repo to the Hub.
 8. (Optional) Copy/paste the RunPod badge into your GitHub README.md file to allow users instantly deploy your repo from GitHub.
 
-The Hub status badge will show "pending" during build/test and update after approval.
+The Hub status badge will be marked "Pending" during building/testing. After testing is complete, the RunPod team will manually review the repo for publication.
 
-To update your repo, just **create a new GitHub release**, and your listing will be automatically indexed and built, usually within an hour.
+To update your repo on the Hub, just **create a new GitHub release**, and the Hub listing will be automatically indexed and built (usually within an hour).
 
 ## hub.json reference
 

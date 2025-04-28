@@ -64,7 +64,8 @@ Once your endpoint is ready to share:
 
 1. Add the required configuration files in a `.runpod` directory, following the instructions in the [Hub publishing guide](/hub/publishing-guide).
 2. Create a GitHub release to establish a versioned snapshot.
-3. Submit your repository to the Hub through the RunPod console, where it will undergo automated building and testing before becoming available to the community.
+3. Submit your repository to the Hub through the RunPod console, where it will undergo automated building and testing.
+4. The RunPod team will review your repo. After approval, your repo will appear in the Hub.
 
 To learn more, see the [Hub publishing guide](/hub/publishing-guide).
 
