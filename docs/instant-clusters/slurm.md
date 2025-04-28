@@ -59,7 +59,7 @@ The repository contains several essential scripts for setting up SLURM. Let's ex
 Now run the installation script **on each Pod**, replacing `[MUNGE_SECRET_KEY]` with any secure random string (like a password). The secret key is used for authentication between nodes, and must be identical across all Pods in your cluster.
 
 ```bash
-./install.sh "[MUNGE_SECRET_KEY]" node-0 node-1 10.65.0.2 10.65.0.3```
+./install.sh "[MUNGE_SECRET_KEY]" node-0 node-1 10.65.0.2 10.65.0.3
 ```
 
 This script automates the complex process of configuring a two-node SLURM cluster with GPU support, handling everything from system dependencies to authentication and resource configuration. It implements the necessary setup for both the primary (i.e. master/control) and secondary (i.e compute/worker) nodes.
