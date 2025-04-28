@@ -265,5 +265,6 @@ Now that you've learned the basics, you're ready to:
 - [Send endpoint requests using cURL and the Serverless SDK.](/serverless/endpoints/send-requests)
 - [Learn how to use endpoint operations like `/run` and `/status`.](/serverless/endpoints/operations)
 - [Manage your Serverless endpoints using the RunPod console.](/serverless/endpoints/manage-endpoints)
+- [Configure your endpoints for optimal performance and cost.](/serverless/endpoints/endpoint-configurations)
 - [Create more advanced handler functions.](/serverless/handlers/overview)
 - [Learn more about local testing.](/serverless/development/local-testing)

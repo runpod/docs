@@ -113,7 +113,6 @@ When a user/client sends a request to your Serverless endpoint:
 Ready to get started with RunPod Serverless?
 
 - [Deploy your first Serverless endpoint.](/serverless/get-started)
-- [Try a Quick Deploy model.](/serverless/quick-deploys)
 - [Deploy large language models in minutes with vLLM.](/serverless/vllm/overview)
-- [Learn about handler functions.](/serverless/handlers/overview)
-- [Learn about endpoints.](/serverless/endpoints/overview)
+- [Learn more about endpoints.](/serverless/endpoints/overview)
+- [Learn more about handler functions.](/serverless/handlers/overview)
