@@ -1,6 +1,6 @@
 ---
 title: "Handler functions"
-description: "Create and deploy Serverless handler functions with RunPod, processing submitted inputs and generating output without managing server infrastructure, ideal for efficient, cost-effective, and rapid deployment of code."
+description: "Learn to create handler functions for RunPod Serverless. Handler functions define how your worker processes incoming requests and returns results."
 sidebar_position: 4
 ---
 
@@ -9,7 +9,7 @@ import TabItem from '@theme/TabItem';
 
 # Handler functions
 
-Handler functions are the core of your RunPod Serverless applications. They define how your worker processes incoming requests and returns results. This guide covers everything you need to know about building and using handler functions effectively.
+Handler functions form the core of your RunPod Serverless applications. They define how your worker processes incoming requests and returns results. This guide covers everything you need to know about building and using handler functions effectively.
 
 :::tip
 
@@ -19,7 +19,7 @@ If you're new to Serverless, we recommend learning how to [build your first work
 
 ## Understanding job input
 
-Before building a handler function, it's important to understand the structure of job requests. At minimum, the input will be formatted as:
+Before building a handler function, you should understand the structure of job requests. At minimum, the input will have this format:
 
 ```json
 {
@@ -162,7 +162,7 @@ Learn how to build a concurrent handler by [following this guide](/serverless/wo
 
 ## Error handling
 
-When an exception occurs in your handler function, the RunPod SDK automatically captures it, marking the [job status](/serverless/endpoints/job-states) as `FAILED` and returning the exception details in the job results.
+When an exception occurs in your handler function, the RunPod SDK automatically captures it, marks the [job status](/serverless/endpoints/job-states) as `FAILED` and returns the exception details in the job results.
 
 For custom error responses:
 
@@ -188,7 +188,7 @@ Be cautious with `try/except` blocks to avoid unintentionally suppressing errors
 
 ## Advanced handler controls
 
-Use these features allow you to fine-tune your Serverless applications for specific use cases.
+Use these features to fine-tune your Serverless applications for specific use cases.
 
 ### Progress updates
 

@@ -13,7 +13,7 @@ Learn how to create, deploy, and test a custom Serverless worker.
 
 :::tip
 
-For an even faster start, you can clone the [worker-basic](https://github.com/runpod-workers/worker-basic) repository to get a pre-configured template for building and deploying Serverless workers. After cloning the repository, you can skip to [step 6 of this tutorial](#step-6-build-and-push-your-docker-image) to deploy and test the endpoint.
+For an even faster start, clone the [worker-basic](https://github.com/runpod-workers/worker-basic) repository to get a pre-configured template for building and deploying Serverless workers. After cloning the repository, skip to [step 6 of this tutorial](#step-6-build-and-push-your-docker-image) to deploy and test the endpoint.
 
 :::
 
@@ -169,7 +169,7 @@ CMD ["python3", "-u", "rp_handler.py"]
 
 ## Step 6: Build and push your Docker image
 
-1. Build your Docker image, specifying the platform for RunPod deployment, replacing `[YOUR_USERNAME] with your Docker username:
+1. Build your Docker image, specifying the platform for RunPod deployment, replacing `[YOUR_USERNAME]` with your Docker username:
 
     ```bash
     docker build --platform linux/amd64 --tag [YOUR_USERNAME]/serverless-test .
@@ -177,11 +177,11 @@ CMD ["python3", "-u", "rp_handler.py"]
 
     :::note
 
-    When building your Docker image, you must specify the platform as `linux/amd64` or it won't work on Serverless.
+    You must specify the platform as `linux/amd64` for Serverless deployment.
 
     :::
 
-1. Then push the image to your container registry:
+2. Push the image to your container registry:
 
     ```bash
     docker push yourusername/serverless-test:latest
@@ -189,7 +189,7 @@ CMD ["python3", "-u", "rp_handler.py"]
 
 ## Step 7: Deploy your worker using the RunPod console
 
-You have a few options for deploying your custom worker:
+You have two options for deploying your custom worker:
 
 ### Option 1: Deploy using a Docker image
 
@@ -202,7 +202,7 @@ You have a few options for deploying your custom worker:
 7. Leave the rest of the settings at their defaults.
 8. Click **Create Endpoint**.
 
-You should be automatically redirected to a dedicated detail page for your new endpoint.
+The system will redirect you to a dedicated detail page for your new endpoint.
 
 ### Option 2: Deploy using a GitHub repository
 
@@ -243,9 +243,9 @@ On the left you should see the default test request:
 }
 ```
 
-Leave the default input as is and click **Run**. It will take some time for your workers to initialize.
+Leave the default input as is and click **Run**. The system will take a few minutes to initialize your workers.
 
-When the workers have finished processing your request, you should see output on the right side of the page similar to this:
+When the workers finish processing your request, you should see output on the right side of the page similar to this:
 
 ```json
 {
@@ -258,7 +258,7 @@ When the workers have finished processing your request, you should see output on
 }
 ```
 
-Congratulations, you've successfully deployed and tested your first Serverless worker!
+Congratulations! You've successfully deployed and tested your first Serverless worker.
 
 ## Next steps
 

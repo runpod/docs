@@ -13,7 +13,7 @@ Learn how to implement concurrent handlers to process multiple requests simultan
 In this guide you'll learn how to:
 
 - Create an asynchronous handler function.
-- Implement a concurrency modifier to dynamically adjust concurrency levels.
+- Create a concurrency modifier to dynamically adjust concurrency levels.
 - Optimize worker resources based on request patterns.
 - Deploy and test your concurrent handler.
 
@@ -21,7 +21,6 @@ In this guide you'll learn how to:
 
 - You've [created a RunPod account](/get-started/manage-accounts).
 - You've installed the RunPod SDK (`pip install runpod`).
-- Basic understanding of Python's `asyncio` library.
 
 ## Step 1: Set up your environment
 
@@ -43,7 +42,7 @@ import runpod
 import asyncio
 import random
 
-# Simulated metrics
+# Global variable to track request rate
 request_rate = 0
 
 async def process_request(job):
@@ -77,7 +76,9 @@ def adjust_concurrency(current_concurrency):
         int: The new concurrency level
     """
     global request_rate
-    update_request_rate()  # In production, this would use real metrics
+    
+    # In production, this would use real metrics
+    update_request_rate()
     
     max_concurrency = 10  # Maximum allowable concurrency
     min_concurrency = 1   # Minimum concurrency to maintain
@@ -177,7 +178,7 @@ CMD ["python3", "-u", "concurrent_handler.py"]
 
     :::note
 
-    When building your Docker image, you must specify the platform as `linux/amd64` or it won't work on Serverless.
+    You must specify `linux/amd64` as the platform when building your Docker image for Serverless compatibility.
 
     :::
 
@@ -214,22 +215,22 @@ To test your worker, send multiple requests to your endpoint:
 ```
 
 3. Click **Run** multiple times in quick succession to simulate concurrent requests.
-4. Observe how the worker processes multiple requests without waiting for each to complete.
+4. Observe how the worker handles multiple requests without waiting for each to complete.
 
 ## Understanding the components
 
 ### Asynchronous handler
 
-The `process_request` function is defined with the `async` keyword, allowing it to use non-blocking I/O operations with `await`. This enables the function to "pause" during I/O operations (simulated with `asyncio.sleep()`) and handle other requests while waiting.
+The `process_request` function uses the `async` keyword, enabling it to use non-blocking I/O operations with `await`. This allows the function to pause during I/O operations (simulated with `asyncio.sleep()`) and handle other requests while waiting.
 
 ### Concurrency modifier
 
 The `adjust_concurrency` function:
 - Takes the current concurrency level as input
 - Checks the current request rate
-- Increases concurrency when traffic is high (above 50 requests in this example)
-- Decreases concurrency when traffic is low
-- Respects minimum (1) and maximum (10) concurrency limits
+- Increases concurrency when traffic exceeds 50 requests
+- Decreases concurrency when traffic falls below the threshold
+- Maintains concurrency between 1 and 10
 - Returns the adjusted concurrency level
 
 ### Metrics tracking
@@ -241,17 +242,17 @@ In this example, we use a simple random number generator to simulate changing re
 
 ## Benefits of concurrent handlers
 
-1. **Improved throughput**: Process more requests with fewer workers.
-2. **Cost optimization**: Maximize worker utilization before scaling to additional workers.
-3. **Reduced latency**: Start processing new requests immediately while waiting on I/O operations.
-4. **Dynamic scaling**: Adjust concurrency based on actual workload patterns.
+1. **Improved throughput**: Process more requests with fewer workers
+2. **Cost optimization**: Maximize worker utilization before scaling to additional workers
+3. **Reduced latency**: Start processing new requests immediately while waiting on I/O operations
+4. **Dynamic scaling**: Adjust concurrency based on actual workload patterns
 
 ## Best practices
 
 - Use concurrent handlers for I/O-bound operations, not CPU-bound tasks.
-- Be mindful of memory usage when increasing concurrency.
+- Monitor memory usage carefully when increasing concurrency.
 - Test thoroughly to determine optimal concurrency levels for your specific workload.
-- Use proper error handling to prevent one failing request from affecting others.
+- Implement proper error handling to prevent one failing request from affecting others.
 - Monitor and adjust the concurrency parameters based on real-world performance.
 
 ## Next steps
