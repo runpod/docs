@@ -211,7 +211,7 @@ const config = {
     prism: {
       theme: prismThemes.github,
       darkTheme: prismThemes.dracula,
-      additionalLanguages: ["docker", "json"],
+      additionalLanguages: ["docker", "json", "bash"],
     },
     docs: {
       sidebar: {

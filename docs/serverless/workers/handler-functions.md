@@ -36,7 +36,7 @@ To learn more about endpoint requests, see [Send requests](/serverless/endpoints
 
 Here's a simple handler function that processes an endpoint request:
 
-```python
+```python title="handler.py"
 import runpod
 
 def handler(job):

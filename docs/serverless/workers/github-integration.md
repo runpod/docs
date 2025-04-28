@@ -82,6 +82,8 @@ Builds can have the following statuses:
 | Uploading   | Your container is uploading to the registry. |
 | Completed   | The container build and upload is complete.  |
 
+
+
 ## Known limitations
 
 Private registry base images
@@ -99,3 +101,66 @@ Images only served on the RunPod platform
 ## Disconnect GitHub
 
 To disconnect your GitHub account, go to Settings → Connections → Edit Connection, select your GitHub account, click Configure, scroll down to the Danger Zone, and uninstall “RunPod Inc.”.
+
+
+
+## Continuous integration with GitHub Actions
+
+You can automate testing and deployment with GitHub Actions by creating configuration files in your repository.
+
+For the workflow file (`.github/workflows/test-and-deploy.yml`):
+
+```yaml
+name: Test and Deploy
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        push: true
+        tags: yourusername/worker-name:${{ github.sha }}
+        
+    - name: Run Tests
+      uses: runpod/runpod-test-runner@v1
+      with:
+        image-tag: yourusername/worker-name:${{ github.sha }}
+        runpod-api-key: ${{ secrets.RUNPOD_API_KEY }}
+        test-filename: .github/tests.json
+        request-timeout: 300
+```
+
+For test cases (`.github/tests.json`):
+
+```json
+[
+  {
+    "input": {
+      "prompt": "Test input 1"
+    },
+    "expected_output": {
+      "status": "COMPLETED"
+    }
+  },
+  {
+    "input": {
+      "prompt": "Test input 2",
+      "parameter": "value"
+    },
+    "expected_output": {
+      "status": "COMPLETED"
+    }
+  }
+]
+```
