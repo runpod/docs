@@ -243,10 +243,11 @@ Synchronous requests wait for the job to complete and return the result in a sin
 POST https://api.runpod.ai/v2/{endpoint_id}/runsync
 ```
 
-Best for:
-- Short-running tasks (under 30 seconds)
-- Interactive applications where immediate results are needed
-- Simpler client code (no need to poll for status)
+`/runsync` works best for:
+
+- Short-running tasks (under 30 seconds).
+- Interactive applications where immediate results are needed.
+- Simpler client code (no need to poll for status).
 
 ### Asynchronous requests (`/run`)
 
@@ -256,10 +257,11 @@ Asynchronous requests return immediately with a job ID, allowing your applicatio
 POST https://api.runpod.ai/v2/{endpoint_id}/run
 ```
 
-Best for:
-- Long-running tasks
-- Batch processing
-- Workflows with webhooks
+`/run` works best for:
+
+- Long-running tasks.
+- Batch processing.
+- Workflows with webhooks.
 
 When using asynchronous requests, you'll need to check the job status using the `/status/{job_id}` endpoint or configure a webhook to receive the result.
 

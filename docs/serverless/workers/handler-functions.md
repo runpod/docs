@@ -158,6 +158,8 @@ Always test your async code thoroughly to properly handle asynchronous exception
 
 Process multiple requests simultaneously with a single worker. Concurrent handlers are particularly useful for I/O-bound operations like API calls, database queries, or file operations where a single worker can efficiently manage multiple tasks at once.
 
+When increasing concurrency, it's crucial to monitor memory usage carefully and test thoroughly to determine the optimal concurrency levels for your specific workload. Implement proper error handling to prevent one failing request from affecting others, and continuously monitor and adjust concurrency parameters based on real-world performance.
+
 Learn how to build a concurrent handler by [following this guide](/serverless/workers/concurrent-handler).
 
 ## Error handling
@@ -210,28 +212,22 @@ Progress updates will be available when the job status is polled.
 
 ### Worker refresh
 
-For long-running or complex jobs, you may want to refresh the worker after completion to start with a clean state for the next job:
+For long-running or complex jobs, you may want to refresh the worker after completion to start with a clean state for the next job. Enabling worker refresh clears all logs and wipes the worker state after a job is completed.
 
-<Tabs>
-  <TabItem value="sync" label="Synchronous" default>
+For example:
 
 ```python
 # Requires runpod python version 0.9.0+
 import runpod
 import time
 
-
-def sync_handler(job):
+def handler(job):
     job_input = job["input"]  # Access the input from the request.
 
     results = []
-    for i in range(5):
-        # Generate a synchronous output token
-        output = f"Generated sync token output {i}"
-        results.append(output)
-
-        # Simulate a synchronous task, such as processing time for a large language model
-        time.sleep(1)
+    
+    # Compute results
+    ...
 
     # Return the results and indicate the worker should be refreshed
     return {"refresh_worker": True, "job_results": results}
@@ -240,53 +236,13 @@ def sync_handler(job):
 # Configure and start the RunPod serverless function
 runpod.serverless.start(
     {
-        "handler": sync_handler,  # Required: Specify the sync handler
+        "handler": handler,  # Required: Specify the sync handler
         "return_aggregate_stream": True,  # Optional: Aggregate results are accessible via /run endpoint
     }
 )
 ```
-
-</TabItem>
-  <TabItem value="async" label="Asynchronous">
-
-```python
-import runpod
-import asyncio
-
-
-async def async_generator_handler(job):
-    results = []
-    for i in range(5):
-        # Generate an asynchronous output token
-        output = f"Generated async token output {i}"
-        results.append(output)
-
-        # Simulate an asynchronous task, such as processing time for a large language model
-        await asyncio.sleep(1)
-
-    # Return the results and indicate the worker should be refreshed
-    return {"refresh_worker": True, "job_results": results}
-
-
-# Configure and start the RunPod serverless function
-runpod.serverless.start(
-    {
-        "handler": async_generator_handler,  # Required: Specify the async handler
-        "return_aggregate_stream": True,  # Optional: Aggregate results are accessible via /run endpoint
-    }
-)
-```
-
-</TabItem>
-</Tabs>
 
 Your handler must return a dictionary that contains the `refresh_worker` flag. This flag will be removed before the remaining job output is returned.
-
-:::note
-
-Refreshing a worker does not impact billing or count for/against your min, max, and warmed workers. It simply "resets" that worker at the end of a job.
-
-:::
 
 ## Best practices
 
@@ -313,9 +269,7 @@ Refreshing a worker does not impact billing or count for/against your min, max, 
   ```
 
 2. **Input validation**: Validate inputs before processing to avoid errors during execution.
-3. **Optimize for efficiency**: Minimize resource usage and processing time.
-4. **Consider refresh patterns**: Use worker refresh for memory-intensive tasks.
-5. **Test thoroughly**: Test your handlers locally before deployment.
+3. **Test thoroughly**: Test your handlers locally before deployment.
 
 ## Payload limits
 

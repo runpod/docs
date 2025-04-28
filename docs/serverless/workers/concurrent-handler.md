@@ -42,7 +42,7 @@ import runpod
 import asyncio
 import random
 
-# Global variable to track request rate
+# Global variable to simulate a varying request rate
 request_rate = 0
 
 async def process_request(job):
@@ -108,11 +108,21 @@ if __name__ == "__main__":
     })
 ```
 
-This handler demonstrates the key components of a concurrent handler:
+The `process_request` function uses the `async` keyword, enabling it to use non-blocking I/O operations with `await`. This allows the function to pause during I/O operations (simulated with `asyncio.sleep()`) and handle other requests while waiting.
 
-1. **Asynchronous handler function**: Processes requests concurrently using `async/await`.
-2. **Concurrency modifier**: Dynamically adjusts the concurrency level based on load.
-3. **Metrics tracking**: Simulates monitoring request patterns for adaptive scaling.
+The `adjust_concurrency` function dynamically adjusts the concurrency level based on load by:
+    - Taking the current concurrency level as input.
+    - Checking the current request rate.
+    - Increasing concurrency when traffic exceeds 50 requests.
+    - Decreasing concurrency when traffic falls below the threshold.
+    - Maintaining concurrency between 1 and 10.
+    - Returning the adjusted concurrency level.
+
+
+The `update_request_rate` function simulates monitoring request patterns for adaptive scaling. In this example, we use a simple random number generator to simulate changing request patterns. In a production environment, you would:
+    - Track actual request counts and response times.
+    - Monitor system resource usage, such as CPU and memory.
+    - Adjust concurrency based on real performance metrics.
 
 ## Step 3: Create a test input file
 
@@ -149,117 +159,11 @@ INFO   | Job result: {'output': "Processed: {'message': 'Test concurrent process
 INFO   | Local testing complete, exiting.
 ```
 
-## Step 5: Create a Dockerfile
-
-Create a file named `Dockerfile` with the following content:
-
-```dockerfile
-FROM python:3.10-slim
-
-WORKDIR /
-
-# Install dependencies
-RUN pip install --no-cache-dir runpod asyncio
-
-# Copy your handler file
-COPY concurrent_handler.py /
-
-# Start the container
-CMD ["python3", "-u", "concurrent_handler.py"]
-```
-
-## Step 6: Build and push your Docker image
-
-1. Build your Docker image, specifying the platform for RunPod deployment:
-
-    ```bash
-    docker build --platform linux/amd64 --tag yourusername/concurrent-handler:latest .
-    ```
-
-    :::note
-
-    You must specify `linux/amd64` as the platform when building your Docker image for Serverless compatibility.
-
-    :::
-
-2. Then push the image to your container registry:
-
-    ```bash
-    docker push yourusername/concurrent-handler:latest
-    ```
-
-## Step 7: Deploy your worker using the RunPod console
-
-1. Go to the [Serverless section](https://www.runpod.io/console/serverless) of the RunPod console.
-2. Click **New Endpoint**.
-3. Under **Custom Source**, select **Docker Image**, then click **Next**.
-4. In the **Container Image** field, enter your Docker image URL: `docker.io/yourusername/concurrent-handler:latest`.
-5. (Optional) Enter a custom name for your endpoint, or use the randomly generated name.
-6. Under **Worker Configuration**, check the box for the appropriate GPU (or CPU-only if your workload doesn't require GPU).
-7. Click **Create Endpoint**.
-
-## Step 8: Test your concurrent handler
-
-To test your worker, send multiple requests to your endpoint:
-
-1. Navigate to the **Requests** tab in your endpoint detail page.
-2. Use the following test request:
-
-```json
-{
-    "input": {
-        "message": "Concurrent test",
-        "delay": 2
-    }
-}
-```
-
-3. Click **Run** multiple times in quick succession to simulate concurrent requests.
-4. Observe how the worker handles multiple requests without waiting for each to complete.
-
-## Understanding the components
-
-### Asynchronous handler
-
-The `process_request` function uses the `async` keyword, enabling it to use non-blocking I/O operations with `await`. This allows the function to pause during I/O operations (simulated with `asyncio.sleep()`) and handle other requests while waiting.
-
-### Concurrency modifier
-
-The `adjust_concurrency` function:
-- Takes the current concurrency level as input
-- Checks the current request rate
-- Increases concurrency when traffic exceeds 50 requests
-- Decreases concurrency when traffic falls below the threshold
-- Maintains concurrency between 1 and 10
-- Returns the adjusted concurrency level
-
-### Metrics tracking
-
-In this example, we use a simple random number generator to simulate changing request patterns. In a production environment, you would:
-- Track actual request counts and response times
-- Monitor system resource usage (CPU, memory, etc.)
-- Adjust concurrency based on real performance metrics
-
-## Benefits of concurrent handlers
-
-1. **Improved throughput**: Process more requests with fewer workers
-2. **Cost optimization**: Maximize worker utilization before scaling to additional workers
-3. **Reduced latency**: Start processing new requests immediately while waiting on I/O operations
-4. **Dynamic scaling**: Adjust concurrency based on actual workload patterns
-
-## Best practices
-
-- Use concurrent handlers for I/O-bound operations, not CPU-bound tasks.
-- Monitor memory usage carefully when increasing concurrency.
-- Test thoroughly to determine optimal concurrency levels for your specific workload.
-- Implement proper error handling to prevent one failing request from affecting others.
-- Monitor and adjust the concurrency parameters based on real-world performance.
-
 ## Next steps
 
-Now that you've implemented a concurrent handler, you can:
+Now that you've created a concurrent handler, you can:
 
-- [Add error handling for more robust processing](/serverless/handlers/handler-error-handling).
-- [Implement streaming responses with generator functions](/serverless/handlers/handler-generator).
-- [Configure your endpoint for optimal performance](/serverless/endpoints/endpoint-configurations).
-- [Integrate with external services for more complex workflows](/serverless/endpoints/send-requests).
+- [Use your handler by packaging and deploying a worker image](/serverless/workers/deploy)
+- [Add error handling for more robust processing.](/serverless/workers/handler-functions#error-handling)
+- [Implement streaming responses with generator functions.](/serverless/workers/handler-functions#generator-handlers)
+- [Configure your endpoint for optimal performance.](/serverless/endpoints/endpoint-configurations)
