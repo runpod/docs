@@ -19,7 +19,7 @@ This guide assumes you are operating within a Linux terminal environment and hav
 This method might occur a delay when working with RunPod Serverless Endpoints.
 This delay is due to the FastAPI server that is used to run the Cog model.
 
-To eliminate this delay, consider using [RunPod Handler](/serverless/workers/overview) functions in a future iteration.
+To eliminate this delay, consider using [RunPod Handler](/serverless/handlers/overview) functions in a future iteration.
 
 :::
 

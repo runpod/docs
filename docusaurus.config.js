@@ -3,13 +3,13 @@
 // (when paired with `@ts-check`).
 // There are various equivalent ways to declare your Docusaurus config.
 // See: https://docusaurus.io/docs/api/docusaurus-config
-import { injectSpeedInsights } from "@vercel/speed-insights";
+import { injectSpeedInsights } from "@vercel/speed-insights"
 /* const {
   remarkCodeHike,
 } = require("@code-hike/mdx");
 */
-import path from "path";
-import { themes as prismThemes } from "prism-react-renderer";
+import path from "path"
+import { themes as prismThemes } from "prism-react-renderer"
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -127,6 +127,13 @@ const config = {
           label: "Tutorials",
         },
         {
+          type: "docSidebar",
+          position: "left",
+          sidebarId: "sdkSidebar",
+          collapsed: false,
+          label: "SDKs",
+        },
+        {
           href: "https://rest.runpod.io/v1/docs",
           label: "API",
           position: "left",
@@ -207,18 +214,17 @@ const config = {
     },
     docs: {
       sidebar: {
-        hideable: true,
+        hideable: false,
       },
     },
-    /* announcementBar: {
-      id: "ollama-cpu",
+    announcementBar: {
+      id: "h200s",
       content:
-        "Checkout our new Serverless CPU by running <a href=\"https://docs.runpod.io/tutorials/serverless/cpu/run-ollama-inference/\">inference with Ollama</a>.",
+        'Deploy your workloads on H200s for 1.4x the performance of H100. <a href="https://www.runpod.io/console/deploy?gpu=H200+SXM">Learn more</a>.',
       backgroundColor: "#004a7f",
       textColor: "#ffffff",
       isCloseable: true,
     },
-    */
   },
 
   scripts: [
@@ -236,6 +242,10 @@ const config = {
       async: true,
       defer: true,
     },
+    {
+      src: "https://kit.fontawesome.com/4b9ba14b0f.js",
+      crossOrigin: "anonymous",
+    },
     // {
     // src: "/scripts/fullstory.js",
     //  async: true,
@@ -247,10 +257,92 @@ const config = {
       "posthog-docusaurus",
       {
         apiKey: "phc_1ku7R949l2D5wsXgMCBNSRIVRMiAn8FyKFNoJWDCcOb",
+        appUrl: "https://observe.runpod.io",
+      },
+    ],
+    [
+      "@docusaurus/plugin-client-redirects",
+      {
+        createRedirects(existingPath) {
+          const redirects = []
+          // Redirect from /serverless/workers/vllm/ to /serverless/vllm/
+          if (existingPath.startsWith("/serverless/vllm/")) {
+            redirects.push(
+              existingPath.replace(
+                "/serverless/vllm/",
+                "/serverless/workers/vllm/"
+              )
+            )
+          }
+          // Redirect from /serverless/workers/handlers/ to /serverless/handlers/
+          else if (existingPath.startsWith("/serverless/handlers/")) {
+            redirects.push(
+              existingPath.replace(
+                "/serverless/handlers/",
+                "/serverless/workers/handlers/"
+              )
+            )
+          }
+          // Redirect from /serverless/workers/development/ to /serverless/development/
+          else if (existingPath.startsWith("/serverless/development/")) {
+            redirects.push(
+              existingPath.replace(
+                "/serverless/development/",
+                "/serverless/workers/development/"
+              )
+            )
+          } else if (existingPath.includes("/serverless/endpoints/")) {
+            redirects.push(
+              existingPath.replace(
+                "/serverless/endpoints/",
+                "/serverless/references/"
+              )
+            )
+          } else if (existingPath.includes("/tutorials/serverless/")) {
+            redirects.push(
+              existingPath.replace(
+                "/tutorials/serverless/",
+                "/tutorials/serverless/gpu/"
+              )
+            )
+          }
+          return redirects
+        },
+
+        redirects: [
+          {
+            to: "/serverless/endpoints/send-requests",
+            from: "/serverless/endpoints/get-started",
+          },
+          {
+            to: "/serverless/endpoints/operations",
+            from: "/serverless/endpoints/job-operations",
+          },
+          {
+            to: "/references/glossary",
+            from: "/glossary",
+          },
+          {
+            to: "/references/billing-information",
+            from: "/get-started/billing-information",
+          },
+          {
+            to: "/references/referrals",
+            from: "/get-started/referrals",
+          },
+          {
+            to: "/tutorials/introduction/overview",
+            from: "/tutorials/overview",
+          },
+          {
+            to: "/tutorials/serverless/run-ollama-inference",
+            from: "/tutorials/serverless/cpu/run-ollama-inference",
+          },
+        ],
       },
     ],
   ],
-};
+}
 
-export default config;
-injectSpeedInsights();
+export default config
+injectSpeedInsights()

@@ -1,52 +1,69 @@
 ---
-title: Overview
+title: Introduction
 description: "RunPod is a cloud computing platform for AI, machine learning, and general compute, offering GPU and CPU resources, serverless computing, and a Command Line Interface for easy deployment and development."
 sidebar_position: 1
 ---
 
-**RunPod** is a cloud computing platform designed for AI, machine learning applications, and general computing needs.
+# What is RunPod?
 
-Leverage our platform to execute your code using both GPU and CPU resources through our [Pods](/pods/overview) and [Serverless](/serverless/overview) computing options.
+RunPod is a cloud computing platform built for AI, machine learning, and general compute needs. Whether you're running deep learning models, training AI, or deploying cloud-based applications, RunPod provides **scalable, high-performance GPU and CPU resources** to power your workloads.
 
-Start today by [signing up for an account](https://www.runpod.io/console/signup).
+RunPod offers:
 
-## What are Pods?
+- **High-performance compute:** Access powerful GPU & CPU resources on demand.
+- **Flexible deployment:** Deploy your code using [Serverless](/serverless/overview) for autoscaling pay-per-second execution, or [Pods](/pods/overview) for containerized GPU and CPU instances.
+- **Command-line interface:** Use the [RunPod command-line interface](/runpodctl/overview) to seamlessly automate deployments.
+- **Transparent pricing:** GPUs are billed by the minute, with no fees for ingress/egress. See [RunPod Pricing](https://www.runpod.io/pricing) for details.
 
-**Pods** allow you to run your code on GPU and CPU instances using containers.
+Get started today by [signing up for an account](https://www.runpod.io/console/signup).
 
-Pods are available in two types: [Secure Cloud and Community Cloud](references/faq/#secure-cloud-vs-community-cloud). Secure Cloud operates in T3/T4 data centers, providing high reliability and security. Community Cloud connects individual compute providers to consumers through a vetted, secure peer-to-peer system.
+## Serverless
 
-## What is Serverless?
+[Serverless](/serverless/overview) offers **pay-per-second** serverless computing with **built-in autoscaling** for production workloads.
 
-**Serverless** offers pay-per-second serverless computing with autoscaling capabilities for your production environment.
+Use Serverless to:
 
-Define a Worker, create a REST API Endpoint for it, queue jobs, and enjoy autoscaling to meet demand.
-This service, part of our Secure Cloud offering, ensures low cold-start times and robust security measures.
+- **Deploy AI workloads** with low cold-start times and robust security.
+- Build and expose **REST API endpoints** with autoscaling.
+- Queue jobs efficiently **without managing infrastructure**.
 
-Get started with:
+Get started with Serverless:
 
-- [Building your own Worker image](/serverless/workers/overview)
-- [Using any LLM with the vLLM worker](/serverless/workers/vllm/overview)
+- [Build your first Serverless app.](/serverless/get-started)
+- [Run any LLM as an endpoint using vLLM workers.](/serverless/vllm/get-started)
+- [Tutorial: Create a Serverless endpoint with Stable Diffusion.](/tutorials/serverless/run-your-first)
 
-## Command Line Interface (CLI)
+## Pods
 
-RunPod also provides a Command Line Interface (CLI) tool for quickly developing and deploying custom endpoints on the RunPod serverless platform.
+[Pods](/pods/overview) allow you to run **containerized workloads** on dedicated GPU or CPU instances.
 
-For more information, see the following:
+RunPod offers [two types of Pods](/references/faq/#secure-cloud-vs-community-cloud).
 
-- [GitHub](https://github.com/runpod/runpodctl)
-- [Reference documentation](/runpodctl/reference/runpodctl)
+- **Secure Cloud:** Operates in T3/T4 data centers, providing high reliability and security.
+- **Community Cloud**: Connects individual compute providers to users through a vetted, secure peer-to-peer system.
 
-### Our mission
+Get started with Pods:
 
-RunPod aims to make cloud computing accessible and affordable for everyone, without compromising on features, usability, or experience. We empower individuals and enterprises with cutting-edge technology to unlock the potential of AI and cloud computing.
+- [Deploy your first Pod.](/get-started)
+- [Choose the right Pod.](/pods/choose-a-pod)
+- [Tutorial: Connect to a Pod instance with VSCode.](/tutorials/pods/connect-to-vscode)
 
-For general inquiries, browse our documentation or reach out to us on [Discord](https://discord.gg/cUpRmau42V), our support chat, or by [email](mailto:help@runpod.io). More information is available on our [contact page](https://www.runpod.io/contact).
+## RunPod CLI
 
-## Where to go next?
+RunPod provides a [command-line interface](/runpodctl/overview) (CLI) tool for programmatically managing Pods, or quickly developing and deploying custom Serverless environments.
 
-Learn more about RunPod by:
+For more information, see:
 
-- [Creating an account](/get-started/manage-accounts)
-- [Adding funds to your account](/get-started/billing-information)
-- [Running your first tutorial](/tutorials/introduction/overview)
+- [CLI overview](/runpodctl/overview)
+- [CLI reference](/runpodctl/reference/runpodctl)
+- [CLI GitHub page](https://github.com/runpod/runpodctl)
+
+## Support
+
+If you need help, reach out to us on [Discord](https://discord.gg/cUpRmau42V), via [email](mailto:help@runpod.io), or submit a request using our [contact page](https://contact.runpod.io/hc/requests/new).
+
+## Next steps
+
+- [Create and manage your account](/get-started/manage-accounts)
+- [Add funds to your account](/get-started/billing-information)
+- [Complete your first tutorial](/tutorials/introduction/overview)

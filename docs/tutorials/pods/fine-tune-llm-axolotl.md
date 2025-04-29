@@ -6,6 +6,13 @@ description: "Learn how to fine-tune large language models with Axolotl on RunPo
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
+:::note
+
+RunPod provides an easier method to fine tune an LLM.
+For more information, see [Fine tune a model](/fine-tune/).
+
+:::
+
 [axolotl](https://github.com/OpenAccess-AI-Collective/axolotl) is a tool that simplifies the process of training large language models (LLMs).
 It provides a streamlined workflow that makes it easier to fine-tune AI models on various configurations and architectures.
 When combined with RunPod's GPU resources, Axolotl enables you to harness the power needed to efficiently train LLMs.

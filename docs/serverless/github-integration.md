@@ -1,10 +1,10 @@
 ---
-title: "Deploying with GitHub"
-sidebar_position: 3
+title: "Deploy with GitHub"
+sidebar_position: 4
 description: Get started by deploying a Worker and integrating it with GitHub
 ---
 
-RunPod manages the container registry and docker build process, enabling seamless integration with your developer workflow.
+RunPod manages the container registry and Docker build process, enabling seamless integration with your developer workflow.
 
 1. Pulls your code and Dockerfile
 2. Builds the container image using layer caching for speed
@@ -15,7 +15,7 @@ This integration enables you to focus on development while RunPod handles the in
 
 :::note
 
-You must use [RunPod](/serverless/workers/development/overview) Python library to develop your Serverless worker.
+You must use [RunPod](/serverless/development/overview) Python library to develop your Serverless worker.
 
 :::
 
@@ -82,14 +82,17 @@ Builds can have the following statuses:
 
 ## Known limitations
 
-- Private registry base images
-  At the moment, RunPod does not support privately hosted images as base images for docker build. A good workaround is to pack as much of the content in the privately hosted image into the image you are building.
+Private registry base images
 
-- GPU builds
-  Some builds require GPUs. A good example is ones that rely on the GPU build version of bitsandbytes.
+- At the moment, RunPod does not support privately hosted images as base images for docker build. A good workaround is to pack as much of the content in the privately hosted image into the image you are building.
 
-- Images only served on the RunPod platform
-  Images that are built using runpod's image builder service cannot be used anywhere else.
+GPU builds
+
+- Some builds require GPUs. A good example is ones that rely on the GPU build version of bitsandbytes.
+
+Images only served on the RunPod platform
+
+- Images that are built using runpod's image builder service cannot be used anywhere else.
 
 ## Disconnect GitHub
 

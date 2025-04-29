@@ -1,5 +1,5 @@
 ---
-title: "Burn Testing"
+title: "Burn testing"
 description: "Before listing a machine on the RunPod platform, thoroughly test it with a burn test, verifying memory, CPU, and disk capabilities, and ensure compatibility with popular templates by self-renting the machine after verifying its performance."
 ---
 

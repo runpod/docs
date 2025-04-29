@@ -4,7 +4,7 @@ sidebar_position: 1
 description: "Create an account or get invited by a team member to use RunPod, then convert personal to team account or invite others to join, with various role options including Basic, Billing, Dev, and Admin for customized access and permissions."
 ---
 
-You will need to create an account or get invited by a team member to use RunPod.
+To access RunPod resources, you'll need to either create your own account or join an existing team through an invitation. This page covers both approaches, and explains how to manage team accounts and user roles.
 
 ## Create an account
 
