@@ -370,8 +370,8 @@ const config = {
             from: "/serverless/github-integration",
           },
           {
-            to: "/serverless/get-started",
-            from: "/serverless/workers/custom-worker",
+            to: "/serverless/workers/custom-worker",
+            from: "/serverless/get-started",
           },
         ],
       },
