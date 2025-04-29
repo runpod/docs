@@ -51,7 +51,7 @@ For more detailed information or support, please [contact our customer service t
 
 ## Available data centers
 
-Global networking is available across 16 data centers worldwide.
+Global networking is available across 17 data centers worldwide.
 
 | Region ID | Geographic Location | 
 |-----------|---------------------|
@@ -59,6 +59,7 @@ Global networking is available across 16 data centers worldwide.
 | EU-CZ-1 | Czech Republic |
 | EU-FR-1 | France |
 | EU-NL-1 | Netherlands |
+| EU-RO-1 | Romania |
 | EU-SE-1 | Sweden |
 | EUR-IS-2 | Iceland |
 | OC-AU-1 | Australia |

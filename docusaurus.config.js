@@ -3,18 +3,19 @@
 // (when paired with `@ts-check`).
 // There are various equivalent ways to declare your Docusaurus config.
 // See: https://docusaurus.io/docs/api/docusaurus-config
-import { injectSpeedInsights } from "@vercel/speed-insights";
+import { injectSpeedInsights } from "@vercel/speed-insights"
 /* const {
   remarkCodeHike,
 } = require("@code-hike/mdx");
 */
-import path from "path";
-import { themes as prismThemes } from "prism-react-renderer";
+import path from "path"
+import { themes as prismThemes } from "prism-react-renderer"
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: "RunPod Documentation",
-  tagline: "Globally distributed GPU cloud built for production. Develop, train, and scale AI applications.",
+  tagline:
+    "Globally distributed GPU cloud built for production. Develop, train, and scale AI applications.",
   favicon: "img/favicon.ico",
   url: "https://docs.runpod.io",
   baseUrl: "/",
@@ -217,15 +218,14 @@ const config = {
         hideable: false,
       },
     },
-     announcementBar: {
+    announcementBar: {
       id: "h200s",
       content:
-        "Deploy your workloads on H200s for 1.4x the performance of H100. <a href=\"https://www.runpod.io/console/deploy?gpu=H200+SXM\">Learn more</a>.",
+        'Deploy your workloads on H200s for 1.4x the performance of H100. <a href="https://www.runpod.io/console/deploy?gpu=H200+SXM">Learn more</a>.',
       backgroundColor: "#004a7f",
       textColor: "#ffffff",
       isCloseable: true,
     },
-
   },
 
   scripts: [
@@ -234,7 +234,8 @@ const config = {
       "data-website-id": "d8e25089-cadd-4c1c-9010-7e83cd99a2a5",
       "data-project-name": "RunPod",
       "data-project-color": "#070D27",
-      "data-project-logo": "https://avatars.githubusercontent.com/u/95939477?s=200&v=4",
+      "data-project-logo":
+        "https://avatars.githubusercontent.com/u/95939477?s=200&v=4",
       async: true,
     },
     {
@@ -257,68 +258,92 @@ const config = {
       "posthog-docusaurus",
       {
         apiKey: "phc_1ku7R949l2D5wsXgMCBNSRIVRMiAn8FyKFNoJWDCcOb",
+        appUrl: "https://observe.runpod.io",
       },
     ],
     [
       "@docusaurus/plugin-client-redirects",
       {
         createRedirects(existingPath) {
-          const redirects = [];
-          // Redirect from /serverless/workers/vllm/ to /serverless/vllm/ 
+          const redirects = []
+          // Redirect from /serverless/workers/vllm/ to /serverless/vllm/
           if (existingPath.startsWith("/serverless/vllm/")) {
-            redirects.push(existingPath.replace("/serverless/vllm/", "/serverless/workers/vllm/"));
+            redirects.push(
+              existingPath.replace(
+                "/serverless/vllm/",
+                "/serverless/workers/vllm/"
+              )
+            )
           }
           // Redirect from /serverless/workers/handlers/ to /serverless/handlers/
           else if (existingPath.startsWith("/serverless/handlers/")) {
-            redirects.push(existingPath.replace("/serverless/handlers/", "/serverless/workers/handlers/"));
+            redirects.push(
+              existingPath.replace(
+                "/serverless/handlers/",
+                "/serverless/workers/handlers/"
+              )
+            )
           }
           // Redirect from /serverless/workers/development/ to /serverless/development/
           else if (existingPath.startsWith("/serverless/development/")) {
-            redirects.push(existingPath.replace("/serverless/development/", "/serverless/workers/development/"));
+            redirects.push(
+              existingPath.replace(
+                "/serverless/development/",
+                "/serverless/workers/development/"
+              )
+            )
+          } else if (existingPath.includes("/serverless/endpoints/")) {
+            redirects.push(
+              existingPath.replace(
+                "/serverless/endpoints/",
+                "/serverless/references/"
+              )
+            )
+          } else if (existingPath.includes("/tutorials/serverless/")) {
+            redirects.push(
+              existingPath.replace(
+                "/tutorials/serverless/",
+                "/tutorials/serverless/gpu/"
+              )
+            )
           }
-          else if (existingPath.includes('/serverless/endpoints/')) {
-            redirects.push(existingPath.replace('/serverless/endpoints/', '/serverless/references/'));
-          }
-          else if (existingPath.includes('/tutorials/serverless/')) {
-            redirects.push(existingPath.replace('tutorials/serverless/', 'tutorials/serverless/gpu/'));
-          }
-          return redirects;
+          return redirects
         },
 
         redirects: [
           {
-            to: '/serverless/endpoints/send-requests',
-            from: '/serverless/endpoints/get-started',
+            to: "/serverless/endpoints/send-requests",
+            from: "/serverless/endpoints/get-started",
           },
           {
-            to: '/serverless/endpoints/operations',
-            from: '/serverless/endpoints/job-operations',
+            to: "/serverless/endpoints/operations",
+            from: "/serverless/endpoints/job-operations",
           },
           {
-            to: '/references/glossary',
-            from: '/glossary',
+            to: "/references/glossary",
+            from: "/glossary",
           },
           {
-            to: '/references/billing-information',
-            from: '/get-started/billing-information',
+            to: "/references/billing-information",
+            from: "/get-started/billing-information",
           },
           {
-            to: '/references/referrals',
-            from: '/get-started/referrals',
+            to: "/references/referrals",
+            from: "/get-started/referrals",
           },
           {
-            to: '/tutorials/introduction/overview',
-            from: '/tutorials/overview',
+            to: "/tutorials/introduction/overview",
+            from: "/tutorials/overview",
           },
           {
-            to: '/tutorials/serverless/run-ollama-inference',
-            from: '/tutorials/serverless/gpu/run-ollama-inference',
+            to: "/tutorials/serverless/run-ollama-inference",
+            from: "/tutorials/serverless/cpu/run-ollama-inference",
           },
-        ]
+        ],
       },
-    ]
+    ],
   ],
-};
+}
 
-export default config;
-injectSpeedInsights();
+export default config
+injectSpeedInsights()
