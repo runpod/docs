@@ -163,7 +163,7 @@ INFO   | Local testing complete, exiting.
 
 Now that you've created a concurrent handler, you can:
 
-- [Use your handler by packaging and deploying a worker image](/serverless/workers/deploy)
+- [Package and deploy your handler as a Serverless worker.](/serverless/workers/deploy)
 - [Add error handling for more robust processing.](/serverless/workers/handler-functions#error-handling)
 - [Implement streaming responses with generator functions.](/serverless/workers/handler-functions#generator-handlers)
 - [Configure your endpoint for optimal performance.](/serverless/endpoints/endpoint-configurations)

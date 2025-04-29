@@ -6,25 +6,18 @@ description: "Learn about RunPod Serverless workers. Understand worker types, st
 
 # Worker overview
 
-Workers are container instances that execute your code when users make requests to your [Serverless endpoint](/serverless/endpoints/overview). They process request inputs using a [handler function](/serverless/workers/handler-functions) that you define. Serverless endpoints automatically manage the worker lifecycle, starting them when needed and stopping them when idle to optimize resource usage.
+Workers are container instances that execute your code when users make requests to your [Serverless endpoint](/serverless/endpoints/overview). They process request inputs using a [handler function](/serverless/workers/handler-functions) that you define and store results for retrieval. Serverless endpoints automatically manage the worker lifecycle, starting them when needed and stopping them when idle to optimize resource usage.
 
 <img src="/img/docs/serverless-workers-tab.png" width="1200" alt="Screenshot of the workers tab in the RunPod console."/>
 
-Workers handle:
+## Build your first worker
 
-- Processing incoming requests.
-- Executing your handler functions.
-- Managing computational resources.
-- Outputting results for your endpoint to return.
+[Follow this tutorial](/serverless/workers/custom-worker) for a step-by-step walkthrough of how to create and deploy a Serverless worker.
 
-## Deploy a worker
-
-For a step-by-step walkthrough of how to create and deploy a worker, [follow this tutorial](/serverless/workers/custom-worker).
-
-This guide walks you through:
+This guide walks you through the process of:
 
 1. Creating a [handler function](/serverless/workers/handler-functions) to process your inputs.
-2. Packaging your application in a Docker container.
+2. Packaging your worker in a Docker container.
 3. Deploying your worker to a Serverless endpoint.
 4. Testing your worker locally and on the RunPod console.
 
@@ -43,6 +36,7 @@ When deploying a worker to a Serverless endpoint, you can configure various para
 To learn more, see [Endpoint configurations](/serverless/endpoints/endpoint-configurations).
 
 ## Worker types
+
 - **Active (min) workers**: "Always on" workers that eliminate cold start delays. The system charges you immediately but offers up to 30% discount. (Default: 0).
 - **Flex workers**: "Sometimes on" workers that scale during traffic surges. They transition to idle after completing jobs. (Default: Max - Active = 3).
 - **Extra workers**: Additional workers that the system adds during traffic spikes when Docker images are cached on host servers. (Default: 2).
@@ -62,8 +56,9 @@ You can view the state of your workers using the **Workers** tab of a Serverless
 
 ## Next steps
 
-- [Create a custom worker.](/serverless/workers/custom-worker)
+- [Build your first worker.](/serverless/workers/custom-worker)
+- [Create a custom handler function.](/serverless/workers/hander-functions)
+- [Learn how to deploy workers from Docker Hub.](/serverless/workers/deploy)
 - [Deploy large language models using vLLM.](/serverless/vllm/overview)
 - [Explore Quick Deploy options.](/serverless/quick-deploys)
-- [Learn about handler functions.](/serverless/handlers/overview)
 - [Configure your endpoints for optimal performance.](/serverless/endpoints/endpoint-configurations)

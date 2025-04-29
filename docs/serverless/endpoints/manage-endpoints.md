@@ -14,7 +14,7 @@ Create a new Serverless endpoint through the RunPod web interface:
 
 1. Navigate to the [Serverless section](https://www.runpod.io/console/serverless) of the RunPod console.
 2. Click **New Endpoint**.
-3. Select a source for your endpoint, such as a Docker image, GitHub repo, or a preset model. Click **Next**.
+3. Select a source for your endpoint, such as a [Docker image](/serverless/workers/deploy), [GitHub repo](/serverless/workers/github-integration), or a preset model. Click **Next**.
 4. Follow the UI steps to select a Docker image, GitHub repo, or Hugging Face model. Click **Next**.
 5. Configure your endpoint, setting the **Endpoint Name**, the number of **Max Workers**, **Environment Variables**, etc. For a full list of options, see [Endpoint configurations](/serverless/endpoints/endpoint-configurations)
 6. Click **Create Endpoint** to deploy.

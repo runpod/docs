@@ -76,11 +76,11 @@ python handler.py --test_input '{"input": {"prompt": "Test prompt"}}'
 
 ## Handler types
 
-RunPod supports several types of handler functions to meet different application needs:
+You can create several types of handler functions depending on the needs of your application.
 
 ### Standard handlers
 
-Process inputs synchronously and return results directly. This is the simplest handler type.
+The simplest handler type, standard handlers process inputs synchronously and return results directly.
 
 ```python
 import runpod
@@ -101,7 +101,7 @@ runpod.serverless.start({"handler": handler})
 
 ### Generator handlers
 
-Stream results incrementally as they become available. This is useful for real-time updates, especially in language model tasks.
+Generator handlers stream results incrementally as they become available. Use these when your application requires real-time updates, for example when streaming results from a language model.
 
 ```python
 import runpod
@@ -121,7 +121,7 @@ By default, outputs from generator handlers are only available at the `/stream` 
 
 ### Asynchronous handlers
 
-Process operations concurrently for improved efficiency. This is particularly useful for tasks involving I/O operations, API calls, or processing large datasets.
+Asynchronous handlers process operations concurrently for improved efficiency. Use these for tasks involving I/O operations, API calls, or processing large datasets.
 
 ```python
 import runpod
@@ -142,9 +142,7 @@ runpod.serverless.start({
 })
 ```
 
-Asynchronous handlers provide significant efficiency advantages by enabling non-blocking operations, allowing your code to handle multiple tasks concurrently without waiting for each operation to complete. This approach offers excellent scalability for applications that deal with high-frequency requests or need to process large-scale data, as your worker can maintain responsiveness even under heavy load.
-
-Async handlers are particularly valuable when you need to yield results over time, making them perfectly suited for streaming data scenarios and long-running tasks that produce incremental outputs.
+Async handlers allow your code to handle multiple tasks concurrently without waiting for each operation to complete. This approach offers excellent scalability for applications that deal with high-frequency requests, allowing your workers to remain responsive even under heavy load. Async handlers are also useful for streaming data scenarios and long-running tasks that produce incremental outputs.
 
 :::tip
 
@@ -156,7 +154,7 @@ Always test your async code thoroughly to properly handle asynchronous exception
 
 ### Concurrent handlers
 
-Process multiple requests simultaneously with a single worker. Concurrent handlers are particularly useful for I/O-bound operations like API calls, database queries, or file operations where a single worker can efficiently manage multiple tasks at once.
+Concurrent handlers process multiple requests simultaneously with a single worker. Use these for I/O-bound operations like API calls, database queries, or file operations where a single worker can efficiently manage multiple tasks at once.
 
 When increasing concurrency, it's crucial to monitor memory usage carefully and test thoroughly to determine the optimal concurrency levels for your specific workload. Implement proper error handling to prevent one failing request from affecting others, and continuously monitor and adjust concurrency parameters based on real-world performance.
 
@@ -244,29 +242,31 @@ runpod.serverless.start(
 
 Your handler must return a dictionary that contains the `refresh_worker` flag. This flag will be removed before the remaining job output is returned.
 
-## Best practices
+## Hanlder function best practices
+
+A short list of best practices to keep in mind as you build your hander function:
 
 1. **Initialize outside handler**: Load models and other heavy resources outside your handler function to avoid repeated initialization.
 
-  ```python
-  import runpod
-  import torch
-  from transformers import AutoModelForSequenceClassification, AutoTokenizer
+    ```python
+    import runpod
+    import torch
+    from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-  # Load model and tokenizer outside the handler
-  model_name = "distilbert-base-uncased-finetuned-sst-2-english"
-  tokenizer = AutoTokenizer.from_pretrained(model_name)
-  model = AutoModelForSequenceClassification.from_pretrained(model_name)
+    # Load model and tokenizer outside the handler
+    model_name = "distilbert-base-uncased-finetuned-sst-2-english"
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForSequenceClassification.from_pretrained(model_name)
 
-  # Move model to GPU if available
-  device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-  model.to(device)
+    # Move model to GPU if available
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
 
-  def handler(event):
-      # ...
+    def handler(event):
+        # ...
 
-  runpod.serverless.start({"handler": handler})
-  ```
+    runpod.serverless.start({"handler": handler})
+    ```
 
 2. **Input validation**: Validate inputs before processing to avoid errors during execution.
 3. **Test thoroughly**: Test your handlers locally before deployment.
@@ -277,11 +277,12 @@ Be aware of payload size limits when designing your handler:
 - `/run` endpoint: 10 MB
 - `/runsync` endpoint: 20 MB
 
-If your results exceed these limits, consider storing them in cloud storage and returning links instead.
+If your results exceed these limits, consider stashing them in cloud storage and returning links instead.
 
 ## Next steps
 
 Once you've created your handler function, you can:
+
 - [Package it in a Docker container.](/serverless/workers/deploy)
 - [Deploy it as a Serverless endpoint.](/serverless/endpoints/manage-endpoints)
 - [Configure your endpoint for optimal performance.](/serverless/endpoints/endpoint-configurations)

@@ -160,8 +160,9 @@ If your worker fails to start or process requests:
 
 ## Next steps
 
-After successfully deploying your worker, you can try:
+After successfully deploying your worker, you can:
 
-- [Sending API requests to your endpoint.](/serverless/endpoints/send-requests)
-- [Creating more advanced handler functions](/serverless/workers/handler-functions)
-- [Optimizing your endpoint configurations](/serverless/endpoints/endpoint-configurations)
+- [Send API requests to your endpoint.](/serverless/endpoints/send-requests)
+- [Create more advanced handler functions](/serverless/workers/handler-functions)
+- [Optimize your endpoint configurations](/serverless/endpoints/endpoint-configurations)
+- [Learn how to deploy workers directly from GitHub](/serverless/workers/github-integration)
