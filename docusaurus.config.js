@@ -339,21 +339,22 @@ const config = {
             to: "/tutorials/serverless/run-ollama-inference",
             from: "/tutorials/serverless/cpu/run-ollama-inference",
           },
+          // Consolidating handler pages
           {
             to: "/serverless/workers/handler-functions",
-            from: "/serverless/workers/handlers/handler-additional-controls",
+            from: "/serverless/handlers/handler-additional-controls",
           },
           {
             to: "/serverless/workers/handler-functions",
-            from: "/serverless/workers/handlers/handler-async",
+            from: "/serverless/handlers/handler-async",
           },
           {
             to: "/serverless/workers/concurrent-handler",
-            from: "/serverless/workers/handlers/handler-concurrency",
+            from: "/serverless/handlers/handler-concurrency",
           },
           {
             to: "/serverless/workers/handler-functions",
-            from: "/serverless/workers/handlers/handler-generator",
+            from: "/serverless/handlers/handler-generator",
           },
           {
             to: "/serverless/workers/handler-functions",
@@ -361,8 +362,9 @@ const config = {
           },
           {
             to: "/serverless/workers/handler-functions",
-            from: "/serverless/workers/handlers/overview",
+            from: "/serverless/handlers/overview",
           },
+          // Moving github integration under workers
           {
             to: "/serverless/workers/github-integration",
             from: "/serverless/github-integration",

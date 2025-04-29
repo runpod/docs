@@ -184,7 +184,7 @@ def handler(job):
 runpod.serverless.start({"handler": handler})
 ```
 
-Be cautious with `try/except` blocks to avoid unintentionally suppressing errors. Either return the error for a graceful failure or raise it to flag the job as `FAILED`.
+Exercise caution when using `try/except` blocks to avoid unintentionally suppressing errors. Either return the error for a graceful failure or raise it to flag the job as `FAILED`.
 
 ## Advanced handler controls
 
@@ -220,7 +220,7 @@ import runpod
 import time
 
 def handler(job):
-    job_input = job["input"]  # Access the input from the request.
+    job_input = job["input"]  # Access the input from the request
 
     results = []
     
@@ -242,9 +242,9 @@ runpod.serverless.start(
 
 Your handler must return a dictionary that contains the `refresh_worker` flag. This flag will be removed before the remaining job output is returned.
 
-## Hanlder function best practices
+## Handler function best practices
 
-A short list of best practices to keep in mind as you build your hander function:
+A short list of best practices to keep in mind as you build your handler function:
 
 1. **Initialize outside handler**: Load models and other heavy resources outside your handler function to avoid repeated initialization.
 
