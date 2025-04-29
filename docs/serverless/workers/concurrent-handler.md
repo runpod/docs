@@ -119,7 +119,7 @@ The `adjust_concurrency` function dynamically adjusts the concurrency level base
     - Returning the adjusted concurrency level.
 
 
-The `update_request_rate` function simulates monitoring request patterns for adaptive scaling. In this example, we use a simple random number generator to simulate changing request patterns. In a production environment, you would:
+The `update_request_rate` function simulates monitoring request patterns for adaptive scaling. This example uses a simple random number generator to simulate changing request patterns. In a production environment, you would:
     - Track actual request counts and response times.
     - Monitor system resource usage, such as CPU and memory.
     - Adjust concurrency based on real performance metrics.

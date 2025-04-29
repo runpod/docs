@@ -41,7 +41,7 @@ To deploy a worker from a GitHub repository:
 1. Go to the [Serverless section](https://www.runpod.io/console/serverless) of the RunPod console
 2. Click **New Endpoint**
 3. Under **Custom Source**, select **GitHub Repo**, then click **Next**
-4. Use the search bar or menu to select the repository containing your code. This menu is populated with all repos connected to your account—i.e., repos you've forked/created, or owned by your GitHub organizations.
+4. Use the search bar or menu to select the repository containing your code. This menu is populated with all repos connected to your account (repos you've forked/created, or owned by your GitHub organizations).
 5. Configure your deployment options:
    - **Branch:** Select which branch to deploy from.
    - **Dockerfile:** Specify the path to your Dockerfile (if not in root).
