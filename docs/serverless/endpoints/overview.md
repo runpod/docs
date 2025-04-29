@@ -48,13 +48,13 @@ When a request is sent to an endpoint, it creates a **job** that gets processed 
 
 A [worker](/serverless/workers/overview) is the containerized environment that executes your handler code, providing the compute resources (CPU, GPU, memory) needed to process requests.
 
-The [handler function](/serverless/workers/handler-function) is the code that processes incoming requests and returns responses, defining the business logic of your endpoint.
+The [handler function](/serverless/workers/handler-functions) is the code that processes incoming requests and returns responses, defining the business logic of your endpoint.
 
 <img src="/img/docs/serverless-request-flow.png" width="800" alt="A diagram demonstrating the Serverless endpoint request flow"/>
 
 ## Getting started
 
-[Follow this step-by-step guide](/serverless/get-started) to create your first custom endpoint. This tutorial walks you through the process of setting up your development environment, creating a handler file, testing your endpoint locally, building and deploying a worker image, and sending endpoint requests using the RunPod console.
+[Follow this step-by-step guide](/serverless/workers/custom-worker) to create your first custom endpoint. This tutorial walks you through the process of setting up your development environment, creating a handler file, testing your endpoint locally, building and deploying a worker image, and sending endpoint requests using the RunPod console.
 
 ## Next steps
 

@@ -69,7 +69,7 @@ An [endpoint](/serverless/endpoints/overview) is the access point for your Serve
 
 ### Handler functions
 
-[Handler functions](/serverless/handlers/overview) are the core of your Serverless application. These functions define how a worker processes incoming requests and returns results. They follow a simple pattern:
+[Handler functions](/serverless/workers/handler-functions) are the core of your Serverless application. These functions define how a worker processes incoming requests and returns results. They follow a simple pattern:
 
 ```python # rp_handler.py
 import runpod  # Required
@@ -113,7 +113,7 @@ When a user/client sends a request to your Serverless endpoint:
 Ready to get started with RunPod Serverless?
 
 - [Deploy large language models in minutes with vLLM.](/serverless/vllm/overview)
-- [Create a custom worker.](/serverless/get-started)
+- [Build your first worker.](/serverless/workers/custom-worker)
 - [Learn more about endpoints.](/serverless/endpoints/overview)
 - [Learn more about workers.](/serverless/workers/overview)
-- [Learn more about handler functions.](/serverless/handlers/overview)
+- [Learn more about handler functions.](/serverless/workers/handler-functions)

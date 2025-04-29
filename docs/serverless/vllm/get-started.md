@@ -48,7 +48,7 @@ On the **endpoint Parameters** page, configure your deployment:
 
 4. Select **Deploy**.
 
-Once the endpoint initializes, you can send requests to your [endpoint](/serverless/endpoints/get-started).
+Once the endpoint initializes, you can send requests to your [endpoint](/serverless/endpoints/send-requests).
 Continue to the [Send a request](#send-a-request) section.
 
 ## Deploy using the Worker image
@@ -73,8 +73,7 @@ Follow these steps to run the vLLM Worker on a Serverless endpoint:
      - `HF_TOKEN`: (Optional) Your Hugging Face API token for private models
 4. Select **Deploy**.
 
-Once the endpoint initializes, you can send requests to your [endpoint](/serverless/endpoints/get-started).
-Continue to the [Send a request](#send-a-request) section.
+Once the endpoint initializes, you can send requests to your [endpoint](/serverless/endpoints/send-requests).
 
 For a complete list of available environment variables, see the [vLLM Worker variables](/serverless/vllm/environment-variables).
 

@@ -339,6 +339,38 @@ const config = {
             to: "/tutorials/serverless/run-ollama-inference",
             from: "/tutorials/serverless/cpu/run-ollama-inference",
           },
+          {
+            to: "/serverless/workers/handler-functions",
+            from: "/serverless/workers/handlers/handler-additional-controls",
+          },
+          {
+            to: "/serverless/workers/handler-functions",
+            from: "/serverless/workers/handlers/handler-async",
+          },
+          {
+            to: "/serverless/workers/concurrent-handler",
+            from: "/serverless/workers/handlers/handler-concurrency",
+          },
+          {
+            to: "/serverless/workers/handler-functions",
+            from: "/serverless/workers/handlers/handler-generator",
+          },
+          {
+            to: "/serverless/workers/handler-functions",
+            from: "/serverless/workers/handlers/handler-error-handling",
+          },
+          {
+            to: "/serverless/workers/handler-functions",
+            from: "/serverless/workers/handlers/overview",
+          },
+          {
+            to: "/serverless/workers/github-integration",
+            from: "/serverless/github-integration",
+          },
+          {
+            to: "/serverless/get-started",
+            from: "/serverless/workers/custom-worker",
+          },
         ],
       },
     ],

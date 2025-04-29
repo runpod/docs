@@ -15,7 +15,7 @@ After deploying a Serverless endpoint, you need to know how to interact with it 
 
 Before sending requests, it's important to understand the basic structure. All requests to RunPod endpoints must:
 
-1. Include an `input` object that contains the parameters for your worker's [handler function](/serverless/handlers/overview).
+1. Include an `input` object that contains the parameters for your worker's [handler function](/serverless/workers/handler-functions).
 2. Be formatted as valid JSON.
 3. Include your API key for authentication (unless sent from the RunPod console).
 
@@ -284,6 +284,6 @@ Implementing proper error handling and retry logic will make your integrations m
 Now that you've learned how to send requests to your endpoint, you can:
 
 - [Manage job operations.](/serverless/endpoints/operations)
-- [Create more advanced handler functions.](/serverless/handlers/overview)
+- [Create more advanced handler functions.](/serverless/workers/handler-functions)
 - [Learn about local testing.](/serverless/development/local-testing)
 - [Deploy your endpoints with GitHub.](/serverless/github-integration)

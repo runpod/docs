@@ -21,7 +21,7 @@ This guide walks you through the process of:
 3. Deploying your worker to a Serverless endpoint.
 4. Testing your worker locally and on the RunPod console.
 
-You can also deploy a preconfigured worker by using [Quick Deploys.](/serverless/workers/quick-deploys)
+You can also deploy a preconfigured worker by using [Quick Deploys.](/serverless/quick-deploys)
 
 ## Worker configurations
 
@@ -57,7 +57,7 @@ You can view the state of your workers using the **Workers** tab of a Serverless
 ## Next steps
 
 - [Build your first worker.](/serverless/workers/custom-worker)
-- [Create a custom handler function.](/serverless/workers/hander-functions)
+- [Create a custom handler function.](/serverless/workers/handler-functions)
 - [Learn how to deploy workers from Docker Hub.](/serverless/workers/deploy)
 - [Deploy large language models using vLLM.](/serverless/vllm/overview)
 - [Explore Quick Deploy options.](/serverless/quick-deploys)

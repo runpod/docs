@@ -241,7 +241,7 @@ Congratulations! You've successfully deployed and tested your first Serverless w
 
 Now that you've learned the basics, you're ready to:
 
-- [Create more advanced handler functions.](/serverless/handlers/overview)
+- [Create more advanced handler functions.](/serverless/workers/handler-functions)
 - [Send endpoint requests using cURL and the Serverless SDK.](/serverless/endpoints/send-requests)
 - [Learn how to use endpoint operations like `/run` and `/status`.](/serverless/endpoints/operations)
 - [Manage your Serverless endpoints using the RunPod console.](/serverless/endpoints/manage-endpoints)
