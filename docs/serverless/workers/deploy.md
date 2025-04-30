@@ -12,9 +12,9 @@ Learn how to package a [handler function](/serverless/workers/handler-functions)
 
 To deploy a worker image, you need:
 
-- A working handler function [handler function](/serverless/workers/handler-functions).
+- A working [handler function](/serverless/workers/handler-functions).
 - [Docker](https://docs.docker.com/get-started/install/) installed on your development machine.
-- A Docker Hub account.
+- A [Docker Hub](https://hub.docker.com/) account.
 
 ## Project organization
 

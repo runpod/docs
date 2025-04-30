@@ -134,6 +134,13 @@ const config = {
           label: "SDKs",
         },
         {
+          type: "docSidebar",
+          position: "left",
+          sidebarId: "cliSidebar",
+          collapsed: false,
+          label: "RunPod CLI",
+        },  
+        {
           href: "https://rest.runpod.io/v1/docs",
           label: "API",
           position: "left",
@@ -339,7 +346,7 @@ const config = {
             to: "/tutorials/serverless/run-ollama-inference",
             from: "/tutorials/serverless/cpu/run-ollama-inference",
           },
-          // Consolidating handler pages
+          // Consolidated handler pages
           {
             to: "/serverless/workers/handler-functions",
             from: "/serverless/handlers/handler-additional-controls",
@@ -364,7 +371,7 @@ const config = {
             to: "/serverless/workers/handler-functions",
             from: "/serverless/handlers/overview",
           },
-          // Moving github integration under workers
+          // Move github integration under workers
           {
             to: "/serverless/workers/github-integration",
             from: "/serverless/github-integration",

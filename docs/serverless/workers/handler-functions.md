@@ -246,7 +246,7 @@ Your handler must return a dictionary that contains the `refresh_worker` flag. T
 
 A short list of best practices to keep in mind as you build your handler function:
 
-1. **Initialize outside handler**: Load models and other heavy resources outside your handler function to avoid repeated initialization.
+1. **Initialize outside the handler**: Load models and other heavy resources outside your handler function to avoid repeated initialization.
 
     ```python
     import runpod
@@ -268,8 +268,8 @@ A short list of best practices to keep in mind as you build your handler functio
     runpod.serverless.start({"handler": handler})
     ```
 
-2. **Input validation**: Validate inputs before processing to avoid errors during execution.
-3. **Test thoroughly**: Test your handlers locally before deployment.
+2. **Input validation**: [Validate inputs](#error-handling) before processing to avoid errors during execution.
+3. **Local testing**: [Test your handlers locally](/serverless/development/local-testing) before deployment.
 
 ## Payload limits
 
