@@ -379,6 +379,15 @@ const config = {
             to: "/serverless/workers/custom-worker",
             from: "/serverless/get-started",
           },
+          // Redirects for deletion of configurable-endpoints and environment-variables
+          {
+            to: "/serverless/vllm/overview",
+            from: "/serverless/vllm/configurable-endpoints",
+          },
+          {
+            to: "/serverless/vllm/overview",
+            from: "/serverless/vllm/environment-variables",
+          },
         ],
       },
     ],
