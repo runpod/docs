@@ -106,7 +106,6 @@ const config = {
     image: "img/docusaurus-social-card.png",
     navbar: {
       title: "RunPod",
-
       logo: {
         alt: "RunPod Logo",
         src: "img/logo.svg",
@@ -138,7 +137,7 @@ const config = {
           position: "left",
           sidebarId: "cliSidebar",
           collapsed: false,
-          label: "RunPod CLI",
+          label: "CLI",
         },  
         {
           href: "https://rest.runpod.io/v1/docs",
