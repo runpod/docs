@@ -4,6 +4,82 @@ sidebar_position: 3
 description: "Discover the vLLM Worker, a cloud-based AI model that integrates with OpenAI's API for seamless interaction. With its streaming and non-streaming capabilities, it's ideal for chatbots, conversational AI, and natural language processing applications."
 ---
 
+
+
+
+## Step 4: Test your endpoint with the OpenAI client
+
+Let's test your endpoint using the OpenAI Python client. Create a new file call `openai_request.py` and add the following code:
+
+```python
+from openai import OpenAI
+import os
+
+# Set global variables
+ENDPOINT_ID = "YOUR_ENDPOINT_ID"  # Replace with your actual endpoint ID
+API_KEY = "YOUR_API_KEY"  # Replace with your actual API key
+
+# Initialize the OpenAI client
+client = OpenAI(
+    api_key=API_KEY,
+    base_url=f"https://api.runpod.ai/v2/{ENDPOINT_ID}/openai/v1",
+)
+
+# Make a chat completion request
+response = client.chat.completions.create(
+    model="openchat/openchat-3.5-0106",  # Use your model name
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Explain quantum computing in simple terms."}
+    ],
+    temperature=0.7,
+    max_tokens=500
+)
+
+# Print the response
+print(response.choices[0].message.content)
+```
+
+Save this as `test_endpoint.py` and run it to test your endpoint.
+
+## Step 6: Test with streaming responses
+
+For many applications, streaming responses provide a better user experience. Let's modify our code to use streaming:
+
+```python
+from openai import OpenAI
+import os
+
+# Initialize the OpenAI client
+client = OpenAI(
+    api_key="your-api-key",
+    base_url=f"https://api.runpod.ai/v2/your-endpoint-id/openai/v1",
+)
+
+# Make a streaming chat completion request
+stream = client.chat.completions.create(
+    model="openchat/openchat-3.5-0106",  # Use your model name
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Write a short poem about AI."}
+    ],
+    temperature=0.7,
+    max_tokens=200,
+    stream=True  # Enable streaming
+)
+
+# Print the streaming response
+print("Response: ", end="", flush=True)
+for chunk in stream:
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="", flush=True)
+print()
+```
+
+
+
+
+
 The vLLM Worker is compatible with OpenAI's API, so you can use the same code to interact with the vLLM Worker as you would with OpenAI's API.
 
 ## Conventions

@@ -15,7 +15,7 @@ In this guide you'll learn how to:
 - Create an asynchronous handler function.
 - Create a concurrency modifier to dynamically adjust concurrency levels.
 - Optimize worker resources based on request patterns.
-- Deploy and test your concurrent handler.
+- Test your concurrent handler locally.
 
 ## Requirements
 

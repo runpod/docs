@@ -39,7 +39,7 @@ To edit an API key:
 2. Under **API Keys**, select the pencil icon for the key you wish to update
 3. Update the key with your desired permissions, then select **Update**.
 
-## Enable/Disable an API key
+## Enable/disable an API key
 
 To enable/disable an API key:
 

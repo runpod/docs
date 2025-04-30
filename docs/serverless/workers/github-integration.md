@@ -152,9 +152,16 @@ To learn how to add your RunPod API key as a GitHub secret, see [Using secrets i
 
 RunPod's GitHub integration has a few limitations to be aware of:
 
-- **Private registry base images:** RunPod doesn't currently support privately hosted images as base images.
-- **GPU builds:** Some builds requiring GPU access during build time (like bitsandbytes) are not supported.
-- **Platform restriction:** Images built using RunPod's builder service can only be used on the RunPod platform.
+## GitHub integration limitations
+
+When using GitHub integration with RunPod, be aware of these important limitations:
+
+- **Build time limit**: Builds must complete within 160 minutes (2.5 hours). Optimize your Dockerfile for efficiency with large images to avoid timeouts.
+- **Image size restriction**: Docker images cannot exceed 100 GB. Plan your image requirements accordingly, particularly when including large model weights or dependencies.
+- **Base image limitations**: The integration doesn't support privately hosted images as base images. Consider incorporating essential components directly into your Dockerfile instead.
+- **Hardware-specific builds**: Builds requiring GPU access during construction (such as those using GPU-compiled versions of libraries like `bitsandbytes`) are not supported.
+- **Platform exclusivity**: Images built through RunPod's image builder service are designed exclusively for RunPod's infrastructure and cannot be pulled or executed on other platforms.
+- **Single GitHub connection**: Each RunPod account can link to only one GitHub account. This connection cannot be shared among team members, requiring separate RunPod accounts for collaborative projects.
 
 ## Disconnecting GitHub
 

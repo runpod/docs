@@ -8,6 +8,8 @@ sidebar_position: 1
 
 RunPod Serverless is a cloud computing platform that lets you run AI models and compute-intensive workloads without managing servers. You only pay for the actual compute time you use, with no idle costs when your application isn't processing requests.
 
+<iframe width="900" height="508" src="https://www.youtube.com/embed/8HzN9HxYZxc?si=mn6K4nYChD1iZ42I" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
 ## Why use Serverless?
 
 * **Focus on your code, not infrastructure**: Deploy your applications without worrying about server management, scaling, or maintenance.

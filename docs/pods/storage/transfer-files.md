@@ -6,6 +6,8 @@ description: "Transfer files to and from your Pod using runpotctl, SCP and rsync
 
 Learn to transfer files to and from RunPod.
 
+<iframe width="900" height="508" src="https://www.youtube.com/embed/Z3bCRDvBSY8?si=45Y2bRLXF6Pt-s95" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
 ## Prerequisites
 
 - If you intend to use `runpodctl`, make sure it's installed on your machine, see [install runpodctl](../../runpodctl/install-runpodctl.md)
