@@ -64,7 +64,8 @@ The performance of vLLM workers depends on several factors:
 
 ## Next steps
 
-- [Deploy a vLLM Worker as a Serverless endpoint.](/serverless/vllm/get-started)
-- [Explore the environment variables available for the vLLM Worker on the GitHub README.](https://github.com/runpod-workers/worker-vllm#environment-variablessettings)
-- [Learn how to deploy Google's Gemma model using RunPod's vLLM Worker.](/tutorials/serverless/run-gemma-7b)
+- [Deploy a vLLM worker as a Serverless endpoint.](/serverless/vllm/get-started)
+- [Send requests to a vLLM endpoint.](/serverless/vllm/vllm-requests)
+- [Learn about RunPod's OpenAI API compatibility.](/serverless/vllm/openai-compatibility)
+- [Deploy Google's Gemma model using a vLLM Worker.](/tutorials/serverless/run-gemma-7b)
 

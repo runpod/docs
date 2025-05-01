@@ -155,6 +155,7 @@ Congratulations! You've successfully deployed a vLLM worker on RunPod's Serverle
 
 Next you can try:
 
-- [Learning about OpenAI compatibility.](/serverless/vllm/openai-compatibility)
-- [Sending requests using the RunPod or OpenAI API.](/serverless/vllm/vllm-requests)
+- [Sending requests using the RunPod API.](/serverless/vllm/vllm-requests)
+- [Learning about vLLM's OpenAI API compatibility.](/serverless/vllm/openai-compatibility)
+- [Customizing your vLLM worker's handler function.](/serverless/workers/hander-function)
 - [Building a custom worker for more specialized workloads.](/serverless/workers/custom-worker)

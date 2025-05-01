@@ -87,66 +87,66 @@ You can enhance your workflow with GitHub Actions for testing before deployment:
 
 1. Create a workflow file at `.github/workflows/test-and-deploy.yml`:
 
-```yaml
-name: Test and Deploy
+      ```yaml
+      name: Test and Deploy
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+      on:
+      push:
+         branches: [ main ]
+      pull_request:
+         branches: [ main ]
 
-jobs:
-  test-and-deploy:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v4
-      with:
-        context: .
-        push: true
-        tags: [DOCKER_USERNAME]/[WORKER_NAME]:${{ github.sha }}
-        
-    - name: Run Tests
-      uses: runpod/runpod-test-runner@v1
-      with:
-        image-tag: [DOCKER_USERNAME]/[WORKER_NAME]:${{ github.sha }}
-        runpod-api-key: ${{ secrets.RUNPOD_API_KEY }}
-        test-filename: .github/tests.json
-        request-timeout: 300
-```
+      jobs:
+      test-and-deploy:
+         runs-on: ubuntu-latest
+         steps:
+         - uses: actions/checkout@v3
+         
+         - name: Build and push Docker image
+            uses: docker/build-push-action@v4
+            with:
+            context: .
+            push: true
+            tags: [DOCKER_USERNAME]/[WORKER_NAME]:${{ github.sha }}
+            
+         - name: Run Tests
+            uses: runpod/runpod-test-runner@v1
+            with:
+            image-tag: [DOCKER_USERNAME]/[WORKER_NAME]:${{ github.sha }}
+            runpod-api-key: ${{ secrets.RUNPOD_API_KEY }} # Add your API key to a GitHub secret
+            test-filename: .github/tests.json
+            request-timeout: 300
+      ```
 
-:::tip
+      :::tip
 
-To learn how to add your RunPod API key as a GitHub secret, see [Using secrets in GitHub Actions](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions).
+      To add your RunPod API key to a GitHub secret, see [Using secrets in GitHub Actions](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions).
 
-:::
+      :::
 
 2. Create test cases for your repository at `.github/tests.json`:
 
-```json
-[
-  {
-    "input": {
-      "prompt": "Test input 1"
-    },
-    "expected_output": {
-      "status": "COMPLETED"
-    }
-  },
-  {
-    "input": {
-      "prompt": "Test input 2",
-      "parameter": "value"
-    },
-    "expected_output": {
-      "status": "COMPLETED"
-    }
-  }
-]
-```
+      ```json
+      [
+      {
+         "input": {
+            "prompt": "Test input 1"
+         },
+         "expected_output": {
+            "status": "COMPLETED"
+         }
+      },
+      {
+         "input": {
+            "prompt": "Test input 2",
+            "parameter": "value"
+         },
+         "expected_output": {
+            "status": "COMPLETED"
+         }
+      }
+      ]
+      ```
 
 ## Known limitations
 

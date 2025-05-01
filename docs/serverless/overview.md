@@ -52,21 +52,25 @@ runpod.serverless.start({"handler": handler})  # Required
 
 RunPod Serverless offers three ways to deploy your workloads, each designed for different use cases:
 
-### Quick Deploys
+### Quick deploy an endpoint
 
-**Best for**: Getting popular AI models running quickly with minimal setup.
+**Best for**: Deploying preconfigured AI models with minimal effort (no coding required).
 
-Quick Deploys are pre-configured templates for popular AI models that you can deploy with just a few clicks:
-* No coding required.
-* Pre-optimized configurations.
-* Wide selection of popular AI models.
-* Minimal technical knowledge needed.
+You can deploy a Serverless endpoint in minutes from the RunPod console:
 
-[Get started with Quick Deploys →](/serverless/quick-deploys)
+1. Go to the [Serverless page](https://www.runpod.io/console/serverless) in the RunPod console.
+2. Under **Quick Deploy**, browse the collection of preconfigured workers and select one that matches your needs.
+3. Click **Configure**. Depending on your choice, you may need to enter a [Hugging Face model](https://huggingface.co/models).
+4. Choose a **Worker Configuration**. Quick deploys are preconfigured with 
+5. Click the **Create Endpoint**.
 
-### vLLM workers
+You'll be redirected to your new endpoint. Now you're ready to [send a request](/serverless/endpoints/send-requests).
 
-**Best for**: Deploying and serving large language models (LLMs).
+[Quick deploy an endpoint →](https://www.runpod.io/console/serverless)
+
+### Deploy a vLLM worker
+
+**Best for**: Deploying and serving large language models (LLMs) with minimal configuration.
 
 vLLM workers are specifically optimized for running LLMs:
 * Support for any [Hugging Face model](https://huggingface.co/models).
@@ -74,20 +78,38 @@ vLLM workers are specifically optimized for running LLMs:
 * Simple configuration via environment variables.
 * High-performance serving with vLLM.
 
-[Get started with vLLM workers →](/serverless/vllm/get-started)
+[Deploy a vLLM worker →](/serverless/vllm/get-started)
 
-### Custom workers
+### Fork a worker template
+
+**Best for**: Creating a custom worker using an existing template.
+
+RunPod maintains a collection of [worker templates](https://github.com/runpod-workers) on GitHub that you can use as a starting point:
+
+- [worker-basic](https://github.com/runpod-workers/worker-basic): A minimal template with essential functionality.
+- [worker-template](https://github.com/runpod-workers/worker-template): A more comprehensive template with additional features
+- [Model-specific templates](https://github.com/runpod-workers#worker-collection): Specialized templates for common AI tasks (image generation, audio processing, etc.)
+
+After you fork a worker you can learn how to:
+
+1. [Test your worker](/serverless/development/local-testing) locally.
+2. Customize it with your own [handler function](/serverless/workers/handler-functions).
+3. Deploy it to an endpoint using [Docker](/serverless/workers/deploy) or [GitHub](/serverless/workers/github-integration).
+
+[Browse worker templates →](https://github.com/runpod-workers)
+
+### Build a custom worker
 
 **Best for**: Running custom code or specialized AI workloads.
 
-Custom workers give you complete control over your application:
+Creating a custom workers give you complete control over your application:
 
 * Write your own Python code.
-* Package in Docker containers.
-* Full flexibility for any use case.
-* Custom processing logic.
+* Package it in a Docker container.
+* Allows full flexibility for any use case.
+* Create custom processing logic.
 
-[Get started with custom workers →](/serverless/workers/custom-worker)
+[Build your first custom worker →](/serverless/workers/custom-worker)
 
 ## How requests work
 
