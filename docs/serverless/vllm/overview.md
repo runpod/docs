@@ -20,11 +20,19 @@ vLLM workers offer several advantages that make them ideal for LLM deployment:
 - **Configurable environments**: Extensive customization options through [environment variables](https://github.com/runpod-workers/worker-vllm#environment-variablessettings) allow you to adjust model parameters, performance settings, and other behaviors.
 - **Auto-scaling architecture**: Serverless automatically scales your endpoint from zero to many workers based on demand, billing on a per-second basis.
 
+## Deployment options
+
+You have a few options for how to deploy a vLLM worker:
+
+1. **Quick deploy a vLLM endpoint**: The simplest approach—use RunPod's UI to deploy a model directly from Hugging Face with minimal configuration. For step-by-step instructions, see [Deploy a vLLM worker](/serverless/vllm/get-started).
+2. **Deploy using a prebuilt worker image**: Deploy a preconfigured vLLM worker image from [GitHub](https://github.com/runpod-workers/worker-vllm) or [Docker Hub](https://hub.docker.com/r/runpod/worker-v1-vllm/tags), configuring your endpoint using [environment variables](https://github.com/runpod-workers/worker-vllm#environment-variablessettings).
+3. **Custom Docker images**: For advanced users who need to include specialized components or modifications.
+
 ## Compatible models
 
 You can deploy almost any model on [Hugging Face](https://huggingface.co/models?other=LLM) as a vLLM worker. You can find a full list of supported models architectures on the [GitHub README](https://github.com/runpod-workers/worker-vllm/blob/main/README.md#compatible-model-architectures).
 
-## How it works
+## How vLLM works
 
 When deployed to a [Serverless endpoint](/serverless/endpionts/overview), vLLM workers:
 
@@ -32,15 +40,7 @@ When deployed to a [Serverless endpoint](/serverless/endpionts/overview), vLLM w
 2. Optimize the model for inference using vLLM's techniques like continuous batching and PagedAttention.
 3. Expose API endpoints for both [OpenAI-compatible requests](/serverless/vllm/openai-compatibility) and RunPod's native [endpoint request](/serverless/endpoints/send-requests) format.
 4. Process incoming requests by dynamically allocating GPU resources.
-5. Scale workers up or down based on traffic patterns
-
-## Deployment options
-
-RunPod offers multiple ways to deploy vLLM workers:
-
-1. **Quick Deploy a vLLM endpoint**: The simplest approach—use RunPod's UI to deploy a model directly from Hugging Face with minimal configuration. For step-by-step instructions, see [Deploy a vLLM worker](/serverless/vllm/get-started).
-2. **Deploy using a prebuilt worker image**: Deploy a preconfigured vLLM worker image from [GitHub](https://github.com/runpod-workers/worker-vllm) or [Docker Hub](https://hub.docker.com/r/runpod/worker-v1-vllm/tags), configuring your endpoint using [environment variables](https://github.com/runpod-workers/worker-vllm#environment-variablessettings).
-3. **Custom Docker images**: For advanced users who need to include specialized components or modifications.
+5. Scale workers up or down based on traffic patterns.
 
 ## Use cases
 
