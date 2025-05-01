@@ -1,12 +1,12 @@
 ---
 title: Send vLLM requests
 sidebar_position: 2
-description: "Learn how to deploy a vLLM worker on RunPod Serverless to create a scalable endpoint for your large language model (LLM) applications."
+description: "Learn how to send requests to vLLM workers on RunPod Serverless, including code examples and best practices for RunPod's native API format."
 ---
 
 # Send requests to vLLM workers
 
-This page covers different methods for sending requests to vLLM workers on RunPod, including code examples and best practices for RunPod's native API format. Use this guide to effectively integrate LLMs into your applications while maintaining control over performance and cost.
+This guide covers different methods for sending requests to vLLM workers on RunPod, including code examples and best practices for RunPod's native API format. Use this guide to effectively integrate LLMs into your applications while maintaining control over performance and cost.
 
 ## Requirements
 
@@ -33,13 +33,15 @@ import requests
 url = "https://api.runpod.ai/v2/<endpoint_id>/run"
 headers = {"Authorization": "Bearer [RUNPOD_API_KEY]", "Content-Type": "application/json"}
 
-data = {"input": {
-    "messages": [
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "Write a short poem."}
-    ],
-    "sampling_params": {"temperature": 0.7, "max_tokens": 100}
-}}
+data = {
+    "input": {
+        "messages": [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Write a short poem."}
+        ],
+        "sampling_params": {"temperature": 0.7, "max_tokens": 100}
+    }
+}
 
 response = requests.post(url, headers=headers, json=data)
 print(response.json())
@@ -47,17 +49,18 @@ print(response.json())
 
 ### cURL Example
 
-Run the following command in your local terminal, replacing `[RUNPOD_API_KEY]` with your RunPod API key and [RUNPOD_ENDPOINT_ID] with your vLLM endpoint ID.
+Run the following command in your local terminal, replacing `[RUNPOD_API_KEY]` with your RunPod API key and `[RUNPOD_ENDPOINT_ID]` with your vLLM endpoint ID.
 
 ```sh
 curl -X POST "https://api.runpod.ai/v2/[RUNPOD_ENDPOINT_ID]/run" \
      -H "Authorization: Bearer [RUNPOD_API_KEY]" \
      -H "Content-Type: application/json" \
-     -d '{"input":
-               {
-                 "prompt": "Write a haiku about nature.",
-                 "sampling_params": {"temperature": 0.8, "max_tokens": 50}
-         }}'
+     -d '{
+           "input": {
+             "prompt": "Write a haiku about nature.",
+             "sampling_params": {"temperature": 0.8, "max_tokens": 50}
+           }
+         }'
 ```
 
 ## Request formats
@@ -85,30 +88,29 @@ vLLM workers accept two primary input formats:
 
 ## Request input parameters
 
-vLLM workers support various parameters to control generation behavior. The most commonly used parameters are listed below:
+vLLM workers support various parameters to control generation behavior. Here are the most commonly used parameters:
 
-| Parameter          | Type             | Description                                                              |
-|--------------------|------------------|--------------------------------------------------------------------------|
-| `temperature`      | `float`          | Controls randomness (0.0 = deterministic, higher = more random)          |
-| `max_tokens`       | `int`            | Maximum number of tokens to generate                                     |
-| `top_p`            | `float`          | Nucleus sampling parameter (0.0-1.0)                                     |
-| `top_k`            | `int`            | Limits consideration to top k tokens                                     |
-| `stop`             | `string` or `array` | Sequence(s) at which to stop generation                                  |
-| `repetition_penalty` | `float`          | Penalizes repetition (1.0 = no penalty)                                  |
-| `presence_penalty` | `float`   | Penalizes new tokens already in text                                     |
-| `frequency_penalty`| `float`   | Penalizes token frequency                                                |
-| `min_p`            | `float`   | Minimum probability threshold relative to most likely token              |
-| `best_of`          | `int`     | Number of completions to generate server-side                            |
-| `use_beam_search`  | `boolean` | Whether to use beam search instead of sampling                           |
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `temperature` | `float` | Controls randomness (0.0 = deterministic, higher = more random) |
+| `max_tokens` | `int` | Maximum number of tokens to generate |
+| `top_p` | `float` | Nucleus sampling parameter (0.0-1.0) |
+| `top_k` | `int` | Limits consideration to top k tokens |
+| `stop` | `string` or `array` | Sequence(s) at which to stop generation |
+| `repetition_penalty` | `float` | Penalizes repetition (1.0 = no penalty) |
+| `presence_penalty` | `float` | Penalizes new tokens already in text |
+| `frequency_penalty` | `float` | Penalizes token frequency |
+| `min_p` | `float` | Minimum probability threshold relative to most likely token |
+| `best_of` | `int` | Number of completions to generate server-side |
+| `use_beam_search` | `boolean` | Whether to use beam search instead of sampling |
 
 You can find a complete list of request input parameters on the [GitHub README](https://github.com/runpod-workers/worker-vllm?tab=readme-ov-file#usage-standard-non-openai).
 
-
 ## Error handling
 
-When working with vLLM workers, it's important to implement proper error handling to address potential issues such as network timeouts, rate limiting, worker initialization delays, and model loading errors.
+When working with vLLM workers, it's crucial to implement proper error handling to address potential issues such as network timeouts, rate limiting, worker initialization delays, and model loading errors.
 
-Here is an example error handling implentation:
+Here is an example error handling implementation:
 
 ```python
 import requests

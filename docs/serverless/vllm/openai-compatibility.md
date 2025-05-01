@@ -6,21 +6,21 @@ description: "Learn how RunPod's vLLM workers provide OpenAI API compatibility, 
 
 # OpenAI API compatibility guide
 
-This page explains how RunPod's [vLLM workers](serverless/vllm/overview) implement OpenAI API compatibility, allowing you to use familiar [OpenAI client libraries](https://platform.openai.com/docs/libraries) with your deployed models.
+RunPod's [vLLM workers](serverless/vllm/overview) implement OpenAI API compatibility, allowing you to use familiar [OpenAI client libraries](https://platform.openai.com/docs/libraries) with your deployed models. This guide will help you understand how to leverage this compatibility to integrate your models seamlessly with existing OpenAI-based applications.
 
 ## Endpoint structure
 
-When using the OpenAI-compatible API with RunPod, the base URL follows this pattern:
+When using the OpenAI-compatible API with RunPod, your requests will be directed to this base URL pattern:
 
 ```
 https://api.runpod.ai/v2/[ENDPOINT_ID]/openai/v1
 ```
 
-Where `[ENDPOINT_ID]` is your Serverless endpoint ID.
+Replace `[ENDPOINT_ID]` with your Serverless endpoint ID.
 
 ## Supported APIs
 
-The vLLM worker implements these OpenAI API endpoints:
+The vLLM worker implements these core OpenAI API endpoints:
 
 | Endpoint | Description | Status |
 |----------|-------------|--------|
@@ -30,10 +30,10 @@ The vLLM worker implements these OpenAI API endpoints:
 
 ## Model naming
 
-The `MODEL_NAME` environment variable is required for all OpenAI-compatible API requests. `MODEL_NAME` corresponds to:
+The `MODEL_NAME` environment variable is essential for all OpenAI-compatible API requests. This variable corresponds to either:
 
 1. The [Hugging Face model](https://huggingface.co/models) you've deployed (e.g., `mistralai/Mistral-7B-Instruct-v0.2`)
-2. An override name if you've set `OPENAI_SERVED_MODEL_NAME_OVERRIDE` as an environment variable
+2. A custom name if you've set `OPENAI_SERVED_MODEL_NAME_OVERRIDE` as an environment variable
 
 This model name is used in chat/text completion API requests to identify which model should process your request.
 
@@ -69,7 +69,7 @@ The `/chat/completions` endpoint is designed for instruction-tuned LLMs that fol
 
 #### Non-streaming request example
 
-Here is an example chat completion request:
+Here's how you can make a basic chat completion request:
 
 ```python
 from openai import OpenAI
@@ -100,7 +100,7 @@ print(response.choices[0].message.content)
 
 #### Response format
 
-Here is an example JSON payload for a chat completion response:
+The API returns responses in this JSON format:
 
 ```json
 {
@@ -128,7 +128,7 @@ Here is an example JSON payload for a chat completion response:
 
 #### Streaming request example
 
-Streaming allows the model's output to be received incrementally as it's generated, rather than waiting for the complete response. This real-time delivery enhances responsiveness, making it ideal for interactive applications like chatbots or for monitoring the progress of lengthy generation tasks.
+Streaming allows you to receive the model's output incrementally as it's generated, rather than waiting for the complete response. This real-time delivery enhances responsiveness, making it ideal for interactive applications like chatbots or for monitoring the progress of lengthy generation tasks.
 
 ```python
 # ... Imports and initialization ...
@@ -159,7 +159,7 @@ The `/completions` endpoint is designed for base LLMs and text completion tasks.
 
 #### Non-streaming request example
 
-Here is an example text completion request:
+Here's how you can make a text completion request:
 
 ```python
 # ... Imports and initialization ...
@@ -178,7 +178,7 @@ print(response.choices[0].text)
 
 #### Response format
 
-Here is an example JSON payload for a text completion response:
+The API returns responses in this JSON format:
 
 ```json
 {
@@ -264,22 +264,6 @@ Use these environment variables to customize the OpenAI compatibility:
 
 You can find a complete list of vLLM environment variables on the [GitHub README](https://github.com/runpod-workers/worker-vllm#environment-variables).
 
-## Implementation differences
-
-While the vLLM worker aims for high compatibility, there are some differences from OpenAI's implementation:
-
-1. **Token counting**: Token counts may differ slightly from OpenAI models.
-2. **Streaming format**: The exact chunking of streaming responses may vary.
-3. **Error format**: Error responses follow a similar but not identical format.
-4. **Rate limits**: Rate limits follow RunPod's endpoint policies rather than OpenAI's.
-
-The vLLM worker also currently has some limitations:
-
-- Functions/tools API is not currently supported
-- Some OpenAI-specific features like moderation endpoints are not available
-- Vision models and multimodal capabilities depend on the underlying model support
-
-
 ## Client libraries
 
 The OpenAI-compatible API works with standard [OpenAI client libraries](https://platform.openai.com/docs/libraries):
@@ -321,6 +305,21 @@ const response = await openai.chat.completions.create({
   ]
 });
 ```
+
+## Implementation differences
+
+While the vLLM worker aims for high compatibility, there are some differences from OpenAI's implementation:
+
+1. **Token counting**: Token counts may differ slightly from OpenAI models.
+2. **Streaming format**: The exact chunking of streaming responses may vary.
+3. **Error format**: Error responses follow a similar but not identical format.
+4. **Rate limits**: Rate limits follow RunPod's endpoint policies rather than OpenAI's.
+
+The vLLM worker also currently has a few limitations:
+
+- The function and tool APIs are not currently supported.
+- Some OpenAI-specific features like moderation endpoints are not available.
+- Vision models and multimodal capabilities depend on the underlying model support.
 
 ## Troubleshooting
 

@@ -6,7 +6,7 @@ description: "Learn how to deploy a vLLM worker on RunPod Serverless to create a
 
 # Deploy a vLLM worker
 
-Learn how to deploy a large language model (LLM) using RunPod's preconfigured vLLM workers. By the end, you'll have a fully functional API endpoint that can use to handle LLM inference requests.
+Learn how to deploy a large language model (LLM) using RunPod's preconfigured vLLM workers. By the end of this guide, you'll have a fully functional API endpoint that you can use to handle LLM inference requests.
 
 ## What you'll learn
 
@@ -45,20 +45,20 @@ The easiest way to deploy a vLLM worker is through the RunPod console with the [
 2. Under **Quick Deploy**, find **Serverless vLLM** and click **Configure**.
 3. In the deployment modal:
    - Select a vLLM version (latest stable recommended).
-   - Under **Hugging Face Models**, enter your model: `openchat/openchat-3.5-0106`
+   - Under **Hugging Face Models**, enter your model: `openchat/openchat-3.5-0106`.
    - If using a gated model, enter your **Hugging Face Token**.
    - Click **Next**.
 4. In the vLLM settings modal, under **LLM Settings**:
    - Set **Max Model Length** to `8192` (or an appropriate context length for your model).
    - Leave other settings at their defaults unless you have specific requirements.
-   - Click **Next**
+   - Click **Next**.
 5. In the endpoint configuration modal:
    - Under **Worker Configuration**:
-     - Set **Active Workers** to `0` for cost savings or `1` for faster response times
-     - Set **Max Workers** to `2` (or higher for more concurrent capacity)
-     - Set **GPU Count** to `1` (increase for larger models)
+     - Set **Active Workers** to `0` for cost savings or `1` for faster response times.
+     - Set **Max Workers** to `2` (or higher for more concurrent capacity).
+     - Set **GPU Count** to `1` (increase for larger models).
    - Leave other settings at their defaults unless you have specific requirements.
-   - Click **Deploy**
+   - Click **Deploy**.
 
 Your endpoint will now begin initializing. This may take several minutes while RunPod provisions resources and downloads your model.
 
@@ -157,5 +157,5 @@ Next you can try:
 
 - [Sending requests using the RunPod API.](/serverless/vllm/vllm-requests)
 - [Learning about vLLM's OpenAI API compatibility.](/serverless/vllm/openai-compatibility)
-- [Customizing your vLLM worker's handler function.](/serverless/workers/hander-function)
+- [Customizing your vLLM worker's handler function.](/serverless/workers/handler-function)
 - [Building a custom worker for more specialized workloads.](/serverless/workers/custom-worker)
