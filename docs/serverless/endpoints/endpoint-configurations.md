@@ -120,7 +120,7 @@ You can use the `/status` operation to configure the time-to-live (TTL) for an i
 
 ### FlashBoot
 
-FlashBoot is RunPod's solution for reducing the average cold-start times on your endpoint. It works probabilistically. When your endpoint has consistent traffic, your workers have a higher chance of benefiting from FlashBoot for faster spin-ups. However, if your endpoint isn't receiving frequent requests, FlashBoot has fewer opportunities to optimize performance. There is no additional cost associated with FlashBoot.
+FlashBoot is RunPod's solution for reducing the average cold-start times on your endpoint. It works by retaining worker resources for some time after they're no longer in use, so they can be rebooted quickly. When your endpoint has consistent traffic, your workers have a higher chance of benefiting from FlashBoot for faster spin-ups. However, if your endpoint isn't receiving frequent requests, FlashBoot has fewer opportunities to optimize performance. There is no additional cost associated with FlashBoot.
 
 ## Advanced configuration
 
