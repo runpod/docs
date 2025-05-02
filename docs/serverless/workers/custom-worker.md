@@ -1,19 +1,19 @@
 ---
-title: "Create a custom endpoint"
-sidebar_position: 2
-description: Create and deploy your first custom Serverless endpoint. Learn to create a handler, test it locally, build a Docker image, deploy an endpoint, and send requests with this step-by-step tutorial.
+title: "Build your first worker"
+sidebar_position: 3
+description: Build and deploy your first custom Serverless worker. Learn to create a handler, test it locally, build a Docker image, create an endpoint, and send requests with this step-by-step tutorial.
 ---
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Create a custom endpoint
+# Build your first worker
 
-Learn how to create, deploy, and test your first custom Serverless endpoint.
+Learn how to create, deploy, and test a custom Serverless worker.
 
 :::tip
 
-For an even faster start, you can clone the [worker-basic](https://github.com/runpod-workers/worker-basic) repository to get a pre-configured template for building and deploying Serverless endpoints. After cloning the repository, you can skip to [step 6 of this tutorial](#step-6-build-and-push-your-docker-image) to deploy and test the endpoint.
+For an even faster start, clone the [worker-basic](https://github.com/runpod-workers/worker-basic) repository for a pre-configured template for building and deploying Serverless workers. After cloning the repository, skip to [step 6 of this tutorial](#step-6-build-and-push-your-docker-image) to deploy and test the endpoint.
 
 :::
 
@@ -23,9 +23,9 @@ In this tutorial you'll learn how to:
 
 - Set up your development environment.
 - Create a handler file.
-- Test your endpoint locally.
+- Test your handler locally.
 - Build a Docker image for deployment.
-- Deploy and test your endpoint on the RunPod console.
+- Deploy and test your worker on the RunPod console.
 
 ## Requirements
 
@@ -169,31 +169,31 @@ CMD ["python3", "-u", "rp_handler.py"]
 
 ## Step 6: Build and push your Docker image
 
-1. Build your Docker image, specifying the platform for RunPod deployment, replacing `[YOUR_USERNAME] with your Docker username:
+:::note
+
+Instead of building and pushing your image via Docker Hub, you can also [deploy your worker from a GitHub repository](/serverless/workers/github-integration).
+
+:::
+
+Before you can deploy your worker on RunPod Serverless, you need to push it to Docker Hub:
+
+1. Build your Docker image, specifying the platform for RunPod deployment, replacing `[YOUR_USERNAME]` with your Docker username:
 
     ```bash
     docker build --platform linux/amd64 --tag [YOUR_USERNAME]/serverless-test .
     ```
 
-    :::note
-
-    When building your Docker image, you must specify the platform as `linux/amd64` or it won't work on Serverless.
-
-    :::
-
-1. Then push the image to your container registry:
+2. Push the image to your container registry:
 
     ```bash
     docker push yourusername/serverless-test:latest
     ```
 
-## Step 7: Deploy your endpoint using the web interface
+## Step 7: Deploy your worker using the RunPod console
 
-You have a few  options for deploying your custom endpoint:
+To deploy your worker to a Serverless endpoint:
 
-### Option 1: Deploy using a Docker image
-
-1. Go to the [Serverless section](https://www.runpod.io/console/serverless) of the RunPod web interface.
+1. Go to the [Serverless section](https://www.runpod.io/console/serverless) of the RunPod console.
 2. Click **New Endpoint**.
 3. Under **Custom Source**, select **Docker Image**, then click **Next**.
 4. In the **Container Image** field, enter your Docker image URL: `docker.io/yourusername/serverless-test:latest`.
@@ -202,32 +202,11 @@ You have a few  options for deploying your custom endpoint:
 7. Leave the rest of the settings at their defaults.
 8. Click **Create Endpoint**.
 
-You should be automatically redirected to a dedicated detail page for your new endpoint.
+The system will redirect you to a dedicated detail page for your new endpoint.
 
-### Option 2: Deploy using a GitHub repository
+## Step 8: Test your worker
 
-1. Go to the [Serverless section](https://www.runpod.io/console/serverless) of the RunPod web interface.
-2. Click **New Endpoint**.
-3. Under **Custom Source**, select **GitHub Repository**.
-4. You will be prompted to connect your GitHub account if you haven't done so already.
-5. Once connected, select the repository that contains your Dockerfile and handler code.
-6. Specify the branch you want to use for deployment.
-7. (Optional) Enter a custom name for your endpoint, or use the randomly generated name.
-8. Under **Worker Configuration**, check the box for **16 GB** GPUs.
-9. Leave the rest of the settings at their defaults.
-10. Click **Create Endpoint**.
-
-The system will automatically build your Docker image from the specified GitHub repository and deploy your endpoint.
-
-You should be automatically redirected to a dedicated detail page for your new endpoint.
-
-:::note
-For more information on GitHub integration, [read more here](/serverless/github-integration).
-:::
-
-## Step 8: Test your endpoint on RunPod
-
-To test your endpoint, click the **Requests** tab in the endpoint detail page:
+To test your worker, click the **Requests** tab in the endpoint detail page:
 
 <img src="/img/docs/serverless-get-started-endpoint-details.png" width="900" alt="Screenshot of the endpoint details page."/>
 
@@ -241,9 +220,9 @@ On the left you should see the default test request:
 }
 ```
 
-Leave the default input as is and click **Run**. It will take some time for your workers to initialize.
+Leave the default input as is and click **Run**. The system will take a few minutes to initialize your workers.
 
-When the workers have finished processing your request, you should see output on the right side of the page similar to this:
+When the workers finish processing your request, you should see output on the right side of the page similar to this:
 
 ```json
 {
@@ -256,15 +235,15 @@ When the workers have finished processing your request, you should see output on
 }
 ```
 
-Congratulations, you've successfully deployed and tested your first Serverless endpoint!
+Congratulations! You've successfully deployed and tested your first Serverless worker.
 
 ## Next steps
 
 Now that you've learned the basics, you're ready to:
 
+- [Create more advanced handler functions.](/serverless/workers/handler-functions)
 - [Send endpoint requests using cURL and the Serverless SDK.](/serverless/endpoints/send-requests)
 - [Learn how to use endpoint operations like `/run` and `/status`.](/serverless/endpoints/operations)
 - [Manage your Serverless endpoints using the RunPod console.](/serverless/endpoints/manage-endpoints)
 - [Configure your endpoints for optimal performance and cost.](/serverless/endpoints/endpoint-configurations)
-- [Create more advanced handler functions.](/serverless/handlers/overview)
 - [Learn more about local testing.](/serverless/development/local-testing)

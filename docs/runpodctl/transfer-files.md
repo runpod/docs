@@ -5,7 +5,7 @@ sidebar_position: 4
 
 # Transfer files with runpodctl
 
-The RunPod CLI provides simple commands for transferring data between Pods, or between your local machine and a Pod. It uses one-time codes for secure authentication, so **no API keys are required**.
+RunPod CLI provides simple commands for transferring data between Pods, or between your local machine and a Pod. It uses one-time codes for secure authentication, so **no API keys are required**.
 
 ## Send a file
 

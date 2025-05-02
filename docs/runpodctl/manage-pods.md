@@ -7,7 +7,7 @@ description: "Learn how to manage Pods with runpodctl."
 
 # Manage Pods with runpodctl
 
-The RunPod CLI makes it easy to manage Pods using your local terminal. Use the commands below to manage your Pods with `runpodctl`. For a complete list of commands, run `runpodctl help`.
+RunPod CLI makes it easy to manage [Pods](/pods/overview) using your local terminal. Use the commands below to manage your Pods with `runpodctl`. For a complete list of commands, run `runpodctl help`.
 
 ## List all Pods
 

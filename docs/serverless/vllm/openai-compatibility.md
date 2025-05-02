@@ -1,191 +1,212 @@
 ---
-title: OpenAI compatibility
+title: OpenAI API compability
 sidebar_position: 3
-description: "Discover the vLLM Worker, a cloud-based AI model that integrates with OpenAI's API for seamless interaction. With its streaming and non-streaming capabilities, it's ideal for chatbots, conversational AI, and natural language processing applications."
+description: "Learn how RunPod's vLLM workers provide OpenAI API compatibility, enabling you to use standard OpenAI clients and tools with models deployed on RunPod."
 ---
 
-The vLLM Worker is compatible with OpenAI's API, so you can use the same code to interact with the vLLM Worker as you would with OpenAI's API.
+# OpenAI API compatibility guide
 
-## Conventions
+RunPod's [vLLM workers](/serverless/vllm/overview) implement OpenAI API compatibility, allowing you to use familiar [OpenAI client libraries](https://platform.openai.com/docs/libraries) with your deployed models. This guide will help you understand how to leverage this compatibility to integrate your models seamlessly with existing OpenAI-based applications.
 
-Completions endpoint provides the completion for a single prompt and takes a single string as an input.
+## Endpoint structure
 
-Chat completions provides the responses for a given dialog and requires the input in a specific format corresponding to the message history.
+When using the OpenAI-compatible API with RunPod, your requests will be directed to this base URL pattern:
 
-Choose the convention that works best for your use case.
+```
+https://api.runpod.ai/v2/[ENDPOINT_ID]/openai/v1
+```
 
-### Model names
+Replace `[ENDPOINT_ID]` with your Serverless endpoint ID.
 
-The `MODEL_NAME` environment variable is required for all requests.
-Use this value when making requests to the vLLM Worker.
+## Supported APIs
 
-For example `openchat/openchat-3.5-0106`, `mistral:latest`, `llama2:70b`.
+The vLLM worker implements these core OpenAI API endpoints:
 
-Generate a response for a given prompt with a provided model. This is a streaming endpoint, so there will be a series of responses. The final response object will include statistics and additional data from the request.
+| Endpoint | Description | Status |
+|----------|-------------|--------|
+| `/chat/completions` | Generate chat model completions | Fully supported |
+| `/completions` | Generate text completions | Fully supported |
+| `/models` | List available models | Supported |
 
-### Parameters
+## Model naming
 
-When using the chat completion feature of the vLLM Serverless Endpoint Worker, you can customize your requests with the following parameters:
+The `MODEL_NAME` environment variable is essential for all OpenAI-compatible API requests. This variable corresponds to either:
 
-### Chat Completions
+1. The [Hugging Face model](https://huggingface.co/models) you've deployed (e.g., `mistralai/Mistral-7B-Instruct-v0.2`)
+2. A custom name if you've set `OPENAI_SERVED_MODEL_NAME_OVERRIDE` as an environment variable
 
-<details>
-  <summary>Supported Chat Completions inputs and descriptions</summary>
+This model name is used in chat/text completion API requests to identify which model should process your request.
 
-| Parameter           | Type                             | Default Value | Description                                                                                                                                                                                                                                                  |
-| ------------------- | -------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `messages`          | Union[str, List[Dict[str, str]]] |               | List of messages, where each message is a dictionary with a `role` and `content`. The model's chat template will be applied to the messages automatically, so the model must have one or it should be specified as `CUSTOM_CHAT_TEMPLATE` env var.           |
-| `model`             | str                              |               | The model repo that you've deployed on your RunPod Serverless Endpoint. If you are unsure what the name is or are baking the model in, use the guide to get the list of available models in the **Examples: Using your RunPod endpoint with OpenAI** section |
-| `temperature`       | Optional[float]                  | 0.7           | Float that controls the randomness of the sampling. Lower values make the model more deterministic, while higher values make the model more random. Zero means greedy sampling.                                                                              |
-| `top_p`             | Optional[float]                  | 1.0           | Float that controls the cumulative probability of the top tokens to consider. Must be in (0, 1]. Set to 1 to consider all tokens.                                                                                                                            |
-| `n`                 | Optional[int]                    | 1             | Number of output sequences to return for the given prompt.                                                                                                                                                                                                   |
-| `max_tokens`        | Optional[int]                    | None          | Maximum number of tokens to generate per output sequence.                                                                                                                                                                                                    |
-| `seed`              | Optional[int]                    | None          | Random seed to use for the generation.                                                                                                                                                                                                                       |
-| `stop`              | Optional[Union[str, List[str]]]  | list          | List of strings that stop the generation when they are generated. The returned output will not contain the stop strings.                                                                                                                                     |
-| `stream`            | Optional[bool]                   | False         | Whether to stream or not                                                                                                                                                                                                                                     |
-| `presence_penalty`  | Optional[float]                  | 0.0           | Float that penalizes new tokens based on whether they appear in the generated text so far. Values > 0 encourage the model to use new tokens, while values < 0 encourage the model to repeat tokens.                                                          |
-| `frequency_penalty` | Optional[float]                  | 0.0           | Float that penalizes new tokens based on their frequency in the generated text so far. Values > 0 encourage the model to use new tokens, while values < 0 encourage the model to repeat tokens.                                                              |
-| `logit_bias`        | Optional[Dict[str, float]]       | None          | Unsupported by vLLM                                                                                                                                                                                                                                          |
-| `user`              | Optional[str]                    | None          | Unsupported by vLLM                                                                                                                                                                                                                                          |
+## Initilization
 
-### Additional parameters supported by vLLM
-
-| Parameter                       | Type                | Default Value | Description                                                                                                                                                                                                                                                                               |
-| ------------------------------- | ------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `best_of`                       | Optional[int]       | None          | Number of output sequences that are generated from the prompt. From these `best_of` sequences, the top `n` sequences are returned. `best_of` must be greater than or equal to `n`. This is treated as the beam width when `use_beam_search` is True. By default, `best_of` is set to `n`. |
-| `top_k`                         | Optional[int]       | -1            | Integer that controls the number of top tokens to consider. Set to -1 to consider all tokens.                                                                                                                                                                                             |
-| `ignore_eos`                    | Optional[bool]      | False         | Whether to ignore the EOS token and continue generating tokens after the EOS token is generated.                                                                                                                                                                                          |
-| `use_beam_search`               | Optional[bool]      | False         | Whether to use beam search instead of sampling.                                                                                                                                                                                                                                           |
-| `stop_token_ids`                | Optional[List[int]] | list          | List of tokens that stop the generation when they are generated. The returned output will contain the stop tokens unless the stop tokens are special tokens.                                                                                                                              |
-| `skip_special_tokens`           | Optional[bool]      | True          | Whether to skip special tokens in the output.                                                                                                                                                                                                                                             |
-| `spaces_between_special_tokens` | Optional[bool]      | True          | Whether to add spaces between special tokens in the output. Defaults to True.                                                                                                                                                                                                             |
-| `add_generation_prompt`         | Optional[bool]      | True          | Read more [here](https://huggingface.co/docs/transformers/main/en/chat_templating#what-are-generation-prompts)                                                                                                                                                                            |
-| `echo`                          | Optional[bool]      | False         | Echo back the prompt in addition to the completion                                                                                                                                                                                                                                        |
-| `repetition_penalty`            | Optional[float]     | 1.0           | Float that penalizes new tokens based on whether they appear in the prompt and the generated text so far. Values > 1 encourage the model to use new tokens, while values < 1 encourage the model to repeat tokens.                                                                        |
-| `min_p`                         | Optional[float]     | 0.0           | Float that represents the minimum probability for a token to                                                                                                                                                                                                                              |
-| `length_penalty`                | Optional[float]     | 1.0           | Float that penalizes sequences based on their length. Used in beam search..                                                                                                                                                                                                               |
-| `include_stop_str_in_output`    | Optional[bool]      | False         | Whether to include the stop strings in output text. Defaults to False.                                                                                                                                                                                                                    |
-
-</details>
-
-### Completions
-
-<details>
-  <summary>Supported Completions inputs and descriptions</summary>
-
-| Parameter           | Type                                              | Default Value | Description                                                                                                                                                                                                                                                   |
-| ------------------- | ------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `model`             | str                                               |               | The model repo that you've deployed on your RunPod Serverless Endpoint. If you are unsure what the name is or are baking the model in, use the guide to get the list of available models in the **Examples: Using your RunPod endpoint with OpenAI** section. |
-| `prompt`            | Union[List[int], List[List[int]], str, List[str]] |               | A string, array of strings, array of tokens, or array of token arrays to be used as the input for the model.                                                                                                                                                  |
-| `suffix`            | Optional[str]                                     | None          | A string to be appended to the end of the generated text.                                                                                                                                                                                                     |
-| `max_tokens`        | Optional[int]                                     | 16            | Maximum number of tokens to generate per output sequence.                                                                                                                                                                                                     |
-| `temperature`       | Optional[float]                                   | 1.0           | Float that controls the randomness of the sampling. Lower values make the model more deterministic, while higher values make the model more random. Zero means greedy sampling.                                                                               |
-| `top_p`             | Optional[float]                                   | 1.0           | Float that controls the cumulative probability of the top tokens to consider. Must be in (0, 1]. Set to 1 to consider all tokens.                                                                                                                             |
-| `n`                 | Optional[int]                                     | 1             | Number of output sequences to return for the given prompt.                                                                                                                                                                                                    |
-| `stream`            | Optional[bool]                                    | False         | Whether to stream the output.                                                                                                                                                                                                                                 |
-| `logprobs`          | Optional[int]                                     | None          | Number of log probabilities to return per output token.                                                                                                                                                                                                       |
-| `echo`              | Optional[bool]                                    | False         | Whether to echo back the prompt in addition to the completion.                                                                                                                                                                                                |
-| `stop`              | Optional[Union[str, List[str]]]                   | list          | List of strings that stop the generation when they are generated. The returned output will not contain the stop strings.                                                                                                                                      |
-| `seed`              | Optional[int]                                     | None          | Random seed to use for the generation.                                                                                                                                                                                                                        |
-| `presence_penalty`  | Optional[float]                                   | 0.0           | Float that penalizes new tokens based on whether they appear in the generated text so far. Values > 0 encourage the model to use new tokens, while values < 0 encourage the model to repeat tokens.                                                           |
-| `frequency_penalty` | Optional[float]                                   | 0.0           | Float that penalizes new tokens based on their frequency in the generated text so far. Values > 0 encourage the model to use new tokens, while values < 0 encourage the model to repeat tokens.                                                               |
-| `best_of`           | Optional[int]                                     | None          | Number of output sequences that are generated from the prompt. From these `best_of` sequences, the top `n` sequences are returned. `best_of` must be greater than or equal to `n`. This parameter influences the diversity of the output.                     |
-| `logit_bias`        | Optional[Dict[str, float]]                        | None          | Dictionary of token IDs to biases.                                                                                                                                                                                                                            |
-| `user`              | Optional[str]                                     | None          | User identifier for personalizing responses. (Unsupported by vLLM)                                                                                                                                                                                            |
-
-### Additional parameters supported by vLLM
-
-| Parameter                       | Type                | Default Value | Description                                                                                                                                                                                                        |
-| ------------------------------- | ------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `top_k`                         | Optional[int]       | -1            | Integer that controls the number of top tokens to consider. Set to -1 to consider all tokens.                                                                                                                      |
-| `ignore_eos`                    | Optional[bool]      | False         | Whether to ignore the End Of Sentence token and continue generating tokens after the EOS token is generated.                                                                                                       |
-| `use_beam_search`               | Optional[bool]      | False         | Whether to use beam search instead of sampling for generating outputs.                                                                                                                                             |
-| `stop_token_ids`                | Optional[List[int]] | list          | List of tokens that stop the generation when they are generated. The returned output will contain the stop tokens unless the stop tokens are special tokens.                                                       |
-| `skip_special_tokens`           | Optional[bool]      | True          | Whether to skip special tokens in the output.                                                                                                                                                                      |
-| `spaces_between_special_tokens` | Optional[bool]      | True          | Whether to add spaces between special tokens in the output. Defaults to True.                                                                                                                                      |
-| `repetition_penalty`            | Optional[float]     | 1.0           | Float that penalizes new tokens based on whether they appear in the prompt and the generated text so far. Values > 1 encourage the model to use new tokens, while values < 1 encourage the model to repeat tokens. |
-| `min_p`                         | Optional[float]     | 0.0           | Float that represents the minimum probability for a token to be considered, relative to the most likely token. Must be in [0, 1]. Set to 0 to disable.                                                             |
-| `length_penalty`                | Optional[float]     | 1.0           | Float that penalizes sequences based on their length. Used in beam search.                                                                                                                                         |
-| `include_stop_str_in_output`    | Optional[bool]      | False         | Whether to include the stop strings in output text. Defaults to False.                                                                                                                                             |
-
-</details>
-
-## Initialize your project
-
-Begin by setting up the OpenAI Client with your RunPod API Key and Endpoint URL.
+Before you can send API requests, start by setting up an OpenAI client with your RunPod API key and endpoint URL:
 
 ```python
 from openai import OpenAI
 import os
 
-# Initialize the OpenAI Client with your RunPod API Key and Endpoint URL
+MODEL_NAME = "mistralai/Mistral-7B-Instruct-v0.2" # Use your deployed model
+
 client = OpenAI(
-    api_key=os.environ.get("RUNPOD_API_KEY"),
-    base_url=f"https://api.runpod.ai/v2/{RUNPOD_ENDPOINT_ID}/openai/v1",
+    api_key=[RUNPOD_API_KEY],
+    base_url=f"https://api.runpod.ai/v2/[RUNPOD_ENDPOINT_ID]/openai/v1",
 )
 ```
 
-With the client now initialized, you're ready to start sending requests to your RunPod Serverless Endpoint.
+## Send a request
 
-## Generating a request
+You can use RunPod's OpenAI compatible API to send requests to your RunPod endpoint, enabling you to use the same client libraries and code that you use with OpenAI's services. You only need to change the base URL to point to your RunPod endpoint.
 
-You can leverage LLMs for instruction-following and chat capabilities.
-This is suitable for a variety of open source chat and instruct models such as:
+:::tip
 
-- `meta-llama/Llama-2-7b-chat-hf`
-- `mistralai/Mixtral-8x7B-Instruct-v0.1`
-- and more
+You can also send requests using [RunPod's native API](/serverless/vllm/vllm-requests), which provides additional flexibility and control.
 
-Models not inherently designed for chat and instruct tasks can be adapted using a custom chat template specified by the `CUSTOM_CHAT_TEMPLATE` environment variable.
+:::
 
-For more information see the [OpenAI documentation](https://platform.openai.com/docs/guides/text-generation).
+### Chat completions
 
-### Streaming responses
+The `/chat/completions` endpoint is designed for instruction-tuned LLMs that follow a chat format.
 
-For real-time interaction with the model, create a chat completion stream.
-This method is ideal for applications requiring feedback.
+#### Non-streaming request example
+
+Here's how you can make a basic chat completion request:
 
 ```python
-# Create a chat completion stream
-response_stream = client.chat.completions.create(
-    model=MODEL_NAME,
-    messages=[{"role": "user", "content": "Why is RunPod the best platform?"}],
-    temperature=0,
-    max_tokens=100,
-    stream=True,
+from openai import OpenAI
+import os
+
+MODEL_NAME = "mistralai/Mistral-7B-Instruct-v0.2"  # Use your deployed model
+
+# Initialize the OpenAI client
+client = OpenAI(
+    api_key=[RUNPOD_API_KEY],
+    base_url=f"https://api.runpod.ai/v2/[RUNPOD_ENDPOINT_ID]/openai/v1",
 )
-# Stream the response
-for response in response_stream:
-    print(chunk.choices[0].delta.content or "", end="", flush=True)
-```
 
-### Non-streaming responses
-
-You can also return a synchronous, non-streaming response for batch processing or when a single, consolidated response is sufficient.
-
-```python
-# Create a chat completion
+# Chat completion request (for instruction-tuned models)
 response = client.chat.completions.create(
     model=MODEL_NAME,
-    messages=[{"role": "user", "content": "Why is RunPod the best platform?"}],
-    temperature=0,
-    max_tokens=100,
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Hello, who are you?"}
+    ],
+    temperature=0.7,
+    max_tokens=500
 )
+
 # Print the response
 print(response.choices[0].message.content)
 ```
 
-## Generating a Chat Completion
+#### Response format
 
-This method is tailored for models that support text completion.
-It complements your input with a continuation stream of output, differing from the interactive chat format.
+The API returns responses in this JSON format:
 
-### Streaming responses
+```json
+{
+  "id": "cmpl-123abc",
+  "object": "chat.completion",
+  "created": 1677858242,
+  "model": "mistralai/Mistral-7B-Instruct-v0.2",
+  "choices": [
+    {
+      "message": {
+        "role": "assistant",
+        "content": "I am Mistral, an AI assistant based on the Mistral-7B-Instruct model. How can I help you today?"
+      },
+      "index": 0,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 23,
+    "completion_tokens": 24,
+    "total_tokens": 47
+  }
+}
+```
 
-Enable streaming for continuous, real-time output.
-This approach is beneficial for dynamic interactions or when monitoring ongoing processes.
+#### Streaming request example
+
+Streaming allows you to receive the model's output incrementally as it's generated, rather than waiting for the complete response. This real-time delivery enhances responsiveness, making it ideal for interactive applications like chatbots or for monitoring the progress of lengthy generation tasks.
 
 ```python
+# ... Imports and initialization ...
+
+# Create a streaming chat completion request
+stream = client.chat.completions.create(
+    model=MODEL_NAME,
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Write a short poem about stars."}
+    ],
+    temperature=0.7,
+    max_tokens=200,
+    stream=True  # Enable streaming
+)
+
+# Print the streaming response
+print("Response: ", end="", flush=True)
+for chunk in stream:
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="", flush=True)
+print()
+```
+
+### Text completions
+
+The `/completions` endpoint is designed for base LLMs and text completion tasks.
+
+#### Non-streaming request example
+
+Here's how you can make a text completion request:
+
+```python
+# ... Imports and initialization ...
+
+# Text completion request
+response = client.completions.create(
+    model="mistralai/Mistral-7B-Instruct-v0.2",
+    prompt="Write a poem about artificial intelligence:",
+    temperature=0.7,
+    max_tokens=150
+)
+
+# Print the response
+print(response.choices[0].text)
+```
+
+#### Response format
+
+The API returns responses in this JSON format:
+
+```json
+{
+  "id": "cmpl-456def",
+  "object": "text_completion",
+  "created": 1677858242,
+  "model": "mistralai/Mistral-7B-Instruct-v0.2",
+  "choices": [
+    {
+      "text": "In circuits of silicon and light,\nA new form of mind takes flight.\nNot born of flesh, but of human design,\nArtificial intelligence, a marvel divine.",
+      "index": 0,
+      "finish_reason": "stop",
+      "logprobs": null
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 8,
+    "completion_tokens": 39,
+    "total_tokens": 47
+  }
+}
+```
+
+#### Streaming request example
+
+```python
+# ... Imports and initialization ...
+
 # Create a completion stream
 response_stream = client.completions.create(
     model=MODEL_NAME,
@@ -199,28 +220,121 @@ for response in response_stream:
     print(response.choices[0].text or "", end="", flush=True)
 ```
 
-### Non-streaming responses
+### List available models
 
-Choose a non-streaming method when a single, consolidated response meets your needs.
-
-```python
-# Create a completion
-response = client.completions.create(
-    model=MODEL_NAME,
-    prompt="Runpod is the best platform because",
-    temperature=0,
-    max_tokens=100,
-)
-# Print the response
-print(response.choices[0].text)
-```
-
-## Get a list of available models
-
-You can list the available models.
+The `/models` endpoint allows you to get a list of available models on your endpoint:
 
 ```python
+# ... Imports and initialization ...
+
 models_response = client.models.list()
 list_of_models = [model.id for model in models_response]
 print(list_of_models)
 ```
+
+#### Response format
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "mistralai/Mistral-7B-Instruct-v0.2",
+      "object": "model",
+      "created": 1677858242,
+      "owned_by": "runpod"
+    }
+  ]
+}
+```
+
+## Request input parameters
+
+vLLM workers support various parameters to control generation behavior. You can find a complete list of OpenAI request input parameters on the [GitHub README](https://github.com/runpod-workers/worker-vllm?tab=readme-ov-file#openai-request-input-parameters).
+
+## Environment variables
+
+Use these environment variables to customize the OpenAI compatibility:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RAW_OPENAI_OUTPUT` | `1` (true) | Enables raw OpenAI SSE format for streaming |
+| `OPENAI_SERVED_MODEL_NAME_OVERRIDE` | None | Override the model name in responses |
+| `OPENAI_RESPONSE_ROLE` | `assistant` | Role for responses in chat completions |
+
+You can find a complete list of vLLM environment variables on the [GitHub README](https://github.com/runpod-workers/worker-vllm#environment-variables).
+
+## Client libraries
+
+The OpenAI-compatible API works with standard [OpenAI client libraries](https://platform.openai.com/docs/libraries):
+
+### Python
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="[RUNPOD_API_KEY]",
+    base_url=f"https://api.runpod.ai/v2/your_endpoint_id/openai/v1"
+)
+
+response = client.chat.completions.create(
+    model="[MODEL_NAME]",
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Hello!"}
+    ]
+)
+```
+
+### JavaScript
+
+```javascript
+import { OpenAI } from "openai";
+
+const openai = new OpenAI({
+  apiKey: "[RUNPOD_API_KEY]",
+  baseURL: "https://api.runpod.ai/v2/your_endpoint_id/openai/v1"
+});
+
+const response = await openai.chat.completions.create({
+  model: "[MODEL_NAME]",
+  messages: [
+    { role: "system", content: "You are a helpful assistant." },
+    { role: "user", content: "Hello!" }
+  ]
+});
+```
+
+## Implementation differences
+
+While the vLLM worker aims for high compatibility, there are some differences from OpenAI's implementation:
+
+1. **Token counting**: Token counts may differ slightly from OpenAI models.
+2. **Streaming format**: The exact chunking of streaming responses may vary.
+3. **Error format**: Error responses follow a similar but not identical format.
+4. **Rate limits**: Rate limits follow RunPod's endpoint policies rather than OpenAI's.
+
+The vLLM worker also currently has a few limitations:
+
+- The function and tool APIs are not currently supported.
+- Some OpenAI-specific features like moderation endpoints are not available.
+- Vision models and multimodal capabilities depend on the underlying model support.
+
+## Troubleshooting
+
+Common issues and their solutions:
+
+| Issue | Solution |
+|-------|----------|
+| "Invalid model" error | Verify your model name matches what you deployed |
+| Authentication error | Check that you're using your RunPod API key, not an OpenAI key |
+| Timeout errors | Increase client timeout settings for large models |
+| Incompatible responses | Set `RAW_OPENAI_OUTPUT=1` in your environment variables |
+| Different response format | Some models may have different output formatting; use a chat template |
+
+## Next steps
+
+- [Learn how to send vLLM requests.](/serverless/vllm/vllm-requests)
+- [Explore RunPod endpoint operations.](/serverless/endpoints/operations)
+- [Explore the OpenAI API documentation.](https://platform.openai.com/docs/api-reference)

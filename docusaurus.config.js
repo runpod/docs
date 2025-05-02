@@ -106,7 +106,6 @@ const config = {
     image: "img/docusaurus-social-card.png",
     navbar: {
       title: "RunPod",
-
       logo: {
         alt: "RunPod Logo",
         src: "img/logo.svg",
@@ -133,6 +132,13 @@ const config = {
           collapsed: false,
           label: "SDKs",
         },
+        {
+          type: "docSidebar",
+          position: "left",
+          sidebarId: "cliSidebar",
+          collapsed: false,
+          label: "CLI",
+        },  
         {
           href: "https://rest.runpod.io/v1/docs",
           label: "API",
@@ -211,6 +217,7 @@ const config = {
     prism: {
       theme: prismThemes.github,
       darkTheme: prismThemes.dracula,
+      additionalLanguages: ["docker", "json", "bash"],
     },
     docs: {
       sidebar: {
@@ -337,6 +344,53 @@ const config = {
           {
             to: "/tutorials/serverless/run-ollama-inference",
             from: "/tutorials/serverless/cpu/run-ollama-inference",
+          },
+          // Consolidated handler pages
+          {
+            to: "/serverless/workers/handler-functions",
+            from: "/serverless/handlers/handler-additional-controls",
+          },
+          {
+            to: "/serverless/workers/handler-functions",
+            from: "/serverless/handlers/handler-async",
+          },
+          {
+            to: "/serverless/workers/concurrent-handler",
+            from: "/serverless/handlers/handler-concurrency",
+          },
+          {
+            to: "/serverless/workers/handler-functions",
+            from: "/serverless/handlers/handler-generator",
+          },
+          {
+            to: "/serverless/workers/handler-functions",
+            from: "/serverless/workers/handlers/handler-error-handling",
+          },
+          {
+            to: "/serverless/workers/handler-functions",
+            from: "/serverless/handlers/overview",
+          },
+          // Move github integration under workers
+          {
+            to: "/serverless/workers/github-integration",
+            from: "/serverless/github-integration",
+          },
+          {
+            to: "/serverless/workers/custom-worker",
+            from: "/serverless/get-started",
+          },
+          // Redirects for deletions
+          {
+            to: "/serverless/vllm/overview",
+            from: "/serverless/vllm/configurable-endpoints",
+          },
+          {
+            to: "/serverless/vllm/overview",
+            from: "/serverless/vllm/environment-variables",
+          },
+          {
+            to: "/serverless/overview",
+            from: "/serverless/quick-deploys",
           },
         ],
       },
