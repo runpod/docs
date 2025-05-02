@@ -76,12 +76,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy your code and model files
 COPY src/handler.py .
-// highlight-start
 COPY models/ /models/
 
 # Set environment variables if needed
 ENV MODEL_PATH=/models/my_model.pt
-// highlight-end
 
 # Command to run when the container starts
 CMD ["python", "-u", "/handler.py"]

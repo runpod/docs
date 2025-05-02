@@ -24,11 +24,23 @@ vLLM workers offer several advantages that make them ideal for LLM deployment:
 
 There are two ways to deploy a vLLM worker:
 
-**Quick deploy a vLLM endpoint**: The simplest approach—use RunPod's UI to deploy a model directly from Hugging Face with minimal configuration. For step-by-step instructions, see [Deploy a vLLM worker](/serverless/vllm/get-started).
+### Option 1: Quick deploy a vLLM endpoint
 
-**Deploy using a prebuilt worker image**: Deploy a preconfigured vLLM worker image from [GitHub](https://github.com/runpod-workers/worker-vllm) or [Docker Hub](https://hub.docker.com/r/runpod/worker-v1-vllm/tags), configuring your endpoint using [environment variables](https://github.com/runpod-workers/worker-vllm#environment-variablessettings).
+This is the simplest approach. Use RunPod's UI to deploy a model directly from Hugging Face with minimal configuration. For step-by-step instructions, see [Deploy a vLLM worker](/serverless/vllm/get-started).
 
-You can add new functionality your vLLM worker by customizing its [handler function](/serverless/workers/handler-function).
+:::warning
+
+Quick-deployed workers will download models during initialization, which can take some time depending on the model selected. If you plan to run a vLLM endpoint in production, it’s best to package your model into a Docker image ahead of time (using the Docker image method below), as this can significantly reduce cold start times.
+
+:::
+
+### Option 2: Deploy using a Docker image
+
+Deploy a packaged vLLM worker image from [GitHub](https://github.com/runpod-workers/worker-vllm) or [Docker Hub](https://hub.docker.com/r/runpod/worker-v1-vllm/tags), configuring your endpoint using [environment variables](https://github.com/runpod-workers/worker-vllm#environment-variablessettings).
+
+Follow the instructions in the [vLLM worker README](https://github.com/runpod-workers/worker-vllm?tab=readme-ov-file#option-2-build-docker-image-with-model-inside) to build a model into your worker image.
+
+You can add new functionality your vLLM worker deployment by customizing its [handler function](/serverless/workers/handler-function).
 
 ## Compatible models
 

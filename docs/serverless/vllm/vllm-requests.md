@@ -88,11 +88,11 @@ vLLM workers accept two primary input formats:
 
 ## Request input parameters
 
-vLLM workers support various parameters to control generation behavior. Here are the most commonly used parameters:
+vLLM workers support various parameters to control generation behavior. Here are some commonly used parameters:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `temperature` | `float` | Controls randomness (0.0 = deterministic, higher = more random) |
+| `temperature` | `float` | Controls randomness (0.0-1.0) |
 | `max_tokens` | `int` | Maximum number of tokens to generate |
 | `top_p` | `float` | Nucleus sampling parameter (0.0-1.0) |
 | `top_k` | `int` | Limits consideration to top k tokens |

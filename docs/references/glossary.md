@@ -15,7 +15,7 @@ We offer both GPU and CPU serverless options:
 
 ## Worker
 
-A [worker](./serverless/workers/overview.md) is a single compute resource that processes Serverless endpoint requests. Each endpoint can have multiple workers, enabling parallel processing of multiple requests simultaneously.
+A [worker](/serverless/workers/overview) is a single compute resource that processes Serverless endpoint requests. Each endpoint can have multiple workers, enabling parallel processing of multiple requests simultaneously.
 
 ## Endpoint
 

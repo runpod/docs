@@ -140,14 +140,18 @@ To add or modify environment variables:
 4. Add/edit your desired variables.
 5. Click **Save Endpoint**.
 
+You can find a full list of available environment variables in the [vLLM worker GitHub README](https://github.com/runpod-workers/worker-vllm?tab=readme-ov-file#environment-variablessettings).
+
+You may also wish to adjust the input parameters for your request. For example, use the `max_tokens` parameter to increase the maximum number of tokens generated per reponse. To learn more, see [Send vLLM requests](/serverless/vllm/vllm-requests#request-input-parameters).
+
 ## Troubleshooting
 
 If you encounter issues with your deployment:
 
-- **Worker fails to initialize**: Check that your model is compatible with vLLM and your GPU has enough VRAM
-- **Slow response times**: Consider using a more powerful GPU or optimizing your request parameters
-- **Out of memory errors**: Reduce the max_tokens parameter or use a smaller model
-- **API errors**: Verify your endpoint ID and API key are correct
+- **Worker fails to initialize**: Check that your model is compatible with vLLM and your GPU has enough VRAM.
+- **Slow response times**: Consider using a more powerful GPU or optimizing your request parameters.
+- **Out of memory errors**: Try increasing GPU size or reducing `MAX_MODEL_LEN`.
+- **API errors**: Verify your endpoint ID and API key are correct.
 
 ## Next steps
 

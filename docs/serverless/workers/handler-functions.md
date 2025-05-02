@@ -154,7 +154,7 @@ Always test your async code thoroughly to properly handle asynchronous exception
 
 ### Concurrent handlers
 
-Concurrent handlers process multiple requests simultaneously with a single worker. Use these for I/O-bound operations like API calls, database queries, or file operations where a single worker can efficiently manage multiple tasks at once.
+Concurrent handlers process multiple requests simultaneously with a single worker. Use these for small, rapid operations that don't fully utlize the worker's GPU.
 
 When increasing concurrency, it's crucial to monitor memory usage carefully and test thoroughly to determine the optimal concurrency levels for your specific workload. Implement proper error handling to prevent one failing request from affecting others, and continuously monitor and adjust concurrency parameters based on real-world performance.
 

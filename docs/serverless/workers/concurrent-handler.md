@@ -10,7 +10,7 @@ Learn how to implement concurrent handlers to process multiple requests simultan
 
 ## What you'll learn
 
-In this guide you'll learn how to:
+In this guide you will learn how to:
 
 - Create an asynchronous handler function.
 - Create a concurrency modifier to dynamically adjust concurrency levels.
@@ -21,6 +21,7 @@ In this guide you'll learn how to:
 
 - You've [created a RunPod account](/get-started/manage-accounts).
 - You've installed the RunPod SDK (`pip install runpod`).
+- You know how to build a [basic handler function](/serverless/workers/handler-functions).
 
 ## Step 1: Set up your environment
 
@@ -65,9 +66,40 @@ async def process_request(job):
     
     return f"Processed: {job_input}"
 
+# Placeholder code for a dynamic concurrency adjustment function 
+def adjust_concurrency(current_concurrency):
+    return 50
+
+def update_request_rate():
+    """Simulates changes in the request rate to mimic real-world scenarios."""
+    global request_rate
+    request_rate = random.randint(20, 100)
+
+# Start the Serverless function when the script is run
+if __name__ == "__main__":
+    runpod.serverless.start({
+        "handler": process_request,
+        "concurrency_modifier": adjust_concurrency
+    })
+```
+
+The `process_request` function uses the `async` keyword, enabling it to use non-blocking I/O operations with `await`. This allows the function to pause during I/O operations (simulated with `asyncio.sleep()`) and handle other requests while waiting.
+
+The `update_request_rate` function simulates monitoring request patterns for adaptive scaling. This example uses a simple random number generator to simulate changing request patterns. In a production environment, you would:
+    - Track actual request counts and response times.
+    - Monitor system resource usage, such as CPU and memory.
+    - Adjust concurrency based on real performance metrics.
+
+## Step 3: Implement dynamic concurrency adjustment
+
+Let's enhance our handler with dynamic concurrency adjustment. This will allow your worker to handle more requests during high traffic periods and conserve resources during low traffic periods.
+
+Replace the placeholder `adjust_concurrency` function with this improved version:
+
+```python
 def adjust_concurrency(current_concurrency):
     """
-    Dynamically adjusts the worker's concurrency level based on request load.
+    Dynamically adjust the worker's concurrency level based on request load.
     
     Args:
         current_concurrency (int): The current concurrency level
@@ -94,39 +126,52 @@ def adjust_concurrency(current_concurrency):
         return current_concurrency - 1
     
     return current_concurrency
-
-def update_request_rate():
-    """Simulates changes in the request rate to mimic real-world scenarios."""
-    global request_rate
-    request_rate = random.randint(20, 100)
-
-# Start the Serverless function when the script is run
-if __name__ == "__main__":
-    runpod.serverless.start({
-        "handler": process_request,
-        "concurrency_modifier": adjust_concurrency
-    })
 ```
 
-The `process_request` function uses the `async` keyword, enabling it to use non-blocking I/O operations with `await`. This allows the function to pause during I/O operations (simulated with `asyncio.sleep()`) and handle other requests while waiting.
+Let's break down how this function works:
 
-The `adjust_concurrency` function dynamically adjusts the concurrency level based on load by:
-    - Taking the current concurrency level as input.
-    - Checking the current request rate.
-    - Increasing concurrency when traffic exceeds 50 requests.
-    - Decreasing concurrency when traffic falls below the threshold.
-    - Maintaining concurrency between 1 and 10.
-    - Returning the adjusted concurrency level.
+1. **Control parameters**: 
+   - `max_concurrency = 10`: Sets an upper limit on concurrency to prevent resource exhaustion.
+   - `min_concurrency = 1`: Ensures at least one request can be processed at a time.
+   - `high_request_rate_threshold = 50`: Defines when to consider traffic "high".
+
+   You can adjust these parameters based on your specific workload.
 
 
-The `update_request_rate` function simulates monitoring request patterns for adaptive scaling. This example uses a simple random number generator to simulate changing request patterns. In a production environment, you would:
-    - Track actual request counts and response times.
-    - Monitor system resource usage, such as CPU and memory.
-    - Adjust concurrency based on real performance metrics.
+2. **Scaling up logic**:
 
-## Step 3: Create a test input file
+   ```python
+   if (request_rate > high_request_rate_threshold and 
+       current_concurrency < max_concurrency):
+       return current_concurrency + 1
+   ```
 
-Create a file named `test_input.json` to test your handler locally:
+   This increases concurrency by 1 when:
+   - The request rate exceeds our threshold (50 requests).
+   - We haven't reached our maximum concurrency limit.
+
+3. **Scaling down logic**:
+   ```python
+   elif (request_rate <= high_request_rate_threshold and 
+         current_concurrency > min_concurrency):
+       return current_concurrency - 1
+   ```
+
+   This decreases concurrency by 1 when:
+   - The request rate is at or below our threshold.
+   - We're above our minimum concurrency level.
+
+4. **Default behavior**:
+   ```python
+   return current_concurrency
+   ```
+   If neither condition is met, maintain the current concurrency level.
+
+With these enhancements, your concurrent handler will now dynamically adjust its concurrency level based on the observed request rate, optimizing resource usage and responsiveness.
+
+## Step 4: Create a test input file
+
+Now we're ready to test our handler. Create a file named `test_input.json` to test your handler locally:
 
 ```json title="test_input.json"
 {
@@ -137,7 +182,7 @@ Create a file named `test_input.json` to test your handler locally:
 }
 ```
 
-## Step 4: Test your handler locally
+## Step 5: Test your handler locally
 
 Run your handler to verify that it works correctly:
 
@@ -159,9 +204,31 @@ INFO   | Job result: {'output': "Processed: {'message': 'Test concurrent process
 INFO   | Local testing complete, exiting.
 ```
 
+## (Optional) Step 6: Implement real metrics collection
+
+In a production environment, you should to replace the `update_request_rate` function with real metrics collection. Here is an example how you could built this functionality:
+
+```python
+def update_request_rate(request_history):
+    """Collects real metrics about request patterns."""
+    global request_rate
+    
+    # Option 1: Track request count over a time window
+    current_time = time.time()
+    # Count requests in the last minute
+    recent_requests = [r for r in request_history if r > current_time - 60]
+    request_rate = len(recent_requests)
+    
+    # Option 2: Use an exponential moving average
+    # request_rate = 0.9 * request_rate + 0.1 * new_requests
+    
+    # Option 3: Read from a shared metrics service like Redis
+    # request_rate = redis_client.get('recent_request_rate')
+```
+
 ## Next steps
 
-Now that you've created a concurrent handler, you can:
+Now that you've created a concurrent handler, you're ready to:
 
 - [Package and deploy your handler as a Serverless worker.](/serverless/workers/deploy)
 - [Add error handling for more robust processing.](/serverless/workers/handler-functions#error-handling)
