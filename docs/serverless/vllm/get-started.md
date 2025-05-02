@@ -40,7 +40,7 @@ For this walkthrough, we'll use `openchat/openchat-3.5-0106`, but you can substi
 
 ## Step 2: Deploy using the RunPod console
 
-The easiest way to deploy a vLLM worker is through the RunPod console with the [Quick Deploy](/serverless/quick-deploys) feature:
+The easiest way to deploy a vLLM worker is through the RunPod console:
 
 1. Navigate to the [Serverless page](https://www.runpod.io/console/serverless).
 2. Under **Quick Deploy**, find **Serverless vLLM** and click **Configure**.

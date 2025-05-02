@@ -6,7 +6,7 @@ description: "Learn how RunPod's vLLM workers provide OpenAI API compatibility, 
 
 # OpenAI API compatibility guide
 
-RunPod's [vLLM workers](serverless/vllm/overview) implement OpenAI API compatibility, allowing you to use familiar [OpenAI client libraries](https://platform.openai.com/docs/libraries) with your deployed models. This guide will help you understand how to leverage this compatibility to integrate your models seamlessly with existing OpenAI-based applications.
+RunPod's [vLLM workers](/serverless/vllm/overview) implement OpenAI API compatibility, allowing you to use familiar [OpenAI client libraries](https://platform.openai.com/docs/libraries) with your deployed models. This guide will help you understand how to leverage this compatibility to integrate your models seamlessly with existing OpenAI-based applications.
 
 ## Endpoint structure
 
