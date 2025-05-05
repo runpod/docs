@@ -29,11 +29,13 @@ In this tutorial, you'll learn how to:
 
 First, decide which LLM you want to deploy. The vLLM worker supports most Hugging Face models, including:
 
-- Llama 3 (e.g., `meta-llama/Meta-Llama-3-8B-Instruct`)
-- Mistral (e.g., `mistralai/Mistral-7B-Instruct-v0.2`)
-- Qwen2 (e.g., `Qwen/Qwen1.5-7B-Chat`)
+- Llama 3 (e.g., `meta-llama/Llama-3.2-3B-Instruct`)
+- Mistral (e.g., `mistralai/Ministral-8B-Instruct-2410`)
+- Qwen3 (e.g., `Qwen/Qwen3-8B`)
 - OpenChat (e.g., `openchat/openchat-3.5-0106`)
-- Gemma (e.g., `google/gemma-7b`)
+- Gemma (e.g., `google/gemma-3-1b-it`)
+- Deepseek-R1 (e.g., `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B`)
+- Phi-4 (e.g., `microsoft/Phi-4-mini-instruct`)
 - And many more
 
 For this walkthrough, we'll use `openchat/openchat-3.5-0106`, but you can substitute this with [any compatible model](https://github.com/runpod-workers/worker-vllm?tab=readme-ov-file#compatible-model-architectures).
