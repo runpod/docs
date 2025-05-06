@@ -17,14 +17,14 @@ Whether you're a developer looking to **share your work** or a user seeking **pr
 
 The Hub simplifies the entire lifecycle of repo sharing and deployment, from initial submission through testing, discovery, and usage.
 
-### For Hub users
+### For RunPod users
 
 - **Find production-ready AI solutions**: Discover vetted, open-source repositories optimized for RunPod with minimal setup required.
 - **Deploy in one click**: Go from discovery to running services in minutes, not days.
 - **Customize to your needs**: RunPod Hub repos expose configurable parameters for fine-tuning without diving into code.
 - **Save development time**: Leverage community innovations instead of building from scratch.
 
-### For Hub creators
+### For RunPod creators
 
 - **Showcase your work**: Share your projects with the broader AI community.
 - **Maintain control**: Your GitHub repo remains the source of truth, while the Hub automatically detects new releases.
