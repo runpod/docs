@@ -208,9 +208,9 @@ There are two primary factors that impact worker start times:
 
 :::tip
 
-By default, worker cold starts will timeout after seven minutes. When this happens, the system will mark these workers as unhealthy and terminate them before they can begin processing requests. To accommodate longer initialization periods, set the `RUNPOD_INIT_TIMEOUT` environment variable with a value in seconds. For example, setting `RUNPOD_INIT_TIMEOUT=800` allows workers up to 800 seconds (approximately 13 minutes) to complete their initialization process.
+By default, worker cold starts will timeout after seven minutes. When this happens, the system will mark these workers as unhealthy and terminate them before they can begin processing requests. To accommodate longer cold stars, set the `RUNPOD_INIT_TIMEOUT` environment variable with a value in seconds. For example, setting `RUNPOD_INIT_TIMEOUT=800` allows workers up to 800 seconds (approximately 13 minutes) to complete the cold start process.
 
-Set this value based on your specific workload requirements, ensuring it provides adequate time for model loading and initialization while avoiding excessive wait times for failed workers.
+Set this value based on your specific workload requirements, ensuring it provides adequate time for workers to start, while avoiding excessive wait times for failed workers.
 
 :::
 
