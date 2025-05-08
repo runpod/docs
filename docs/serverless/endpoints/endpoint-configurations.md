@@ -126,7 +126,7 @@ FlashBoot is RunPod's solution for reducing the average cold-start times on your
 
 :::tip
 
-FlashBoot effectiveness increases exponentially with higher request volumes and worker counts, making it ideal for busy production endpoints. For endpoints with fewer than 3 workers, FlashBoot's overhead may exceed its benefits.
+The effectiveness of FlashBoot increases exponentially with higher request volumes and worker counts, making it ideal for busy production endpoints. For endpoints with fewer than 3 workers, FlashBoot's overhead may exceed its benefits.
 
 :::
 
