@@ -208,18 +208,21 @@ There are two primary factors that impact worker start times:
 
 Use these strategies to reduce worker startup times:
 
-1. **Embed models in Docker images:** Instead of downloading large models in your handler function, you should package your ML models directly within your worker container image whenever possible. This strategy place your model on the worker's high-speed local storage (SSD/NVMe), dramatically reducing the time needed to load models into GPU memory. This is generally the best option for production environments, though for very large models (500GB+) you may need to store them on a network volume instead.
-2. **Store large models on network volumes:**  You can save large models to a network volume using a Pod or one-time handler, then mount the volume to your Serverless workers. Network volumes do not serve models as fast or reliably as the embedded approach, but can help speed up development by allowing for faster iteration and easier switching between models and configurations.
-3. **Increase active workers:** Keep active worker counts above zero to eliminate cold starts entirely. Active workers stay ready to process new requests at all times, and are 30% cheaper when idle compared to regular (flex) workers.
-4. **Increase idle timeouts:** Configure longer idle periods to keep workers active between requests. This prevents workers from shutting down prematurely during brief traffic gaps, eliminating cold starts for subsequent requests.
-5. **Fine-tune scaling thresholds:** Adjust your auto-scaling parameters for faster worker provisioning:
-   - Set queue delay thresholds to 2-3 seconds (instead of the default 4).
-   - Reduce request count thresholds to 2-3 (from the default 4).
+1. **Embed models in Docker images:** Package your ML models directly within your worker container image instead of downloading them in your handler function. This strategy places models on the worker's high-speed local storage (SSD/NVMe), dramatically reducing the time needed to load models into GPU memory. This approach is optimal for production environments, though extremely large models (500GB+) may require network volume storage.
 
-   These adjustments create a more responsive scaling system that reacts quickly to traffic increases.
+2. **Store large models on network volumes:** For flexibility during development, save large models to a network volume using a Pod or one-time handler, then mount this volume to your Serverless workers. While network volumes offer slower model loading compared to embedding models directly, they can speed up your workflow by enabling rapid iteration and seamless switching between different models and configurations.
 
-6. **Expand maximum worker capacity:** Configure higher maximum worker limits to ensure sufficient capacity is pre-warmed across your infrastructure. This approach pre-caches your Docker images across multiple machines and data centers, eliminating download delays when scaling up.
+3. **Maintain active workers:** Set active worker counts above zero to completely eliminate cold starts. These workers remain ready to process requests instantly and cost up to 30% less when idle compared to standard (flex) workers.
 
+4. **Extend idle timeouts:** Configure longer idle periods to preserve worker availability between requests. This strategy prevents premature worker shutdown during temporary traffic lulls, ensuring no cold starts for subsequent requests.
+
+5. **Optimize scaling parameters:** Fine-tune your auto-scaling configuration for more responsive worker provisioning:
+   - Lower queue delay thresholds to 2-3 seconds (default 4).
+   - Decrease request count thresholds to 2-3 (default 4).
+
+   These refinements create a more agile scaling system that responds swiftly to traffic fluctuations.
+
+6. **Increase maximum worker limits:** Set higher maximum worker capacities to ensure your Docker images are pre-cached across multiple compute nodes and data centers. This proactive approach eliminates image download delays during scaling events, significantly reducing startup times.
 
 ## Best practices summary
 
