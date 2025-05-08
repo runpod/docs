@@ -11,6 +11,8 @@ import TabItem from '@theme/TabItem';
 
 After deploying a Serverless endpoint, you need to know how to interact with it effectively. This guide covers everything from testing your endpoint in the console to sending requests programmatically and configuring advanced options.
 
+<iframe src="https://www.youtube.com/embed/BURJRgjNNJI?si=a_Qt3W8Ci-0IZRbm" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
 ## Understanding request structure
 
 Before sending requests, it's important to understand the basic structure. All requests to RunPod endpoints must:

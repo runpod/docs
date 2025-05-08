@@ -6,7 +6,7 @@ description: "Deploy and manage Serverless workers with RunPod endpoints, featur
 
 # Endpoints overview
 
-Endpoints are the foundation of RunPod Serverless, serving as the gateway for deploying and managing your Serverless workers. They provide a consistent API interface that allows your applications to interact with powerful computational resources on demand.
+Endpoints are the foundation of RunPod Serverless, serving as the gateway for deploying and managing your [Serverless workers](/serverless/workers/overview). They provide a consistent API interface that allows your applications to interact with powerful computational resources on demand.
 
 Whether you're processing large datasets, running AI inference, or performing compute-intensive tasks, endpoints give you the flexibility to deploy and scale your workloads.
 

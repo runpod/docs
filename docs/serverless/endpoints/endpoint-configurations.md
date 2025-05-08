@@ -208,9 +208,10 @@ There are two primary factors that impact worker start times:
 
 Use these strategies to reduce worker startup times:
 
-1. **Embed models in Docker images:** Package your machine learning models directly within your container image. This strategy places models on the host's high-speed local storage (SSD/NVMe), dramatically reducing the time needed to load models into GPU memory.
-2. **Increase active workers:** Keep active worker counts above zero to eliminate cold starts entirely. Active workers stay ready to process new requests at all times, and are 30% cheaper when idle compared to regular (flex) workers.
-3. **Increase idle timeouts:** Configure longer idle periods to keep workers active between requests. This prevents workers from shutting down prematurely during brief traffic gaps, eliminating cold starts for subsequent requests.
+1. **Embed models in Docker images:** Instead of downloading large models in your handler function, you should package your ML models directly within your worker container image whenever possible. This strategy place your model on the worker's high-speed local storage (SSD/NVMe), dramatically reducing the time needed to load models into GPU memory. This is generally the best option for production environments, though for very large models (500GB+) you may need to store them on a network volume instead.
+2. **Store large models on network volumes:**  You can save large models to a network volume using a Pod or one-time handler, then mount the volume to your Serverless workers. Network volumes do not serve models as fast or reliably as the embedded approach, but can help speed up development by allowing for faster iteration and easier switching between models and configurations.
+3. **Increase active workers:** Keep active worker counts above zero to eliminate cold starts entirely. Active workers stay ready to process new requests at all times, and are 30% cheaper when idle compared to regular (flex) workers.
+4. **Increase idle timeouts:** Configure longer idle periods to keep workers active between requests. This prevents workers from shutting down prematurely during brief traffic gaps, eliminating cold starts for subsequent requests.
 5. **Fine-tune scaling thresholds:** Adjust your auto-scaling parameters for faster worker provisioning:
    - Set queue delay thresholds to 2-3 seconds (instead of the default 4).
    - Reduce request count thresholds to 2-3 (from the default 4).
