@@ -6,7 +6,7 @@ description: "Deploy and manage Serverless workers with RunPod endpoints, featur
 
 # Endpoints overview
 
-Endpoints are the foundation of RunPod Serverless, serving as the gateway for deploying and managing your Serverless workers. They provide a consistent API interface that allows your applications to interact with powerful computational resources on demand.
+Endpoints are the foundation of RunPod Serverless, serving as the gateway for deploying and managing your [Serverless workers](/serverless/workers/overview). They provide a consistent API interface that allows your applications to interact with powerful computational resources on demand.
 
 Whether you're processing large datasets, running AI inference, or performing compute-intensive tasks, endpoints give you the flexibility to deploy and scale your workloads.
 
@@ -55,6 +55,18 @@ The [handler function](/serverless/workers/handler-functions) is the code that p
 ## Getting started
 
 [Follow this step-by-step guide](/serverless/workers/custom-worker) to create your first custom endpoint. This tutorial walks you through the process of setting up your development environment, creating a handler file, testing your endpoint locally, building and deploying a worker image, and sending endpoint requests using the RunPod console.
+
+## Optimization tradeoffs
+
+When configuring your endpoint, understanding the classic "optimization trilemma" is essential for designing efficient Serverless applications:
+
+**The optimization trilemma:** Cost, speed, and model size (pick two).
+
+- For **affordable and fast endpoints**, deploy workers with smaller ML models.
+- If you want to serve **large models with rapid responses**, expect higher costs.
+- To serve **large models at low cost**, you'll most likely need to plan for slower response times.
+
+For detailed guidance on how to optimize your endpoint for cost or speed (or both), see [Endpoint configuration](/serverless/endpoints/endpoint-configurations).
 
 ## Next steps
 
