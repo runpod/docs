@@ -1,0 +1,164 @@
+---
+title: "Using Hugging Face Models with RunPod"
+---
+
+Artificial Intelligence (AI) has revolutionized how applications analyze and interact with data. One powerful aspect of AI is sentiment analysis, which allows machines to interpret and categorize emotions expressed in text. In this tutorial, you will learn how to integrate pre-trained Hugging Face models into your RunPod Serverless applications to perform sentiment analysis. By the end of this guide, you will have a fully functional AI-powered sentiment analysis function running in a serverless environment.
+
+### Install Required Libraries
+
+To begin, we need to install the necessary Python libraries. Hugging Face's `transformers` library provides state-of-the-art machine learning models, while the `torch` library supports these models.
+
+Execute the following command in your terminal to install the required libraries:
+
+```bash
+pip install torch transformers
+```
+
+This command installs the `torch` and `transformers` libraries. `torch` is used for creating and running models, and `transformers` provides pre-trained models.
+
+### Import libraries
+
+Next, we need to import the libraries into our Python script. Create a new Python file named `sentiment_analysis.py` and include the following import statements:
+
+```python sentiment_analysis.py
+import runpod
+from transformers import pipeline
+```
+
+These imports bring in the `runpod` SDK for serverless functions and the `pipeline` method from `transformers`, which allows us to use pre-trained models.
+
+### Load the Model
+
+Loading the model in a function ensures that the model is only loaded once when the worker starts, optimizing the performance of our application. Add the following code to your `sentiment_analysis.py` file:
+
+```python sentiment_analysis.py
+def load_model():
+    return pipeline(
+        "sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english"
+    )
+```
+
+In this function, we use the `pipeline` method from `transformers` to load a pre-trained sentiment analysis model. The `distilbert-base-uncased-finetuned-sst-2-english` model is a distilled version of BERT fine-tuned for sentiment analysis tasks.
+
+### Define the Handler Function
+
+We will now define the handler function that will process incoming events and use the model for sentiment analysis. Add the following code to your script:
+
+```python sentiment_analysis.py
+def sentiment_analysis_handler(event):
+    global model
+
+    # Ensure the model is loaded
+    if "model" not in globals():
+        model = load_model()
+
+    # Get the input text from the event
+    text = event["input"].get("text")
+
+    # Validate input
+    if not text:
+        return {"error": "No text provided for analysis."}
+
+    # Perform sentiment analysis
+    result = model(text)[0]
+
+    return {"sentiment": result["label"], "score": float(result["score"])}
+```
+
+This function performs the following steps:
+
+1. Ensures the model is loaded.
+2. Retrieves the input text from the incoming event.
+3. Validates the input to ensure text is provided.
+4. Uses the loaded model to perform sentiment analysis.
+5. Returns the sentiment label and score as a dictionary.
+
+### Start the Serverless Worker
+
+To run our sentiment analysis function as a serverless worker, we need to start the worker using RunPod's SDK. Add the following line at the end of your `sentiment_analysis.py` file:
+
+```python sentiment_analysis.py
+runpod.serverless.start({"handler": sentiment_analysis_handler})
+```
+
+This command starts the serverless worker and specifies `sentiment_analysis_handler` as the handler function for incoming requests.
+
+### Complete Code
+
+Here is the complete code for our sentiment analysis serverless function:
+
+```python sentiment_analysis.py
+import runpod
+from transformers import pipeline
+
+
+def load_model():
+    return pipeline(
+        "sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english"
+    )
+
+
+def sentiment_analysis_handler(event):
+    global model
+
+    if "model" not in globals():
+        model = load_model()
+
+    text = event["input"].get("text")
+
+    if not text:
+        return {"error": "No text provided for analysis."}
+
+    result = model(text)[0]
+
+    return {"sentiment": result["label"], "score": float(result["score"])}
+
+
+runpod.serverless.start({"handler": sentiment_analysis_handler})
+```
+
+### Testing Locally
+
+To test this function locally, create a file named `test_input.json` with the following content:
+
+```json test_input.json
+{
+  "input": {
+    "text": "I love using RunPod for serverless machine learning!"
+  }
+}
+```
+
+Run the following command in your terminal to test the function:
+
+```
+python sentiment_analysis.py --rp_server_api
+```
+
+You should see output similar to the following, indicating that the sentiment analysis function is working correctly:
+
+```bash
+--- Starting Serverless Worker |  Version 1.6.2 ---
+INFO   | Using test_input.json as job input.
+DEBUG  | Retrieved local job: {'input': {'text': 'I love using RunPod for serverless machine learning!'}, 'id': 'local_test'}
+INFO   | local_test | Started.
+model.safetensors: 100%|█████████████████████████| 268M/268M [00:02<00:00, 94.9MB/s]
+tokenizer_config.json: 100%|██████████████████████| 48.0/48.0 [00:00<00:00, 631kB/s]
+vocab.txt: 100%|█████████████████████████████████| 232k/232k [00:00<00:00, 1.86MB/s]
+Hardware accelerator e.g. GPU is available in the environment, but no `device` argument is passed to the `Pipeline` object. Model will be on CPU.
+DEBUG  | local_test | Handler output: {'sentiment': 'POSITIVE', 'score': 0.9889019727706909}
+DEBUG  | local_test | run_job return: {'output': {'sentiment': 'POSITIVE', 'score': 0.9889019727706909}}
+INFO   | Job local_test completed successfully.
+INFO   | Job result: {'output': {'sentiment': 'POSITIVE', 'score': 0.9889019727706909}}
+INFO   | Local testing complete, exiting.
+```
+
+## Conclusion
+
+In this tutorial, you learned how to integrate a pre-trained Hugging Face model into a RunPod serverless function to perform sentiment analysis on text input.
+
+This powerful combination enables you to create advanced AI applications in a serverless environment.
+
+You can extend this concept to use more complex models or perform different types of inference tasks as needed.
+
+In our final lesson, we will explore a more complex AI task: text-to-image generation.

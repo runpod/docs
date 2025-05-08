@@ -1,0 +1,184 @@
+---
+title: "Creating And Testing A RunPod Serverless Function With Local Server"
+sidebarTitle: "Local Server Testing"
+---
+
+This tutorial will guide you through creating a basic serverless function using RunPod's Python SDK. We'll build a function that reverses a given string, demonstrating the simplicity and flexibility of RunPod's serverless architecture.
+
+## Setting up your Serverless Function
+
+Let's break down the process of creating our string reversal function into steps.
+
+### Import RunPod Library
+
+First, import the RunPod library:
+
+```python
+import runpod
+```
+
+### Define utility function
+
+Create a utility function to reverse the string:
+
+```python
+def reverse_string(s):
+    return s[::-1]
+```
+
+This function uses Python's slicing feature to efficiently reverse the input string.
+
+### Create the Handler Function
+
+The handler function is the core of our serverless application:
+
+```python
+def handler(job):
+    print(f"string-reverser | Starting job {job['id']}")
+    job_input = job["input"]
+
+    input_string = job_input.get("text", "")
+
+    if not input_string:
+        return {"error": "No input text provided"}
+
+    reversed_string = reverse_string(input_string)
+
+    job_output = {"original_text": input_string, "reversed_text": reversed_string}
+
+    return job_output
+```
+
+This handler:
+
+1. Logs the start of each job
+2. Extracts the input string from the job data
+3. Validates the input
+4. Reverses the string using our utility function
+5. Prepares and returns the output
+
+### Start the Serverless Function
+
+Finally, start the RunPod serverless worker:
+
+```python
+runpod.serverless.start({"handler": handler})
+```
+
+This line registers our handler function with RunPod's serverless infrastructure.
+
+## Complete code example
+
+Here's the full code for our serverless string reversal function:
+
+```python
+import runpod
+
+
+def reverse_string(s):
+    return s[::-1]
+
+
+def handler(job):
+    print(f"string-reverser | Starting job {job['id']}")
+    job_input = job["input"]
+
+    input_string = job_input.get("text", "")
+
+    if not input_string:
+        return {"error": "No input text provided"}
+
+    reversed_string = reverse_string(input_string)
+
+    job_output = {"original_text": input_string, "reversed_text": reversed_string}
+
+    return job_output
+
+
+runpod.serverless.start({"handler": handler})
+```
+
+## Testing Your Serverless Function
+
+RunPod provides multiple ways to test your serverless function locally before deployment. We'll explore two methods: using command-line arguments and running a local test server.
+
+### Method 1: Command-line Testing
+
+To quickly test your function using command-line arguments, use this command:
+
+```bash
+python your_script.py --test_input '{"input": {"text": "Hello, RunPod!"}}'
+```
+
+When you run this test, you'll see output similar to:
+
+```bash
+--- Starting Serverless Worker |  Version 1.6.2 ---
+INFO   | test_input set, using test_input as job input.
+DEBUG  | Retrieved local job: {'input': {'text': 'Hello, RunPod!'}, 'id': 'local_test'}
+INFO   | local_test | Started.
+string-reverser | Starting job local_test
+DEBUG  | local_test | Handler output: {'original_text': 'Hello, RunPod!', 'reversed_text': '!doPnuR ,olleH'}
+DEBUG  | local_test | run_job return: {'output': {'original_text': 'Hello, RunPod!', 'reversed_text': '!doPnuR ,olleH'}}
+INFO   | Job local_test completed successfully.
+INFO   | Job result: {'output': {'original_text': 'Hello, RunPod!', 'reversed_text': '!doPnuR ,olleH'}}
+INFO   | Local testing complete, exiting.
+```
+
+This output shows the serverless worker starting, processing the job, and returning the result.
+
+### Method 2: Local Test Server
+
+For more comprehensive testing, especially when you want to simulate HTTP requests to your serverless function, you can launch a local test server. This server provides an endpoint that you can send requests to, mimicking the behavior of a deployed serverless function.
+
+To start the local test server, use the `--rp_serve_api` flag:
+
+```bash
+python your_script.py --rp_serve_api
+```
+
+This command starts a FastAPI server on your local machine, accessible at `http://localhost:8000`.
+
+#### Sending Requests to the Local Server
+
+Once your local server is running, you can send HTTP POST requests to test your function. Use tools like `curl` or Postman, or write scripts to automate your tests.
+
+Example using `curl`:
+
+```bash
+curl -X POST http://localhost:8000/run \
+     -H "Content-Type: application/json" \
+     -d '{"input": {"text": "Hello, RunPod!"}}'
+```
+
+This will send a POST request to your local server with the input data, simulating how your function would be called in a production environment.
+
+#### Understanding the Server Output
+
+When you send a request to the local server, you'll see output in your terminal similar to:
+
+```bash
+INFO:     127.0.0.1:52686 - "POST /run HTTP/1.1" 200 OK
+DEBUG    | Retrieved local job: {'input': {'text': 'Hello, RunPod!'}, 'id': 'local_test'}
+INFO     | local_test | Started.
+string-reverser | Starting job local_test
+DEBUG    | local_test | Handler output: {'original_text': 'Hello, RunPod!', 'reversed_text': '!doPnuR ,olleH'}
+DEBUG    | local_test | run_job return: {'output': {'original_text': 'Hello, RunPod!', 'reversed_text': '!doPnuR ,olleH'}}
+INFO     | Job local_test completed successfully.
+```
+
+This output provides detailed information about how your function processes the request, which can be invaluable for debugging and optimizing your serverless function.
+
+## Conclusion
+
+You've now created a basic serverless function using RunPod's Python SDK that reverses input strings and learned how to test it using both command-line arguments and a local test server. This example demonstrates how easy it is to deploy and validate simple text processing tasks as serverless functions.
+
+To further explore RunPod's serverless capabilities, consider:
+
+* Adding more complex string manipulations
+* Implementing error handling for different input types
+* Writing automated test scripts to cover various input scenarios
+* Using the local server to integrate your function with other parts of your application during development
+* Exploring RunPod's documentation for advanced features like concurrent processing or GPU acceleration
+
+RunPod's serverless library provides a powerful foundation for building scalable, efficient text processing applications without the need to manage infrastructure.

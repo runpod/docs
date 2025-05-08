@@ -1,0 +1,215 @@
+---
+title: "Text To Image Generation with Stable Diffusion on RunPod"
+---
+
+Text-to-image generation using advanced AI models offers a unique way to bring textual descriptions to life as images. Stable Diffusion is a powerful model capable of generating high-quality images from text inputs, and RunPod is a serverless computing platform that can manage resource-intensive tasks effectively. This tutorial will guide you through setting up a serverless application that utilizes Stable Diffusion for generating images from text prompts on RunPod.
+
+By the end of this guide, you will have a fully functional text-to-image generation system deployed on a RunPod serverless environment.
+
+## Prerequisites
+
+Before diving into the setup, ensure you have the following:
+
+* Access to a RunPod account
+* A GPU instance configured on RunPod
+* Basic knowledge of Python programming
+
+## Import required libraries
+
+To start, we need to import several essential libraries. These will provide the functionalities required for serverless operation and image generation.
+
+```python stable_diffusion.py
+import runpod
+import torch
+from diffusers import StableDiffusionPipeline
+from io import BytesIO
+import base64
+```
+
+Here’s a breakdown of the imports:
+
+* `runpod`: The SDK used to interact with RunPod's serverless environment.
+* `torch`: PyTorch library, necessary for running deep learning models and ensuring they utilize the GPU.
+* `diffusers`: Provides methods to work with diffusion models like Stable Diffusion.
+* `BytesIO` and `base64`: Used to handle image data conversions.
+
+Next, confirm that CUDA is available, as the model requires a GPU to function efficiently.
+
+```python stable_diffusion.py
+assert (
+    torch.cuda.is_available()
+), "CUDA is not available. Make sure you have a GPU instance."
+```
+
+This assertion checks whether a compatible NVIDIA GPU is available for PyTorch to use.
+
+## Load the Stable Diffusion Model
+
+We'll load the Stable Diffusion model in a separate function. This ensures that the model is only loaded once when the worker process starts, which is more efficient.
+
+```python stable_diffusion.py
+def load_model():
+    model_id = "runwayml/stable-diffusion-v1-5"
+    pipe = StableDiffusionPipeline.from_pretrained(model_id, torch_dtype=torch.float16)
+    pipe = pipe.to("cuda")
+    return pipe
+```
+
+Here's what this function does:
+
+* `model_id` specifies the model identifier for Stable Diffusion version 1.5.
+* `StableDiffusionPipeline.from_pretrained` loads the model weights into memory with a specified tensor type.
+* `pipe.to("cuda")` moves the model to the GPU for faster computation.
+
+## Define Helper Functions
+
+We need a helper function to convert the generated image into a base64 string. This encoding allows the image to be easily transmitted over the web in textual form.
+
+```python stable_diffusion.py
+def image_to_base64(image):
+    buffered = BytesIO()
+    image.save(buffered, format="PNG")
+    return base64.b64encode(buffered.getvalue()).decode("utf-8")
+```
+
+Explanation:
+
+* `BytesIO`: Creates an in-memory binary stream to which the image is saved.
+* `base64.b64encode`: Encodes the binary data to a base64 format, which is then decoded to a UTF-8 string.
+
+## Define the Handler Function
+
+The handler function will be responsible for managing image generation requests. It includes loading the model (if not already loaded), validating inputs, generating images, and converting them to base64 strings.
+
+```python stable_diffusion.py
+def stable_diffusion_handler(event):
+    global model
+
+    # Ensure the model is loaded
+    if "model" not in globals():
+        model = load_model()
+
+    # Get the input prompt from the event
+    prompt = event["input"].get("prompt")
+
+    # Validate input
+    if not prompt:
+        return {"error": "No prompt provided for image generation."}
+
+    try:
+        # Generate the image
+        image = model(prompt).images[0]
+
+        # Convert the image to base64
+        image_base64 = image_to_base64(image)
+
+        return {"image": image_base64, "prompt": prompt}
+
+    except Exception as e:
+        return {"error": str(e)}
+```
+
+Key steps in the function:
+
+* Checks if the model is loaded globally, and loads it if not.
+* Extracts the `prompt` from the input event.
+* Validates that a prompt has been provided.
+* Uses the `model` to generate an image.
+* Converts the image to base64 and prepares the response.
+
+## Start the Serverless Worker
+
+Now, we'll start the serverless worker using the RunPod SDK.
+
+```python stable_diffusion.py
+runpod.serverless.start({"handler": stable_diffusion_handler})
+```
+
+This command starts the serverless worker and specifies the `stable_diffusion_handler` function to handle incoming requests.
+
+## Complete Code
+
+For your convenience, here is the entire code consolidated:
+
+```python stable_diffusion.py
+import runpod
+import torch
+from diffusers import StableDiffusionPipeline
+from io import BytesIO
+import base64
+
+assert (
+    torch.cuda.is_available()
+), "CUDA is not available. Make sure you have a GPU instance."
+
+
+def load_model():
+    model_id = "runwayml/stable-diffusion-v1-5"
+    pipe = StableDiffusionPipeline.from_pretrained(model_id, torch_dtype=torch.float16)
+    # to run on cpu change `cuda` to `cpu`
+    pipe = pipe.to("cuda")
+    return pipe
+
+
+def image_to_base64(image):
+    buffered = BytesIO()
+    image.save(buffered, format="PNG")
+    return base64.b64encode(buffered.getvalue()).decode("utf-8")
+
+
+def stable_diffusion_handler(event):
+    global model
+
+    if "model" not in globals():
+        model = load_model()
+
+    prompt = event["input"].get("prompt")
+
+    if not prompt:
+        return {"error": "No prompt provided for image generation."}
+
+    try:
+        image = model(prompt).images[0]
+        image_base64 = image_to_base64(image)
+
+        return {"image": image_base64, "prompt": prompt}
+
+    except Exception as e:
+        return {"error": str(e)}
+
+
+runpod.serverless.start({"handler": stable_diffusion_handler})
+```
+
+## Testing Locally
+
+Before deploying on RunPod, you might want to test the script locally. Create a `test_input.json` file with the following content:
+
+```json test_input.json
+{
+  "input": {
+    "prompt": "A serene landscape with mountains and a lake at sunset"
+  }
+}
+```
+
+Run the script with the following command:
+
+```
+python stable_diffusion.py --rp_server_api
+```
+
+Note: Local testing may not work optimally without a suitable GPU. If issues arise, proceed to deploy and test on RunPod.
+
+## Important Notes:
+
+1. This example requires significant computational resources, particularly GPU memory. Ensure your RunPod configuration has sufficient GPU capabilities.
+2. The model is loaded only once when the worker starts, optimizing performance.
+3. We've used Stable Diffusion v1.5; you can replace it with other versions or models as required.
+4. The handler includes error handling for missing input and exceptions during processing.
+5. Ensure necessary dependencies (like `torch`, `diffusers`) are included in your environment or requirements file when deploying.
+6. The generated image is returned as a base64-encoded string. For practical applications, consider saving it to a file or cloud storage.
+
+### Conclusion
+
+In this tutorial, you learned how to use the RunPod serverless platform with Stable Diffusion to create a text-to-image generation system. This project showcases the potential for deploying resource-intensive AI models in a serverless architecture using the RunPod Python SDK. You now have the skills to create and deploy sophisticated AI applications on RunPod. What will you create next?

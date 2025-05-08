@@ -1,0 +1,188 @@
+---
+title: "Building A Generator Handler For Text To Speech Simulation"
+sidebarTitle: "Generator Handler"
+---
+
+This tutorial will guide you through creating a serverless function using RunPod's Python SDK that simulates a text-to-speech (TTS) process. We'll use a generator handler to stream results incrementally, demonstrating how to handle long-running tasks efficiently in a serverless environment.
+
+A generator in the RunPod's Python SDK is a special type of function that allows you to iterate over a sequence of values lazily. Instead of returning a single value and exiting, a generator yields multiple values, one at a time, pausing the function's state between each yield. This is particularly useful for handling large data streams or long-running tasks, as it allows the function to produce and return results incrementally, rather than waiting until the entire process is complete.
+
+## Setting up your Serverless Function
+
+Let's break down the process of creating our TTS simulator into steps.
+
+### Import required libraries
+
+First, import the necessary libraries:
+
+```python
+import runpod
+import time
+import re
+import json
+import sys
+```
+
+### Create the TTS Simulator
+
+Define a function that simulates the text-to-speech process:
+
+```python
+def text_to_speech_simulator(text, chunk_size=5, delay=0.5):
+    words = re.findall(r'\w+', text)
+    
+    for i in range(0, len(words), chunk_size):
+        chunk = words[i:i+chunk_size]
+        audio_chunk = f"Audio chunk {i//chunk_size + 1}: {' '.join(chunk)}"
+        time.sleep(delay)  # Simulate processing time
+        yield audio_chunk
+```
+
+This function:
+
+1. Splits the input text into words
+2. Processes the words in chunks
+3. Simulates a delay for each chunk
+4. Yields each "audio chunk" as it's processed
+
+### Create the Generator Handler
+
+Now, let's create the main handler function:
+
+```python
+def generator_handler(job):
+    job_input = job['input']
+    text = job_input.get('text', "Welcome to RunPod's text-to-speech simulator!")
+    chunk_size = job_input.get('chunk_size', 5)
+    delay = job_input.get('delay', 0.5)
+    
+    print(f"TTS Simulator | Starting job {job['id']}")
+    print(f"Processing text: {text}")
+    
+    for audio_chunk in text_to_speech_simulator(text, chunk_size, delay):
+        yield {"status": "processing", "chunk": audio_chunk}
+    
+    yield {"status": "completed", "message": "Text-to-speech conversion completed"}
+```
+
+This handler:
+
+1. Extracts parameters from the job input
+2. Logs the start of the job
+3. Calls the TTS simulator and yields each chunk as it's processed
+4. Yields a completion message when finished
+
+### Set up the main function
+
+Finally, set up the main execution block:
+
+```python
+if __name__ == "__main__":
+    if "--test_input" in sys.argv:
+        # Code for local testing (see full example)
+    else:
+        runpod.serverless.start({"handler": generator_handler})
+```
+
+This block allows for both local testing and deployment as a RunPod serverless function.
+
+## Complete code example
+
+Here's the full code for our serverless TTS simulator:
+
+```python
+import runpod
+import time
+import re
+import json
+import sys
+
+def text_to_speech_simulator(text, chunk_size=5, delay=0.5):
+    words = re.findall(r'\w+', text)
+    
+    for i in range(0, len(words), chunk_size):
+        chunk = words[i:i+chunk_size]
+        audio_chunk = f"Audio chunk {i//chunk_size + 1}: {' '.join(chunk)}"
+        time.sleep(delay)  # Simulate processing time
+        yield audio_chunk
+
+def generator_handler(job):
+    job_input = job['input']
+    text = job_input.get('text', "Welcome to RunPod's text-to-speech simulator!")
+    chunk_size = job_input.get('chunk_size', 5)
+    delay = job_input.get('delay', 0.5)
+    
+    print(f"TTS Simulator | Starting job {job['id']}")
+    print(f"Processing text: {text}")
+    
+    for audio_chunk in text_to_speech_simulator(text, chunk_size, delay):
+        yield {"status": "processing", "chunk": audio_chunk}
+    
+    yield {"status": "completed", "message": "Text-to-speech conversion completed"}
+
+if __name__ == "__main__":
+    if "--test_input" in sys.argv:
+        test_input_index = sys.argv.index("--test_input")
+        if test_input_index + 1 < len(sys.argv):
+            test_input_json = sys.argv[test_input_index + 1]
+            try:
+                job = json.loads(test_input_json)
+                gen = generator_handler(job)
+                for item in gen:
+                    print(json.dumps(item))
+            except json.JSONDecodeError:
+                print("Error: Invalid JSON in test_input")
+        else:
+            print("Error: --test_input requires a JSON string argument")
+    else:
+        runpod.serverless.start({"handler": generator_handler})
+```
+
+## Testing your Serverless Function
+
+To test your function locally, use this command:
+
+```bash
+python your_script.py --test_input '
+{
+  "input": {
+    "text": "This is a test of the RunPod text-to-speech simulator. It processes text in chunks and simulates audio generation.",
+    "chunk_size": 4,
+    "delay": 1
+  },
+  "id": "local_test"
+}'
+```
+
+### Understanding the output
+
+When you run the test, you'll see output similar to this:
+
+```json
+{"status": "processing", "chunk": "Audio chunk 1: This is a test"}
+{"status": "processing", "chunk": "Audio chunk 2: of the RunPod"}
+{"status": "processing", "chunk": "Audio chunk 3: text to speech"}
+{"status": "processing", "chunk": "Audio chunk 4: simulator It processes"}
+{"status": "processing", "chunk": "Audio chunk 5: text in chunks"}
+{"status": "processing", "chunk": "Audio chunk 6: and simulates audio"}
+{"status": "processing", "chunk": "Audio chunk 7: generation"}
+{"status": "completed", "message": "Text-to-speech conversion completed"}
+```
+
+This output demonstrates:
+
+1. The incremental processing of text chunks
+2. Real-time status updates for each chunk
+3. A completion message when the entire text is processed
+
+## Conclusion
+
+You've now created a serverless function using RunPod's Python SDK that simulates a streaming text-to-speech process. This example showcases how to handle long-running tasks and stream results incrementally in a serverless environment.
+
+To further enhance this application, consider:
+
+* Implementing a real text-to-speech model
+* Adding error handling for various input types
+* Exploring RunPod's documentation for advanced features like GPU acceleration for audio processing
+
+RunPod's serverless library provides a powerful foundation for building scalable, efficient applications that can process and stream data in real-time without the need to manage infrastructure.
