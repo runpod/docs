@@ -51,6 +51,10 @@ To deploy a worker from a GitHub repository:
 
 RunPod will build your Docker image and deploy it to your endpoint automatically. You'll be redirected to the endpoint details page when complete.
 
+## GitHub build arguments
+
+
+
 ## Monitoring build status
 
 You can monitor your build status in the **Builds** tab of your endpoint detail page. Builds progress through these statuses:
