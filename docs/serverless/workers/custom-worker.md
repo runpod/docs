@@ -180,13 +180,13 @@ Before you can deploy your worker on RunPod Serverless, you need to push it to D
 1. Build your Docker image, specifying the platform for RunPod deployment, replacing `[YOUR_USERNAME]` with your Docker username:
 
     ```bash
-    docker build --platform linux/amd64 --tag [YOUR_USERNAME]/serverless-test .
+    docker build --platform linux/amd64 --tag [YOUR_USERNAME]/serverless-worker .
     ```
 
 2. Push the image to your container registry:
 
     ```bash
-    docker push yourusername/serverless-test:latest
+    docker push [YOUR_USERNAME]/serverless-worker:latest
     ```
 
 ## Step 7: Deploy your worker using the RunPod console
@@ -196,7 +196,7 @@ To deploy your worker to a Serverless endpoint:
 1. Go to the [Serverless section](https://www.runpod.io/console/serverless) of the RunPod console.
 2. Click **New Endpoint**.
 3. Under **Custom Source**, select **Docker Image**, then click **Next**.
-4. In the **Container Image** field, enter your Docker image URL: `docker.io/yourusername/serverless-test:latest`.
+4. In the **Container Image** field, enter your Docker image URL: `docker.io/[YOUR_USERNAME]/serverless-worker:latest`.
 5. (Optional) Enter a custom name for your endpoint, or use the randomly generated name.
 6. Under **Worker Configuration**, check the box for **16 GB** GPUs.
 7. Leave the rest of the settings at their defaults.

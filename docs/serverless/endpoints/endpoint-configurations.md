@@ -206,6 +206,14 @@ There are two primary factors that impact worker start times:
 
 2. **Cold start:** A cold start occurs when a worker is revived from an idle state. Cold starts can get very long if your handler code loads large ML models (several gigabytes to hundreds of gigabytes) into GPU memory.
 
+:::tip
+
+By default, worker cold starts will timeout after seven minutes. When this happens, the system will mark these workers as unhealthy and terminate them before they can begin processing requests. To accommodate longer cold stars, set the `RUNPOD_INIT_TIMEOUT` environment variable with a value in seconds. For example, setting `RUNPOD_INIT_TIMEOUT=800` allows workers up to 800 seconds (approximately 13 minutes) to complete the cold start process.
+
+Set this value based on your specific workload requirements, ensuring it provides adequate time for workers to start, while avoiding excessive wait times for failed workers.
+
+:::
+
 Use these strategies to reduce worker startup times:
 
 1. **Embed models in Docker images:** Package your ML models directly within your worker container image instead of downloading them in your handler function. This strategy places models on the worker's high-speed local storage (SSD/NVMe), dramatically reducing the time needed to load models into GPU memory. This approach is optimal for production environments, though extremely large models (500GB+) may require network volume storage.
