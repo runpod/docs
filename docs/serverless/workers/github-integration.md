@@ -53,7 +53,55 @@ RunPod will build your Docker image and deploy it to your endpoint automatically
 
 ## GitHub build arguments
 
+When deploying a worker from a GitHub repo, you can use specify build arguments for your Dockerfile using `ARG`, allowing you to parameterize values in your Dockerfile instructions. Unlike environment variables, these variables do not persist into the final container, so they won't affect your handler function code.
 
+You can specify build arguments either in your Dockerfile, or using the RunPod UI.
+
+:::note
+
+For comprehensive information about using `ARG`, refer to the [official Docker documention](https://docs.docker.com/build/building/variables/).
+
+:::
+
+### Using build arguments in your Dockerfile
+
+To use build arguments in your Dockerfile, declare variables using the `ARG` keyword, then reference them using `$` syntax.
+
+For example:
+
+```dockerfile
+# Base image from RunPod's container registry
+ARG CUDA_VERSION=11.8.0
+ARG BASE_VERSION=0.6.3
+
+# Use build arguments to specify the base image version
+FROM runpod/base:${BASE_VERSION}-cuda${CUDA_VERSION}
+```
+
+You must declare an ARG in your Dockerfile before you can reference it, even if you've defined it in the RunPod UI.
+
+For example, you could declare variables using the UI
+
+### Setting build arguments in the RunPod UI
+
+To customize your build arguments without modifying your Dockerfile, you can specify them using the RunPod console.
+
+When [deploying a worker](#deploying-from-github) from GitHub:
+
+1. During the endpoint configuration process, find the **Build Args** section (below **Public Environment Variables**).
+2. Enter key-value pairs for your build arguments.
+3. These will be passed to your Docker build process.
+
+You must declare an `ARG` in your Dockerfile before you can reference it, even if you've defined it in the RunPod UI:
+
+```dockerfile
+# Build arguments defined in the UI must still be declared in your Dockerfile
+ARG CUDA_VERSION
+ARG BASE_VERSION
+
+# Use build arguments to specify the base image version
+FROM runpod/base:${BASE_VERSION}-cuda${CUDA_VERSION}
+```
 
 ## Monitoring build status
 
