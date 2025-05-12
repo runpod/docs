@@ -1,65 +1,32 @@
-# Website
+# Mintlify Starter Kit
 
-This website is built using [Docusaurus](https://docusaurus.io/), a modern static website generator.
+Click on `Use this template` to copy the Mintlify starter kit. The starter kit contains examples including
 
-## Installation
+- Guide pages
+- Navigation
+- Customizations
+- API Reference pages
+- Use of popular components
 
-```shell
-yarn
+### Development
+
+Install the [Mintlify CLI](https://www.npmjs.com/package/mintlify) to preview the documentation changes locally. To install, use the following command
+
+```
+npm i -g mintlify
 ```
 
-## Local Development
+Run the following command at the root of your documentation (where docs.json is)
 
-```shell
-yarn start
+```
+mintlify dev
 ```
 
-This command starts a local development server and opens up a browser window. Most changes are reflected live without having to restart the server.
+### Publishing Changes
 
-## Build
+Install our Github App to auto propagate changes from your repo to your deployment. Changes will be deployed to production automatically after pushing to the default branch. Find the link to install on your dashboard. 
 
-```shell
-yarn build
-```
+#### Troubleshooting
 
-## Linting
-
-- Install [vale](https://vale.sh/docs/vale-cli/installation/)
-- Lint a specific folder or file, run:
-
-```bash
-vale path/to/docs/
-# or
-vale path/to/*.md
-```
-
-- Lint the entire repo
-
-```bash
-yarn lint
-```
-
-## Format Python code examples
-
-Install `blacken-docs`.
-
-```bash
-python -m pip install blacken-docs
-```
-
-Run the formatter.
-
-```bash
-yarn format
-```
-
-```bash
-git ls-files -z -- '*.md' | xargs -0 blacken-docs
-```
-
-## Update CPU and GPUs
-
-```bash
-yarn gpu-types
-yarn cpu-types
-```
+- Mintlify dev isn't running - Run `mintlify install` it'll re-install dependencies.
+- Page loads as a 404 - Make sure you are running in a folder with `docs.json`

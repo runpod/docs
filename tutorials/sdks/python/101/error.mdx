@@ -1,0 +1,294 @@
+---
+title: "Implementing Error Handling And Logging In RunPod Serverless Functions"
+sidebarTitle: "Error Handling"
+---
+
+This tutorial will guide you through implementing effective error handling and logging in your RunPod serverless functions.
+
+Proper error handling ensures that your serverless functions can handle unexpected situations gracefully. This prevents crashes and ensures that your application can continue running smoothly, even if some parts encounter issues.
+
+We'll create a simulated image classification model to demonstrate these crucial practices, ensuring your serverless deployments are robust and maintainable.
+
+## Setting up your Serverless Function
+
+Let's break down the process of creating our error-aware image classifier into steps.
+
+### Import required libraries and Set Up Logging
+
+First, import the necessary libraries and Set up the RunPod logger:
+
+```python
+import runpod
+from runpod import RunPodLogger
+import time
+import random
+
+log = RunPodLogger()
+```
+
+### Create Helper Functions
+
+Define functions to simulate various parts of the image classification process:
+
+```python
+def load_model():
+    """Simulate loading a machine learning model."""
+    log.info("Loading image classification model...")
+    time.sleep(2)  # Simulate model loading time
+    return "ImageClassifier"
+
+
+def preprocess_image(image_url):
+    """Simulate image preprocessing."""
+    log.debug(f"Preprocessing image: {image_url}")
+    time.sleep(0.5)  # Simulate preprocessing time
+    return f"Preprocessed_{image_url}"
+
+
+def classify_image(model, preprocessed_image):
+    """Simulate image classification."""
+    classes = ["cat", "dog", "bird", "fish", "horse"]
+    confidence = random.uniform(0.7, 0.99)
+    predicted_class = random.choice(classes)
+    return predicted_class, confidence
+```
+
+These functions:
+
+1. Simulate model loading, logging the process
+2. Preprocess images, with debug logging
+3. Classify images, returning random results for demonstration
+
+### Create the Main Handler Function
+
+Now, let's create the main handler function with error handling and logging:
+
+```python
+def handler(job):
+    job_input = job["input"]
+    images = job_input.get("images", [])
+
+    # Process mock logs if provided
+    for job_log in job_input.get("mock_logs", []):
+        log_level = job_log.get("level", "info").lower()
+        if log_level == "debug":
+            log.debug(job_log["message"])
+        elif log_level == "info":
+            log.info(job_log["message"])
+        elif log_level == "warn":
+            log.warn(job_log["message"])
+        elif log_level == "error":
+            log.error(job_log["message"])
+
+    try:
+        # Load model
+        model = load_model()
+        log.info("Model loaded successfully")
+
+        results = []
+        for i, image_url in enumerate(images):
+            # Preprocess image
+            preprocessed_image = preprocess_image(image_url)
+
+            # Classify image
+            predicted_class, confidence = classify_image(model, preprocessed_image)
+
+            result = {
+                "image": image_url,
+                "predicted_class": predicted_class,
+                "confidence": round(confidence, 2),
+            }
+            results.append(result)
+
+            # Log progress
+            progress = (i + 1) / len(images) * 100
+            log.info(f"Progress: {progress:.2f}%")
+
+            # Simulate some processing time
+            time.sleep(random.uniform(0.5, 1.5))
+
+        log.info("Classification completed successfully")
+
+        # Simulate error if mock_error is True
+        if job_input.get("mock_error", False):
+            raise Exception("Mock error")
+
+        return {"status": "success", "results": results}
+
+    except Exception as e:
+        log.error(f"An error occurred: {str(e)}")
+        return {"status": "error", "message": str(e)}
+```
+
+This handler:
+
+1. Processes mock logs to demonstrate different logging levels
+2. Uses a try-except block to handle potential errors
+3. Simulates image classification with progress logging
+4. Returns results or an error message based on the execution
+
+### Start the Serverless Function
+
+Finally, start the RunPod serverless function:
+
+```python
+runpod.serverless.start({"handler": handler})
+```
+
+## Complete code example
+
+Here's the full code for our error-aware image classification simulator:
+
+```python
+import runpod
+from runpod import RunPodLogger
+import time
+import random
+
+log = RunPodLogger()
+
+
+def load_model():
+    """Simulate loading a machine learning model."""
+    log.info("Loading image classification model...")
+    time.sleep(2)  # Simulate model loading time
+    return "ImageClassifier"
+
+
+def preprocess_image(image_url):
+    """Simulate image preprocessing."""
+    log.debug(f"Preprocessing image: {image_url}")
+    time.sleep(0.5)  # Simulate preprocessing time
+    return f"Preprocessed_{image_url}"
+
+
+def classify_image(model, preprocessed_image):
+    """Simulate image classification."""
+    classes = ["cat", "dog", "bird", "fish", "horse"]
+    confidence = random.uniform(0.7, 0.99)
+    predicted_class = random.choice(classes)
+    return predicted_class, confidence
+
+
+def handler(job):
+    job_input = job["input"]
+    images = job_input.get("images", [])
+
+    # Process mock logs if provided
+    for job_log in job_input.get("mock_logs", []):
+        log_level = job_log.get("level", "info").lower()
+        if log_level == "debug":
+            log.debug(job_log["message"])
+        elif log_level == "info":
+            log.info(job_log["message"])
+        elif log_level == "warn":
+            log.warn(job_log["message"])
+        elif log_level == "error":
+            log.error(job_log["message"])
+
+    try:
+        # Load model
+        model = load_model()
+        log.info("Model loaded successfully")
+
+        results = []
+        for i, image_url in enumerate(images):
+            # Preprocess image
+            preprocessed_image = preprocess_image(image_url)
+
+            # Classify image
+            predicted_class, confidence = classify_image(model, preprocessed_image)
+
+            result = {
+                "image": image_url,
+                "predicted_class": predicted_class,
+                "confidence": round(confidence, 2),
+            }
+            results.append(result)
+
+            # Log progress
+            progress = (i + 1) / len(images) * 100
+            log.info(f"Progress: {progress:.2f}%")
+
+            # Simulate some processing time
+            time.sleep(random.uniform(0.5, 1.5))
+
+        log.info("Classification completed successfully")
+
+        # Simulate error if mock_error is True
+        if job_input.get("mock_error", False):
+            raise Exception("Mock error")
+
+        return {"status": "success", "results": results}
+
+    except Exception as e:
+        log.error(f"An error occurred: {str(e)}")
+        return {"status": "error", "message": str(e)}
+
+
+runpod.serverless.start({"handler": handler})
+```
+
+## Testing Your Serverless Function
+
+To test your function locally, use this command:
+
+```bash
+python your_script.py --test_input '{
+    "input": {
+        "images": ["image1.jpg", "image2.jpg", "image3.jpg"],
+        "mock_logs": [
+            {"level": "info", "message": "Starting job"},
+            {"level": "debug", "message": "Debug information"},
+            {"level": "warn", "message": "Warning: low disk space"},
+            {"level": "error", "message": "Error: network timeout"}
+        ],
+        "mock_error": false
+    }
+}'
+```
+
+### Understanding the output
+
+When you run the test, you'll see output similar to this:
+
+```json
+{
+  "status": "success",
+  "results": [
+    {
+      "image": "image1.jpg",
+      "predicted_class": "cat",
+      "confidence": 0.85
+    },
+    {
+      "image": "image2.jpg",
+      "predicted_class": "dog",
+      "confidence": 0.92
+    },
+    {
+      "image": "image3.jpg",
+      "predicted_class": "bird",
+      "confidence": 0.78
+    }
+  ]
+}
+```
+
+This output demonstrates:
+
+1. Successful processing of all images
+2. Random classification results for each image
+3. The overall success status of the job
+
+## Conclusion
+
+You've now created a serverless function using RunPod's Python SDK that demonstrates effective error handling and logging practices. This approach ensures that your serverless functions are robust, maintainable, and easier to debug.
+
+To further enhance this application, consider:
+
+* Implementing more specific error types and handling
+* Adding more detailed logging for each step of the process
+* Exploring RunPod's advanced logging features and integrations
+
+RunPod's serverless library provides a powerful foundation for building reliable, scalable applications with comprehensive error management and logging capabilities.
