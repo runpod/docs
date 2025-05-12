@@ -79,6 +79,6 @@ rm -r /path/to/directory
 ```
 
 
-## Additional Storage
+## Additional storage
 
-If you need more than 20GB storage, Network volumes could be a choice. Please check [blog - Network volumes](https://blog.runpod.io/four-reasons-to-set-up-a/), and [docs - Network volumes](https://docs.runpod.io/pods/storage/create-network-volumes) for additional storage.
+If your Pod needs more than 20GB of storage, consider using a network volume. For more information, see [Create a network volume](/pods/storage/create-network-volumes), or refer to [this blog post](https://blog.runpod.io/four-reasons-to-set-up-a/).
