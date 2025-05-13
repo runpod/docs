@@ -1,7 +1,7 @@
 ---
 title: "Pricing"
 description: "Understand RunPod Serverless pricing, including GPU rates and cost components."
-sidebar_position: 5
+sidebar_position: 2
 ---
 
 # Serverless pricing
@@ -58,6 +58,8 @@ To learn how to optimize cold starts times, see [Endpoint configuration](/server
 
 This is the time your worker spends processing a request. Execution time depends on the complexity of your workload, the size of input data, and the performance of the GPUs you've selected.
 
+Set reasonable [execution timeout limits](/serverless/endpoints/endpoint-configurations#execution-timeout) to prevent runaway jobs from consuming excessive resources, and optimize your code to reduce processing time where possible.
+
 ### Idle time
 
 After completing a request, workers remain active for a specified period before scaling down. This reduces cold starts for subsequent requests but incurs additional charges. The default idle timeout is 5 seconds, but you can configure this in your [endpoint settings](/serverless/endpoints/endpoint-configurations#idle-timeout).
@@ -66,19 +68,7 @@ After completing a request, workers remain active for a specified period before 
 
 Container storage is charged only while your workers are running. When all workers are scaled down, you will no longer be charged.
 
-## Cost optimization tips
-
-### Minimize cold starts
-
-Use [FlashBoot](/serverless/endpoints/endpoint-configurations#flashboot) to reduce cold start times (included at no extra charge). For latency-sensitive applications, increase the number of [active workers](/serverless/endpoints/endpoint-configurations#worker-configuration). Set appropriate [idle timeout](/serverless/endpoints/endpoint-configurations#idle-timeout) values based on your request frequency pattern to balance cost and performance.
-
-### Control execution costs
-
-Set reasonable [execution timeout limits](/serverless/endpoints/endpoint-configurations#execution-timeout) to prevent runaway jobs from consuming excessive resources. Optimize your code to reduce processing time where possible. Choose GPU types appropriate for your workload size rather than overprovisioning resources.
-
-### Storage optimization
-
-Use [network volumes](/pods/storage/create-network-volumes) for persistent storage needs (billed separately from Serverless). Optimize your container size to reduce storage costs during runtime.
+To reduce container costs, use [network volumes](/pods/storage/create-network-volumes) for persistent storage needs (billed separately from Serverless).
 
 ## Billing support
 
