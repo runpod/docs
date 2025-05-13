@@ -6,6 +6,12 @@ sidebar_position: 1
 
 # RunPod Hub overview
 
+:::info
+
+The RunPod Hub is currently in **beta**. We're actively developing features and gathering user feedback to improve the experience. Please [join our discord](https://discord.gg/runpod) if you'd like to provide feedback.
+
+:::
+
 The RunPod Hub is a centralized repository that enables users to **discover, share, and deploy preconfigured AI repos** optimized for RunPod's [Serverless infrastructure](/serverless/overview/). It serves as a catalog of vetted, open-source repositories that can be deployed with minimal setup, creating a collaborative ecosystem for AI developers and users.
 
 Whether you're a developer looking to **share your work** or a user seeking **preconfigured solutions**, the Hub makes discovering and deploying AI projects seamless and efficient.

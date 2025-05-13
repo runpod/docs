@@ -6,6 +6,13 @@ sidebar_position: 3
 
 # Hub publishing guide
 
+:::info
+
+The RunPod Hub is currently in **beta**. We're actively developing features and gathering user feedback to improve the experience. Please [join our discord](https://discord.gg/runpod) if you'd like to provide feedback.
+
+:::
+
+
 Before adding a repo to the [RunPod Hub](https://www.runpod.io/console/hub), you need to create two files:
 
 1. `hub.json` - Defines metadata and deployment settings.

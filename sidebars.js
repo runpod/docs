@@ -34,7 +34,7 @@ module.exports = {
     },
     {
       type: "category",
-      label: "Hub",
+      label: "Hub [beta]",
       collapsible: false,
       items: [
         {
