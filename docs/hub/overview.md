@@ -8,7 +8,6 @@ sidebar_position: 1
 
 The RunPod Hub is a centralized repository that enables users to **discover, share, and deploy preconfigured AI repos** optimized for RunPod's [Serverless infrastructure](/serverless/overview/). It serves as a catalog of vetted, open-source repositories that can be deployed with minimal setup, creating a collaborative ecosystem for AI developers and users.
 
-
 Whether you're a developer looking to **share your work** or a user seeking **preconfigured solutions**, the Hub makes discovering and deploying AI projects seamless and efficient.
 
 <img src="/img/docs/hub-homepage.png" width="900" alt="Screenshot of the Hub page in the RunPod console"/>
@@ -24,7 +23,7 @@ The Hub simplifies the entire lifecycle of repo sharing and deployment, from ini
 - **Customize to your needs**: RunPod Hub repos expose configurable parameters for fine-tuning without diving into code.
 - **Save development time**: Leverage community innovations instead of building from scratch.
 
-### For RunPod creators
+### For Hub creators
 
 - **Showcase your work**: Share your projects with the broader AI community.
 - **Maintain control**: Your GitHub repo remains the source of truth, while the Hub automatically detects new releases.

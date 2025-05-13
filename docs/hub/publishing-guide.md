@@ -1,5 +1,5 @@
 ---
-title: "Publish a repo"
+title: "Publishing guide"
 description: "Learn how to configure your repository for the RunPod Hub with hub.json and tests.json files, including metadata, deployment settings, and test specifications."
 sidebar_position: 3
 ---
@@ -18,7 +18,7 @@ These files should be placed in the `.runpod` directory at the root of your repo
 Follow these steps to add your GitHub repo to the Hub:
 
 1. Create a `.runpod` folder in the root directory of your repo.
-2. Use the reference guides below to create `hub.json` and `tests.json` files in the `.runpod` folder.
+2. Use the sections below to create `hub.json` and `tests.json` files in the `.runpod` folder.
 3. Ensure your repository contains a `handler.py`, `Dockerfile` (if not already set up for [RunPod Serverless](/serverless/overview)), and a `README.md` file in either the `.runpod` or root directory.
 4. Create a new GitHub release (the Hub indexes releases, not commits).
 5. Click **Add Your Repo** in the top-right of the RunPod console [Hub page](https://www.runpod.io/console/hub).
@@ -42,7 +42,7 @@ You can build your `hub.json` from scratch, or use [this template](#hubjson-temp
 | --- | --- | --- | --- |
 | `title` | Name of your tool | Yes | String |
 | `description` | Brief explanation of functionality | Yes | String |
-| `type`  | Deployment type | Yes | `"serverless"` or `"pod"`  |
+| `type`  | Deployment type | Yes | `"serverless"` |
 | `category` | Tool category | Yes | `"audio"`, `"embedding"`, `"language"`, `"video"`, or `"image"` |
 | `iconUrl` | URL to tool icon | No | Valid URL |
 | `config` | RunPod configuration | Yes | Object ([see below](https://www.notion.so/Hub-Configuration-JSON-Reference-Guide-1caff732fc348087b479f5e96c1c2768?pvs=21)) |
@@ -224,7 +224,7 @@ Here’s an example `hub.json` file that you can use as a starting point:
         "value": "static_value"
       },
       {
-        "key": "STRING_EVN_VAR",
+        "key": "STRING_ENV_VAR",
         "input": {
           "name": "User-friendly Name",
           "type": "string",
