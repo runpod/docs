@@ -10,7 +10,7 @@ RunPod Serverless offers flexible, pay-per-second pricing with no upfront costs.
 
 ## GPU pricing
 
- Serverless offers two pricing tiers:
+Serverless offers two pricing tiers:
 
 ### Flex workers
 
@@ -19,7 +19,6 @@ RunPod Serverless offers flexible, pay-per-second pricing with no upfront costs.
 ### Active workers
 
 **Always-on workers** that run 24/7. Active workers receive a 20-30% discount compared to flex workers, but you are charged continuously regardless of usage. Use active workers for consistent workloads, latency-sensitive applications, and high-volume processing.
-
 
 ### Pricing table (per second)
 
@@ -38,46 +37,51 @@ The price of flex/active workers depends on the GPU type and worker configuratio
 
 For the latest pricing information, visit the [RunPod pricing page](https://www.runpod.io/pricing).
 
-## Understanding flex worker costs
+## How billing works
 
-Flex workers are charged during the following periods:
+Serverless billing operates on a precise pay-as-you-go model with specific timing mechanisms.
 
-1. **Cold start time**: The time required to revive a worker and load models into GPU memory.
-2. **Execution time**: The time spent actually processing the request.
-3. **Idle time**: The period in which the worker remains active after completing a request.
+Billing starts when the system signals a worker to wake up and ends when the worker is fully stopped. RunPod Serverless is charged by the second, with partial seconds rounded up to the next full second. For example, if your request takes 2.3 seconds to complete, you'll be billed for 3 seconds.
 
-<!-- 4. **Container storage**: Charges for storage used while the endpoint is running. -->
+### Compute and storage costs
 
-### Cold start time
+Your total Serverless costs include both compute time (GPU usage) and temporary storage:
 
-A cold start occurs when a worker is revived from an idle state. This typically involves starting the container, loading models into GPU memory, and initializing runtime environments. Cold start duration varies based on model size and complexity. Larger models take longer to load into GPU memory.
+1. **Compute costs**: Charged per second based on the GPU type as shown in the pricing table above.
+2. **Storage costs**: The worker container volume incurs charges only while workers are running, calculated in 5-minute intervals. Even if your worker runs for less than 5 minutes, you'll be charged for the full 5-minute period. The storage cost is $0.000011574 per GB per 5 minutes (equivalent to approximately $0.10 per GB per month).
 
-To learn how to optimize cold starts times, see [Endpoint configuration](/serverless/endpoints/endpoint-configurations#reducing-worker-startup-times).
+If you have many workers continuously running with high storage costs, you can utilize [network volumes](/pods/storage/create-network-volumes) to reduce expenses. Network volumes allow you to share data efficiently across multiple workers, reduce per-worker storage requirements by centralizing common files, and maintain persistent storage separate from worker lifecycles.
 
-### Execution time
+### Compute cost breakdown
+
+Serverless workers incur charges during these periods:
+
+1. **Cold start time:** The time required to initialize a worker and load models into GPU memory.
+2. **Execution time:** The time spent actually processing the request.
+3. **Idle time:** The period in which the worker remains active after completing a request.
+
+#### Cold start time
+
+A cold start occurs when a worker is initialized from a scaled-down state. This typically involves starting the container, loading models into GPU memory, and initializing runtime environments. Cold start duration varies based on model size and complexity. Larger models take longer to load into GPU memory.
+
+To optimize cold start times, you can use FlashBoot (included at no extra charge) or configure your [endpoint settings](/serverless/endpoints/endpoint-configurations#reducing-worker-startup-times).
+
+#### Execution time
 
 This is the time your worker spends processing a request. Execution time depends on the complexity of your workload, the size of input data, and the performance of the GPUs you've selected.
 
 Set reasonable [execution timeout limits](/serverless/endpoints/endpoint-configurations#execution-timeout) to prevent runaway jobs from consuming excessive resources, and optimize your code to reduce processing time where possible.
 
-### Idle time
+#### Idle time
 
 After completing a request, workers remain active for a specified period before scaling down. This reduces cold starts for subsequent requests but incurs additional charges. The default idle timeout is 5 seconds, but you can configure this in your [endpoint settings](/serverless/endpoints/endpoint-configurations#idle-timeout).
-
-### Container storage
-
-Container storage is charged only while your workers are running. When all workers are scaled down, you will no longer be charged.
-
-To reduce container costs, use [network volumes](/pods/storage/create-network-volumes) for persistent storage needs (billed separately from Serverless).
 
 ## Billing support
 
 If you think you've been billed incorrectly, please [contact support](https://www.runpod.io/contact), and include this information in your request:
 
-1. The Serverless endpoint ID where you experienced billing issues
-2. Request ID for the specific request (if applicable)
-3. The approximate time when the billing issue occurred
+1. The Serverless endpoint ID where you experienced billing issues.
+2. Request ID for the specific request (if applicable).
+3. The approximate time when the billing issue occurred.
 
-Providing these details will help our support team resolve your issue more efficiently.
-
-For additional questions about Serverless pricing, please [contact us](https://www.runpod.io/contact).
+Providing these details will help our support team resolve your issue more quickly.
