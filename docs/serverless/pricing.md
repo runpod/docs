@@ -14,11 +14,11 @@ RunPod Serverless offers flexible, pay-per-second pricing with no upfront costs.
 
 ### Flex workers
 
-**On-demand workers**. Flex workers are ideal for variable workloads, non-time-sensitive applications, and maximizing cost efficiency for sporadic usage. Flex workers scale to zero when not in use, so you only pay when processing requests.
+**On-demand workers** that scale to zero when not in use, so you only pay when processing requests. Flex workers are ideal for variable workloads, non-time-sensitive applications, and maximizing cost efficiency for sporadic usage.
 
 ### Active workers
 
-**Always-on workers**. Active workers are ideal for consistent workloads, latency-sensitive applications, and high-volume processing. Active workers run 24/7 and receive a 20-30% discount compared to Flex pricing, but you're charged continuously regardless of usage.
+**Always-on workers** that run 24/7. Active workers receive a 20-30% discount compared to flex workers, but you are charged continuously regardless of usage. Use active workers for consistent workloads, latency-sensitive applications, and high-volume processing.
 
 
 ### Pricing table (per second)
