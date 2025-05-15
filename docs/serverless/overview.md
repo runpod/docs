@@ -8,6 +8,8 @@ sidebar_position: 1
 
 RunPod Serverless is a cloud computing platform that lets you run AI models and compute-intensive workloads without managing servers. You only pay for the actual compute time you use, with no idle costs when your application isn't processing requests.
 
+<iframe src="https://www.youtube.com/embed/8HzN9HxYZxc?si=mn6K4nYChD1iZ42I" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
 ## Why use Serverless?
 
 * **Focus on your code, not infrastructure**: Deploy your applications without worrying about server management, scaling, or maintenance.
@@ -16,9 +18,39 @@ RunPod Serverless is a cloud computing platform that lets you run AI models and 
 * **Cost efficiency**: Pay only for what you use, with per-second billing and no costs when idle.
 * **Fast deployment**: Get your code running in the cloud in minutes with minimal configuration.
 
+## Key concepts
+
+### Endpoints
+
+An [endpoint](/serverless/endpoints/overview) is the access point for your Serverless application. It provides a URL where users or applications can send requests to run your code. Each endpoint can be configured with different compute resources, scaling settings, and other parameters to suit your specific needs.
+
+### Workers
+
+[Workers](/serverless/workers/overview) are the container instances that execute your code when requests arrive at your endpoint. RunPod automatically manages worker lifecycle, starting them when needed and stopping them when idle to optimize resource usage.
+
+### Handler functions
+
+[Handler functions](/serverless/workers/handler-functions) are the core of your Serverless application. These functions define how a worker processes incoming requests and returns results. They follow a simple pattern:
+
+```python # rp_handler.py
+import runpod  # Required
+
+def handler(event):
+    # Extract input data from the request
+    input_data = event["input"]
+    
+    # Process the input (replace this with your own code)
+    result = process_data(input_data)
+    
+    # Return the result
+    return result
+
+runpod.serverless.start({"handler": handler})  # Required
+```
+
 ## Deployment options
 
-RunPod Serverless offers three ways to deploy your workloads, each designed for different use cases:
+RunPod Serverless offers several ways to deploy your workloads, each designed for different use cases:
 
 ### RunPod Hub
 
@@ -34,60 +66,48 @@ You can deploy a Serverless endpoint from a repo in the [RunPod Hub](/hub/overvi
 
 [Deploy a repo from the RunPod Hub →](https://www.runpod.io/console/hub)
 
-### vLLM endpoints
+### Deploy a vLLM worker
 
-**Best for**: Deploying and serving large language models (LLMs).
+**Best for**: Deploying and serving large language models (LLMs) with minimal configuration.
 
-vLLM endpoints are specifically optimized for running LLMs:
+vLLM workers are specifically optimized for running LLMs:
 * Support for any [Hugging Face model](https://huggingface.co/models).
 * Optimized for LLM inference.
 * Simple configuration via environment variables.
 * High-performance serving with vLLM.
 
-[Deploy a vLLM endpoint →](/serverless/vllm/get-started)
+[Deploy a vLLM worker →](/serverless/vllm/get-started)
 
-### Custom endpoints
+### Fork a worker template
+
+**Best for**: Creating a custom worker using an existing template.
+
+RunPod maintains a collection of [worker templates](https://github.com/runpod-workers) on GitHub that you can use as a starting point:
+
+- [worker-basic](https://github.com/runpod-workers/worker-basic): A minimal template with essential functionality.
+- [worker-template](https://github.com/runpod-workers/worker-template): A more comprehensive template with additional features
+- [Model-specific templates](https://github.com/runpod-workers#worker-collection): Specialized templates for common AI tasks (image generation, audio processing, etc.)
+
+After you fork a worker you can learn how to:
+
+1. [Test your worker](/serverless/development/local-testing) locally.
+2. Customize it with your own [handler function](/serverless/workers/handler-functions).
+3. Deploy it to an endpoint using [Docker](/serverless/workers/deploy) or [GitHub](/serverless/workers/github-integration).
+
+[Browse worker templates →](https://github.com/runpod-workers)
+
+### Build a custom worker
 
 **Best for**: Running custom code or specialized AI workloads.
 
-Custom endpoints give you complete control over your application:
+Creating a custom workers give you complete control over your application:
 
 * Write your own Python code.
-* Package in Docker containers.
-* Full flexibility for any use case.
-* Custom processing logic.
+* Package it in a Docker container.
+* Allows full flexibility for any use case.
+* Create custom processing logic.
 
-[Create your first custom endpoint →](/serverless/get-started)
-
-## Key concepts
-
-### Endpoints
-
-An [endpoint](/serverless/endpoints/overview) is the access point for your Serverless application. It provides a URL where users or applications can send requests to run your code. Each endpoint can be configured with different compute resources, scaling settings, and other parameters to suit your specific needs.
-
-### Workers
-
-[Workers](/serverless/workers/overview) are the container instances that execute your code when requests arrive at your endpoint. RunPod automatically manages worker lifecycle, starting them when needed and stopping them when idle to optimize resource usage.
-
-### Handler functions
-
-[Handler functions](/serverless/handlers/overview) are the core of your Serverless application. These are the functions that process incoming requests and return results. They follow a simple pattern:
-
-```python # rp_handler.py
-import runpod  # Required
-
-def handler(event):
-    # Extract input data
-    input_data = event["input"]
-    
-    # Process the input (replace this with your own code)
-    result = process_data(input_data)
-    
-    # Return the result
-    return result
-
-runpod.serverless.start({"handler": handler})  # Required
-```
+[Build your first custom worker →](/serverless/workers/custom-worker)
 
 ## How requests work
 
@@ -95,7 +115,7 @@ When a user/client sends a request to your Serverless endpoint:
 
 1. If no workers are active, RunPod automatically starts one (cold start).
 2. The request is queued until a worker is available.
-3. Your handler function processes the request.
+3. A worker processes the request using your handler function.
 4. The result is returned to the user/client after they call `/status` (see [Job operations](/serverless/endpoints/operations)).
 5. Workers remain active for a period to handle additional requests.
 6. Idle workers eventually shut down if no new requests arrive.
@@ -114,7 +134,8 @@ When a user/client sends a request to your Serverless endpoint:
 
 Ready to get started with RunPod Serverless?
 
-- [Deploy your first Serverless endpoint.](/serverless/get-started)
 - [Deploy large language models in minutes with vLLM.](/serverless/vllm/overview)
+- [Build your first worker.](/serverless/workers/custom-worker)
 - [Learn more about endpoints.](/serverless/endpoints/overview)
-- [Learn more about handler functions.](/serverless/handlers/overview)
+- [Learn more about workers.](/serverless/workers/overview)
+- [Learn more about handler functions.](/serverless/workers/handler-functions)
