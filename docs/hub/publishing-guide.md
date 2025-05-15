@@ -40,7 +40,7 @@ To update your repo on the Hub, just **create a new GitHub release**, and the Hu
 
 ## Required files
 
-Aside from a working [Servereless implementation](/serverless/overview), every Hub repo requires two additional configuration files:
+Aside from a working [Serverless implementation](/serverless/overview), every Hub repo requires two additional configuration files:
 
 1. `hub.json` - Defines metadata and deployment settings for your repo.
 2. `tests.json` - Specifies how to test your repo.
