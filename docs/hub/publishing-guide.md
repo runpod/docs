@@ -174,7 +174,9 @@ Advanced options will be hidden by default. Hide an option by setting: `"advance
 
 ### Presets
 
-Presets allow you to define groups of default environment variable values. For example:
+Presets allow you to define groups of default environment variable values. When a user deploys your repo, they'll be offered a dropdown menu with any preset options you've defined.
+
+Here are some example presets:
 
 ```json
 "presets": [
