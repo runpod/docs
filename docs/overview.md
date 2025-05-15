@@ -30,9 +30,8 @@ Use Serverless to:
 Get started with Serverless:
 
 - [Deploy a preconfigured endpoint from the RunPod Hub.](/hub/overview)
-- [Build your first custom Serverless endpoint.](/serverless/get-started)
-- [Deploy a large language model endpoint using vLLM.](/serverless/vllm/get-started)
-
+- [Build a custom Serverless worker.](/serverless/get-started)
+- [Run any LLM as an endpoint using vLLM workers.](/serverless/vllm/get-started)
 
 ## Pods
 

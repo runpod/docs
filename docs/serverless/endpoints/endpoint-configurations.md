@@ -1,12 +1,14 @@
 ---
-title: "Endpoint configurations"
+title: "Endpoint configuration"
 sidebar_position: 8
 description: Configure your endpoint settings to optimize performance and cost, including GPU selection, worker count, idle timeout, and advanced options like data centers, network volumes, and scaling strategies.
 ---
 
+# Endpoint configuration and optimization
+
 This guide explains all available settings and best practices for configuring RunPod Serverless endpoints, helping you optimize for performance, cost, and reliability.
 
-## Basic configurations
+## Basic configuration
 
 ### Endpoint name
 
@@ -120,9 +122,15 @@ You can use the `/status` operation to configure the time-to-live (TTL) for an i
 
 ### FlashBoot
 
-FlashBoot is RunPod's solution for reducing the average cold-start times on your endpoint. It works probabilistically. When your endpoint has consistent traffic, your workers have a higher chance of benefiting from FlashBoot for faster spin-ups. However, if your endpoint isn't receiving frequent requests, FlashBoot has fewer opportunities to optimize performance. There is no additional cost associated with FlashBoot.
+FlashBoot is RunPod's solution for reducing the average cold-start times on your endpoint. It works by retaining worker resources for some time after they're no longer in use, so they can be rebooted quickly. When your endpoint has consistent traffic, your workers have a higher chance of benefiting from FlashBoot for faster spin-ups. However, if your endpoint isn't receiving frequent requests, FlashBoot has fewer opportunities to optimize performance. There is no additional cost associated with FlashBoot.
 
-## Advanced configurations
+:::tip
+
+The effectiveness of FlashBoot increases exponentially with higher request volumes and worker counts, making it ideal for busy production endpoints. For endpoints with fewer than 3 workers, FlashBoot's overhead may exceed its benefits.
+
+:::
+
+## Advanced endpoint configuration
 
 When configuring advanced settings, remember that each constraint (data center, storage, CUDA version, GPU type) may limit resource availability. For maximum availability and reliability, select all data centers and CUDA versions, and avoid network volumes unless your workload specifically requires them.
 
@@ -190,8 +198,43 @@ Limiting your endpoint to just one or two CUDA versions can significantly reduce
 
 :::
 
+## Reducing worker startup times
+
+There are two primary factors that impact worker start times:
+
+1. **Worker initialization time:** Worker initialization occurs when a Docker image is downloaded to a new worker. This takes place after you create a new endpoint, adjust worker counts, or deploy a new worker image. Requests that arrive during initialization face delays, as a worker must be fully initliazed before it can start processing.
+
+2. **Cold start:** A cold start occurs when a worker is revived from an idle state. Cold starts can get very long if your handler code loads large ML models (several gigabytes to hundreds of gigabytes) into GPU memory.
+
+:::tip
+
+By default, worker cold starts will timeout after seven minutes. When this happens, the system will mark these workers as unhealthy and terminate them before they can begin processing requests. To accommodate longer cold stars, set the `RUNPOD_INIT_TIMEOUT` environment variable with a value in seconds. For example, setting `RUNPOD_INIT_TIMEOUT=800` allows workers up to 800 seconds (approximately 13 minutes) to complete the cold start process.
+
+Set this value based on your specific workload requirements, ensuring it provides adequate time for workers to start, while avoiding excessive wait times for failed workers.
+
+:::
+
+Use these strategies to reduce worker startup times:
+
+1. **Embed models in Docker images:** Package your ML models directly within your worker container image instead of downloading them in your handler function. This strategy places models on the worker's high-speed local storage (SSD/NVMe), dramatically reducing the time needed to load models into GPU memory. This approach is optimal for production environments, though extremely large models (500GB+) may require network volume storage.
+
+2. **Store large models on network volumes:** For flexibility during development, save large models to a network volume using a Pod or one-time handler, then mount this volume to your Serverless workers. While network volumes offer slower model loading compared to embedding models directly, they can speed up your workflow by enabling rapid iteration and seamless switching between different models and configurations.
+
+3. **Maintain active workers:** Set active worker counts above zero to completely eliminate cold starts. These workers remain ready to process requests instantly and cost up to 30% less when idle compared to standard (flex) workers.
+
+4. **Extend idle timeouts:** Configure longer idle periods to preserve worker availability between requests. This strategy prevents premature worker shutdown during temporary traffic lulls, ensuring no cold starts for subsequent requests.
+
+5. **Optimize scaling parameters:** Fine-tune your auto-scaling configuration for more responsive worker provisioning:
+   - Lower queue delay thresholds to 2-3 seconds (default 4).
+   - Decrease request count thresholds to 2-3 (default 4).
+
+   These refinements create a more agile scaling system that responds swiftly to traffic fluctuations.
+
+6. **Increase maximum worker limits:** Set higher maximum worker capacities to ensure your Docker images are pre-cached across multiple compute nodes and data centers. This proactive approach eliminates image download delays during scaling events, significantly reducing startup times.
+
 ## Best practices summary
 
+- **Understand optimization tradeoffs** and make conscious tradeoffs between cost, speed, and model size.
 - **Start conservative** with max workers and scale up as needed.
 - **Monitor throttling** and adjust max workers accordingly.
 - **Use active workers** for latency-sensitive applications.
@@ -203,3 +246,6 @@ Limiting your endpoint to just one or two CUDA versions can significantly reduce
 - **Prefer high-end GPUs with lower GPU count** for better performance.
 - **Set execution timeout** to prevent runaway processes.
 - **Match auto-scaling strategy** to your workload patterns.
+- **Embed models in Docker images** when possible for faster loading.
+- **Extend idle timeouts** to prevent frequent cold starts.
+- **Consider disabling FlashBoot** for endpoints with few workers or infrequent traffic.

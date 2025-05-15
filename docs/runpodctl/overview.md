@@ -16,8 +16,7 @@ Every Pod you deploy comes preinstalled with the `runpodctl` command. You can al
 
 RunPod CLI enables you to:
 
-- Manage GPU and CPU Pods programmatically.
-- Execute commands and run code on Pods.
+- [Manage Pods](/runpodctl/manage-pods) and Serverless endpoints programmatically.
 - [Transfer files](/runpodctl/transfer-files) and data between your local system and RunPod.
 - Develop and deploy Serverless endpoints using [RunPod projects](/runpodctl/projects/overview).
 

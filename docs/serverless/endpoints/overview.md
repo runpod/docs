@@ -6,7 +6,7 @@ description: "Deploy and manage Serverless workers with RunPod endpoints, featur
 
 # Endpoints overview
 
-Endpoints are the foundation of RunPod Serverless, serving as the gateway for deploying and managing your Serverless workers. They provide a consistent API interface that allows your applications to interact with powerful computational resources on demand.
+Endpoints are the foundation of RunPod Serverless, serving as the gateway for deploying and managing your [Serverless workers](/serverless/workers/overview). They provide a consistent API interface that allows your applications to interact with powerful computational resources on demand.
 
 Whether you're processing large datasets, running AI inference, or performing compute-intensive tasks, endpoints give you the flexibility to deploy and scale your workloads.
 
@@ -42,19 +42,31 @@ Understanding these fundamental concepts will help you work effectively with Ser
 
 An **endpoint** is a RESTful API, which provides a URL that serves as the entry point for your Serverless worker, allowing you to send requests and receive responses.
 
-A **request** is an HTTP request that you send to an endpoint, which can include parameters, payloads, and headers that define what the endpoint should process. For example, a `POST` request to run a job, or a `GET` request to check status of a job or endpoint health.
+A [request](/serverless/endpoints/send-requests) is an HTTP request that you send to an endpoint, which can include parameters, payloads, and headers that define what the endpoint should process. For example, a `POST` request to run a job, or a `GET` request to check status of a job or endpoint health.
 
 When a request is sent to an endpoint, it creates a **job** that gets processed by a worker. **Jobs** can be either synchronous (immediate response) or asynchronous (background processing).
 
-A **worker** is the containerized environment that executes your handler code, providing the compute resources (CPU, GPU, memory) needed to process requests.
+A [worker](/serverless/workers/overview) is the containerized environment that executes your handler code, providing the compute resources (CPU, GPU, memory) needed to process requests.
 
-The **handler** is the code that processes incoming requests and returns responses, defining the business logic of your endpoint.
+The [handler function](/serverless/workers/handler-functions) is the code that processes incoming requests and returns responses, defining the business logic of your endpoint.
 
 <img src="/img/docs/serverless-request-flow.png" width="800" alt="A diagram demonstrating the Serverless endpoint request flow"/>
 
 ## Getting started
 
-[Follow this step-by-step guide](/serverless/get-started) to create your first custom endpoint. This tutorial walks you through the process of setting up your development environment, creating a handler file, testing your endpoint locally, building and deploying a worker image, and sending endpoint requests using the RunPod console.
+[Follow this step-by-step guide](/serverless/workers/custom-worker) to create your first custom endpoint. This tutorial walks you through the process of setting up your development environment, creating a handler file, testing your endpoint locally, building and deploying a worker image, and sending endpoint requests using the RunPod console.
+
+## Optimization tradeoffs
+
+When configuring your endpoint, understanding the classic "optimization trilemma" is essential for designing efficient Serverless applications:
+
+**The optimization trilemma:** Cost, speed, and model size (pick two).
+
+- For **affordable and fast endpoints**, deploy workers with smaller ML models.
+- If you want to serve **large models with rapid responses**, expect higher costs.
+- To serve **large models at low cost**, you'll most likely need to plan for slower response times.
+
+For detailed guidance on how to optimize your endpoint for cost or speed (or both), see [Endpoint configuration](/serverless/endpoints/endpoint-configurations).
 
 ## Next steps
 

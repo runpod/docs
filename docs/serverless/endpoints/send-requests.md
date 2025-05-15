@@ -11,11 +11,13 @@ import TabItem from '@theme/TabItem';
 
 After deploying a Serverless endpoint, you need to know how to interact with it effectively. This guide covers everything from testing your endpoint in the console to sending requests programmatically and configuring advanced options.
 
+<iframe src="https://www.youtube.com/embed/BURJRgjNNJI?si=a_Qt3W8Ci-0IZRbm" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
 ## Understanding request structure
 
 Before sending requests, it's important to understand the basic structure. All requests to RunPod endpoints must:
 
-1. Include an `input` object that contains the parameters for your worker's [handler function](/serverless/handlers/overview).
+1. Include an `input` object that contains the parameters for your worker's [handler function](/serverless/workers/handler-functions).
 2. Be formatted as valid JSON.
 3. Include your API key for authentication (unless sent from the RunPod console).
 
@@ -243,10 +245,11 @@ Synchronous requests wait for the job to complete and return the result in a sin
 POST https://api.runpod.ai/v2/{endpoint_id}/runsync
 ```
 
-Best for:
-- Short-running tasks (under 30 seconds)
-- Interactive applications where immediate results are needed
-- Simpler client code (no need to poll for status)
+`/runsync` works best for:
+
+- Short-running tasks (under 30 seconds).
+- Interactive applications where immediate results are needed.
+- Simpler client code (no need to poll for status).
 
 ### Asynchronous requests (`/run`)
 
@@ -256,10 +259,11 @@ Asynchronous requests return immediately with a job ID, allowing your applicatio
 POST https://api.runpod.ai/v2/{endpoint_id}/run
 ```
 
-Best for:
-- Long-running tasks
-- Batch processing
-- Workflows with webhooks
+`/run` works best for:
+
+- Long-running tasks.
+- Batch processing.
+- Workflows with webhooks.
 
 When using asynchronous requests, you'll need to check the job status using the `/status/{job_id}` endpoint or configure a webhook to receive the result.
 
@@ -282,6 +286,6 @@ Implementing proper error handling and retry logic will make your integrations m
 Now that you've learned how to send requests to your endpoint, you can:
 
 - [Manage job operations.](/serverless/endpoints/operations)
-- [Create more advanced handler functions.](/serverless/handlers/overview)
+- [Create more advanced handler functions.](/serverless/workers/handler-functions)
 - [Learn about local testing.](/serverless/development/local-testing)
 - [Deploy your endpoints with GitHub.](/serverless/github-integration)
