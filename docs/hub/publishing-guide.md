@@ -21,9 +21,9 @@ Learn how to publish your repositories to the [RunPod Hub](https://www.runpod.io
 Follow these steps to add your repository to the Hub:
 
 1. Navigate to the [Hub page](https://www.runpod.io/console/hub) in the RunPod console.
-1. Under **Add your repo** click the **Get Started**.
-2. Enter your GitHub repo URL.
-3. Follow the UI steps to add your repo to the Hub.
+2. Under **Add your repo** click **Get Started**.
+3. Enter your GitHub repo URL.
+4. Follow the UI steps to add your repo to the Hub.
 
 The Hub UI will walk you through how to:
 
