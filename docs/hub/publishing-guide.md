@@ -12,30 +12,40 @@ The RunPod Hub is currently in **beta**. We're actively developing features and 
 
 :::
 
+Learn how to publish your repositories to the [RunPod Hub](https://www.runpod.io/console/hub), including how to configure your repository with the required `hub.json` and `tests.json` files.
 
-Before adding a repo to the [RunPod Hub](https://www.runpod.io/console/hub), you need to create two files:
-
-1. `hub.json` - Defines metadata and deployment settings.
-2. `tests.json` - Specifies how to test your listing.
-
-These files should be placed in the `.runpod` directory at the root of your repository. This directory takes precedence over the root directory, allowing you to override common files like `Dockerfile` and `README.md` specifically for the Hub.
+<img src="/img/docs/hub-publish-page.png" width="900" alt="Screenshot of the RunPod Hub repo setup UI"/>
 
 ## How to publish your repo
 
-Follow these steps to add your GitHub repo to the Hub:
+Follow these steps to add your repository to the Hub:
 
-1. Create a `.runpod` folder in the root directory of your repo.
-2. Use the sections below to create `hub.json` and `tests.json` files in the `.runpod` folder.
-3. Ensure your repository contains a `handler.py`, `Dockerfile` (if not already set up for [RunPod Serverless](/serverless/overview)), and a `README.md` file in either the `.runpod` or root directory.
-4. Create a new GitHub release (the Hub indexes releases, not commits).
-5. Click **Add Your Repo** in the top-right of the RunPod console [Hub page](https://www.runpod.io/console/hub).
-6. Enter your GitHub repo URL.
-7. Follow the UI flow to add your repo to the Hub.
-8. (Optional) Copy/paste the RunPod badge into your GitHub README.md file to allow users instantly deploy your repo from GitHub.
+1. Navigate to the [Hub page](https://www.runpod.io/console/hub) in the RunPod console.
+1. Under **Add your repo** click the **Get Started**.
+2. Enter your GitHub repo URL.
+3. Follow the UI steps to add your repo to the Hub.
 
-The Hub status badge will be marked "Pending" during building/testing. After testing is complete, the RunPod team will manually review the repo for publication.
+The Hub UI will walk you through how to:
+
+1. Create your `hub.json` and `tests.json` files.
+2. Ensure your repository contains a `handler.py`, `Dockerfile`, and `README.md` file (in either the `.runpod` or root directory).
+3. Create a new GitHub release (the Hub indexes releases, not commits).
+4. (Optional) Add a RunPod Hub badge into your GitHub `README.md` file, so that users can instantly deploy your repo from GitHub.
+
+After all the necessary files are in place and a release has been created, your repo will be marked "Pending" during building/testing. After testing is complete, the RunPod team will manually review the repo for publication.
+
+## Update a repo
 
 To update your repo on the Hub, just **create a new GitHub release**, and the Hub listing will be automatically indexed and built (usually within an hour).
+
+## Required files
+
+Aside from a working [Servereless implementation](/serverless/overview), every Hub repo requires two additional configuration files:
+
+1. `hub.json` - Defines metadata and deployment settings for your repo.
+2. `tests.json` - Specifies how to test your repo.
+
+These files should be placed in the `.runpod` directory at the root of your repository. This directory takes precedence over the root directory, allowing you to override common files like `Dockerfile` and `README.md` specifically for the Hub.
 
 ## hub.json reference
 
