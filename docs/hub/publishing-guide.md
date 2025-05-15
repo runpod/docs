@@ -62,7 +62,7 @@ You can build your `hub.json` from scratch, or use [this template](#hubjson-temp
 | `type`  | Deployment type | Yes | `"serverless"` |
 | `category` | Tool category | Yes | `"audio"`, `"embedding"`, `"language"`, `"video"`, or `"image"` |
 | `iconUrl` | URL to tool icon | No | Valid URL |
-| `config` | RunPod configuration | Yes | Object ([see below](https://www.notion.so/Hub-Configuration-JSON-Reference-Guide-1caff732fc348087b479f5e96c1c2768?pvs=21)) |
+| `config` | RunPod configuration | Yes | Object ([see below](#runpod-configuration)) |
 
 ### RunPod configuration
 
@@ -74,8 +74,8 @@ You can build your `hub.json` from scratch, or use [this template](#hubjson-temp
 | `gpuCount` | Number of GPUs | Only if `runsOn` is `"GPU"` | Integer |
 | `gpuIds` | GPU pool specification | Only if `runsOn` is `"GPU"` | Comma-separated pool IDs (e.g., `"ADA_24"`) or GPU IDs (e.g., `"RTX A4000"`) with optional GPU ID negations (e.g., `"-NVIDIA RTX 4090"`). For a complete list of available GPUs, see [GPU Types](https://docs.runpod.io/references/gpu-types). |
 | `allowedCudaVersions` | Supported CUDA versions | No | Array of version strings |
-| `env`  | Environment variable definitions | No | Object ([see below](https://www.notion.so/Hub-Configuration-JSON-Reference-Guide-1caff732fc348087b479f5e96c1c2768?pvs=21)) |
-| `presets`  | Default environment variable values | No | Object ([see below](https://www.notion.so/Hub-Configuration-JSON-Reference-Guide-1caff732fc348087b479f5e96c1c2768?pvs=21)) |
+| `env`  | Environment variable definitions | No | Object ([see below](#environment-variables)) |
+| `presets`  | Default environment variable values | No | Object ([see below](#presets)) |
 
 ### Environment variables
 
