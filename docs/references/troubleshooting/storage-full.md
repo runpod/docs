@@ -77,3 +77,8 @@ rm /path/to/file
 # To remove an entire directory and its contents, use the rm -r command:
 rm -r /path/to/directory
 ```
+
+
+## Additional storage
+
+If your Pod needs more than 20GB of storage, consider using a network volume. For more information, see [Create a network volume](/pods/storage/create-network-volumes), or refer to [this blog post](https://blog.runpod.io/four-reasons-to-set-up-a/).
