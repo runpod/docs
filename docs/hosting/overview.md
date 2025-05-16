@@ -6,7 +6,7 @@ sidebar_position: 1
 
 ## RunPod GPU hosting opportunity
 
-RunPod offers a diverse range of GPUs, made possible through proprietary servers and collaboration with trusted community members.  
+RunPod offers a diverse range of GPUs, made possible through proprietary servers and collaboration with trusted community members.
 If you're interested in integrating your hardware into the RunPod ecosystem, follow the steps below.
 
 ## How to join as a host
