@@ -30,4 +30,4 @@ If you're interested in integrating your hardware into the RunPod ecosystem, fol
 - Rental Rates: We do not make utilization data publicly available.
   However, we are more than happy to provide statistics and information about popular GPU models when directly discussing with you.
   Furthermore, lots of different variables can impact occupancy.
-  We are more than happy to provide you with in-dept data about how different hardware quality levels can impact your revenue.
+  We are more than happy to provide you with in-depth data about how different hardware quality levels can impact your revenue.
