@@ -352,15 +352,15 @@ const config = {
           },
           {
             to: "/serverless/workers/handler-functions",
-            from: "/serverless/handlers/handler-async",
+            from: "/serverless/workers/handlers/handler-async",
           },
           {
             to: "/serverless/workers/concurrent-handler",
-            from: "/serverless/handlers/handler-concurrency",
+            from: "/serverless/workers/handlers/handler-concurrency",
           },
           {
             to: "/serverless/workers/handler-functions",
-            from: "/serverless/handlers/handler-generator",
+            from: "/serverless/workers/handlers/handler-generator",
           },
           {
             to: "/serverless/workers/handler-functions",
@@ -368,7 +368,7 @@ const config = {
           },
           {
             to: "/serverless/workers/handler-functions",
-            from: "/serverless/handlers/overview",
+            from: "/serverless/workers/handlers/overview", 
           },
           // Move github integration under workers
           {
@@ -382,11 +382,11 @@ const config = {
           // Redirects for deletions
           {
             to: "/serverless/vllm/overview",
-            from: "/serverless/vllm/configurable-endpoints",
+            from: "/serverless/workers/vllm/configurable-endpoints",
           },
           {
             to: "/serverless/vllm/overview",
-            from: "/serverless/vllm/environment-variables",
+            from: "/serverless/workers/vllm/environment-variables",
           },
           {
             to: "/serverless/overview",
