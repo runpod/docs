@@ -50,23 +50,21 @@ runpod.serverless.start({"handler": handler})  # Required
 
 ## Deployment options
 
-RunPod Serverless offers three ways to deploy your workloads, each designed for different use cases:
+RunPod Serverless offers several ways to deploy your workloads, each designed for different use cases:
 
-### Quick deploy an endpoint
+### RunPod Hub
 
-**Best for**: Deploying preconfigured AI models with minimal effort (no coding required).
+**Best for**: Instantly deploying preconfigured AI models.
 
-You can deploy a Serverless endpoint in minutes from the RunPod console:
+You can deploy a Serverless endpoint from a repo in the [RunPod Hub](/hub/overview) in seconds:
 
-1. Go to the [Serverless page](https://www.runpod.io/console/serverless) in the RunPod console.
-2. Under **Quick Deploy**, browse the collection of preconfigured workers and select one that matches your needs.
-3. Click **Configure**. Depending on your choice, you may need to enter a [Hugging Face model](https://huggingface.co/models).
-4. Choose a **Worker Configuration**. Quick deploys are preconfigured with 
-5. Click the **Create Endpoint**.
+1. Navigate to the [Hub page](https://www.runpod.io/console/hub) in the RunPod console.
+2. Browse the collection and select a repo that matches your needs.
+3. Review the repo details, including hardware requirements and available configuration options to ensure compatibility with your use case.
+4. Click the **Deploy** button in the top-right of the repo page. You can also use the dropdown menu to deploy an older version.
+5. Click **Create Endpoint**
 
-You'll be redirected to your new endpoint. Now you're ready to [send a request](/serverless/endpoints/send-requests).
-
-[Quick deploy an endpoint →](https://www.runpod.io/console/serverless)
+[Deploy a repo from the RunPod Hub →](https://www.runpod.io/console/hub)
 
 ### Deploy a vLLM worker
 
