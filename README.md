@@ -53,6 +53,6 @@ git ls-files -z -- '*.md' | xargs -0 blacken-docs
 ## Update CPU and GPUs
 
 ```bash
-yarn gpu-types
-yarn cpu-types
+python helpers/gpu-types.py
+python helpers/cpu-types.py
 ```
