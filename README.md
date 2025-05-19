@@ -1,32 +1,58 @@
-# Mintlify Starter Kit
+# RunPod documentation site
 
-Click on `Use this template` to copy the Mintlify starter kit. The starter kit contains examples including
+This website is built using [Mintlify](https://mintlify.com/).
 
-- Guide pages
-- Navigation
-- Customizations
-- API Reference pages
-- Use of popular components
+## Publishing Changes
 
-### Development
+Create a pull request to make document changes, and request a review from [@muhsinking](https://github.com/muhsinking). Changes will be deployed to production automatically after they are pushed to the `main` branch.
 
-Install the [Mintlify CLI](https://www.npmjs.com/package/mintlify) to preview the documentation changes locally. To install, use the following command
+## Running the docs locally
 
-```
-npm i -g mintlify
-```
+Install Mintlify:
 
-Run the following command at the root of your documentation (where docs.json is)
+```shell
+npm i -g mintlify```
 
-```
+Start a local development server on your browser:
+
+```shell
 mintlify dev
 ```
 
-### Publishing Changes
+Most changes will be reflected live without having to restart the server.
 
-Install our Github App to auto propagate changes from your repo to your deployment. Changes will be deployed to production automatically after pushing to the default branch. Find the link to install on your dashboard. 
+## Linting
 
-#### Troubleshooting
+- Install [vale](https://vale.sh/docs/vale-cli/installation/)
+- Lint a specific folder or file, run:
 
-- Mintlify dev isn't running - Run `mintlify install` it'll re-install dependencies.
-- Page loads as a 404 - Make sure you are running in a folder with `docs.json`
+```bash
+vale path/to/docs/
+# or
+vale path/to/*.md
+```
+
+## Format Python code examples
+
+Install `blacken-docs`.
+
+```bash
+python -m pip install blacken-docs
+```
+
+Run the formatter.
+
+```bash
+yarn format
+```
+
+```bash
+git ls-files -z -- '*.md' | xargs -0 blacken-docs
+```
+
+## Update CPU and GPUs
+
+```bash
+yarn gpu-types
+yarn cpu-types
+```
