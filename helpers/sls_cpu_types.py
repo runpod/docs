@@ -1,3 +1,4 @@
+
 import os
 from datetime import datetime
 
@@ -32,7 +33,7 @@ cpus_df.dropna(how="all")
 cpus_df.sort_values(by="displayName").reset_index(drop=True, inplace=True)
 
 file_path = os.path.join(
-    os.path.dirname(__file__), "../docs/references/cpu-types.md"
+    os.path.dirname(__file__), "../references/cpu-types.mdx"
 )
 
 table = tabulate(cpus_df, headers=["Display Name", "Cores", "Threads Per Core"], tablefmt="github", showindex=False)

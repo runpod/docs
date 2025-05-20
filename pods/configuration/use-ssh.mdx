@@ -1,0 +1,83 @@
+---
+title: "Use SSH"
+---
+
+The basic terminal SSH access that RunPod exposes is not a full SSH connection and, therefore, does not support commands like SCP. If you want to have full SSH capabilities, then you will need to rent an instance that has public IP support and run a full SSH daemon in your Pod.
+
+## Setup
+
+1. Generate your public/private SSH key pair on your local machine with `ssh-keygen -t ed25519 -C "your_email@example.com"`. This will save your public/private key pair to `~/.ssh/id_ed25519.pub` and `~/.ssh/id_ed25519`, respectively.\\
+   <Info>
+
+   if you're using command prompt in Windows rather than the Linux terminal or WSL, your public/private key pair will be saved to `C:\users\{yourUserAccount}\.ssh\id_ed25519.pub` and `C:\users\{yourUserAccount}\.ssh\id_ed25519`, respectively.
+
+   </Info>
+
+<Frame caption="">
+  <img src="/images/004be354-4655a01-1-6b0dd022d29cebe257e9e5df21a52fb4.png" />
+</Frame>
+
+2. Add your public key to your [RunPod user settings](https://www.runpod.io/console/user/settings).
+
+<Frame caption="">
+  <img src="/images/58c926ba-4972691-2-8c4764cae5d826dd756d264474f818d5.png" />
+</Frame>
+
+<Frame caption="">
+  <img src="/images/1b79b819-c340553-image-5834fe29a2179e6bb7fb75f5aa664037.png" />
+</Frame>
+
+3. Start your Pod. Make sure of the following things:
+
+* Your Pod supports a public IP, if you're deploying in Community Cloud.
+* An SSH daemon is started. If you're using a RunPod official template such as RunPod Stable Diffusion, you don't need to take any additional steps. If you're using a custom template, make sure your template has TCP port 22 exposed and use the following Docker command. If you have an existing start command, replace `sleep infinity` at the end with your existing command:
+
+```sh
+bash -c 'apt update;DEBIAN_FRONTEND=noninteractive apt-get install openssh-server -y;mkdir -p ~/.ssh;cd $_;chmod 700 ~/.ssh;echo "$PUBLIC_KEY" >> authorized_keys;chmod 700 authorized_keys;service ssh start;sleep infinity'
+```
+
+<Frame caption="">
+  <img src="/images/93b94d98-97823c6-image-73915734bbfd2cd60e89c719561877e1.png" />
+</Frame>
+
+Once your Pod is done initializing, you'll be able to SSH into it by running the SSH over exposed TCP command in the Pod's Connection Options menu on your local machine.
+
+<Info>
+
+* if you're using the Windows Command Prompt rather than the Linux terminal or WSL, and you've used the default key location when generating your public/private key pair (i.e., you didn't specify a different file path when prompted), you'll need to modify the file path in the provided SSH command after the `-i` flag to `C:\users\{yourUserAccount}\.ssh\id_ed25519`.
+* If you've saved your key to a location other than the default, specify that path you chose when generating your key pair after the `-i` flag instead.
+
+</Info>
+
+<Frame caption="">
+  <img src="/images/ccf2d8df-3d51ed8-image-e3c4caabde1ffd0116215fcedd5986d8.png" />
+</Frame>
+
+<Frame caption="">
+  <img src="/images/979e0732-ff71847-image-7ce565e90197a0386f790c9f8a987987.png" />
+</Frame>
+
+## What's the SSH password?
+
+If you're being prompted for a password when you attempt to connect, something is amiss. We don't require a password for SSH connections. Some common mistakes that cause your SSH client to prompt for a password include:
+
+* Copying and pasting the key *fingerprint* (beginning with `SHA256:`) into your RunPod user settings instead of the public key itself (the contents of the `id_ed25519.pub` file when viewed from a text editor)
+* Omitting the encryption type from the beginning of the key when copying and pasting into your RunPod user settings (i.e., copying the random text, but not the `ssh-ed25519` which precedes it)
+* Not separating different public keys in your RunPod user settings with a newline between each one (this would result in the first public/private key pair functioning as expected, but each subsequent key pair would not work)
+* Specifying an incorrect file path to your private key file:
+
+<Frame caption="">
+  <img src="/images/4222183b-10cbfa6-image-3f9272d8e4fcad6a389624dacca81776.png" />
+</Frame>
+
+* Attempting to use a private key that other users on the machine have permissions for:
+
+<Frame caption="">
+  <img src="/images/87f500a5-7a5cf85-image-c96832adff89df1939a8549b42d4bd74.png" />
+</Frame>
+
+* Incorrect Private Key being used locally in SSH config file. There should be a config file on your local machine in your \~/.ssh folder. You want to ensure that the IdentityFile in the config file points to the private key of the public key you used to make this connection. If you are not pointing to the correct private key in the config file, when you make a connection request using your public key, you will get a mismatch and be prompted for a password. Once the correct private key is set in your config file, you can connect without a password.
+
+<Frame caption="">
+  <img src="/images/a336f3d0-329799832-1f3db241-72a1-4d29-be36-ea5bab945b0a.png" />
+</Frame>

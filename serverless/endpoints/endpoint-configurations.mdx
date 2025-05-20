@@ -1,0 +1,240 @@
+---
+title: "Endpoint configuration and optimization"
+sidebarTitle: "Endpoint configuration"
+---
+
+This guide explains all available settings and best practices for configuring RunPod Serverless endpoints, helping you optimize for performance, cost, and reliability.
+
+## Basic configuration
+
+### Endpoint name
+
+The name you assign to your endpoint for easy identification in your dashboard. This name is only visible to you and doesn't affect the endpoint ID used for API calls.
+
+### GPU selection
+
+Choose one or more GPU types for your endpoint in order of preference. RunPod prioritizes allocating the first GPU type in your list and falls back to subsequent GPU types if your first choice is unavailable.
+
+<Tip>
+
+Selecting multiple GPU types improves availability, especially for high-demand GPUs.
+
+</Tip>
+
+### Worker configuration
+
+#### Active (min) workers
+
+Sets the minimum number of workers that remain running at all times. Setting this at one or higher eliminates cold start delays for faster response times. Active workers incur charges immediately, but receive up to 30% discount from regular pricing.
+
+Default: 0
+
+<Tip>
+
+For workloads with long cold start times, consider using active workers to eliminate startup delays. You can estimate the optimal number by:
+
+1. Measuring your requests per minute during typical usage.
+2. Calculating average request duration in seconds.
+3. Using the formula: Active Workers = (Requests per Minute × Request Duration) / 60
+
+For example, with 6 requests per minute taking 30 seconds each: 6 × 30 / 60 = 3 active workers.
+
+Even a small number of active workers can significantly improve performance for steady traffic patterns while maintaining cost efficiency.
+
+</Tip>
+
+#### Max workers
+
+The maximum number of concurrent workers your endpoint can scale to.
+
+Default: 3
+
+<Warning>
+
+Setting max workers to 1 restricts your deployment to a single machine, creating potential bottlenecks if that machine becomes unavailable.
+
+We recommend setting your max worker count approximately 20% higher than your expected maximum concurrency. This headroom allows for smoother scaling during traffic spikes and helps prevent request throttling.
+
+</Warning>
+
+#### GPUs per worker
+
+The number of GPUs assigned to each worker instance.
+
+Default: 1
+
+<Tip>
+
+When choosing between multiple lower-tier GPUs or fewer high-end GPUs, you should generally prioritize high-end GPUs with lower GPU count per worker when possible.
+
+- High-end GPUs typically offer faster memory speeds and newer architectures, improving model loading and inference times.
+- Multi-GPU configurations introduce parallel processing overhead that can offset performance gains.
+- Higher GPU-per-worker requirements can reduce availability, as finding machines with multiple free GPUs is more challenging than locating single available GPUs.
+
+</Tip>
+
+### Timeout settings
+
+#### Idle timeout
+
+The amount of time that a worker continues running after completing a request. You're still charged for this time, even if the worker isn't actively processing any requests.
+
+By default, the idle timeout is set to 5 seconds to help avoid frequent start/stop cycles and reduce the likelihood of cold starts. Setting a longer idle timeout can help minimize cold starts for intermittent traffic, but it may also increase your costs.
+
+When configuring idle timeout, start by matching it to your average cold start time to reduce startup delays. For workloads with extended cold starts, consider longer idle timeouts to minimize repeated initialization costs.
+
+<Warning>
+
+That idle timeout is only effective when using [queue delay scaling](#queue-delay). Be cautious with high timeout values, as workers with constant traffic may never reach the idle state necessary to scale down properly.
+
+</Warning>
+
+#### Execution timeout
+
+The maximum time a job can run before automatic termination. This prevents runaway jobs from consuming excessive resources. You can turn off this setting, but we highly recommend keeping it on.
+
+Default: 600 seconds (10 minutes)
+Maximum: 24 hours (can be extended using job TTL)
+
+<Warning>
+
+We strongly recommend enabling execution timeout for all endpoints. Set the timeout value to your typical request duration plus a 10-20% buffer. This safeguard prevents unexpected or faulty requests from running indefinitely and consuming unnecessary resources.
+
+</Warning>
+
+#### Job TTL (time-to-live)
+
+The maximum time a job remains in the queue before automatic termination.
+
+Default: 86,400,000 milliseconds (24 hours)
+Minimum: 10,000 milliseconds (10 seconds)
+
+See [Execution policies](/serverless/endpoints/send-requests#execution-policies) for more information.
+
+<Tip>
+
+You can use the `/status` operation to configure the time-to-live (TTL) for an individual job by appending a TTL parameter when checking the status of a job. For example, `https://api.runpod.ai/v2/{endpoint_id}/status/{job_id}?ttl=6000` sets the TTL for the job to 6 seconds. Use this when you want to tell the system to remove a job result sooner than the default retention time.
+
+</Tip>
+
+### FlashBoot
+
+FlashBoot is RunPod's solution for reducing the average cold-start times on your endpoint. It works by retaining worker resources for some time after they're no longer in use, so they can be rebooted quickly. When your endpoint has consistent traffic, your workers have a higher chance of benefiting from FlashBoot for faster spin-ups. However, if your endpoint isn't receiving frequent requests, FlashBoot has fewer opportunities to optimize performance. There is no additional cost associated with FlashBoot.
+
+<Tip>
+
+The effectiveness of FlashBoot increases exponentially with higher request volumes and worker counts, making it ideal for busy production endpoints. For endpoints with fewer than 3 workers, FlashBoot's overhead may exceed its benefits.
+
+</Tip>
+
+## Advanced endpoint configuration
+
+When configuring advanced settings, remember that each constraint (data center, storage, CUDA version, GPU type) may limit resource availability. For maximum availability and reliability, select all data centers and CUDA versions, and avoid network volumes unless your workload specifically requires them.
+
+### Data centers
+
+Control which data centers can deploy and cache your workers. Allowing multiple data centers improves availability, while using a network volume restricts your endpoint to a single data center.
+
+Default: All data centers
+
+<Tip>
+
+For the highest availability, allow all data centers (i.e., keep the default setting in place) and avoid using network volumes unless necessary.
+
+</Tip>
+
+### Network volumes
+
+Attach persistent storage to your workers. Network volumes have higher latency than local storage, and restrict workers to the data center containing your volume. However, they're very useful for sharing large models or data between workers on an endpoint.
+
+See [Create a network volume](/pods/storage/create-network-volumes) for more information.
+
+### Auto-scaling type
+
+#### Queue delay
+
+Adds workers based on request wait times.
+
+The queue delay scaling strategy adjusts worker numbers based on request wait times. Workers are added if requests spend more than X seconds in the queue, where X is a threshold you define. By default, this threshold is set at 4 seconds.
+
+#### Request count
+
+The request count scaling strategy adjusts worker numbers according to total requests in the queue and in progress. It automatically adds workers as the number of requests increases, ensuring tasks are handled efficiently.
+
+Total workers formula: `Math.ceil((requestsInQueue + requestsInProgress) / 4)`
+
+<Tip>
+
+**Optimizing your auto-scaling strategy:**
+
+- For maximum responsiveness, use "request count" with a scaler value of 1 to provision workers immediately for each incoming request.
+- LLM workloads with frequent, short requests typically perform better with "request count" scaling.
+- For gradual scaling, increase the request count scaler value to provision workers more conservatively.
+- Use queue delay when you want workers to remain available briefly after request completion to handle follow-up requests.
+- With long cold start times, favor conservative scaling to minimize the performance and cost impacts of frequent worker initialization.
+
+</Tip>
+
+### Expose HTTP/TCP ports
+
+Enables direct communication with your worker via its public IP and port. This can be useful for real-time applications requiring minimal latency, such as [WebSocket applications](https://github.com/runpod-workers/worker-websocket).
+
+### Enabled GPU types
+
+Here you can specify which [GPU types](/references/gpu-types) to use within your selected GPU size categories. By default, all GPU types are enabled.
+
+### CUDA version selection
+
+Specify which CUDA versions can be used with your workload to ensures your code runs on compatible GPU hardware. RunPod will match your workload to GPU instances with the selected CUDA versions.
+
+<Tip>
+
+CUDA versions are generally backward compatible, so we recommend that you check for the version you need and any higher versions. For example, if your code requires CUDA 12.4, you should also try running it on 12.5, 12.6, and so on.
+
+Limiting your endpoint to just one or two CUDA versions can significantly reduce GPU availability. RunPod continuously updates GPU drivers to support the latest CUDA versions, so keeping more CUDA versions selected gives you access to more resources.
+
+</Tip>
+
+## Reducing worker startup times
+
+There are two primary factors that impact worker start times:
+
+1. **Worker initialization time:** Worker initialization occurs when a Docker image is downloaded to a new worker. This takes place after you create a new endpoint, adjust worker counts, or deploy a new worker image. Requests that arrive during initialization face delays, as a worker must be fully initliazed before it can start processing.
+
+2. **Cold start:** A cold start occurs when a worker is revived from an idle state. Cold starts can get very long if your handler code loads large ML models (several gigabytes to hundreds of gigabytes) into GPU memory.
+
+Use these strategies to reduce worker startup times:
+
+1. **Embed models in Docker images:** Package your ML models directly within your worker container image instead of downloading them in your handler function. This strategy places models on the worker's high-speed local storage (SSD/NVMe), dramatically reducing the time needed to load models into GPU memory. This approach is optimal for production environments, though extremely large models (500GB+) may require network volume storage.
+
+2. **Store large models on network volumes:** For flexibility during development, save large models to a network volume using a Pod or one-time handler, then mount this volume to your Serverless workers. While network volumes offer slower model loading compared to embedding models directly, they can speed up your workflow by enabling rapid iteration and seamless switching between different models and configurations.
+
+3. **Maintain active workers:** Set active worker counts above zero to completely eliminate cold starts. These workers remain ready to process requests instantly and cost up to 30% less when idle compared to standard (flex) workers.
+
+4. **Extend idle timeouts:** Configure longer idle periods to preserve worker availability between requests. This strategy prevents premature worker shutdown during temporary traffic lulls, ensuring no cold starts for subsequent requests.
+
+5. **Optimize scaling parameters:** Fine-tune your auto-scaling configuration for more responsive worker provisioning:
+   - Lower queue delay thresholds to 2-3 seconds (default 4).
+   - Decrease request count thresholds to 2-3 (default 4).
+
+   These refinements create a more agile scaling system that responds swiftly to traffic fluctuations.
+
+6. **Increase maximum worker limits:** Set higher maximum worker capacities to ensure your Docker images are pre-cached across multiple compute nodes and data centers. This proactive approach eliminates image download delays during scaling events, significantly reducing startup times.
+
+## Best practices summary
+
+- **Understand optimization tradeoffs** and make conscious tradeoffs between cost, speed, and model size.
+- **Start conservative** with max workers and scale up as needed.
+- **Monitor throttling** and adjust max workers accordingly.
+- **Use active workers** for latency-sensitive applications.
+- **Select multiple GPU types** to improve availability.
+- **Choose appropriate timeouts** based on your workload characteristics.
+- **Consider data locality** when using network volumes.
+- **Avoid setting max workers to 1** to prevent bottlenecks.
+- **Plan for 20% headroom** in max workers to handle load spikes.
+- **Prefer high-end GPUs with lower GPU count** for better performance.
+- **Set execution timeout** to prevent runaway processes.
+- **Match auto-scaling strategy** to your workload patterns.
+- **Embed models in Docker images** when possible for faster loading.
+- **Extend idle timeouts** to prevent frequent cold starts.
+- **Consider disabling FlashBoot** for endpoints with few workers or infrequent traffic.

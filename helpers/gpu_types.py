@@ -1,3 +1,4 @@
+
 import os
 from datetime import datetime
 
@@ -26,7 +27,7 @@ gpus_df = gpus_df[(gpus_df["id"].str.lower() != "unknown")]
 gpus_df.sort_values(by="displayName").reset_index(drop=True, inplace=True)
 
 file_path = os.path.join(
-    os.path.dirname(__file__), "../docs/references/gpu-types.md"
+    os.path.dirname(__file__), "../references/gpu-types.mdx"
 )
 
 table = tabulate(gpus_df, headers=["GPU ID", "Display Name", "Memory (GB)"], tablefmt="github", showindex=False)
