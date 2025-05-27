@@ -1,41 +1,82 @@
 ---
 title: "Create a network volume"
 sidebarTitle: "Create a network volume"
-description: "Learn how to create network volumes and attach them to your Pods."
+description: "Persistent, portable storage for your Pods and Serverless workers."
 ---
 
-Network Volumes are a feature specific to Secure Cloud that allows you to create a volume that multiple pods can interact with. This gives you an extra amount of flexibility to keep working--especially if you are working with a high demand GPU pool that may not always be available--as you can simply create a pod in a different pool while you wait for an option to free up. This can also save you time by downloading frequently used models or other large files to a volume and holding them for later use, rather than having to re-download them every time you spin up a new pod.
+Network volumes offer persistent storage that, unlike standard Pod disk volumes, exists independently from any single Pod's lifecycle. This means your data is retained even if a Pod is deleted. They can be attached to multiple Pods (though not simultaneously to multiple running Pods), making them ideal for sharing data, transferring storage between machines, or maintaining datasets for Serverless workers.
 
-**How to Create a Volume**
+When attached to a Pod, a network volume replaces the Pod's default disk volume and is typically mounted at `~/workspace`.
 
-Under the Secure Cloud page, click the option to create a volume.
+For a comparison with other storage types, see [Storage options](/pods/storage/types).
 
-<Frame caption="">
-  <img src="/images/db98f66c-797cfdc-image-6065ac7f873bef52b971d60c3f926990.png" />
-</Frame>
+## When to use a network volume
 
-The pricing for the volume will be shown, and you can select a data center and provide a name and the requested size.
+Consider using a network volume when you need:
 
-<Frame caption="">
-  <img src="/images/89ac8db2-596a4f5-image-14d555d8f1316bb57eed78b840a4126a.png" />
-</Frame>
+*   **Persistent data that outlives individual Pods:** Keep your data safe and accessible even after a Pod is terminated.
+*   **Shareable storage:** Use the same data across different Pods or with Serverless workers. While a network volume can be *attached* to multiple Pod configurations, it can only be *actively used* by one running Pod or Serverless worker at a time to prevent data corruption. You would typically stop a Pod before attaching its network volume to a new Pod.
+*   **Portable storage:** Easily move your working environment and data to a different Pod, perhaps in a different GPU pool if your preferred option isn't available.
+*   **Efficient data management:** Store frequently used models or large datasets to avoid re-downloading them for each new Pod or Serverless worker, saving time and bandwidth.
 
-Once you create the volume, it will appear in your list.
+## Prerequisites
 
-<Frame caption="">
-  <img src="/images/db68d0a3-c4eea31-image-84cf22fda878c9e419619ecf39143bcb.png" />
-</Frame>
+- You must be using RunPod's Secure Cloud or Serverless offerings.
 
-Once you click the Deploy option, your container size will be locked to the size of your network volume. Note that there will be a nominal cost for network volume storage, in lieu of the disk cost normally quoted. Also note that you can link many pods to one singular network volume, and you will enjoy an overall cost saving even with just two pods sharing one volume (as opposed to setting up two pods with separate volumes), despite the presence of this additional cost.
+## How to create a network volume
 
-<Frame caption="">
-  <img src="/images/6f1992c4-8f69d41-image-7c106c3d43252c6096872bd9be8a0467.png" />
-</Frame>
+Follow these steps to create a new network volume:
 
-**What's the infrastructure behind Network Volume**
+1.  Navigate to the **Storage** page in the RunPod console.
+2.  Click the **+ Network Volume** button.
 
-When you choose to create a Network Volume, you gain access to our robust infrastructure, which includes state-of-the-art storage servers located in the same datacenters where you rent GPU servers from us. These servers are connected via a high-speed 25Gbps local network, up to 200Gbps in some locations, guaranteeing efficient data transfer and minimal latency. Everything is stored on high-speed NVME SSDs to ensure best performance.
+    <Frame caption="Click '+ Network Volume' on the Storage page.">
+      <img src="/images/db98f66c-797cfdc-image-6065ac7f873bef52b971d60c3f926990.png" />
+    </Frame>
 
-If you're interested in harnessing the advantages of Network Volume and its cost-effective storage solutions, we invite you to read our detailed [blog article](https://blog.runpod.io/four-reasons-to-set-up-a/). It explores the benefits and features of Network Volume, helping you make an informed decision about your storage needs.
+3.  **Configure your volume:**
+    *   The pricing for the volume will be displayed.
+    *   Select a data center for your volume. Choose a location that is geographically close to where your Pods will run for optimal performance.
+    *   Provide a descriptive name for your volume (e.g., "project-alpha-data" or "stable-diffusion-models").
+    *   Specify the desired size for the volume in gigabytes (GB).
 
-**Please note that if your machine-based storage or network volume is terminated due to lack of funds, that disk space is immediately freed up for use by other clients, and RunPod is unable to assist in recovering lost storage.**
+    <Frame caption="Configure data center, name, and size for your network volume.">
+      <img src="/images/89ac8db2-596a4f5-image-14d555d8f1316bb57eed78b840a4126a.png" />
+    </Frame>
+
+4.  **Confirm creation:** Click "Create Volume". It will then appear in your list of network volumes on the Storage page.
+
+    <Frame caption="Newly created network volume in your list.">
+      <img src="/images/db68d0a3-c4eea31-image-84cf22fda878c9e419619ecf39143bcb.png" />
+    </Frame>
+
+## How to use a network volume with a Pod
+
+Network volumes are attached when you deploy a new Pod.
+
+1.  **Initiate Pod deployment:** Start the process of deploying a new Pod from the Secure Cloud > Pods page by clicking **+ New Pod**.
+2.  **Select network volume:** During the Pod configuration, under the "Volume Type" or similar section, choose "Network Volume". Then, select your desired, pre-existing network volume from the dropdown list.
+
+    <Note>
+    Network volumes must be attached during Pod creation. They cannot be attached to an already running Pod, nor can they be unattached later without deleting the Pod.
+    </Note>
+
+3.  **Observe storage configuration:** After selecting the network volume, you'll notice that your Pod's container disk size is locked to the size of the chosen network volume, as illustrated below. The standard Pod disk cost is also replaced by the charge for the network volume storage.
+
+    <Frame caption="Pod deployment configuration showing container size locked to the network volume size.">
+      <img src="/images/6f1992c4-8f69d41-image-7c106c3d43252c6096872bd9be8a0467.png" />
+    </Frame>
+
+4.  **Complete deployment:** Proceed with the rest of the Pod deployment. Your new Pod will use the attached network volume, mounted at `~/workspace` by default.
+
+## Benefits and infrastructure
+
+Using network volumes provides significant flexibility and can lead to cost savings, especially if you frequently switch between Pods or need to share large datasets. Storing data on a shared network volume can be more economical than provisioning separate disk space for multiple Pods. You can achieve overall cost savings even with just two Pods sharing one volume.
+
+Network volumes are backed by high-performance storage servers co-located with RunPod GPU servers. These are connected via high-speed networks (25Gbps, up to 200Gbps in some locations) and use NVMe SSDs for optimal performance, ensuring efficient data transfer and minimal latency.
+
+For a deeper dive into the benefits, read our [blog article on network volumes](https://blog.runpod.io/four-reasons-to-set-up-a/).
+
+<Warning>
+  **Important:** If your account lacks sufficient funds to cover storage costs, your machine-based storage or network volume may be terminated. Once terminated, the disk space is immediately freed for other users, and RunPod cannot recover lost data. Ensure your account remains funded to prevent data loss.
+</Warning>
