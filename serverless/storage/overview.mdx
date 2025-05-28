@@ -12,25 +12,15 @@ RunPod Serverless offers several storage types, each with unique characteristics
 
 ### Container volume
 
-The worker container volume holds temporary storage that exists only while a worker is running, and is completely lost when the worker is stopped or scaled down. It's created automatically when a Serverless worker launches and remains tightly coupled with the worker's lifecycle. This type of storage provides fast read and write speeds since it's locally attached to the worker. The cost of container volume storage is included in the worker's running cost and is not billed separately, making it an economical choice for temporary data.
+A worker's container volume holds temporary storage that exists only while a worker is running, and is completely lost when the worker is stopped or scaled down. It's created automatically when a Serverless worker launches and remains tightly coupled with the worker's lifecycle. 
 
-Container volumes are ideal for temporary processing data that doesn't need to be saved long-term. They're the best choice when speed is critical since they provide the fastest I/O performance. Since container volumes don't persist, they're perfect for data that doesn't need to survive a worker scaling down, and they help minimize storage costs since they're included in your compute charges.
+Container volumes provide fast read and write speeds since they are locally attached to workers. The cost of storage is included in the worker's running cost, making it an economical choice for temporary data.
 
-Use container volume storage for:
-
-*   Temporary files.
-*   Data for processing.
-*   Data that doesn't need to persist beyond the current worker session.
+Any data saved by a worker's handler function will be stored in the container volume by default. To persist data beyond the current worker session, use a network volume or S3-compatible storage.
 
 ### Network volume
 
-Network volumes provide persistent storage that can be attached to different workers and even shared between multiple workers.
-
-Use network volume storage for:
-
-*   Sharing datasets between workers.
-*   Storing large models that need to be accessed by multiple workers.
-*   Preserving data that needs to outlive any individual worker.
+Network volumes provide persistent storage that can be attached to different workers and even shared between multiple workers. Network volumes are ideal for sharing datasets between workers, storing large models that need to be accessed by multiple workers, and preserving data that needs to outlive any individual worker.
 
 To learn how to create and use network volumes, see [Network volumes](/serverless/storage/network-volumes).
 
@@ -46,13 +36,7 @@ RunPod's S3-compatible storage integration allows you to connect your Serverless
 
 You can supply your own credentials for any S3-compatible storage service, which is particularly useful for handling large files that exceed API payload limits. This storage option exists entirely outside the RunPod infrastructure, giving you complete control over data lifecycle and retention policies. Billing depends on your chosen provider's pricing model rather than RunPod's storage rates.
 
-Use S3-compatible storage for:
-*   Handling large files that exceed API payload limits.
-*   Storing results of your workload for later retrieval by other systems.
-*   Creating a bridge between your Serverless processing and external applications.
-
-For implementation details, see [S3-compatible storage integration](/serverless/endpoints/send-requests#s3-compatible-storage-integration).
-
+To configure requests to send data to S3-compatible storage, see [S3-compatible storage integration](/serverless/endpoints/send-requests#s3-compatible-storage-integration).
 
 ## Storage comparison table
 
@@ -69,13 +53,14 @@ For implementation details, see [S3-compatible storage integration](/serverless/
 
 ### Data isolation and sharing
 
-Each worker has its own local directory and maintains its own data (unless a network volume is attached). This means that different workers running on your endpoint cannot share data directly between them. With network storage, you can share models and data among workers, but workers must be  co-located in the same data center as the storage. This shared access capability is valuable for preventing redundant downloads and optimizing resource usage across your worker fleet.
+Each worker has its own local directory and maintains its own data. This means that different workers running on your endpoint cannot share data directly between each other (unless a network volume is attached).
 
 ### Caching and cold starts
 
-Serverless workers always cache and load their Docker images locally on the container volume, even if network storage is attached. Local NVMe cache speeds up cold starts, but large model files still add to the cold start time if they need to be loaded from storage during initialization. For the fastest possible cold starts, consider baking frequently used models directly into your Docker image or using network volumes for efficient sharing of large models across multiple workers.
+Serverless workers cache and load their Docker images locally on the container volume, even if a network volume is attached. While this local caching speeds up initial worker startup, loading large models into GPU memory can still significantly impact cold start times.
+
+For guidance on optimizing storage to reduce cold start times, see [Endpoint configuration](/serverless/endpoints/endpoint-configurations#reducing-worker-startup-times).
 
 ### Location constraints
 
-If you use network storage with your Serverless endpoint, your deployments become constrained to the data center where the network volume is located. This constraint may impact GPU availability and failover options, as your workloads must run in proximity to your storage. For global deployments, consider how storage location might affect your overall system architecture.
-
+If you use network volumes with your Serverless endpoint, your deployments will be constrained to the data center where the volume is located. This constraint may impact GPU availability and failover options, as your workloads must run in proximity to your storage. For global deployments, consider how storage location might affect your overall system architecture.
