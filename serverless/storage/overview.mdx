@@ -1,0 +1,108 @@
+---
+title: "Serverless storage"
+sidebarTitle: "Overview"
+description: "Explore storage options for your Serverless endpoints, including container, network, and S3-compatible storage."
+---
+
+This guide explains the different types of storage available in RunPod Serverless, their characteristics, and when to use each option. Understanding Serverless storage options is essential for optimizing your workloads and managing costs effectively.
+
+## Understanding storage types
+
+RunPod Serverless offers several storage types, each with unique characteristics designed for different use cases:
+
+### Container volume
+
+The worker container volume holds temporary storage that exists only while a worker is running, and is completely lost when the worker is stopped or scaled down. It's created automatically when a Serverless worker launches and remains tightly coupled with the worker's lifecycle. This type of storage provides fast read and write speeds since it's locally attached to the worker. The cost of container volume storage is included in the worker's running cost and is not billed separately, making it an economical choice for temporary data.
+
+Container volumes are ideal for temporary processing data that doesn't need to be saved long-term. They're the best choice when speed is critical since they provide the fastest I/O performance. Since container volumes don't persist, they're perfect for data that doesn't need to survive a worker scaling down, and they help minimize storage costs since they're included in your compute charges.
+
+Use container volume storage for:
+
+*   Temporary files.
+*   Data for processing.
+*   Data that doesn't need to persist beyond the current worker session.
+
+### Network volume
+
+Network volumes provide persistent storage that can be attached to different workers and even shared between multiple workers.
+
+Network volume storage persists independently of any individual worker's lifecycle, making it truly permanent until you explicitly delete it. These volumes can be attached to multiple workers simultaneously, allowing for efficient data sharing and collaboration.
+
+ Network volumes are shareable across any workers located in the same data center, providing flexibility in your workflow. All network storage is backed by high-speed NVME SSDs and connected via a high-speed network ranging from 25Gbps to 200Gbps, ensuring excellent performance even when accessed by multiple workers.
+ 
+ Network volumes are billed at \$0.07/GB/month for volumes under 1TB, and at a discounted rate of \$0.05/GB/month for volumes over 1TB. Storage up to 4TB is available through self-service, and larger allocations can be arranged on request.
+
+Use network volume storage for:
+
+*   Sharing datasets between workers.
+*   Storing large models that need to be accessed by multiple workers.
+*   Preserving data that needs to outlive any individual worker.
+
+To create a new network volume, see [Create a network volume](/pods/storage/create-network-volumes).
+
+To learn how to attach a network volume to your endpoint, see [Attach a network volume](#attach-a-network-volume).
+
+### S3-compatible storage integration
+
+<Tip>
+
+RunPod's S3 integration works with any S3-compatible storage provider, not just AWS S3. You can use MinIO, Backblaze B2, DigitalOcean Spaces, and other compatible providers.
+
+</Tip>
+
+RunPod's S3-compatible storage integration allows you to connect your Serverless endpoints to external object storage services, giving you the flexibility to use your own storage provider with standardized access protocols.
+
+You can supply your own credentials for any S3-compatible storage service, which is particularly useful for handling large files that exceed API payload limits. This storage option exists entirely outside the RunPod infrastructure, giving you complete control over data lifecycle and retention policies. Billing depends on your chosen provider's pricing model rather than RunPod's storage rates.
+
+Use S3-compatible storage for:
+*   Handling large files that exceed API payload limits.
+*   Storing results of your workload for later retrieval by other systems.
+*   Creating a bridge between your Serverless processing and external applications.
+
+For implementation details, see [S3-compatible storage integration](/serverless/endpoints/send-requests#s3-compatible-storage-integration).
+
+
+## Attach a network volume
+
+To attach a network volume to your Serverless endpoint:
+
+1.  Navigate to the [Serverless page](https://www.runpod.io/console/serverless) in the RunPod console.
+2.  Select the endpoint you want to attach a network volume to.
+3. Select **Manage**, then **Edit Endpoint**.
+4.  Expand the **Advanced** section.
+5.  Select a volume from the dropdown below **Network Volume**.
+6.  Select **Save Endpoint** to apply the changes.
+
+The network volume will be mounted to your workers at `~/runpod-volume`.
+
+<Warning>
+
+If your account runs out of funds, your network volume may be deleted to free up resources for other customers. Setting up automatic payments is highly recommended to prevent unexpected data loss due to billing issues. As an additional safeguard, always back up critical data to external systems to protect against any potential data loss.
+
+</Warning>
+
+## Storage comparison table for Serverless
+
+| Feature                 | Container Volume                     | Network Volume                       | S3-Compatible Storage          |
+| ----------------------- | ------------------------------------ | ------------------------------------ | ------------------------------ |
+| **Persistence**         | Temporary (lost when worker stops)   | Permanent (independent of workers) | Permanent (external to RunPod) |
+| **Sharing**             | Not shareable                        | Can be attached to multiple workers  | Accessible via credentials     |
+| **Speed**               | Fastest (local)                      | Fast (networked NVME)                | Varies by provider             |
+| **Cost**                | Included in worker cost              | $0.05-0.07/GB/month                  | Depends on provider            |
+| **Size limits**         | Varies by worker config              | Up to 4TB self-service               | Provider-dependent             |
+| **Use case**            | Temporary processing                 | Multi-worker sharing                 | Very large files, external access |
+
+## Serverless storage behavior
+
+### Data isolation and sharing
+
+Each worker has its own local directory and maintains its own data (unless a network volume is attached). This means that different workers running on your endpoint cannot share data directly between them. With network storage, you can share models and data among workers, but workers must be  co-located in the same data center as the storage. This shared access capability is valuable for preventing redundant downloads and optimizing resource usage across your worker fleet.
+
+### Caching and cold starts
+
+Serverless workers always cache and load their Docker images locally on the container volume, even if network storage is attached. Local NVMe cache speeds up cold starts, but large model files still add to the cold start time if they need to be loaded from storage during initialization. For the fastest possible cold starts, consider baking frequently used models directly into your Docker image or using network volumes for efficient sharing of large models across multiple workers.
+
+### Location constraints
+
+If you use network storage with your Serverless endpoint, your deployments become constrained to the data center where the network volume is located. This constraint may impact GPU availability and failover options, as your workloads must run in proximity to your storage. For global deployments, consider how storage location might affect your overall system architecture.
+
