@@ -17,11 +17,11 @@ Pricing for S3-compatible API usage is the same as for network volumes.
     1. In the RunPod console, navigate to the [Settings page](https://www.runpod.io/console/user/settings).
     2. Expand the **Shared Keys** section and select **Create a shared key**.
     3. Give your key a name and select **Create**.
-    4. Make a note of your access key and secret access key to use in the next step.
+    4. Make a note of your access key ID and secret access key to use in the next step.
 
     <Warning>
 
-    RunPod does not store your secret access key, so you may wish to save it elsewhere (e.g., in your password manager, or in a GitHub secret). Treat your secret access key like a password and don't share it with anyone.
+    For security, RunPod will show your secret access key only once, so you may wish to save it elsewhere (e.g., in your password manager, or in a GitHub secret). Treat your secret access key like a password and don't share it with anyone.
 
     </Warning>
   </Step>
@@ -32,8 +32,8 @@ Pricing for S3-compatible API usage is the same as for network volumes.
     1.  If you haven't already, [install the AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) on your local machine.
     2.  Run the command `aws configure` in your terminal.
     3.  Provide the following when prompted:
-        *   **AWS Access Key ID**: Enter your RunPod access key.
-        *   **AWS Secret Access Key**: Enter your RunPod secret access key.
+        *   **AWS Access Key ID**: Enter your RunPod shared key's access key ID.
+        *   **AWS Secret Access Key**: Enter your RunPod shared key's secret access key.
         *   **Default Region name**: You can leave this blank.
         *   **Default output format**: You can leave this blank or set it to `json`.
 
@@ -112,59 +112,118 @@ You can also use the Boto3 library to interact with the S3-compatible API, using
 
 The following script demonstrates how to upload a file to a RunPod network volume using the Boto3 library:
 
+The script takes command-line arguments for the network volume ID (as an S3 bucket), the datacenter-specific S3 endpoint URL, the local file path, the desired object key (file path on the volume), and the AWS region (which corresponds to the RunPod datacenter ID). It requires your RunPod shared key credentials to be set as environment variables:
+
+*   `RUNPOD_USER_EMAIL`: Should be set to your RunPod account email.
+*   `RUNPOD_S3_API_KEY`: Should be set to your RunPod shared key's secret access key.
+
 ```python
 #!/usr/bin/env python3
 
 import os
 import argparse
+import boto3 # AWS SDK for Python, used to interact with RunPod S3-compatible APIs
 
-import boto3
+def create_s3_client(region: str, endpoint_url: str):
+    
+    # Creates and returns an S3 client configured for RunPod network volume S3-compatible API.
+    #
+    # Args:
+    #   region (str): The RunPod datacenter ID, used as the AWS region
+    #                 (e.g., 'ca-qc-1').
+    #   endpoint_url (str): The S3 endpoint URL for the specific RunPod datacenter
+    #                       (e.g., 'https://ca-qc-1-s3api.runpod.dev/').
 
-def create_s3_client(region, endpoint_url):
+    # Returns:
+    #   boto3.client: An S3 client object, configured for the RunPod S3 API.
+
+    # Retrieve RunPod shared key credentials from environment variables.
     aws_access_key_id = os.environ.get("RUNPOD_USER_EMAIL")
     aws_secret_access_key = os.environ.get("RUNPOD_S3_API_KEY")
 
+    # Ensure necessary shared key credentials are set in the environment
     if not aws_access_key_id or not aws_secret_access_key:
         raise EnvironmentError(
-            "Please set RUNPOD_USER_EMAIL and RUNPOD_S3_API_KEY environment variables"
+            "Please set RUNPOD_USER_EMAIL (with Shared Key Access Key) and "
+            "RUNPOD_S3_API_KEY (with Shared Key Secret Access Key) environment variables. "
+            "These are obtained from 'Shared Keys' in the RunPod console settings."
         )
 
+    # Initialize and return the S3 client for RunPod's S3-compatible API
     return boto3.client(
         "s3",
         aws_access_key_id=aws_access_key_id,
         aws_secret_access_key=aws_secret_access_key,
-        region_name=region,
-        endpoint_url=endpoint_url,
+        region_name=region, # Corresponds to the RunPod datacenter ID
+        endpoint_url=endpoint_url, # Datacenter-specific S3 API endpoint
     )
 
-def put_object(s3_client, bucket_name, object_name, file_path):
+def put_object(s3_client, bucket_name: str, object_name: str, file_path: str):
+    
+    # Uploads a local file to the specified RunPod network volume.
+    #
+    # Args:
+    #   s3_client: The S3 client object (e.g., returned by create_s3_client).
+    #   bucket_name (str): The ID of the target RunPod network volume.
+    #   object_name (str): The desired file path for the object on the network volume.
+    #   file_path (str): The local path to the file that needs to be uploaded.
+
     try:
+        # Attempt to upload the file to the RunPod network volume.
         s3_client.upload_file(file_path, bucket_name, object_name)
-        print(f"Uploaded {file_path} to s3://{bucket_name}/{object_name}")
+        print(f"Successfully uploaded '{file_path}' to Network Volume '{bucket_name}' as '{object_name}'")
     except Exception as e:
-        print(f"Error uploading file: {e}")
+        # Catch any exception during upload, print an error, and re-raise
+        print(f"Error uploading file '{file_path}' to Network Volume '{bucket_name}' as '{object_name}': {e}")
         raise
 
 def main():
+    
+    # Parses command-line arguments and orchestrates the file upload process
+    # to a RunPod network volume.
+    
+    # Set up command-line argument parsing
     parser = argparse.ArgumentParser(
-        description="Upload a file to S3-compatible storage"
+        description="Upload a file to a RunPod Network Volume using its S3-compatible API. "
+                    "Requires RUNPOD_USER_EMAIL and RUNPOD_S3_API_KEY env vars to be set "
+                    "with your RunPod Shared Key credentials."
     )
-    parser.add_argument("-b", "--bucket", required=True, help="Bucket name")
-    parser.add_argument("-e", "--endpoint", required=True, help="S3 endpoint URL")
     parser.add_argument(
-        "-f", "--file", required=True, help="Path to the file to upload"
+        "-b", "--bucket",
+        required=True,
+        help="The ID of your RunPod Network Volume (acts as the S3 bucket name)."
     )
-    parser.add_argument("-o", "--object", required=True, help="S3 object key")
-    parser.add_argument("-r", "--region", required=True, help="AWS region name")
+    parser.add_argument(
+        "-e", "--endpoint",
+        required=True,
+        help="The S3 endpoint URL for your RunPod datacenter (e.g., 'https://<DATACENTER_ID>-s3api.runpod.dev/')."
+    )
+    parser.add_argument(
+        "-f", "--file",
+        required=True,
+        help="The local path to the file to be uploaded."
+    )
+    parser.add_argument(
+        "-o", "--object",
+        required=True,
+        help="The S3 object key (i.e., the desired file path on the Network Volume)."
+    )
+    parser.add_argument(
+        "-r", "--region",
+        required=True,
+        help="The RunPod datacenter ID, used as the AWS region (e.g., 'ca-qc-1'). Find this in the RunPod console's Storage section or endpoint URL."
+    )
 
     args = parser.parse_args()
 
+    # Create the S3 client using the parsed arguments, configured for RunPod.
     client = create_s3_client(args.region, args.endpoint)
+
+    # Upload the object to the specified network volume.
     put_object(client, args.bucket, args.object, args.file)
 
 if __name__ == "__main__":
     main()
-
 ```
 
 Example usage:
