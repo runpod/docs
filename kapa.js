@@ -20,7 +20,7 @@ script.setAttribute("data-button-image-height", 30);
 // script.setAttribute("data-modal-title-color", "#FFFFFF");
 
 // v2
-script.setAttribute("data-project-logo", "https://raw.githubusercontent.com/runpod/docs/51f96638ad16845f314e140d93ea55f33876fc43/logo/icon_square_white.svg",);
+script.setAttribute("data-project-logo", "https://raw.githubusercontent.com/runpod/docs/22268d7d3adb48de47dd22a72f554c9aff9b9971/logo/icon_square_white.svg",);
 script.setAttribute("data-button-bg-color", "#5D29F0");
 script.setAttribute("data-button-hover-bg-color", "#AE6DFF");
 script.setAttribute("data-button-text-color", "#FFFFFF");
