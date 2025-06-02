@@ -10,4 +10,5 @@ script.setAttribute("data-button-image-width", 30);
 script.setAttribute("data-button-image-height", 30);
 script.setAttribute("data-button-bg-color", "#F3F3F3");
 script.setAttribute("data-button-text-color", "#19181E");
+script.setAttribute("data-button-text-shadow", "0px 0px 0px 0px");
 document.head.appendChild(script);
