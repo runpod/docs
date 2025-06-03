@@ -1,0 +1,324 @@
+---
+title: "Build a dual-mode Serverless worker"
+sidebarTitle: "Build a dual-mode worker"
+description: "Create a flexible Serverless worker that supports a Pod-first development workflow."
+---
+
+Learn how to build a flexible Serverless worker with a single Docker image that supports both interactive development ("Pod" mode) and production API handling ("Serverless" mode). This approach promotes a "Pod-first" development workflow for faster iteration.
+
+<Tip>
+
+To get up and running faster, you can also [clone this repository](https://github.com/justinwlin/Runpod-GPU-And-Serverless-Base) and use it as a base for your worker.
+
+</Tip>
+
+## What you'll learn
+
+In this tutorial you'll learn how to:
+
+*   Set up a project for a dual-mode Serverless worker.
+*   Create a handler file (`rp_handler.py`) that adapts its behavior based on a user-specified environment variable.
+*   Write a startup script (`start.sh`) to manage different operational modes.
+*   Build a Docker image designed for flexibility.
+*   Understand and utilize the "Pod-first" development workflow.
+*   Deploy and test your worker in both Pod and Serverless environments.
+
+## Requirements
+
+*   You've [created a RunPod account](/get-started/manage-accounts).
+*   You've installed [Python 3.x](https://www.python.org/downloads/) and [Docker](https://docs.docker.com/get-started/get-docker/) on your local machine and configured them for your command line.
+*   Basic understanding of Docker concepts and shell scripting.
+
+## Step 1: Set up your project structure
+
+First, create a directory for your project and the necessary files.
+
+    Open your terminal and run the following commands:
+
+```sh
+mkdir dual-mode-worker
+cd dual-mode-worker
+touch rp_handler.py start.sh Dockerfile requirements.txt
+```
+
+This creates:
+
+- `rp_handler.py`: Your Python script with the RunPod handler logic.
+- `start.sh`: A shell script that will be the entrypoint for your Docker container.
+- `Dockerfile`: Instructions to build your Docker image.
+- `requirements.txt`: A file to list Python dependencies.
+
+## Step 2: Create the `rp_handler.py` file
+
+This Python script will contain your core logic. It will check for a user-specified environment variable `MODE_TO_RUN` to determine whether to run in Pod or Serverless mode.
+
+Add the following code to `rp_handler.py`:
+
+```python
+import runpod
+import os
+import asyncio
+import time
+
+# Determine the operational mode. Defaults to 'pod' if not set.
+MODE_TO_RUN = os.getenv("MODE_TO_RUN", "pod")
+
+async def handler(event):
+    
+    #This function processes incoming requests to your Serverless endpoint
+    # or runs a test job if in 'Pod' mode.
+    
+    print(f"Handler invoked in {MODE_TO_RUN} mode.")
+    
+    input_data = event.get('input', {})
+    prompt = input_data.get('prompt', 'default prompt')
+    delay = input_data.get('delay', 1)
+
+    print(f"Received prompt: {prompt}")
+    print(f"Processing for {delay} seconds...")
+    
+    # Simulate work
+    await asyncio.sleep(delay) 
+    
+    return {"output": f"Processed prompt: '{prompt}' after {delay}s in {MODE_TO_RUN} mode."}
+
+# Start the Serverless function or run a test based on the mode
+if __name__ == '__main__':
+    if MODE_TO_RUN == "serverless":
+        print("Starting RunPod Serverless worker...")
+        runpod.serverless.start({
+            "handler": handler
+        })
+    elif MODE_TO_RUN == "pod":
+        print("Running in Pod mode. Simulating a test call to the handler.")
+        # This block allows direct testing of the handler in a pod environment
+        async def main_test_pod():
+            test_event = {
+                "input": {
+                    "prompt": "Pod test call!",
+                    "delay": 2
+                }
+            }
+            result = await handler(test_event)
+            print("--- Pod Mode Test Handler Output ---")
+            print(result)
+            print("------------------------------------")
+        
+        asyncio.run(main_test_pod())
+    else:
+        print(f"Unknown MODE_TO_RUN: {MODE_TO_RUN}. Exiting.")
+
+```
+
+Key features:
+
+*   `MODE_TO_RUN = os.getenv("MODE_TO_RUN", "pod")`: Reads the mode from an environment variable, defaulting to `pod`.
+*   `async def handler(event)`: Your core logic. It's an `async` function as required by `runpod.serverless.start`.
+*   `if __name__ == '__main__':`: This block controls what happens when the script is executed directly.
+    *   In `serverless`" mode, it starts the RunPod Serverless worker.
+    *   In `pod` mode, it runs a sample test call to your `handler` function, allowing for quick iteration.
+
+## Step 3: Create the `start.sh` script
+
+This script will be the entrypoint for your Docker container. It reads the `MODE_TO_RUN` environment variable and configures the container accordingly.
+
+Add the following code to `start.sh`:
+
+```bash
+#!/bin/bash
+set -e # Exit immediately if a command exits with a non-zero status.
+
+echo "Container starting with MODE_TO_RUN=${MODE_TO_RUN}"
+
+case $MODE_TO_RUN in
+    serverless)
+        echo "Starting in Serverless mode..."
+        # Execute the Python handler, which will start the runpod worker
+        exec python3 -u /app/rp_handler.py
+        ;;
+    pod)
+        echo "Starting in Pod mode..."
+        echo "Development services (e.g., Jupyter, SSH) would start here."
+        echo "The rp_handler.py script will run its test harness if executed."
+        echo "You can connect to the Pod and manually run 'python /app/rp_handler.py'."
+        # Keep the container running for interactive pod sessions
+        exec sleep infinity
+        ;;
+    *)
+        echo "Error: Invalid MODE_TO_RUN value: '$MODE_TO_RUN'. Expected 'serverless' or 'pod'."
+        exit 1
+        ;;
+esac
+```
+Key features:
+*   `case $MODE_TO_RUN in ... esac`: This structure directs the startup based on the mode.
+*   `serverless` mode: Executes `rp_handler.py`, which then starts the RunPod Serverless worker. `exec` replaces the shell process with the Python process.
+*   `pod` mode: Prints messages indicating it's ready for development. It then runs `sleep infinity` to keep the container alive so you can connect to it (e.g., via SSH or `docker exec`). You would then manually run `python /app/rp_handler.py` inside the Pod to test your handler logic.
+*   `set -e`: Ensures the script exits if any command fails.
+
+## Step 4: Create the `Dockerfile`
+
+This file defines how to build your Docker image.
+
+Add the following content to `Dockerfile`:
+
+```dockerfile
+# Use a standard Python base image
+FROM python:3.10-slim
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Copy the requirements file and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of the application code
+COPY rp_handler.py .
+COPY start.sh .
+
+# Set default environment variables
+ENV PYTHONUNBUFFERED=1
+ENV MODE_TO_RUN="pod" # Default to pod mode
+
+# Make the startup script executable
+RUN chmod +x /app/start.sh
+
+# Set the entrypoint for the container
+CMD ["/app/start.sh"]
+```
+Key features:
+*   `FROM python:3.10-slim`: Starts with a lightweight Python image.
+*   `WORKDIR /app`: Sets the current directory inside the container.
+*   `COPY requirements.txt .` and `RUN pip install ...`: Installs Python dependencies.
+*   `COPY rp_handler.py .` and `COPY start.sh .`: Copies your application files.
+*   `ENV MODE_TO_RUN="pod"`: Sets the default operational mode to "Pod". This can be overridden at runtime.
+*   `RUN chmod +x /app/start.sh`: Makes your startup script executable.
+*   `CMD ["/app/start.sh"]`: Specifies `start.sh` as the command to run when the container starts.
+
+## Step 5: Add dependencies to `requirements.txt`
+
+For this basic example, you only need the `runpod` SDK.
+
+Add the following to `requirements.txt`:
+
+```txt
+runpod
+```
+
+## Step 6: Build and push your Docker image
+
+<Info>
+
+Instead of building and pushing your image via Docker Hub, you can also [deploy your worker from a GitHub repository](/serverless/workers/github-integration).
+
+</Info>
+
+Now, build your Docker image and push it to a container registry like Docker Hub.
+
+<Steps>
+  <Step title="Build your Docker image">
+    Build your Docker image, replacing `[YOUR_USERNAME]` with your Docker Hub username and choosing a suitable image name:
+    
+    ```sh
+    docker build --platform linux/amd64 --tag [YOUR_USERNAME]/dual-mode-worker .
+    ```
+    The `--platform linux/amd64` flag is important for compatibility with RunPod's infrastructure.
+  </Step>
+  
+  <Step title="Push the image to your container registry">
+    ```sh
+    docker push [YOUR_USERNAME]/dual-mode-worker:latest
+    ```
+    (You might need to `docker login` first).
+  </Step>
+</Steps>
+
+## Step 7: Utilize the Pod-First Development Workflow
+
+The primary advantage of this setup is the "Pod-first" workflow. You develop and test your handler logic interactively in a Pod environment before deploying to Serverless.
+
+<Tabs>
+<Tab title="Test in Pod Mode (Locally or on RunPod)">
+
+You can run your container locally with Docker, simulating Pod mode:
+
+```sh
+docker run -e MODE_TO_RUN=pod --rm -it [YOUR_USERNAME]/dual-mode-worker
+```
+
+Or, deploy this image to a RunPod Pod:
+1. Go to **Compute > Pods** in the RunPod console and click **New Pod**.
+2. Choose a GPU.
+3. For "Docker Image Name", enter `[YOUR_USERNAME]/dual-mode-worker:latest`.
+4. Under "Environment Variables", set `MODE_TO_RUN` to `pod`.
+5. Configure port mapping if you plan to run services like Jupyter (e.g., map port `8888`).
+6. Deploy the Pod.
+
+Once the Pod is running (either locally or on RunPod), you can connect to it (e.g., `docker exec -it <container_id> /bin/bash` for local, or SSH for RunPod Pod).
+Inside the Pod, navigate to `/app` and run your handler directly:
+
+```sh
+python rp_handler.py
+```
+This will execute the Pod-specific test harness in your `rp_handler.py`, giving you immediate feedback. You can edit `rp_handler.py` within the Pod (using an attached volume or tools inside the Pod) and re-run it for rapid iteration.
+
+</Tab>
+<Tab title="Deploy to Serverless Mode">
+
+Once you're confident with your `rp_handler.py` logic tested in Pod mode:
+1. Go to the [Serverless section](https://www.runpod.io/console/serverless) of the RunPod console.
+2. Click **New Endpoint**.
+3. Under **Custom Source**, select **Docker Image**, then click **Next**.
+4. In the **Container Image** field, enter your Docker image URL: `docker.io/[YOUR_USERNAME]/dual-mode-worker:latest`.
+5. Under **Advanced Settings > Environment Variables**, set `MODE_TO_RUN` to `serverless`.
+6. Configure GPU, workers, and other settings as needed.
+7. Click **Create Endpoint**.
+
+The *same* image is used, but `start.sh` will now direct it to run in Serverless mode, starting the `runpod.serverless.start` worker.
+
+</Tab>
+</Tabs>
+
+## Step 8: Test your Serverless Worker
+
+After deploying your endpoint in "Serverless" mode:
+
+1.  Navigate to your endpoint's detail page in the RunPod console.
+2.  Click the **Requests** tab.
+3.  Use the following JSON as test input:
+
+```json
+{
+    "input": {
+        "prompt": "Hello Serverless World!",
+        "delay": 3
+    }
+}
+```
+4.  Click **Run**.
+
+After a few moments for initialization and processing, you should see output similar to this:
+
+```json
+{
+    "delayTime": 12345, // This will vary
+    "executionTime": 3050, // This will be around 3000ms + overhead
+    "id": "some-unique-id",
+    "output": {
+        "output": "Processed prompt: 'Hello Serverless World!' after 3s in Serverless mode."
+    },
+    "status": "COMPLETED"
+}
+```
+
+Congratulations! You've successfully built, deployed, and tested a dual-mode Serverless worker.
+
+## Next steps
+
+Now that you've mastered the dual-mode structure:
+
+*   [Explore advanced handler functions.](/serverless/workers/handler-functions)
+*   [Learn about sending requests programmatically via API or SDKs.](/serverless/endpoints/send-requests)
+*   [Deep dive into local testing and development.](/serverless/development/local-testing)
+*   [Understand endpoint configurations for performance and cost optimization.](/serverless/endpoints/endpoint-configurations) 
