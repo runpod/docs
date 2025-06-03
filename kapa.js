@@ -18,7 +18,7 @@ script.setAttribute("data-modal-title-font-weight", "600");
 // script.setAttribute("data-button-border", "1px solid #E1E1E5");
 
 // v2 (purple/white)
-script.setAttribute("data-project-logo", "https://raw.githubusercontent.com/runpod/docs/22268d7d3adb48de47dd22a72f554c9aff9b9971/logo/icon_square_white.svg",);
+script.setAttribute("data-project-logo", "https://raw.githubusercontent.com/runpod/docs/c29473974f2eb4162345d634a5b443db34781660/logo/icon_square_white.svg",);
 script.setAttribute("data-button-bg-color", "#5D29F0");
 script.setAttribute("data-button-hover-bg-color", "#AE6DFF");
 script.setAttribute("data-button-text-color", "#FFFFFF");
