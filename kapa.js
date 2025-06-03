@@ -1,7 +1,7 @@
 const script = document.createElement("script");
 script.src = "https://widget.kapa.ai/kapa-widget.bundle.js";
 script.async = true;
-script.setAttribute("data-website-id", "5b21ac2d-dd52-41f2-b02b-cd82467e45cc");
+script.setAttribute("data-website-id", "d8e25089-cadd-4c1c-9010-7e83cd99a2a5");
 script.setAttribute("data-project-name", "Runpod");
 script.setAttribute("data-project-color", "#070D27");
 script.setAttribute("data-button-image-width", 30);
