@@ -17,7 +17,7 @@ To get up and running faster, you can also [clone this repository](https://githu
 In this tutorial you'll learn how to:
 
 *   Set up a project for a dual-mode Serverless worker.
-*   Create a handler file (`rp_handler.py`) that adapts its behavior based on a user-specified environment variable.
+*   Create a handler file (`handler.py`) that adapts its behavior based on a user-specified environment variable.
 *   Write a startup script (`start.sh`) to manage different operational modes.
 *   Build a Docker image designed for flexibility.
 *   Understand and utilize the "Pod-first" development workflow.
@@ -38,21 +38,21 @@ First, create a directory for your project and the necessary files.
 ```sh
 mkdir dual-mode-worker
 cd dual-mode-worker
-touch rp_handler.py start.sh Dockerfile requirements.txt
+touch handler.py start.sh Dockerfile requirements.txt
 ```
 
 This creates:
 
-- `rp_handler.py`: Your Python script with the RunPod handler logic.
+- `handler.py`: Your Python script with the RunPod handler logic.
 - `start.sh`: A shell script that will be the entrypoint for your Docker container.
 - `Dockerfile`: Instructions to build your Docker image.
 - `requirements.txt`: A file to list Python dependencies.
 
-## Step 2: Create the `rp_handler.py` file
+## Step 2: Create the `handler.py` file
 
 This Python script will contain your core logic. It will check for a user-specified environment variable `MODE_TO_RUN` to determine whether to run in Pod or Serverless mode.
 
-Add the following code to `rp_handler.py`:
+Add the following code to `handler.py`:
 
 ```python
 import runpod
@@ -134,13 +134,13 @@ case $MODE_TO_RUN in
     serverless)
         echo "Starting in Serverless mode..."
         # Execute the Python handler, which will start the runpod worker
-        exec python3 -u /app/rp_handler.py
+        exec python3 -u /app/handler.py
         ;;
     pod)
         echo "Starting in Pod mode..."
         echo "Development services (e.g., Jupyter, SSH) would start here."
-        echo "The rp_handler.py script will run its test harness if executed."
-        echo "You can connect to the Pod and manually run 'python /app/rp_handler.py'."
+        echo "The handler.py script will run its test harness if executed."
+        echo "You can connect to the Pod and manually run 'python /app/handler.py'."
         # Keep the container running for interactive pod sessions
         exec sleep infinity
         ;;
@@ -152,8 +152,8 @@ esac
 ```
 Key features:
 *   `case $MODE_TO_RUN in ... esac`: This structure directs the startup based on the mode.
-*   `serverless` mode: Executes `rp_handler.py`, which then starts the RunPod Serverless worker. `exec` replaces the shell process with the Python process.
-*   `pod` mode: Prints messages indicating it's ready for development. It then runs `sleep infinity` to keep the container alive so you can connect to it (e.g., via SSH or `docker exec`). You would then manually run `python /app/rp_handler.py` inside the Pod to test your handler logic.
+*   `serverless` mode: Executes `handler.py`, which then starts the RunPod Serverless worker. `exec` replaces the shell process with the Python process.
+*   `pod` mode: Prints messages indicating it's ready for development. It then runs `sleep infinity` to keep the container alive so you can connect to it (e.g., via SSH or `docker exec`). You would then manually run `python /app/handler.py` inside the Pod to test your handler logic.
 *   `set -e`: Ensures the script exits if any command fails.
 
 ## Step 4: Create the `Dockerfile`
@@ -174,7 +174,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code
-COPY rp_handler.py .
+COPY handler.py .
 COPY start.sh .
 
 # Set default environment variables
@@ -191,7 +191,7 @@ Key features:
 *   `FROM python:3.10-slim`: Starts with a lightweight Python image.
 *   `WORKDIR /app`: Sets the current directory inside the container.
 *   `COPY requirements.txt .` and `RUN pip install ...`: Installs Python dependencies.
-*   `COPY rp_handler.py .` and `COPY start.sh .`: Copies your application files.
+*   `COPY handler.py .` and `COPY start.sh .`: Copies your application files.
 *   `ENV MODE_TO_RUN="pod"`: Sets the default operational mode to "Pod". This can be overridden at runtime.
 *   `RUN chmod +x /app/start.sh`: Makes your startup script executable.
 *   `CMD ["/app/start.sh"]`: Specifies `start.sh` as the command to run when the container starts.
@@ -259,14 +259,14 @@ Once the Pod is running (either locally or on RunPod), you can connect to it (e.
 Inside the Pod, navigate to `/app` and run your handler directly:
 
 ```sh
-python rp_handler.py
+python handler.py
 ```
-This will execute the Pod-specific test harness in your `rp_handler.py`, giving you immediate feedback. You can edit `rp_handler.py` within the Pod (using an attached volume or tools inside the Pod) and re-run it for rapid iteration.
+This will execute the Pod-specific test harness in your `handler.py`, giving you immediate feedback. You can edit `handler.py` within the Pod (using an attached volume or tools inside the Pod) and re-run it for rapid iteration.
 
 </Tab>
 <Tab title="Deploy to Serverless Mode">
 
-Once you're confident with your `rp_handler.py` logic tested in Pod mode:
+Once you're confident with your `handler.py` logic tested in Pod mode:
 1. Go to the [Serverless section](https://www.runpod.io/console/serverless) of the RunPod console.
 2. Click **New Endpoint**.
 3. Under **Custom Source**, select **Docker Image**, then click **Next**.
