@@ -7,10 +7,7 @@ script.setAttribute("data-project-color", "#070D27");
 script.setAttribute("data-button-image-width", 30);
 script.setAttribute("data-button-image-height", 30);
 script.setAttribute("data-font-family", "Inter");
-script.setAttribute("data-modal-title-font-family", "Inter");
 script.setAttribute("data-modal-title-font-weight", "600");
-script.setAttribute("data-query-input-font-family", "Inter");
-script.setAttribute("data-answer-feedback-button-font-family", "Inter");
 
 // v1
 // script.setAttribute("data-project-logo", "https://raw.githubusercontent.com/runpod/docs/51f96638ad16845f314e140d93ea55f33876fc43/logo/icon_square.svg",);
