@@ -80,8 +80,6 @@ FROM runpod/base:${BASE_VERSION}-cuda${CUDA_VERSION}
 
 You must declare an ARG in your Dockerfile before you can reference it, even if you've defined it in the RunPod UI.
 
-For example, you could declare variables using the UI
-
 ### Setting build arguments in the RunPod UI
 
 To customize your build arguments without modifying your Dockerfile, you can specify them using the RunPod console.
