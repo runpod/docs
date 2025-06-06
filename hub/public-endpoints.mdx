@@ -1,0 +1,261 @@
+---
+title: "Public endpoints"
+sidebarTitle: "Public endpoints"
+description: "Test and deploy production-ready AI models with RunPod's public endpoints."
+---
+
+RunPod public endpoints provide instant access to state-of-the-art AI models through simple API calls, eliminating the need to manage infrastructure while offering enterprise-grade scaling and performance.
+
+<Note>
+Public endpoints are currently in beta. We're actively expanding our model selection and improving the user experience. [Join our Discord](https://discord.gg/runpod) for updates and feedback.
+</Note>
+
+## Available models
+
+Our initial launch includes optimized text-to-image generation models:
+
+| Model | Description | Use case |
+|-------|-------------|----------|
+| **FLUX.1 [dev]** | High-quality image generation with excellent prompt adherence | Professional artwork, detailed illustrations |
+| **FLUX.1 [schnell]** | Fast image generation optimized for speed | Rapid prototyping, real-time applications |
+
+<Note>
+More models are coming soon, including video generation capabilities and custom model deployment options.
+</Note>
+
+## Accessing the public endpoint playground
+
+A public endpoint playground can be found in the RunPod console, providing a streamlined way to discover and experiment with AI models.
+
+To access the public endpoint playground:
+
+1. Navigate to the [RunPod Hub](https://www.runpod.io/console/hub) in the console
+2. Find the **Public endpoints** section
+3. Browse available models and select one that fits your needs
+4. Click **Deploy** to create your endpoint.
+5. Start making API calls immediately
+
+To test a model in the playground:
+
+1. Select a model using the dropdown menu.
+2. Under **Input**, enter a prompt in the text box.
+3. Enter a negative prompt if needed. Negative prompts tell the model what to exclude from the output.
+4. Under **Additional settings**, you can adjust the seed, aspect ratio, number of inference steps, guidance scale, and output format.
+6. Click **Run** to start generating.
+
+The playground will generate an image or JSON response.
+
+Under **Result**, you can use the dropdown menu to show either a preview of the output, or the raw JSON.
+
+## Making API requests to public endpoints
+
+You can make API requests to public endpoints using any HTTP client. The endpoint URL is specific to the model you want to use. For `FLUX.1 [dev]`, the endpoint is `https://api.runpod.ai/v2/black-forest-labs-flux-1-dev/run`.
+
+All requests require authentication using your RunPod API key, passed in the `Authorization` header. You can find your API key in the [RunPod console](https://www.runpod.io/console/user/settings) under **Settings > API Keys**.
+
+### Synchronous requests
+
+For immediate results, use the `/runsync` endpoint:
+
+```bash curl
+curl -X POST "https://api.runpod.ai/v2/black-forest-labs-flux-1-dev/runsync" \
+  -H "Authorization: Bearer YOUR_RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": {
+      "prompt": "A serene mountain landscape at sunset",
+      "width": 1024,
+      "height": 1024,
+      "num_inference_steps": 20,
+      "guidance_scale": 7.5
+    }
+  }'
+```
+
+### Asynchronous requests
+
+For longer-running tasks or batch processing, use the `/run` endpoint:
+
+```bash curl
+curl -X POST "https://api.runpod.ai/v2/black-forest-labs-flux-1-dev/run" \
+  -H "Authorization: Bearer YOUR_RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": {
+      "prompt": "A futuristic cityscape with flying cars",
+      "width": 1024,
+      "height": 1024,
+      "num_inference_steps": 50,
+      "guidance": 8.0
+    }
+  }'
+```
+
+Then check the status and retrieve results:
+
+```bash curl
+curl -X GET "https://api.runpod.ai/v2/{endpoint-id}/status/{job-id}" \
+  -H "Authorization: Bearer YOUR_RUNPOD_API_KEY"
+```
+
+### Response format
+
+All endpoints return a consistent JSON response format:
+
+```json
+{
+  "id": "job-12345",
+  "status": "COMPLETED",
+  "output": {
+    "images": [
+      {
+        "url": "https://runpod.s3.amazonaws.com/...",
+        "base64": "data:image/png;base64,..."
+      }
+    ]
+  },
+  "executionTime": 2.5,
+  "cost": 0.0075
+}
+```
+
+## Model-specific parameters
+
+### FLUX.1 [dev]
+
+FLUX.1 [dev] is optimized for high-quality, detailed image generation. The model accepts several parameters to control the generation process:
+
+```json
+{
+  "input": {
+    "prompt": "Your image description",
+    "negative_prompt": "Elements to avoid (optional)",
+    "width": 1024,
+    "height": 1024,
+    "num_inference_steps": 20,
+    "guidance_scale": 7.5,
+    "seed": 42,
+    "image_format": "png"
+  }
+}
+```
+
+**Parameters:**
+- `prompt` (string, required): Text description of the desired image.
+- `negative_prompt` (string, optional): Elements to exclude from the image.
+- `width` (integer, default: 1024): Image width in pixels (64-2048).
+- `height` (integer, default: 1024): Image height in pixels (64-2048).
+- `num_inference_steps` (integer, default: 20): Number of denoising steps (1-50).
+- `guidance` (float, default: 7.5): How closely to follow the prompt (1.0-20.0).
+- `seed` (integer, optional): Random seed for reproducible results.
+- `image_format` (string, default: "jpeg"): Output format ("png" or "jpeg").
+
+### FLUX.1 [schnell]
+
+FLUX.1 [schnell] is optimized for speed and real-time applications:
+
+```json
+{
+  "input": {
+    "prompt": "A quick sketch of a mountain",
+    "width": 1024,
+    "height": 1024,
+    "num_inference_steps": 4,
+    "guidance": 1.0,
+    "seed": 123
+  }
+}
+```
+
+**Parameters:**
+- `prompt` (string, required): Text description of the desired image
+- `width` (integer, default: 1024): Image width in pixels (64-2048)
+- `height` (integer, default: 1024): Image height in pixels (64-2048)
+- `num_inference_steps` (integer, default: 4): Number of denoising steps (1-8)
+- `guidance` (float, default: 1.0): Prompt adherence strength (0.5-2.0)
+- `seed` (integer, optional): Random seed for reproducible results
+
+<Warning>
+FLUX.1 [schnell] is optimized for speed and works best with lower step counts. Using higher values may not improve quality significantly.
+</Warning>
+
+## Python example
+
+You can also use the RunPod SDK to make API requests to public endpoints. For example:
+
+```python
+import requests
+import json
+
+def generate_image(prompt, model_id, api_key):
+    url = f"https://api.runpod.ai/v2/{model_id}/run"
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "input": {
+            "prompt": prompt,
+            "width": 1024,
+            "height": 1024,
+            "num_inference_steps": 20,
+            "guidance": 7.5
+        }
+    }
+    
+    response = requests.post(url, headers=headers, json=payload)
+    
+    if response.status_code == 200:
+        result = response.json()
+        return result["output"]["images"][0]["url"]
+    else:
+        raise Exception(f"Error: {response.status_code} - {response.text}")
+
+# Example usage
+image_url = generate_image(
+    "A beautiful sunset over the ocean",
+    "black-forest-labs-flux-1-dev",
+    "[RUNPOD_API_KEY]"
+)
+print(f"Generated image: {image_url}")
+```
+
+## Hub endpoint playground features
+
+- **Interactive parameter adjustment**: Modify prompts, dimensions, and model settings in real-time.
+- **Instant preview**: Generate images directly in the browser.
+- **Cost estimation**: See estimated costs before running generation.
+- **API code generation**: Copy working code examples for your applications.
+- **Result sharing**: Share generated images and configurations with your team.
+
+## Pricing
+
+Public endpoints use transparent, usage-based pricing:
+
+| Model | Price | Billing unit |
+|-------|-------|--------------|
+| FLUX.1 [dev] | $0.025 | per megapixel |
+| FLUX.1 [schnell] | $0.003 | per megapixel |
+
+**Pricing examples:**
+- 1024×1024 image (1 megapixel): $0.025 (dev) / $0.003 (schnell)
+- 512×512 image (0.25 megapixels): $0.00625 (dev) / $0.00075 (schnell)
+- 2048×2048 image (4 megapixels): $0.10 (dev) / $0.012 (schnell)
+
+<Note>
+Pricing is calculated based on the actual output resolution. Failed generations are not charged.
+</Note>
+
+## Best practices
+
+### Prompt engineering
+
+When working with public endpoints, following best practices will help you achieve better results and optimize performance. For prompt engineering, be specific with detailed prompts as they generally produce better results. Include style modifiers such as art styles, camera angles, or lighting conditions. For FLUX.1 [dev], use negative prompts to exclude unwanted elements from your images.
+
+A good prompt example would be: "A professional portrait of a woman in business attire, studio lighting, high quality, detailed, corporate headshot style."
+
+### Performance optimization
+
+For performance optimization, choose the right model for your needs. Use FLUX.1 [schnell] when you need speed, and FLUX.1 [dev] when you need higher quality. Standard dimensions like 1024×1024 render fastest, so stick to these unless you need specific aspect ratios. For multiple images, use asynchronous endpoints to batch your requests. Consider caching results by storing generated images to avoid regenerating identical prompts.
