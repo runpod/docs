@@ -1,0 +1,193 @@
+---
+title: "Cloud IDE"
+---
+
+The RunPod Serverless cloud IDE provides a browser-based development environment that allows you to edit, test, and debug your handler code directly in the cloud. This feature is particularly useful for debugging complex issues, making quick fixes, or developing code when you don't have access to your local development environment.
+
+## Overview
+
+The cloud IDE creates a Pod containing a copy of your worker's handler file and opens a VSCode-like interface in your browser. This environment allows you to:
+
+* Edit your handler code directly in the cloud.
+* Test changes without rebuilding and redeploying your entire worker.
+* Debug issues in an environment that closely matches your production deployment.
+* Access development tools and terminal functionality through your browser.
+
+<Warning>
+
+Changes made in the cloud IDE are saved to the Pod, not directly to your deployed workers. You'll need to explicitly push changes to update your production workers.
+
+</Warning>
+
+## Accessing the cloud IDE
+
+To access the cloud IDE for your serverless endpoint:
+
+1. Navigate to the [Serverless section](https://www.runpod.io/console/serverless) of the RunPod console.
+2. Find the endpoint you want to debug and click on it to open the endpoint details page.
+3. Click the **Manage** button.
+4. Click **Open IDE** from the management options.
+5. Wait approximately 5 minutes for the IDE environment to initialize.
+6. Once ready, click **Open** in the top banner to access the IDE.
+
+The initialization process creates a dedicated Pod with your handler code and sets up the development environment. During this time, the system downloads your worker's container image and prepares the IDE interface.
+
+## Working with the cloud IDE
+
+### Environment setup
+
+When the cloud IDE opens, you'll find:
+
+* A copy of your worker's handler file pre-loaded.
+* A VSCode-like interface with syntax highlighting and code completion.
+* Access to a terminal for running commands and debugging.
+* File explorer for navigating your project structure.
+
+### Code editing
+
+The cloud IDE provides a full-featured code editor with:
+
+* Syntax highlighting for Python and other languages.
+* Code completion and IntelliSense features.
+* Multi-file editing capabilities.
+* Find and replace functionality.
+* Git integration for version control.
+
+Make your code changes directly in the editor. All changes are automatically saved within the Pod environment.
+
+### Testing changes
+
+To test your modified handler code within the cloud IDE:
+
+1. Open the terminal in the IDE interface.
+2. Navigate to your handler file directory.
+3. Run your handler locally using the RunPod SDK testing features:
+
+```bash
+python your_handler.py --test_input '{"input": {"key": "value"}}'
+```
+
+Or start a local test server:
+
+```bash
+python your_handler.py --rp_serve_api
+```
+
+You can use all the same [local testing options](/serverless/development/local-testing) available in your local development environment.
+
+### Debugging workflow
+
+The cloud IDE is particularly useful for debugging issues that only occur in the cloud environment:
+
+1. **Reproduce the issue**: Use the same inputs that caused problems in production.
+2. **Add debugging code**: Insert print statements, logging, or use the Python debugger.
+3. **Test iteratively**: Make changes and test them immediately without redeployment.
+4. **Analyze logs**: Review output and error messages in the terminal.
+
+Example debugging session:
+
+```python
+import runpod
+import logging
+
+# Add debugging logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+def handler(job):
+    job_input = job["input"]
+    logger.debug(f"Received input: {job_input}")
+    
+    try:
+        # Your handler logic here
+        result = process_input(job_input)
+        logger.debug(f"Processing result: {result}")
+        return result
+    except Exception as e:
+        logger.error(f"Error processing job: {str(e)}")
+        raise
+
+runpod.serverless.start({"handler": handler})
+```
+
+## Pushing changes to production
+
+After testing your changes in the cloud IDE, you need to update your production workers. The process depends on how you originally deployed your worker:
+
+### Docker Hub deployment
+
+If your worker was deployed from a Docker Hub image:
+
+1. Update your local codebase with the changes from the cloud IDE.
+2. Rebuild your Docker image with the updated code.
+3. Push the new image to Docker Hub.
+4. Update your endpoint configuration to use the new image version.
+
+### GitHub integration
+
+If your worker uses GitHub integration:
+
+1. Copy your changes from the cloud IDE to your local repository.
+2. Commit and push the changes to your GitHub repository.
+3. The endpoint will automatically update with the new code.
+
+### Manual update process
+
+1. **Export your changes**: Copy the modified code from the cloud IDE.
+2. **Update your source**: Apply changes to your local development environment.
+3. **Rebuild and deploy**: Follow your normal deployment process to update the production workers.
+
+<Tip>
+
+Consider using version control to track changes made in the cloud IDE. Create a new branch for cloud IDE experiments to maintain a clean development workflow.
+
+</Tip>
+
+## Best practices
+
+### Use for debugging
+
+The cloud IDE is most effective for debugging production issues that don't reproduce locally, testing quick fixes before full redeployment, experimenting with code changes in a production-like environment, and accessing logs and system information not available locally. This makes it an invaluable tool when you encounter environment-specific issues or need to validate changes in a setting that closely matches your production deployment.
+
+### Avoid for primary development
+
+While the cloud IDE is powerful, it has several limitations that make it less suitable for primary development work. Changes aren't automatically synced to your source control, the environment is temporary and will be cleaned up, collaboration features are limited compared to local development, and network latency may affect the editing experience. These factors make it better suited for targeted debugging and testing rather than comprehensive development work.
+
+### Development workflow integration
+
+Integrate the cloud IDE into your development workflow by following a structured approach. Start by developing locally first using your local environment for primary development, then deploy and test your changes to your serverless endpoint. When issues arise, use the cloud IDE to investigate and debug problems, making sure to sync any fixes back to your local codebase. Finally, redeploy your updates to production with the complete changes to ensure consistency across your development pipeline.
+
+## Limitations and considerations
+
+### Compatibility
+
+The cloud IDE works with all RunPod Serverless endpoints, but some considerations apply. For Realtime Serverless deployments, the IDE creates a standard Pod which may not perfectly replicate the Realtime environment. Complex container setups may require additional configuration in the IDE environment. Additionally, you should ensure all required dependencies are available in the container image since the IDE environment mirrors your deployed container.
+
+### Resource usage
+
+Cloud IDE Pods consume resources and incur costs since they run on the same infrastructure as your workers. Remember to close the IDE when finished to avoid unnecessary charges, though the Pod will automatically shut down after a period of inactivity to help manage costs.
+
+### Security considerations
+
+The cloud IDE operates within your RunPod account security context, and code changes are isolated to the IDE Pod until you explicitly deploy them to production. Be cautious when working with sensitive data or credentials in the cloud environment, as this operates in a shared cloud infrastructure.
+
+## Troubleshooting
+
+### IDE won't open
+
+If the cloud IDE fails to open, first check that your endpoint is properly deployed and running, then verify that your container image includes the necessary development tools. Make sure to wait the full initialization period of approximately 5 minutes before attempting to open the IDE, as the setup process requires time to download your container and prepare the environment.
+
+### Code changes not working
+
+If your code changes don't seem to take effect, ensure you've saved your changes in the editor and restart your test server or re-run your handler. Check for syntax errors or import issues in the terminal, as these can prevent your updated code from executing properly.
+
+### Performance issues
+
+If the IDE feels slow or unresponsive, check your internet connection stability and try refreshing the browser page. Consider closing unused files and terminal sessions to free up resources and improve responsiveness in the cloud environment.
+
+## Next steps
+
+* [Learn more about local testing options](/serverless/development/local-testing)
+* [Explore debugging techniques](/serverless/development/debugger)  
+* [Understand handler function development](/serverless/workers/handler-functions)
+* [Deploy your updated workers](/serverless/workers/deploy)
