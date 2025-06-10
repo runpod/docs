@@ -1,0 +1,432 @@
+---
+title: "Connect to VSCode or Cursor"
+sidebarTitle: "Connect to IDE"
+description: "Set up remote development with Visual Studio Code or Cursor IDE."
+---
+
+This tutorial explains how to connect directly to your Pod instance through VSCode or Cursor using the Dev Containers extension, allowing you to work within your Pod's volume directory as if the files were stored on your local machine.
+
+## Requirements
+
+To complete this tutorial, you will need:
+
+- A running Pod instance. See [Manage Pods](/pods/manage-pods#create-a-pod) for detailed deployment instructions.
+- A local development environment with VSCode or Cursor installed.
+  - Download VSCode from [Visual Studio Code](https://code.visualstudio.com/download).
+  - Download Cursor from [Cursor](https://cursor.sh/).
+- Familiarity with basic command-line operations and SSH.
+- A RunPod account. Sign up at [RunPod](https://www.runpod.io/).
+- (Optional) A GitHub account for code management.
+
+## Step 1: Install required extensions
+
+To connect to your Pod, you'll need both the Remote-SSH and Dev Containers extensions.
+
+<Tabs>
+
+  <Tab title="VSCode">
+    1. Open VSCode and navigate to the **Extensions** view (Ctrl+Shift+X or Cmd+Shift+X).
+    2. Search for and install:
+       - **Remote - SSH** by ms-vscode-remote (Microsoft)
+       - **Dev Containers** by ms-vscode-remote (Microsoft)
+    3. Click **Install** for each extension.
+  </Tab>
+
+  <Tab title="Cursor">
+    1. Open Cursor and navigate to the **Extensions** view (Ctrl+Shift+X or Cmd+Shift+X).
+    2. Search for and install:
+       - **Remote - SSH** by Anysphere (Cursor)
+       - **Dev Containers** by Anysphere (Cursor)
+    3. Click **Install** for each extension.
+  </Tab>
+
+</Tabs>
+
+## Step 2: Generate an SSH key
+
+To connect to your Pod, you'll need an SSH key that is paired with your RunPod account. If you don't have one, follow these steps:
+
+1. Generate an SSH key using this command on your local terminal:
+
+   ```sh
+   ssh-keygen -t ed25519 -C "YOUR_EMAIL@DOMAIN.COM"
+   ```
+
+2. To retrieve your public SSH key, run this command:
+
+    ```sh
+    cat ~/.ssh/id_ed25519.pub
+    ```
+    This will output something similar to this:
+
+    ```sh
+    ssh-ed25519 AAAAC4NzaC1lZDI1JTE5AAAAIGP+L8hnjIcBqUb8NRrDiC32FuJBvRA0m8jLShzgq6BQ YOUR_EMAIL@DOMAIN.COM
+    ```
+
+3.  Copy and paste the output into the **SSH Public Keys** field in your [RunPod user account settings](https://www.runpod.io/console/user/settings).
+
+## Step 3: Configure SSH on VSCode or Cursor
+
+You'll configure SSH access to your Pod using the Remote-SSH extension. The instructions are slightly different for VSCode and Cursor.
+
+<Tabs>
+
+  <Tab title="VSCode">
+   1. From the [Pods](https://www.runpod.io/console/pods) page, select the Pod you deployed.
+
+   2. Select **Connect**, then select the **SSH** tab.
+   3. Copy the appropriate SSH command:
+
+      - For full functionality, use **SSH over exposed TCP** (supports SCP & SFTP). The command will look similar to this:
+      ```bash
+      ssh root@123.456.789.80 -p 12345 -i ~/.ssh/id_ed25519
+      ```
+
+      - For basic access, use the standard SSH command. The command will look similar to this:
+      ```bash
+      ssh pod-id@ssh.runpod.io -i ~/.ssh/id_ed25519
+      ```
+
+   <Note>
+   If you only see one command, it is because SSH over exposed TCP is not supportted by your selected GPU or template.
+   </Note>
+
+   4. In VSCode, open the **Command Palette** (Ctrl+Shift+P or Cmd+Shift+P) and choose **Remote-SSH: Connect to Host**, then select **Add New SSH Host**.
+
+   5. Enter the copied SSH command from step 3 and press **Enter**. This will add a new entry to your SSH config file. It will look similar to this:
+
+      ```
+      Host 123.456.789.80
+         HostName 123.456.789.80
+         User root
+         Port 12345
+         IdentityFile ~/.ssh/id_ed25519
+      ```
+
+  </Tab>
+
+  <Tab title="Cursor">
+
+1. From the [Pods](https://www.runpod.io/console/pods) page, select the Pod you deployed.
+
+2. Select **Connect**.
+3. Under **Direct TCP Ports**, look a line similar to:
+
+   ```
+   TCP port ->  69.48.159.6:25634 -> :22
+   ```
+
+   These values are:
+   - `69.48.159.6` is the IP address of your Pod.
+   - `25634` is the port number of your Pod.
+
+   Make a note of these values (they will likely be different for your Pod). We'll use them in the following steps.
+
+4. In Cursor, open the **Command Palette** (Ctrl+Shift+P or Cmd+Shift+P) and choose **Remote-SSH: Connect to Host**, then select **Add New SSH Host**. This opens the SSH config file in Cursor.
+
+5. Add the following to the SSH config file:
+
+   ```
+   Host POD_NAME
+       HostName POD_IP
+       User root
+       Port POD_PORT
+       IdentityFile ~/.ssh/id_ed25519
+   ```
+
+   Replace:
+   - `POD_NAME` with a descriptive name for your Pod. This will be used to identify your Pod in the SSH config file, and does not need to match the name you gave your Pod in the RunPod console.
+   - `POD_IP` with the IP address of your Pod from step 3.
+   - `POD_PORT` with the port number of your Pod from step 3.
+
+   So, for the example Pod, the SSH config file will look like:
+
+   ```
+   Host my-pod
+       HostName 69.48.159.6
+       User root
+       Port 25634
+       IdentityFile ~/.ssh/id_ed25519
+   ```
+
+   <Note>
+   If you are using a custom SSH key, replace `~/.ssh/id_ed25519` with the path to your SSH key.
+   </Note>
+
+6. Save and close the file.
+
+  </Tab>
+
+</Tabs>
+
+## Step 3: Connect to your Pod
+
+Now connect to your Pod using the Remote-SSH extension.
+
+1. Open the Command Palette (Ctrl+Shift+P or Cmd+Shift+P).
+2. Select **Remote-SSH: Connect to Host**.
+3. Choose your Pod from the list (either by IP or custom name if you configured one).
+4. VSCode/Cursor will open a new window and connect to your Pod.
+5. When prompted, select the platform (Linux).
+6. Once connected, click **Open Folder** and navigate to your workspace directory (typically `/workspace`).
+
+You are now connected to your Pod instance and can work on your volume directory as if it were local.
+
+## Step 4: Use Dev Containers (optional)
+
+For a more isolated development environment, you can use Dev Containers after connecting via SSH.
+
+### Opening a folder in a container
+
+After establishing the SSH connection:
+
+1. Navigate to your project directory on the Pod (typically `/workspace`).
+2. Open the Command Palette and select **Dev Containers: Reopen in Container**.
+3. If prompted, choose a development container configuration or create a new one.
+
+### Create a Dev Container configuration
+
+To optimize your development environment, create a `.devcontainer/devcontainer.json` file in your project:
+
+```json
+{
+  "name": "RunPod Development",
+  "image": "mcr.microsoft.com/devcontainers/python:3.10",
+  
+  // Features to add to the dev container
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/python:1": {},
+    "ghcr.io/devcontainers/features/node:1": {}
+  },
+  
+  // Use 'forwardPorts' to make a list of ports inside the container available locally
+  "forwardPorts": [8888, 6006],
+  
+  // Use 'postCreateCommand' to run commands after the container is created
+  "postCreateCommand": "pip install -r requirements.txt",
+  
+  // Configure tool-specific properties
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-toolsai.jupyter"
+      ]
+    }
+  },
+  
+  // Uncomment to connect as root instead
+  "remoteUser": "root"
+}
+```
+
+### GPU-enabled Dev Containers
+
+For GPU workloads, modify your `devcontainer.json`:
+
+```json
+{
+  "name": "RunPod GPU Development",
+  "image": "nvcr.io/nvidia/pytorch:23.10-py3",
+  
+  "runArgs": ["--gpus", "all"],
+  
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/nvidia-cuda:1": {}
+  },
+  
+  "postCreateCommand": "nvidia-smi && pip install -r requirements.txt",
+  
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-toolsai.jupyter",
+        "ms-toolsai.vscode-jupyter-cell-tags"
+      ]
+    }
+  }
+}
+```
+
+## Working with your Pod
+
+Once connected through Remote-SSH (with or without Dev Containers), you can:
+
+- Edit files with full IntelliSense and language support.
+- Run and debug applications with access to GPU resources.
+- Use integrated terminal for command execution.
+- Install extensions that run on the remote host.
+- Forward ports to access services locally.
+- Commit and push code using integrated Git support.
+
+### Important directories
+
+- `/workspace`: Default persistent storage directory.
+- `/runpod-volume`: Alternative persistent storage location.
+- `/tmp`: Temporary files (cleared when Pod stops).
+- `/root`: Home directory for the root user.
+
+## Best practices
+
+### Performance optimization
+
+1. **Use network volumes** for large datasets to improve I/O performance.
+2. **Pre-build containers** with all dependencies to reduce setup time when using Dev Containers.
+3. **Install extensions remotely** for better integration with your Pod environment.
+
+### Development workflow
+
+1. **Use version control**: Initialize Git repositories in `/workspace` for persistence.
+2. **Save frequently**: Network interruptions can occur, so save your work regularly.
+3. **Configure port forwarding** for web services and Jupyter notebooks.
+
+### Connection stability
+
+1. **Configure SSH keep-alive** in your SSH config:
+   ```
+   Host runpod-dev
+       HostName 123.456.789.80
+       User root
+       Port 12345
+       IdentityFile ~/.ssh/id_ed25519
+       ServerAliveInterval 60
+       ServerAliveCountMax 3
+   ```
+
+2. **Use tmux or screen** for long-running processes that should survive disconnections.
+
+## Troubleshooting
+
+### Connection issues
+
+If you cannot connect to your Pod:
+
+1. Verify your Pod is running and fully initialized.
+2. Check that your SSH key is properly configured in RunPod settings.
+3. Ensure the Pod has SSH enabled in its template.
+4. For custom templates, verify port 22 is exposed.
+
+### VSCode server installation fails
+
+If the VSCode server fails to install:
+
+1. Check your Pod has sufficient disk space.
+2. Ensure your Pod has internet connectivity.
+3. Try manually removing the `.vscode-server` directory and reconnecting:
+   ```sh
+   rm -rf ~/.vscode-server
+   ```
+
+### Dev Container fails to start
+
+If the Dev Container fails to initialize:
+
+1. Check your `devcontainer.json` syntax.
+2. Verify the base image exists and is accessible.
+3. Ensure your Pod has sufficient disk space.
+4. Check container logs for specific errors.
+
+### GPU not accessible
+
+If GPU resources aren't available:
+
+1. Verify your Pod has GPU resources allocated.
+2. Check that NVIDIA drivers are installed.
+3. When using Dev Containers, ensure your configuration includes GPU support.
+4. Run `nvidia-smi` to verify GPU visibility.
+
+### Extensions not working
+
+If extensions fail to function properly:
+
+1. Ensure they're installed on the remote host, not just locally.
+2. Check that required dependencies are installed.
+3. Restart the VSCode/Cursor window after installing extensions.
+
+## Advanced configuration
+
+### Multiple Pod development
+
+Configure multiple Pods in your SSH config:
+
+```
+Host runpod-dev
+    HostName 123.456.789.80
+    User root
+    Port 12345
+    IdentityFile ~/.ssh/id_ed25519
+
+Host runpod-prod
+    HostName 234.567.890.90
+    User root
+    Port 23456
+    IdentityFile ~/.ssh/id_ed25519
+```
+
+### Automatic port forwarding
+
+Add to your SSH config for automatic port forwarding:
+
+```
+Host runpod-dev
+    HostName 123.456.789.80
+    User root
+    Port 12345
+    IdentityFile ~/.ssh/id_ed25519
+    LocalForward 8888 localhost:8888  # Jupyter
+    LocalForward 6006 localhost:6006  # TensorBoard
+```
+
+Or when using Dev Containers, add to your `devcontainer.json`:
+
+```json
+{
+  "forwardPorts": [3000, 5000, 8080, 8888],
+  "portsAttributes": {
+    "8888": {
+      "label": "Jupyter",
+      "onAutoForward": "openBrowser"
+    },
+    "3000": {
+      "label": "Web App",
+      "onAutoForward": "notify"
+    }
+  }
+}
+```
+
+### Custom Docker images
+
+Create a custom Dockerfile for your Dev Container:
+
+```dockerfile
+FROM runpod/pytorch:2.0.1-py3.10-cuda11.8.0-devel
+
+# Install additional tools
+RUN apt-get update && apt-get install -y \
+    htop \
+    ncdu \
+    tree \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python packages
+COPY requirements.txt /tmp/
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
+
+# Set up development environment
+WORKDIR /workspace
+```
+
+## Next steps
+
+Now that you're connected to your Pod through VSCode or Cursor:
+
+- [Transfer files](/pods/storage/transfer-files) between your local machine and Pod.
+- [Expose ports](/pods/configuration/expose-ports) to access web services.
+- [Create network volumes](/pods/storage/create-network-volumes) for persistent storage.
+- Set up [JupyterLab](/pods/connect-to-a-pod#jupyterlab-connection) for notebook development.
+- Configure [environment variables](/pods/references/environment-variables) for your applications.
