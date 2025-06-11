@@ -4,7 +4,7 @@ sidebarTitle: "Build a dual-mode worker"
 description: "Create a flexible Serverless worker that supports a Pod-first development workflow."
 ---
 
-Developing machine learning and AI applications often requires powerful GPUs, making local development of API endpoints challenging. A typical development workflow for [Serverless](/serverless/overview) would be to write your handler code, deploy it directly to a Serverless endpoint, send endpoint requests to test, debug using worker logs, and repeat. 
+Developing machine learning and AI applications often requires powerful GPUs, making local development of API endpoints challenging. A typical development workflow for [Serverless](/serverless/overview) would be to write your handler code, deploy it directly to a Serverless endpoint, send endpoint requests to test, debug using worker logs, and repeat.
 
 This can have signifcant drawbacks, such as:
 
@@ -69,65 +69,42 @@ This Python script will contain your core logic. It will check for a user-specif
 Add the following code to `handler.py`:
 
 ```python
-import runpod
 import os
 import asyncio
-import time
+import runpod
 
-# Determine the operational mode. Defaults to 'pod' if not set.
-MODE_TO_RUN = os.getenv("MODE_TO_RUN", "pod")
+# Use the MODEL environment variable; fallback to a default if not set
+mode_to_run = os.getenv("MODE_TO_RUN", "pod")
+model_length_default = 25000
+
+print("------- ENVIRONMENT VARIABLES -------")
+print("Mode running: ", mode_to_run)
+print("------- -------------------- -------")
 
 async def handler(event):
-    
-    #This function processes incoming requests to your Serverless endpoint
-    # or runs a test job if in 'Pod' mode.
-    
-    print(f"Handler invoked in {MODE_TO_RUN} mode.")
-    
-    input_data = event.get('input', {})
-    prompt = input_data.get('prompt', 'default prompt')
-    delay = input_data.get('delay', 1)
+    inputReq = event.get("input", {})
+    return inputReq
 
-    print(f"Received prompt: {prompt}")
-    print(f"Processing for {delay} seconds...")
-    
-    # Simulate work
-    await asyncio.sleep(delay) 
-    
-    return {"output": f"Processed prompt: '{prompt}' after {delay}s in {MODE_TO_RUN} mode."}
+if mode_to_run == "pod":
+    async def main():
+        prompt = "Hello World"
+        requestObject = {"input": {"prompt": prompt}}
+        response = await handler(requestObject)
+        print(response)
 
-# Start the Serverless function or run a test based on the mode
-if __name__ == '__main__':
-    if MODE_TO_RUN == "serverless":
-        print("Starting RunPod Serverless worker...")
-        runpod.serverless.start({
-            "handler": handler
-        })
-    elif MODE_TO_RUN == "pod":
-        print("Running in Pod mode. Simulating a test call to the handler.")
-        # This block allows direct testing of the handler in a pod environment
-        async def main_test_pod():
-            test_event = {
-                "input": {
-                    "prompt": "Pod test call!",
-                    "delay": 2
-                }
-            }
-            result = await handler(test_event)
-            print("--- Pod Mode Test Handler Output ---")
-            print(result)
-            print("------------------------------------")
-        
-        asyncio.run(main_test_pod())
-    else:
-        print(f"Unknown MODE_TO_RUN: {MODE_TO_RUN}. Exiting.")
+    asyncio.run(main())
+else: 
+    runpod.serverless.start({
+        "handler": handler,
+        "concurrency_modifier": adjust_concurrency,
+    })
 
 ```
 
 Key features:
 
 *   `MODE_TO_RUN = os.getenv("MODE_TO_RUN", "pod")`: Reads the mode from an environment variable, defaulting to `pod`.
-*   `async def handler(event)`: Your core logic. It's an `async` function as required by `runpod.serverless.start`.
+*   `async def handler(event)`: Your core logic.
 *   `if __name__ == '__main__':`: This block controls what happens when the script is executed directly.
     *   In `serverless`" mode, it starts the RunPod Serverless worker.
     *   In `pod` mode, it runs a sample test call to your `handler` function, allowing for quick iteration.
@@ -140,35 +117,105 @@ Add the following code to `start.sh`:
 
 ```bash
 #!/bin/bash
-set -e # Exit immediately if a command exits with a non-zero status.
+set -e  # Exit the script if any statement returns a non-true return value
 
-echo "Container starting with MODE_TO_RUN=${MODE_TO_RUN}"
+# Set workspace directory from env or default
+WORKSPACE_DIR="${WORKSPACE_DIR:-/workspace}"
+
+# Start nginx service
+start_nginx() {
+    echo "Starting Nginx service..."
+    service nginx start
+}
+
+# Execute script if exists
+execute_script() {
+    local script_path=$1
+    local script_msg=$2
+    if [[ -f ${script_path} ]]; then
+        echo "${script_msg}"
+        bash ${script_path}
+    fi
+}
+
+# Setup ssh
+setup_ssh() {
+    if [[ $PUBLIC_KEY ]]; then
+        echo "Setting up SSH..."
+        mkdir -p ~/.ssh
+        echo "$PUBLIC_KEY" >> ~/.ssh/authorized_keys
+        chmod 700 -R ~/.ssh
+        # Generate SSH host keys if not present
+        generate_ssh_keys
+        service ssh start
+        echo "SSH host keys:"
+        cat /etc/ssh/*.pub
+    fi
+}
+
+# Generate SSH host keys
+generate_ssh_keys() {
+    ssh-keygen -A
+}
+
+# Export env vars
+export_env_vars() {
+    echo "Exporting environment variables..."
+    printenv | grep -E '^RUNPOD_|^PATH=|^_=' | awk -F = '{ print "export " $1 "=\"" $2 "\"" }' >> /etc/rp_environment
+    echo 'source /etc/rp_environment' >> ~/.bashrc
+}
+
+# Start jupyter lab
+start_jupyter() {
+    echo "Starting Jupyter Lab..."
+    mkdir -p "$WORKSPACE_DIR" && \
+    cd / && \
+    nohup jupyter lab --allow-root --no-browser --port=8888 --ip=* --NotebookApp.token='' --NotebookApp.password='' --FileContentsManager.delete_to_trash=False --ServerApp.terminado_settings='{"shell_command":["/bin/bash"]}' --ServerApp.allow_origin=* --ServerApp.preferred_dir="$WORKSPACE_DIR" &> /jupyter.log &
+    echo "Jupyter Lab started without a password"
+}
+
+# Call Python handler if mode is serverless or both
+call_python_handler() {
+    echo "Calling Python handler.py..."
+    python $WORKSPACE_DIR/handler.py
+}
+
+# ---------------------------------------------------------------------------- #
+#                               Main Program                                   #
+# ---------------------------------------------------------------------------- #
+
+start_nginx
+
+echo "Pod Started"
+
+setup_ssh
 
 case $MODE_TO_RUN in
     serverless)
-        echo "Starting in Serverless mode..."
-        # Execute the Python handler, which will start the runpod worker
-        exec python3 -u /app/handler.py
+        echo "Running in serverless mode"
+        call_python_handler
         ;;
     pod)
-        echo "Starting in Pod mode..."
-        echo "Development services (e.g., Jupyter, SSH) would start here."
-        echo "The handler.py script will run its test harness if executed."
-        echo "You can connect to the Pod and manually run 'python /app/handler.py'."
-        # Keep the container running for interactive pod sessions
-        exec sleep infinity
+        echo "Running in pod mode"
+        start_jupyter
         ;;
     *)
-        echo "Error: Invalid MODE_TO_RUN value: '$MODE_TO_RUN'. Expected 'serverless' or 'pod'."
+        echo "Invalid MODE_TO_RUN value: $MODE_TO_RUN. Expected 'serverless', 'pod', or 'both'."
         exit 1
         ;;
 esac
+
+export_env_vars
+
+echo "Start script(s) finished"
+
+sleep infinity
+
 ```
 Key features:
 *   `case $MODE_TO_RUN in ... esac`: This structure directs the startup based on the mode.
 *   `serverless` mode: Executes `handler.py`, which then starts the RunPod Serverless worker. `exec` replaces the shell process with the Python process.
-*   `pod` mode: Prints messages indicating it's ready for development. It then runs `sleep infinity` to keep the container alive so you can connect to it (e.g., via SSH or `docker exec`). You would then manually run `python /app/handler.py` inside the Pod to test your handler logic.
-*   `set -e`: Ensures the script exits if any command fails.
+*   `pod` mode: Starts up the JupyterLab server for Pod development, then runs `sleep infinity` to keep the container alive so you can connect to it (e.g., via SSH or `docker exec`). You would then manually run `python /app/handler.py` inside the Pod to test your handler logic.
 
 ## Step 4: Create the `Dockerfile`
 
@@ -177,38 +224,73 @@ This file defines how to build your Docker image.
 Add the following content to `Dockerfile`:
 
 ```dockerfile
-# Use a standard Python base image
-FROM python:3.10-slim
+# Use an official RunPod base image
+FROM runpod/pytorch:2.0.1-py3.10-cuda11.8.0-devel-ubuntu22.04
 
-# Set the working directory in the container
-WORKDIR /app
+# Environment variables
+ENV PYTHONUNBUFFERED=1 
 
-# Copy the requirements file and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Supported modes: pod, serverless
+ARG MODE_TO_RUN=pod
+ENV MODE_TO_RUN=$MODE_TO_RUN
 
-# Copy the rest of the application code
-COPY handler.py .
-COPY start.sh .
+# Set up the working directory
+ARG WORKSPACE_DIR=/app
+ENV WORKSPACE_DIR=${WORKSPACE_DIR}
+WORKDIR $WORKSPACE_DIR
 
-# Set default environment variables
-ENV PYTHONUNBUFFERED=1
-ENV MODE_TO_RUN="pod" # Default to pod mode
+# Install dependencies in a single RUN command to reduce layers and clean up in the same layer to reduce image size
+RUN apt-get update --yes --quiet && \
+    DEBIAN_FRONTEND=noninteractive apt-get install --yes --quiet --no-install-recommends \
+    software-properties-common \
+    gpg-agent \
+    build-essential \
+    apt-utils \
+    ca-certificates \
+    curl && \
+    add-apt-repository --yes ppa:deadsnakes/ppa && \
+    apt-get update --yes --quiet && \
+    DEBIAN_FRONTEND=noninteractive apt-get install --yes --quiet --no-install-recommends
 
-# Make the startup script executable
-RUN chmod +x /app/start.sh
+# Create and activate a Python virtual environment
+RUN python3 -m venv /app/venv
+ENV PATH="/app/venv/bin:$PATH"
 
-# Set the entrypoint for the container
-CMD ["/app/start.sh"]
+# Install Python packages
+RUN pip install --no-cache-dir \
+    asyncio \
+    requests \
+    runpod
+
+# Install requirements.txt
+COPY requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+    
+# Delete's the default start.sh file from RunPod (so we can replace it with our own below)
+RUN rm ../start.sh
+
+# Copy all of our files into the container
+COPY handler.py $WORKSPACE_DIR/handler.py
+COPY start.sh $WORKSPACE_DIR/start.sh
+
+# Make sure start.sh is executable
+RUN chmod +x start.sh
+
+# Make sure that the start.sh is in the path
+RUN ls -la $WORKSPACE_DIR/start.sh
+
+# depot build -t justinrunpod/pod-server-base:1.0 . --push --platform linux/amd64
+CMD $WORKSPACE_DIR/start.sh
 ```
 Key features:
-*   `FROM python:3.10-slim`: Starts with a lightweight Python image.
-*   `WORKDIR /app`: Sets the current directory inside the container.
-*   `COPY requirements.txt .` and `RUN pip install ...`: Installs Python dependencies.
-*   `COPY handler.py .` and `COPY start.sh .`: Copies your application files.
-*   `ENV MODE_TO_RUN="pod"`: Sets the default operational mode to "Pod". This can be overridden at runtime.
-*   `RUN chmod +x /app/start.sh`: Makes your startup script executable.
-*   `CMD ["/app/start.sh"]`: Specifies `start.sh` as the command to run when the container starts.
+*   `FROM runpod/pytorch:2.0.1-py3.10-cuda11.8.0-devel-ubuntu22.04`: Starts with a RunPod base image that comes with nginx, runpodctl, and other helpful base packages.
+*   `ARG WORKSPACE_DIR=/workspace` and `ENV WORKSPACE_DIR=${WORKSPACE_DIR}`: Allows the workspace directory to be set at build time.
+*   `WORKDIR $WORKSPACE_DIR`: Sets the working directory to the value of `WORKSPACE_DIR`.
+*   `COPY requirements.txt ./requirements.txt` and `RUN pip install ...`: Installs Python dependencies.
+*   `COPY . .`: Copies all application files into the workspace directory.
+*   `ENV MODE_TO_RUN="pod"`: Sets the default operational mode to "pod". This can be overridden at runtime.
+*   `CMD ["$WORKSPACE_DIR/start.sh"]`: Specifies `start.sh` as the command to run when the container starts.
 
 ## Step 5: Build and push your Docker image
 
@@ -246,13 +328,7 @@ Now, build your Docker image and push it to a container registry like Docker Hub
 
 Now that you've finished building our Docker image, let's explore how you would use the Pod-first development workflow in practice.
 
-You can run your container locally with Docker:
-
-```sh
-docker run -e MODE_TO_RUN=pod --rm -it [YOUR_USERNAME]/dual-mode-worker
-```
-
-Or, deploy the image to a Pod:
+Deploy the image to a Pod by following these steps:
 
 1. Go to the [Pods page](https://www.runpod.io/console/pods) in the RunPod console and click **Create Pod**.
 2. Choose a GPU.
