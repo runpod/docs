@@ -11,7 +11,8 @@ Create a pull request to make document changes, and request a review from [@muhs
 Install Mintlify:
 
 ```shell
-npm i -g mintlify```
+npm i -g mintlify
+```
 
 Start a local development server on your browser:
 
