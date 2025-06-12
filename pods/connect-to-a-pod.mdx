@@ -1,60 +1,116 @@
 ---
 title: "Connect to a Pod"
+sidebarTitle: "Connect to a Pod"
+description: "Learn how to connect using the web terminal, SSH, JupyterLab, or VSCode."
 ---
 
-You can connect to a Pod through various methods, depending on your requirements, preferences, and templates used.
+You can connect to your Runpod Pods using a few different methods, depending on your specific needs, preferences, and the template used to create the Pod.
 
-## SSH terminal
+## Web terminal connection
 
-Connecting to a Pod using an SSH terminal is a secure and reliable method, suitable for long-running processes and critical tasks.
+The web terminal offers a convenient, browser-based method to quickly connect to your Pod and run commands. However, it's not recommended for long-running processes, such as training an LLM, as the connection might not be as stable or persistent as a direct [SSH connection](#ssh-terminal-connection).
 
-Every Pod contains the ability to connect through SSH.
+The availability of the web terminal depends on the [Pod's template](/pods/templates/overview).
 
-To do this, you need to have an SSH client installed on your local machine.
+To connect using the web terminal:
 
-1. Open the terminal on your local machine.
-2. Choose one of the following commands and then enter it into your machine's terminal:
+1.  Navigate to the [Pods page](https://console.runpod.io/pods) in the Runpod console.
+2.  Expand the desired Pod and select **Connect**.
+3.  Select **Open Web Terminal**.
+
+This will open a new tab in your browser with a web terminal session.
+
+## JupyterLab connection
+
+JupyterLab provides an interactive, web-based environment for running code, managing files, and performing data analysis. Many Runpod templates, especially those geared towards machine learning and data science, come with JupyterLab pre-configured and accessible via HTTP.
+
+To connect to JupyterLab (if it's available on your Pod):
+
+1.  Deploy your Pod, ensuring that the template is configured to run JupyterLab. Official Runpod templates like "Runpod Pytorch" are usually compatible.
+2.  Once the Pod is running, navigate to the [Pods page](https://console.runpod.io/pods) in the Runpod console.
+3.  Find the Pod you created and click the **Connect** button. If it's grayed out, your Pod hasn't finished starting up yet.
+4.  In the window that opens, under **HTTP Services**, look for a link to **Jupyter Lab** (or a similarly named service on the configured HTTP port, often 8888). Click this link to open the JupyterLab workspace in your browser.
+5.  Once in JupyterLab, you can create new notebooks (e.g., under **Notebook**, select **Python 3 (ipykernel)**), upload files, and run code interactively.
+
+## SSH terminal connection
+
+Connecting to a Pod via an SSH (Secure Shell) terminal provides a secure and reliable method for interacting with your instance. Use this to manage long-running processes, critical tasks, and when you need the full capabilities of a shell environment. Every Pod offers the ability to connect through SSH.
+
+To establish an SSH connection, you'll need an SSH client installed on your local machine. The exact command will vary slightly depending on whether you're using the basic proxy connection or a direct connection to a public IP.
+
+### Basic SSH connection
+
+Runpod provides a basic SSH connection that is proxied through Runpod's systems. This method does not support commands like SCP (Secure Copy Protocol) or SFTP (SSH File Transfer Protocol).
+
+To connect using this method:
+
+1.  Ensure you have an SSH key pair generated on your local machine. If you haven't done this, you can generate one using this command on your local terminal:
+
+    ```sh
+    ssh-keygen -t ed25519 -C "YOUR_EMAIL@DOMAIN.COM"
+    ```
+
+2. To retrieve your public SSH key, run this command:
+
+    ```sh
+    cat ~/.ssh/id_ed25519.pub
+    ```
+    This will output something similar to this:
+
+    ```sh
+    ssh-ed25519 AAAAC4NzaC1lZDI1JTE5AAAAIGP+L8hnjIcBqUb8NRrDiC32FuJBvRA0m8jLShzgq6BQ YOUR_EMAIL@DOMAIN.COM
+    ```
+
+3.  Copy and paste the output into the **SSH Public Keys** field in your [Runpod user account settings](https://www.runpod.io/console/user/settings).
+4. To get the SSH command for your Pod, navigate to the [Pods page](https://console.runpod.io/pods) in the Runpod console.
+5. Expand your Pod and select **Connect**.
+6. Select the SSH tab. Copy the command listed under **SSH**. It should look something like this:
+
+    ```sh
+    ssh 8y5rumuyb50m78-6441103b@ssh.runpod.io -i ~/.ssh/id_ed25519
+    ```
+
+7. Run the copied command in your local terminal to connect to your Pod.
+
+For a detailed guide on setting up SSH keys, see [Use SSH](/pods/configuration/use-ssh).
+
+### Full SSH connection (via public IP)
+
+For full SSH capabilities, including SCP and SFTP for file transfers, you need to rent an instance that supports a public IP address and ensure an SSH daemon is running within your Pod.
+
+To connect using this method:
+1.  Follow the same SSH key setup as for the [basic SSH connection](#basic-ssh-connection).
+2.  An SSH daemon must be started in your Pod. Runpod official templates, such as "Runpod PyTorch", often have this pre-configured. If you're using a custom template, ensure TCP port 22 is exposed and the SSH daemon is started. Refer to the [Use SSH guide](/pods/configuration/use-ssh) for commands to include in your custom Docker template.
+3. To get the SSH command for your Pod, navigate to the [Pods page](https://console.runpod.io/pods) in the Runpod console.
+4. Expand your Pod and select **Connect**.
+5. Select the SSH tab. Copy the command listed under **SSH over exposed TCP**. It should look something like this:
+
+    ```sh
+    ssh root@213.173.108.12 -p 17445 -i ~/.ssh/id_ed25519
+    ```
+
+6. Run the copied command in your local terminal to connect to your Pod.
+
+The SSH command above has the following structure:
 
 ```sh
-# No support for SCP & SFTP
-ssh <username>@<pod-ssh-hostname> -i <path-to-ssh-key>
-
-# Supports SCP & SFTP
-ssh <username>@<pod-ip-address> -p <ssh-port> -i <path-to-ssh-key>
+ssh root@[POD_IP_ADDRESS] -p [SSH_PORT] -i [PATH_TO_SSH_KEY]
 ```
 
-Replace the placeholders with the following:
+Where:
+* `root`: Your assigned username for the Pod (typically `root`).
+* `[POD_IP_ADDRESS]`: The public IP address of your Pod.
+* `[SSH_PORT]`: The designated public SSH port for your Pod.
+* `[PATH_TO_SSH_KEY]`: The local file path to your private SSH key.
 
-* `<username>`: Your assigned username for the Pod
-* `<pod-ssh-hostname>`: The SSH hostname provided for your Pod
-* `<pod-ip-address>`: The IP address of your Pod
-* `<ssh-port>`: The designated SSH port for your Pod
-* `<path-to-ssh-key>`: The path to your SSH private key file
+<Note>
 
-You now have a secure SSH terminal to your Pod.
+If you're prompted for a password when attempting to connect, this indicates an issue with your SSH key configuration. Refer to the troubleshooting section in the [Use SSH guide](/pods/configuration/use-ssh#what-s-the-ssh-password) for common mistakes and solutions.
 
-## Web terminal
+</Note>
 
-<Info>
+## Connect via VSCode
 
-Depending on your Pod's template will provide the ability to connect to the web terminal.
+For a more integrated development experience, you can connect directly to your Pod instance through Visual Studio Code (VSCode). This allows you to work within your Pod's volume directory as if the files were stored on your local machine, leveraging VSCode's powerful editing and debugging features.
 
-</Info>
-
-The web terminal is a convenient, web-based terminal for quickly connecting to your Pod and running commands.
-
-This shouldn't be relied on for long-running process such as training an LLM or other critical tasks.
-
-The web terminal is useful for quickly logging in to your Pod and running commands.
-
-1. On your Pod's page, select **Connect**.
-2. Select **Start Web Terminal** then choose **Connect to Web Terminal** in a new window.
-3. Enter the **Username** and **Password**.
-
-<Info>
-
-You can find the **Username** and **Password** for your web terminal once select **Start Web Terminal**.
-
-![Username and password](/images/7f13ffba-username-password-e56cf90a5083892db3bb69e6944fee81.png)
-
-</Info>
+For a step-by-step guide, see [Connect to a Pod through VSCode](/tutorials/pods/connect-to-vscode).

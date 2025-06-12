@@ -3,7 +3,7 @@ title: "Endpoint configuration and optimization"
 sidebarTitle: "Endpoint configuration"
 ---
 
-This guide explains all available settings and best practices for configuring RunPod Serverless endpoints, helping you optimize for performance, cost, and reliability.
+This guide explains all available settings and best practices for configuring Runpod Serverless endpoints, helping you optimize for performance, cost, and reliability.
 
 ## Basic configuration
 
@@ -13,7 +13,7 @@ The name you assign to your endpoint for easy identification in your dashboard. 
 
 ### GPU selection
 
-Choose one or more GPU types for your endpoint in order of preference. RunPod prioritizes allocating the first GPU type in your list and falls back to subsequent GPU types if your first choice is unavailable.
+Choose one or more GPU types for your endpoint in order of preference. Runpod prioritizes allocating the first GPU type in your list and falls back to subsequent GPU types if your first choice is unavailable.
 
 <Tip>
 
@@ -119,7 +119,7 @@ You can use the `/status` operation to configure the time-to-live (TTL) for an i
 
 ### FlashBoot
 
-FlashBoot is RunPod's solution for reducing the average cold-start times on your endpoint. It works by retaining worker resources for some time after they're no longer in use, so they can be rebooted quickly. When your endpoint has consistent traffic, your workers have a higher chance of benefiting from FlashBoot for faster spin-ups. However, if your endpoint isn't receiving frequent requests, FlashBoot has fewer opportunities to optimize performance. There is no additional cost associated with FlashBoot.
+FlashBoot is Runpod's solution for reducing the average cold-start times on your endpoint. It works by retaining worker resources for some time after they're no longer in use, so they can be rebooted quickly. When your endpoint has consistent traffic, your workers have a higher chance of benefiting from FlashBoot for faster spin-ups. However, if your endpoint isn't receiving frequent requests, FlashBoot has fewer opportunities to optimize performance. There is no additional cost associated with FlashBoot.
 
 <Tip>
 
@@ -145,9 +145,9 @@ For the highest availability, allow all data centers (i.e., keep the default set
 
 ### Network volumes
 
-Attach persistent storage to your workers. Network volumes have higher latency than local storage, and restrict workers to the data center containing your volume. However, they're very useful for sharing large models or data between workers on an endpoint.
+Attach persistent storage to your workers. Network volumes have higher latency than local storage, and restrict workers to the data center containing your volume. However, they can be very useful for sharing large models or data between workers on an endpoint.
 
-See [Create a network volume](/pods/storage/create-network-volumes) for more information.
+For more information, see [Network volumes](/serverless/storage/network-volumes).
 
 ### Auto-scaling type
 
@@ -185,13 +185,13 @@ Here you can specify which [GPU types](/references/gpu-types) to use within your
 
 ### CUDA version selection
 
-Specify which CUDA versions can be used with your workload to ensures your code runs on compatible GPU hardware. RunPod will match your workload to GPU instances with the selected CUDA versions.
+Specify which CUDA versions can be used with your workload to ensures your code runs on compatible GPU hardware. Runpod will match your workload to GPU instances with the selected CUDA versions.
 
 <Tip>
 
 CUDA versions are generally backward compatible, so we recommend that you check for the version you need and any higher versions. For example, if your code requires CUDA 12.4, you should also try running it on 12.5, 12.6, and so on.
 
-Limiting your endpoint to just one or two CUDA versions can significantly reduce GPU availability. RunPod continuously updates GPU drivers to support the latest CUDA versions, so keeping more CUDA versions selected gives you access to more resources.
+Limiting your endpoint to just one or two CUDA versions can significantly reduce GPU availability. Runpod continuously updates GPU drivers to support the latest CUDA versions, so keeping more CUDA versions selected gives you access to more resources.
 
 </Tip>
 
@@ -199,15 +199,21 @@ Limiting your endpoint to just one or two CUDA versions can significantly reduce
 
 There are two primary factors that impact worker start times:
 
-1. **Worker initialization time:** Worker initialization occurs when a Docker image is downloaded to a new worker. This takes place after you create a new endpoint, adjust worker counts, or deploy a new worker image. Requests that arrive during initialization face delays, as a worker must be fully initliazed before it can start processing.
+1. **Worker initialization time:** Worker initialization occurs when a Docker image is downloaded to a new worker. This takes place after you create a new endpoint, adjust worker counts, or deploy a new worker image. Requests that arrive during initialization face delays, as a worker must be fully initialized before it can start processing.
 
 2. **Cold start:** A cold start occurs when a worker is revived from an idle state. Cold starts can get very long if your handler code loads large ML models (several gigabytes to hundreds of gigabytes) into GPU memory.
+
+<Note>
+
+If your worker's cold start time exceeds the default 7-minute limit (which can occur when loading large models), the system may mark it as unhealthy. To prevent this, you can extend the cold start timeout by setting the `RUNPOD_INIT_TIMEOUT` environment variable. For example, setting `RUNPOD_INIT_TIMEOUT=800` allows up to 800 seconds (13.3 minutes) for revival.
+
+</Note>
 
 Use these strategies to reduce worker startup times:
 
 1. **Embed models in Docker images:** Package your ML models directly within your worker container image instead of downloading them in your handler function. This strategy places models on the worker's high-speed local storage (SSD/NVMe), dramatically reducing the time needed to load models into GPU memory. This approach is optimal for production environments, though extremely large models (500GB+) may require network volume storage.
 
-2. **Store large models on network volumes:** For flexibility during development, save large models to a network volume using a Pod or one-time handler, then mount this volume to your Serverless workers. While network volumes offer slower model loading compared to embedding models directly, they can speed up your workflow by enabling rapid iteration and seamless switching between different models and configurations.
+2. **Store large models on network volumes:** For flexibility during development, save large models to a [network volume](/serverless/storage/network-volumes) using a Pod or one-time handler, then mount this volume to your Serverless workers. While network volumes offer slower model loading compared to embedding models directly, they can speed up your workflow by enabling rapid iteration and seamless switching between different models and configurations.
 
 3. **Maintain active workers:** Set active worker counts above zero to completely eliminate cold starts. These workers remain ready to process requests instantly and cost up to 30% less when idle compared to standard (flex) workers.
 
