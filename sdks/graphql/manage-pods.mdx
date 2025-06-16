@@ -6,9 +6,9 @@ title: "Manage Pods"
 
 Runpod uses API Keys for all API requests. Go to [Settings](https://www.runpod.io/console/user/settings) to manage your API keys.
 
-## GraphQL API Spec
+## GraphQL API spec
 
-If you need detailed queries, mutations, fields, and inputs, look at the [GraphQL Spec](https://graphql-spec.runpod.io/).
+If you need detailed queries, mutations, fields, and inputs, look at the [GraphQL spec](https://graphql-spec.runpod.io/).
 
 ## Create Pods
 
@@ -32,7 +32,7 @@ A Pod consists of the following resources:
 
 * Global Networking
 
-### Create On-Demand Pod
+### Create on-demand Pod
 
 <Tabs>
 <Tab title="cURL">
@@ -101,7 +101,7 @@ mutation {
 
 </Tabs>
 
-### Create Spot Pod
+### Create spot Pod
 
 <Tabs>
 <Tab title="cURL">
@@ -171,7 +171,7 @@ mutation {
 
 </Tabs>
 
-### Filter by Allowed CUDA Versions
+### Filter by CUDA version
 
 You can pass in the `allowedCudaVersions` as a list of CUDA versions that you want to allow for the GPU in the pod.
 
@@ -238,7 +238,7 @@ mutation {
 
 ## Start Pods
 
-### Start On-Demand Pod
+### Start on-demand Pod
 
 <Tabs>
 <Tab title="cURL">
@@ -293,7 +293,7 @@ mutation {
 
 </Tabs>
 
-### Start Spot Pod
+### Start spot Pod
 
 <Tabs>
 <Tab title="cURL">
@@ -348,7 +348,7 @@ mutation {
 
 </Tabs>
 
-### Filter by CUDA Version
+### Filter by CUDA version
 
 You can pass in the `allowedCudaVersions` as a list of CUDA versions that you want to allow for the GPU in the pod.
 
@@ -714,7 +714,7 @@ query GpuTypes {
 
 </Tabs>
 
-### Get GPU Type by ID
+### Get GPU type by ID
 
 <Tabs>
 <Tab title="cURL">
@@ -769,4 +769,133 @@ query GpuTypes {
 
 </Tab>
 
+</Tabs>
+
+### Check GPU type availability
+
+You can check if a specific [GPU type](/references/gpu-types) is available in the [Secure Cloud or Community Cloud](/references/faq#secure-cloud-vs-community-cloud).
+
+<Note>
+The `stockStatus` field can help you determine the likelihood that a particular GPU type will be available when creating a Pod. For example, if `stockStatus` is `"Low"`, it means there are very few GPUs of that type available.
+</Note>
+
+<Tabs>
+<Tab title="cURL">
+```bash
+curl --request POST \
+  --header 'content-type: application/json' \
+  --url 'https://api.runpod.io/graphql?api_key=${YOUR_API_KEY}' \
+  --data '{"query": "query { gpuTypes(input: { id: \"NVIDIA RTX A4000\" }) { lowestPrice(input: { compliance: null, dataCenterId: null, globalNetwork: false, gpuCount: 1, minDisk: 0, minMemoryInGb: 8, minVcpuCount: 2, secureCloud: true }) { minimumBidPrice uninterruptablePrice minVcpu minMemory stockStatus compliance maxUnreservedGpuCount availableGpuCounts __typename } id displayName memoryInGb securePrice communityPrice oneMonthPrice oneWeekPrice threeMonthPrice sixMonthPrice secureSpotPrice __typename } }"}'
+```
+</Tab>
+
+<Tab title="GraphQL">
+```GraphQL
+query {
+  gpuTypes(input: { id: "NVIDIA RTX A4000" }) {
+    lowestPrice(input: {
+      compliance: null,
+      dataCenterId: null,
+      globalNetwork: false,
+      gpuCount: 1,
+      minDisk: 0,
+      minMemoryInGb: 8,
+      minVcpuCount: 2,
+      secureCloud: true
+    }) {
+      minimumBidPrice
+      uninterruptablePrice
+      minVcpu
+      minMemory
+      stockStatus
+      compliance
+      maxUnreservedGpuCount
+      availableGpuCounts
+      __typename
+    }
+    id
+    displayName
+    memoryInGb
+    securePrice
+    communityPrice
+    oneMonthPrice
+    oneWeekPrice
+    threeMonthPrice
+    sixMonthPrice
+    secureSpotPrice
+    __typename
+  }
+}
+```
+</Tab>
+
+<Tab title="Example output (in stock)">
+```json
+{
+  "data": {
+    "gpuTypes": [
+      {
+        "lowestPrice": {
+          "minimumBidPrice": 0.2,
+          "uninterruptablePrice": 0.35,
+          "minVcpu": 2,
+          "minMemory": 8,
+          "stockStatus": "IN_STOCK",
+          "compliance": null,
+          "maxUnreservedGpuCount": 5,
+          "availableGpuCounts": [1, 2, 4],
+          "__typename": "GpuTypeLowestPrice"
+        },
+        "id": "NVIDIA RTX A4000",
+        "displayName": "RTX A4000",
+        "memoryInGb": 16,
+        "securePrice": 0.35,
+        "communityPrice": 0.2,
+        "oneMonthPrice": 200,
+        "oneWeekPrice": 60,
+        "threeMonthPrice": 500,
+        "sixMonthPrice": 900,
+        "secureSpotPrice": 0.18,
+        "__typename": "GpuType"
+      }
+    ]
+  }
+}
+```
+</Tab>
+
+<Tab title="Example output (low stock)">
+```json
+{
+  "data": {
+    "gpuTypes": [
+      {
+        "lowestPrice": {
+          "minimumBidPrice": 0.16,
+          "uninterruptablePrice": 0.24,
+          "minVcpu": 5,
+          "minMemory": 31,
+          "stockStatus": "Low",
+          "compliance": null,
+          "maxUnreservedGpuCount": 7,
+          "availableGpuCounts": [1,2,3,4,5,6,7],
+          "__typename": "LowestPrice"
+        },
+        "id": "NVIDIA RTX A4000",
+        "displayName": "RTX A4000",
+        "memoryInGb": 16,
+        "securePrice": 0.24,
+        "communityPrice": 0.17,
+        "oneMonthPrice": null,
+        "oneWeekPrice": null,
+        "threeMonthPrice": 0.204,
+        "sixMonthPrice": 0.192,
+        "secureSpotPrice": 0.16,
+        "__typename": "GpuType"
+      }
+    ]
+  }
+}
+```
+</Tab>
 </Tabs>
