@@ -1,0 +1,329 @@
+---
+title: "S3-compatible API"
+sidebarTitle: "S3-compatible API"
+description: "Use Runpod's S3-compatible API to access and manage your network volumes."
+tag: "BETA"
+---
+
+<Note>
+
+The S3-compatible API is currently in beta. If you'd like to provide feedback, please [join our Discord](https://discord.gg/runpod)
+
+</Note>
+
+Runpod provides an S3-protocol compatible API that allows direct access to your [network volumes](/serverless/storage/network-volumes). This feature enables you to manage files on your network volumes without needing to launch a Pod, reducing cost and operational friction.
+
+Using the S3-compatible API to access your network volumes does not affect pricing. Network volumes are billed hourly at a rate of \$0.07 per GB per month for the first 1TB, and \$0.05 per GB per month for additional storage beyond that.
+
+## Datacenter availability
+
+The S3-compatible API is currently available for network volumes hosted in a limited number of datacenters.
+
+Each datacenter has an endpoint URL that you'll use when calling the S3-compatible API, using the format `https://s3api-[DATACENTER].runpod.io/`.
+
+Create a network volume in one of the following datacenters to use the S3-compatible API:
+
+| Datacenter | Endpoint URL |
+|-------------|--------------|
+| `EUR-IS-1` | `https://s3api-eur-is-1.runpod.io/` |
+| `EU-RO-1` | `https://s3api-eu-ro-1.runpod.io/` |
+
+## Setup and authentication
+
+<Steps>
+<Step title="Create a network volume">
+
+    Before you can use the S3-compatible API, you must create a network volume in a [supported datacenter](#datacenter-availability). For detailed instructions, see [Network volumes -> Create a network volume](/serverless/storage/network-volumes#create-a-network-volume).
+
+</Step>
+
+<Step title="Create an S3 API key">
+
+    Next, you'll need to generate a new key called an "S3 API key" (this is separate from your Runpod API key).
+
+    1. In the Runpod console, navigate to the [Settings page](https://www.runpod.io/console/user/settings).
+    2. Expand the **S3 API Keys** section and select **Create an S3 API key**.
+    3. Give your key a name and select **Create**.
+    4. Make a note of your access key ID and secret access key to use in the next step.
+
+    <Warning>
+
+    For security, Runpod will show your secret access key only once, so you may wish to save it elsewhere (e.g., in your password manager, or in a GitHub secret). Treat your secret access key like a password and don't share it with anyone.
+
+    </Warning>
+    
+  </Step>
+
+  <Step title="Configure AWS CLI">
+
+    To use the S3-compatible API with your Runpod network volumes, you must configure your AWS CLI with the Runpod S3 API key you created.
+
+    1.  If you haven't already, [install the AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) on your local machine.
+    2.  Run the command `aws configure` in your terminal.
+    3.  Provide the following when prompted:
+        *   **AWS Access Key ID**: Enter your Runpod user ID. You can find this in the [Secrets section](https://www.runpod.io/console/user/secrets) of the Runpod console, in the description of your S3 API key. By default, the description will look similar to: `Shared Secret for user_2f21CfO73Mm2Uq2lEGFiEF24IPw 1749176107073`. `user_2f21CfO73Mm2Uq2lEGFiEF24IPw` is the user ID (yours will be different).
+        *   **AWS Secret Access Key**: Enter your Runpod S3 API key's secret access key.
+        *   **Default Region name**: You can leave this blank.
+        *   **Default output format**: You can leave this blank or set it to `json`.
+
+    This will configure the AWS CLI to use your Runpod S3 API key by storing these details in your AWS credentials file (typically at `~/.aws/credentials`).
+    
+  </Step>
+</Steps>
+
+## Using the S3-compatible API
+
+You can use the S3-compatible API to interact with your Runpod network volumes using standard S3 tools:
+
+*   [AWS s3 CLI](https://awscli.amazonaws.com/v2/documentation/api/latest/reference/s3/index.html).
+*   [AWS s3api CLI](https://docs.aws.amazon.com/cli/latest/reference/s3api/).
+*   [The Boto3 Python library](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3.html).
+
+Core AWS CLI operations such as `ls`, `cp`, `mv`, `rm`, and `sync` function as expected.
+
+## s3 CLI examples
+
+When using `aws s3` commands, you must pass in the [endpoint URL](#datacenter-availability) for your network volume using the `--endpoint-url` flag.
+
+<Note>
+
+Unlike traditional S3 key-value stores, object names in the Runpod S3-compatible API correspond to actual file paths on your network volume. Object names containing special characters (e.g., `#`) may need to be URL encoded to ensure proper processing.
+
+</Note>
+
+### List objects
+
+Use `ls` to list objects in a network volume directory:
+
+```bash
+aws s3 ls --region [DATACENTER] \
+    --endpoint-url https://s3api-[DATACENTER].runpod.io/ \ 
+    s3://[NETWORK_VOLUME_ID]/[REMOTE_DIR]
+
+```
+
+### Transfer files
+
+Use `cp` to copy a file to a network volume:
+
+```bash
+aws s3 cp --region [DATACENTER] \
+    --endpoint-url https://s3api-[DATACENTER].runpod.io/ \
+    [LOCAL_FILE] \
+    s3://[NETWORK_VOLUME_ID]
+```
+
+Use `cp` to copy a file from a network volume to a local directory:
+
+```bash
+aws s3 cp --region [DATACENTER] \
+    --endpoint-url https://s3api-[DATACENTER].runpod.io/ \
+    s3://[NETWORK_VOLUME_ID]/remote-file.txt ./[LOCAL_DIR]
+```
+
+Use `rm` to remove a file from a network volume:
+
+```bash
+aws s3 rm --region [DATACENTER] \
+    --endpoint-url https://s3api-[DATACENTER].runpod.io/ \
+    s3://[NETWORK_VOLUME_ID]/remote-file.txt
+```
+
+### Sync directories
+
+This command syncs a local directory (source) to a network volume directory (destination):
+
+```bash
+aws s3 sync --region [DATACENTER] \
+    --endpoint-url https://s3api-[DATACENTER].runpod.io/ \
+    ./[LOCAL_DIR] \
+    s3://[NETWORK_VOLUME_ID]/[REMOTE_DIR]
+```
+
+## s3api CLI example
+
+You can also use `aws s3api` commands (instead of the `aws s3`) to interact with the S3-compatible API.
+
+For example, here's how you could use `aws s3api get-object` to download an object from a network volume:
+
+```bash
+aws s3api get-object --bucket [NETWORK_VOLUME_ID] \
+    --key [REMOTE_FILE] \
+    --region [DATACENTER] \
+    --endpoint-url https://s3api-[DATACENTER].runpod.io/ \
+    [LOCAL_FILE]
+```
+
+Replace `[LOCAL_FILE]` with the desired path and name of the file after download—for example: `~/local-dir/my-file.txt`.
+
+For a list of available `s3api` commands, see the [AWS s3api reference](https://docs.aws.amazon.com/cli/latest/reference/s3api/).
+
+## Boto3 Python example
+
+You can also use the Boto3 library to interact with the S3-compatible API, using it to transfer files to and from a Runpod network volume.
+
+The script below demonstrates how to upload a file to a Runpod network volume using the Boto3 library. It takes command-line arguments for the network volume ID (as an S3 bucket), the datacenter-specific S3 endpoint URL, the local file path, the desired object (file path on the network volume), and the AWS Region (which corresponds to the Runpod datacenter ID).
+
+Your Runpod S3 API key credentials must be set as environment variables:
+
+*   `RUNPOD_USER_EMAIL`: Should be set to your Runpod account email.
+*   `RUNPOD_S3_API_KEY`: Should be set to your Runpod S3 API key's secret access key.
+
+```python
+#!/usr/bin/env python3
+
+import os
+import argparse
+import boto3 # AWS SDK for Python, used to interact with Runpod S3-compatible APIs
+
+def create_s3_client(region: str, endpoint_url: str):
+    
+    # Creates and returns an S3 client configured for Runpod network volume S3-compatible API.
+    #
+    # Args:
+    #   region (str): The Runpod datacenter ID, used as the AWS region
+    #                 (e.g., 'ca-qc-1').
+    #   endpoint_url (str): The S3 endpoint URL for the specific Runpod datacenter
+    #                       (e.g., 'https://ca-qc-1-s3api.runpod.io/').
+
+    # Returns:
+    #   boto3.client: An S3 client object, configured for the Runpod S3 API.
+
+    # Retrieve Runpod S3 API key credentials from environment variables.
+    aws_access_key_id = os.environ.get("RUNPOD_USER_EMAIL")
+    aws_secret_access_key = os.environ.get("RUNPOD_S3_API_KEY")
+
+    # Ensure necessary S3 API key credentials are set in the environment
+    if not aws_access_key_id or not aws_secret_access_key:
+        raise EnvironmentError(
+            "Please set RUNPOD_USER_EMAIL (with S3 API Key Access Key) and "
+            "RUNPOD_S3_API_KEY (with S3 API Key Secret Access Key) environment variables. "
+            "These are obtained from 'S3 API Keys' in the Runpod console settings."
+        )
+
+    # Initialize and return the S3 client for Runpod's S3-compatible API
+    return boto3.client(
+        "s3",
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        region_name=region, # Corresponds to the Runpod datacenter ID
+        endpoint_url=endpoint_url, # Datacenter-specific S3 API endpoint
+    )
+
+def put_object(s3_client, bucket_name: str, object_name: str, file_path: str):
+    
+    # Uploads a local file to the specified Runpod network volume.
+    #
+    # Args:
+    #   s3_client: The S3 client object (e.g., returned by create_s3_client).
+    #   bucket_name (str): The ID of the target Runpod network volume.
+    #   object_name (str): The desired file path for the object on the network volume.
+    #   file_path (str): The local path to the file that needs to be uploaded.
+
+    try:
+        # Attempt to upload the file to the Runpod network volume.
+        s3_client.upload_file(file_path, bucket_name, object_name)
+        print(f"Successfully uploaded '{file_path}' to Network Volume '{bucket_name}' as '{object_name}'")
+    except Exception as e:
+        # Catch any exception during upload, print an error, and re-raise
+        print(f"Error uploading file '{file_path}' to Network Volume '{bucket_name}' as '{object_name}': {e}")
+        raise
+
+def main():
+    
+    # Parses command-line arguments and orchestrates the file upload process
+    # to a Runpod network volume.
+    
+    # Set up command-line argument parsing
+    parser = argparse.ArgumentParser(
+        description="Upload a file to a Runpod Network Volume using its S3-compatible API. "
+                    "Requires RUNPOD_USER_EMAIL and RUNPOD_S3_API_KEY env vars to be set "
+                    "with your Runpod S3 API key credentials."
+    )
+    parser.add_argument(
+        "-b", "--bucket",
+        required=True,
+        help="The ID of your Runpod Network Volume (acts as the S3 bucket name)."
+    )
+    parser.add_argument(
+        "-e", "--endpoint",
+        required=True,
+        help="The S3 endpoint URL for your Runpod datacenter (e.g., 'https://s3api-[DATACENTER].runpod.io/')."
+    )
+    parser.add_argument(
+        "-f", "--file",
+        required=True,
+        help="The local path to the file to be uploaded."
+    )
+    parser.add_argument(
+        "-o", "--object",
+        required=True,
+        help="The S3 object key (i.e., the desired file path on the Network Volume)."
+    )
+    parser.add_argument(
+        "-r", "--region",
+        required=True,
+        help="The Runpod datacenter ID, used as the AWS region (e.g., 'ca-qc-1'). Find this in the Runpod console's Storage section or endpoint URL."
+    )
+
+    args = parser.parse_args()
+
+    # Create the S3 client using the parsed arguments, configured for Runpod.
+    client = create_s3_client(args.region, args.endpoint)
+
+    # Upload the object to the specified network volume.
+    put_object(client, args.bucket, args.object, args.file)
+
+if __name__ == "__main__":
+    main()
+```
+
+Example usage:
+
+```bash
+./s3_example_put.py --endpoint https://s3api-eur-is-1.runpod.io/ \
+    --region 'EUR-IS-1' \
+    --bucket 'network_volume_id' \
+    --object 'path/to/model_file.bin' \
+    --file 'model_file.bin'
+```
+
+## Supported S3 actions
+
+The S3-compatible API supports the following operations. For detailed information on each, refer to the [AWS S3 API documentation](https://docs.aws.amazon.com/AmazonS3/latest/API/API_Operations_Amazon_Simple_Storage_Service.html).
+
+| Operation                 | Description                                  |
+| ------------------------- | -------------------------------------------- |
+| `CopyObject`             | Copy objects between locations.              |
+| `DeleteObject`           | Remove objects.                              |
+| `GetObject`              | Download objects.                            |
+| `HeadBucket`             | Verify bucket exists and you have permissions. |
+| `HeadObject`             | Retrieve object metadata.                    |
+| `ListBuckets`            | List available buckets.                      |
+| `ListObjects`            | List objects in a bucket.                    |
+| `PutObject`              | Upload objects.                              |
+| `CreateMultipartUpload` | Start a multipart upload for large files.    |
+| `UploadPart`             | Upload a part of a multipart upload.         |
+| `CompleteMultipartUpload`| Finish a multipart upload.                   |
+| `AbortMultipartUpload`  | Cancel a multipart upload.                   |
+| `ListMultipartUploads`  | View in-progress multipart uploads.          |
+
+Large file handling is supported through multipart uploads, allowing you to transfer files larger than 5GB.
+
+## Limitations
+
+-   **Multipart uploads**:
+    -   Parts from multipart uploads are stored on disk until either `CompleteMultipartUpload` or `AbortMultipartUpload` is called.
+    -   The S3-compatible API enforces the 5GB maximum single file part upload size, but not the 5TB maximum file size.
+    -   The 5MB minimum part size for multipart uploads is not enforced.
+-   **Storage capacity**: Network volumes have a fixed storage capacity, unlike the virtually unlimited storage of standard S3 buckets. The `CopyObject` and `UploadPart` actions do not check for available free space beforehand and may fail if the volume runs out of space. This behavior is similar to applying a size quota in S3.
+-   **Object names**: Unlike traditional S3 key-value stores, object names in the Runpod S3-compatible API correspond to actual file paths on your network volume. Object names containing special characters (e.g., `#`) may need to be URL encoded to ensure proper processing.
+-   **Time synchronization**: Requests that are out of time sync by 1 hour will be rejected. This is more lenient than the 15-minute window specified by the AWS SigV4 authentication specification.
+
+## Reference documentation
+
+For comprehensive documentation on AWS S3 commands and libraries, refer to:
+
+- [AWS CLI S3 reference](https://awscli.amazonaws.com/v2/documentation/api/latest/reference/s3/index.html).
+- [AWS S3 API reference](https://docs.aws.amazon.com/AmazonS3/latest/API/API_Operations_Amazon_Simple_Storage_Service.html).
+- [Boto3 S3 reference](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3.html).
