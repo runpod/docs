@@ -44,11 +44,11 @@ Create a network volume in one of the following datacenters to use the S3-compat
     1. In the Runpod console, navigate to the [Settings page](https://www.console.runpod.io/user/settings).
     2. Expand the **S3 API Keys** section and select **Create an S3 API key**.
     3. Give your key a name and select **Create**.
-    4. Make a note of your access key ID and secret access key to use in the next step.
+    4. Make a note of the **access key** (e.g., `user_***...`) and **secret** (e.g., `rps_***...`) to use in the next step.
 
     <Warning>
 
-    For security, Runpod will show your secret access key only once, so you may wish to save it elsewhere (e.g., in your password manager, or in a GitHub secret). Treat your secret access key like a password and don't share it with anyone.
+    For security, Runpod will show your API key secret only once, so you may wish to save it elsewhere (e.g., in your password manager, or in a GitHub secret). Treat your API key secret like a password and don't share it with anyone.
 
     </Warning>
     
@@ -164,10 +164,10 @@ You can also use the Boto3 library to interact with the S3-compatible API, using
 
 The script below demonstrates how to upload a file to a Runpod network volume using the Boto3 library. It takes command-line arguments for the network volume ID (as an S3 bucket), the datacenter-specific S3 endpoint URL, the local file path, the desired object (file path on the network volume), and the AWS Region (which corresponds to the Runpod datacenter ID).
 
-Your Runpod S3 API key credentials must be set as environment variables:
+Your Runpod S3 API key credentials must be set as environment variables using the values from the [Setup and authentication](#setup-and-authentication) step:
 
-*   `RUNPOD_USER_EMAIL`: Should be set to your Runpod account email.
-*   `RUNPOD_S3_API_KEY`: Should be set to your Runpod S3 API key's secret access key.
+*   `AWS_ACCESS_KEY_ID`: Should be set to your Runpod S3 API key **access key** (e.g., `user_***...`).
+*   `AWS_SECRET_ACCESS_KEY`: Should be set to your Runpod S3 API key's **secret** (e.g., `rps_***...`).
 
 ```python
 #!/usr/bin/env python3
@@ -177,7 +177,7 @@ import argparse
 import boto3 # AWS SDK for Python, used to interact with Runpod S3-compatible APIs
 
 def create_s3_client(region: str, endpoint_url: str):
-    
+
     # Creates and returns an S3 client configured for Runpod network volume S3-compatible API.
     #
     # Args:
@@ -190,14 +190,14 @@ def create_s3_client(region: str, endpoint_url: str):
     #   boto3.client: An S3 client object, configured for the Runpod S3 API.
 
     # Retrieve Runpod S3 API key credentials from environment variables.
-    aws_access_key_id = os.environ.get("RUNPOD_USER_EMAIL")
-    aws_secret_access_key = os.environ.get("RUNPOD_S3_API_KEY")
+    aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID")
+    aws_secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
 
     # Ensure necessary S3 API key credentials are set in the environment
     if not aws_access_key_id or not aws_secret_access_key:
         raise EnvironmentError(
-            "Please set RUNPOD_USER_EMAIL (with S3 API Key Access Key) and "
-            "RUNPOD_S3_API_KEY (with S3 API Key Secret Access Key) environment variables. "
+            "Please set AWS_ACCESS_KEY_ID (with S3 API Key Access Key) and "
+            "AWS_SECRET_ACCESS_KEY (with S3 API Key Secret Access Key) environment variables. "
             "These are obtained from 'S3 API Keys' in the Runpod console settings."
         )
 
@@ -211,7 +211,7 @@ def create_s3_client(region: str, endpoint_url: str):
     )
 
 def put_object(s3_client, bucket_name: str, object_name: str, file_path: str):
-    
+
     # Uploads a local file to the specified Runpod network volume.
     #
     # Args:
@@ -230,14 +230,14 @@ def put_object(s3_client, bucket_name: str, object_name: str, file_path: str):
         raise
 
 def main():
-    
+
     # Parses command-line arguments and orchestrates the file upload process
     # to a Runpod network volume.
-    
+
     # Set up command-line argument parsing
     parser = argparse.ArgumentParser(
         description="Upload a file to a Runpod Network Volume using its S3-compatible API. "
-                    "Requires RUNPOD_USER_EMAIL and RUNPOD_S3_API_KEY env vars to be set "
+                    "Requires AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY env vars to be set "
                     "with your Runpod S3 API key credentials."
     )
     parser.add_argument(
@@ -311,14 +311,22 @@ The S3-compatible API supports the following operations. For detailed informatio
 Large file handling is supported through multipart uploads, allowing you to transfer files larger than 5GB.
 
 ## Limitations
-
+-   **Storage capacity**: Network volumes have a fixed storage capacity, unlike the virtually unlimited storage of standard S3 buckets. The `CopyObject` and `UploadPart` actions do not check for available free space beforehand and may fail if the volume runs out of space. This behavior is similar to applying a size quota in S3.
+-   **Maximum file size:** 4TB (the maximum size of a network volume).
 -   **Multipart uploads**:
     -   Parts from multipart uploads are stored on disk until either `CompleteMultipartUpload` or `AbortMultipartUpload` is called.
     -   The S3-compatible API enforces the 5GB maximum single file part upload size, but not the 5TB maximum file size.
     -   The 5MB minimum part size for multipart uploads is not enforced.
--   **Storage capacity**: Network volumes have a fixed storage capacity, unlike the virtually unlimited storage of standard S3 buckets. The `CopyObject` and `UploadPart` actions do not check for available free space beforehand and may fail if the volume runs out of space. This behavior is similar to applying a size quota in S3.
 -   **Object names**: Unlike traditional S3 key-value stores, object names in the Runpod S3-compatible API correspond to actual file paths on your network volume. Object names containing special characters (e.g., `#`) may need to be URL encoded to ensure proper processing.
 -   **Time synchronization**: Requests that are out of time sync by 1 hour will be rejected. This is more lenient than the 15-minute window specified by the AWS SigV4 authentication specification.
+-   **Unsupported S3 features:**
+    -   Object versioning.
+    -   Object encryption.
+    -   Object tagging.
+    -   Object ACLs.
+    -   Object locking.
+    -   Website redirects.
+    -   Storage classes besides `STANDARD` (all network volume objects use the `STANDARD` storage class).
 
 ## Reference documentation
 
