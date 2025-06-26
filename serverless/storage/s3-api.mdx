@@ -94,6 +94,12 @@ aws s3 ls --region [DATACENTER] \
     s3://[NETWORK_VOLUME_ID]/[REMOTE_DIR]
 ```
 
+<Warning>
+
+`ls` operations may timeout when used on network volumes containing many files (over 50,000 files) or large amounts of data. For more information, see [S3-compatible API limitations](#listobjects-timeout-with-large-file-counts).
+
+</Warning>
+
 ### Transfer files
 
 Use `cp` to copy a file to a network volume:
@@ -314,22 +320,41 @@ The S3-compatible API supports the following operations. For detailed informatio
 Large file handling is supported through multipart uploads, allowing you to transfer files larger than 5GB.
 
 ## Limitations
+
+### Storage and time synchronization
+
 -   **Storage capacity**: Network volumes have a fixed storage capacity, unlike the virtually unlimited storage of standard S3 buckets. The `CopyObject` and `UploadPart` actions do not check for available free space beforehand and may fail if the volume runs out of space. This behavior is similar to applying a size quota in S3.
--   **Maximum file size:** 4TB (the maximum size of a network volume).
--   **Multipart uploads**:
-    -   The S3-compatible API enforces a 500MB maximum on upload part size.
-    -   The 5MB minimum part size for multipart uploads is not enforced.
-    -   Parts from multipart uploads are stored on disk until either `CompleteMultipartUpload` or `AbortMultipartUpload` is called.
+-   **Maximum file size**: 4TB (the maximum size of a network volume).
 -   **Object names**: Unlike traditional S3 key-value stores, object names in the Runpod S3-compatible API correspond to actual file paths on your network volume. Object names containing special characters (e.g., `#`) may need to be URL encoded to ensure proper processing.
 -   **Time synchronization**: Requests that are out of time sync by 1 hour will be rejected. This is more lenient than the 15-minute window specified by the AWS SigV4 authentication specification.
--   **Unsupported S3 features:**
-    -   Object versioning.
-    -   Object encryption.
-    -   Object tagging.
-    -   Object ACLs.
-    -   Object locking.
-    -   Website redirects.
-    -   Storage classes besides `STANDARD` (all network volume objects use the `STANDARD` storage class).
+
+### Multipart uploads
+
+-   The S3-compatible API enforces a 500MB maximum on upload part size.
+-   The 5MB minimum part size for multipart uploads is not enforced.
+-   Parts from multipart uploads are stored on disk until either `CompleteMultipartUpload` or `AbortMultipartUpload` is called.
+
+### ListObjects timeout with large file counts
+
+The `ListObjects` and `ListObjectsV2` operations may timeout when used on network volumes containing many files (over 50,000 files) or large amounts of data.
+
+**Symptoms:**
+- `aws s3 ls` commands result in `504 Gateway Timeout` errors.
+- File uploads and downloads work normally, but you cannot list directory contents.
+
+**Workarounds:**
+1. **Use alternative access methods**: Access your network volume [through a Pod](/pods/storage/create-network-volumes) instead of the S3 API when browsing large directories.
+2. **Target specific subdirectories**: If possible, list specific subdirectories rather than the root directory to reduce the number of files being processed.
+
+### Unsupported S3 features
+
+-   Object versioning.
+-   Object encryption.
+-   Object tagging.
+-   Object ACLs.
+-   Object locking.
+-   Website redirects.
+-   Storage classes besides `STANDARD`.
 
 ## Reference documentation
 
