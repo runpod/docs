@@ -2,12 +2,8 @@
 title: "S3-compatible API"
 sidebarTitle: "S3-compatible API"
 description: "Use Runpod's S3-compatible API to access and manage your network volumes."
-tag: "BETA"
+tag: "NEW"
 ---
-
-<Note>
-The S3-compatible API is currently in beta. If you'd like to provide feedback, please [join our Discord](https://discord.gg/runpod).
-</Note>
 
 Runpod provides an S3-protocol compatible API for direct access to your [network volumes](/serverless/storage/network-volumes). This allows you to manage files on your network volumes without launching a Pod, reducing cost and operational friction.
 
@@ -93,6 +89,8 @@ aws s3 ls --region [DATACENTER] \
     --endpoint-url https://s3api-[DATACENTER].runpod.io/ \ 
     s3://[NETWORK_VOLUME_ID]/[REMOTE_DIR]
 ```
+
+Unlike standard S3 buckets, `ls` and `ListObjects` operations will list empty directories.
 
 <Warning>
 
@@ -309,7 +307,7 @@ The S3-compatible API supports the following operations. For detailed informatio
 | `HeadBucket`             | Verify bucket exists and you have permissions. |
 | `HeadObject`             | Retrieve object metadata.                    |
 | `ListBuckets`            | List available buckets.                      |
-| `ListObjects`            | List objects in a bucket.                    |
+| `ListObjects`            | List objects in a bucket. Unlike standard S3, this includes empty directories.                    |
 | `PutObject`              | Upload objects.                              |
 | `CreateMultipartUpload` | Start a multipart upload for large files.    |
 | `UploadPart`             | Upload a part of a multipart upload.         |
@@ -326,7 +324,21 @@ Large file handling is supported through multipart uploads, allowing you to tran
 </Warning>
 
 
-## Limitations
+## Known issues and limitations
+
+### ListObjects runs slowly or fails with "same next token" error
+
+When running `aws s3 ls` or `ListObjects` on a directory with many files or large amounts of data (typically >10,000 files or >10 GB of data) for the first time, it may run very slowly, or you may encounter the following error: 
+
+```bash
+"fatal error: Error during pagination: The same next token was received twice: ..."
+```
+
+This occurs because Runpod must compute and cache the MD5 checksum (i.e., ETag) for files created without the S3-compatible API. This computation can take several minutes for large directories or files, as the `ListObjects` request must wait until the checksum is ready.
+
+Workarounds:
+* The operation will typically complete successfully if you wait for the process to finish.
+* If the client aborts with a pagination error, retry the operation after a brief pause.
 
 ### Storage and time synchronization
 
