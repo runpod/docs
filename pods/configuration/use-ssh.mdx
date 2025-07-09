@@ -1,83 +1,120 @@
 ---
-title: "Use SSH"
+title: "Connect to a Pod with SSH"
+sidebarTitle: "Connect with SSH"
+description: "Connect to your Pods with SSH to manage long-running processes and critical tasks."
 ---
 
-The basic terminal SSH access that Runpod exposes is not a full SSH connection and, therefore, does not support commands like SCP. If you want to have full SSH capabilities, then you will need to rent an instance that has public IP support and run a full SSH daemon in your Pod.
+Connecting to a Pod through an SSH (Secure Shell) terminal provides a secure and reliable method for interacting with your instance. Use this to manage long-running processes, critical tasks, and when you need the full capabilities of a shell environment.
 
-## Setup
+Every Pod offers the ability to connect through SSH using the [basic proxy method](#basic-ssh-connection) below (which does not support commands like SCP or SFTP), but not all Pods support the [full public IP method](#full-ssh-connection-via-public-ip).
 
-1. Generate your public/private SSH key pair on your local machine with `ssh-keygen -t ed25519 -C "your_email@example.com"`. This will save your public/private key pair to `~/.ssh/id_ed25519.pub` and `~/.ssh/id_ed25519`, respectively.\\
-   <Info>
+## Generate your SSH key and add it to your Runpod account
 
-   if you're using command prompt in Windows rather than the Linux terminal or WSL, your public/private key pair will be saved to `C:\users\{yourUserAccount}\.ssh\id_ed25519.pub` and `C:\users\{yourUserAccount}\.ssh\id_ed25519`, respectively.
+1. Generate an SSH key using this command on your local terminal:
 
-   </Info>
+  ```sh
+  ssh-keygen -t ed25519 -C "YOUR_EMAIL@DOMAIN.COM"
+  ```
 
-<Frame caption="">
-  <img src="/images/004be354-4655a01-1-6b0dd022d29cebe257e9e5df21a52fb4.png" />
-</Frame>
+  This saves your public/private key pair to `~/.ssh/id_ed25519.pub` and `~/.ssh/id_ed25519` respectively.
 
-2. Add your public key to your [Runpod user settings](https://www.console.runpod.io/user/settings).
+  <Warning>
 
-<Frame caption="">
-  <img src="/images/58c926ba-4972691-2-8c4764cae5d826dd756d264474f818d5.png" />
-</Frame>
+  If you are using Command Prompt on Windows instead of the Linux terminal or WSL, your public and private key pair will be saved to `C:\Users\YOUR_USER_ACCOUNT\.ssh\id_ed25519.pub` and `C:\Users\YOUR_USER_ACCOUNT\.ssh\id_ed25519`, respectively.
+  
+  </Warning>
 
-<Frame caption="">
-  <img src="/images/1b79b819-c340553-image-5834fe29a2179e6bb7fb75f5aa664037.png" />
-</Frame>
+2. Retrieve your public SSH key by running this command:
 
-3. Start your Pod. Make sure of the following things:
+    ```sh
+    cat ~/.ssh/id_ed25519.pub
+    ```
+    
+    This will output something similar to this:
 
-* Your Pod supports a public IP, if you're deploying in Community Cloud.
-* An SSH daemon is started. If you're using a Runpod official template such as Runpod Stable Diffusion, you don't need to take any additional steps. If you're using a custom template, make sure your template has TCP port 22 exposed and use the following Docker command. If you have an existing start command, replace `sleep infinity` at the end with your existing command:
+    ```sh
+    ssh-ed25519 AAAAC4NzaC1lZDI1JTE5AAAAIGP+L8hnjIcBqUb8NRrDiC32FuJBvRA0m8jLShzgq6BQ YOUR_EMAIL@DOMAIN.COM
+    ```
+
+3.  Copy and paste the output into the **SSH Public Keys** field in your [Runpod user account settings](https://www.console.runpod.io/user/settings).
+
+<Warning>
+If you need to add multiple SSH keys to your Runpod account, make sure that each key pair is on its own line in the **SSH Public Keys** field.
+</Warning>
+
+## Basic SSH connection
+
+All Pods provide a basic SSH connection that is proxied through Runpod's systems. This method does not support commands like SCP (Secure Copy Protocol) or SFTP (SSH File Transfer Protocol).
+
+To connect using this method:
+
+1.  Ensure you have an [SSH key pair](#generate-your-ssh-key-and-add-it-to-your-runpod-account) generated on your local machine and added to your Runpod account.
+2. Navigate to the [Pods page](https://console.runpod.io/pods) in the Runpod console.
+3. Expand your Pod and select **Connect**.
+4. Select the SSH tab. Copy the command listed under **SSH**. It should look something like this:
+
+    ```sh
+    ssh 8y5rumuyb50m78-6441103b@ssh.runpod.io -i ~/.ssh/id_ed25519
+    ```
+
+  <Warning>
+  If you saved your key to a custom location, use that specific path after the `-i` flag instead.
+  </Warning>
+
+5. Run the copied command in your local terminal to connect to your Pod.
+
+## Full SSH connection via public IP
+
+For full SSH capabilities, including SCP and SFTP for file transfers, you need to rent an instance that supports a public IP address and ensure an SSH daemon is running within your Pod.
+
+If you are using a Runpod official template, such as Runpod PyTorch or Stable Diffusion, no additional setup is required, as full SSH access is already configured for you.
+
+However, if you're using a custom template, ensure that TCP port 22 is exposed and that the SSH daemon is running inside your Pod. To do this, add the following Docker command to your template. Or, if you already have a custom start command, replace `sleep infinity` at the end with your existing command with this:
 
 ```sh
 bash -c 'apt update;DEBIAN_FRONTEND=noninteractive apt-get install openssh-server -y;mkdir -p ~/.ssh;cd $_;chmod 700 ~/.ssh;echo "$PUBLIC_KEY" >> authorized_keys;chmod 700 authorized_keys;service ssh start;sleep infinity'
 ```
 
-<Frame caption="">
-  <img src="/images/93b94d98-97823c6-image-73915734bbfd2cd60e89c719561877e1.png" />
-</Frame>
 
-Once your Pod is done initializing, you'll be able to SSH into it by running the SSH over exposed TCP command in the Pod's Connection Options menu on your local machine.
+Once you're sure that the SSH daemon is running, you can connect to your Pod by following these steps:
 
-<Info>
+1.  Ensure you have an [SSH key pair](#generate-your-ssh-key-and-add-it-to-your-runpod-account) generated on your local machine and added to your Runpod account.
+2.  An SSH daemon must be started in your Pod. Runpod official templates, such as "Runpod PyTorch", often have this pre-configured. If you're using a custom template, ensure TCP port 22 is exposed and the SSH daemon is started. Refer to the [Use SSH guide](/pods/configuration/use-ssh) for commands to include in your custom Docker template.
+3. Navigate to the [Pods page](https://console.runpod.io/pods) in the Runpod console.
+4. Expand your Pod and select **Connect**.
+5. Select the SSH tab. Copy the command listed under **SSH over exposed TCP**. It should look something like this:
 
-* if you're using the Windows Command Prompt rather than the Linux terminal or WSL, and you've used the default key location when generating your public/private key pair (i.e., you didn't specify a different file path when prompted), you'll need to modify the file path in the provided SSH command after the `-i` flag to `C:\users\{yourUserAccount}\.ssh\id_ed25519`.
-* If you've saved your key to a location other than the default, specify that path you chose when generating your key pair after the `-i` flag instead.
+  ```sh
+  ssh root@213.173.108.12 -p 17445 -i ~/.ssh/id_ed25519
+  ```
 
-</Info>
+  <Warning>
+  If you saved your key to a custom location, use that specific path after the `-i` flag instead.
+  </Warning>
 
-<Frame caption="">
-  <img src="/images/ccf2d8df-3d51ed8-image-e3c4caabde1ffd0116215fcedd5986d8.png" />
-</Frame>
+6. Run the copied command in your local terminal to connect to your Pod.
 
-<Frame caption="">
-  <img src="/images/979e0732-ff71847-image-7ce565e90197a0386f790c9f8a987987.png" />
-</Frame>
+The SSH command above has the following structure:
 
-## What's the SSH password?
+```sh
+ssh root@[POD_IP_ADDRESS] -p [SSH_PORT] -i [PATH_TO_SSH_KEY]
+```
 
-If you're being prompted for a password when you attempt to connect, something is amiss. We don't require a password for SSH connections. Some common mistakes that cause your SSH client to prompt for a password include:
+Where:
+* `root`: Your assigned username for the Pod (typically `root`).
+* `[POD_IP_ADDRESS]`: The public IP address of your Pod.
+* `[SSH_PORT]`: The designated public SSH port for your Pod.
+* `[PATH_TO_SSH_KEY]`: The local file path to your private SSH key.
 
-* Copying and pasting the key *fingerprint* (beginning with `SHA256:`) into your Runpod user settings instead of the public key itself (the contents of the `id_ed25519.pub` file when viewed from a text editor)
-* Omitting the encryption type from the beginning of the key when copying and pasting into your Runpod user settings (i.e., copying the random text, but not the `ssh-ed25519` which precedes it)
-* Not separating different public keys in your Runpod user settings with a newline between each one (this would result in the first public/private key pair functioning as expected, but each subsequent key pair would not work)
-* Specifying an incorrect file path to your private key file:
+## Troubleshooting
 
-<Frame caption="">
-  <img src="/images/4222183b-10cbfa6-image-3f9272d8e4fcad6a389624dacca81776.png" />
-</Frame>
+If you are asked for a password when connecting to your Pod via SSH, this means something is not set up correctly. Runpod does not require a password for SSH connections, as authentication is handled entirely through your SSH key pair. This prompt usually indicates a problem with your SSH key configuration. 
 
-* Attempting to use a private key that other users on the machine have permissions for:
+Here are some common reasons why this might happen:
 
-<Frame caption="">
-  <img src="/images/87f500a5-7a5cf85-image-c96832adff89df1939a8549b42d4bd74.png" />
-</Frame>
-
-* Incorrect Private Key being used locally in SSH config file. There should be a config file on your local machine in your \~/.ssh folder. You want to ensure that the IdentityFile in the config file points to the private key of the public key you used to make this connection. If you are not pointing to the correct private key in the config file, when you make a connection request using your public key, you will get a mismatch and be prompted for a password. Once the correct private key is set in your config file, you can connect without a password.
-
-<Frame caption="">
-  <img src="/images/a336f3d0-329799832-1f3db241-72a1-4d29-be36-ea5bab945b0a.png" />
-</Frame>
+- If you copy and paste the key *fingerprint* (which starts with `SHA256:`) into your Runpod user settings instead of the actual public key (the contents of your `id_ed25519.pub` file), authentication will fail.
+- If you omit the encryption type at the beginning of your public key when pasting it into your Runpod user settings (for example, leaving out `ssh-ed25519`), the key will not be recognized.
+- If you add multiple public keys to your Runpod user settings but do not separate them with a newline, only the first key will work. Each key must be on its own line.
+- If you specify the wrong file path to your private key when connecting, SSH will not be able to find the correct key (`No such file or directory` error).
+- If your private key file is accessible by other users on your machine, SSH may refuse to use it for security reasons (`bad permissions` error).
+- If your SSH configuration file (`~/.ssh/config`) points to the wrong private key, you will also be prompted for a password. Make sure the `IdentityFile` entry in your config file matches the private key that corresponds to the public key you added to your Runpod account.
