@@ -417,6 +417,56 @@ Workarounds:
 -   The AWS S3 minimum part size of 5MB is not enforced.
 -   Multipart upload parts and metadata are stored in a hidden `.s3compat_uploads/` folder. This folder and its contents are automatically cleaned up when you call `CompleteMultipartUpload` or `AbortMultipartUpload`.
 
+#### Timeout configuration for large files
+
+When uploading large files, you may encounter timeout errors during the `CompleteMultipartUpload` operation. To resolve this, increase the timeout settings in your AWS tools:
+
+**AWS CLI (`aws s3` and `aws s3api`):**
+
+Option 1: Use the `--cli-read-timeout` parameter:
+```bash
+aws s3 cp large-file.zip s3://your-volume-name/ --cli-read-timeout 7200 --endpoint-url https://storage.datacenter.runpod.io
+```
+
+Option 2: Configure timeout in `~/.aws/config`:
+```ini
+[default]
+cli_read_timeout = 7200
+```
+
+**Boto3 (Python SDK):**
+
+Configure a custom timeout when creating the S3 client:
+```python
+import boto3
+from botocore.config import Config
+
+# Configure custom timeout
+custom_config = Config(
+    read_timeout=7200,
+)
+
+# Create S3 client with custom timeout
+s3_client = boto3.client('s3', config=custom_config)
+```
+
+Or with a session:
+```python
+import boto3
+from botocore.config import Config
+
+custom_config = Config(
+    read_timeout=7200,
+)
+
+session = boto3.Session()
+s3_client = session.client('s3', config=custom_config)
+```
+
+<Note>
+The timeout value of 7200 seconds (2 hours) should handle most large file uploads. For extremely large files, you may need to increase this value further.
+</Note>
+
 ### Unsupported S3 features
 
 -   Object versioning.
