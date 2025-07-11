@@ -308,7 +308,7 @@ With that in mind, here's an example of how to run the script above using comman
 
 The tables below show which S3 API operations and AWS CLI commands are currently supported. Use the tables below to understand what functionality is available and plan your development workflows accordingly.
 
-For detailed information these operations, refer to the [AWS S3 API documentation](https://docs.aws.amazon.com/AmazonS3/latest/API/API_Operations_Amazon_Simple_Storage_Service.html).
+For detailed information on these operations, refer to the [AWS S3 API documentation](https://docs.aws.amazon.com/AmazonS3/latest/API/API_Operations_Amazon_Simple_Storage_Service.html).
 
 <Note>
 If a function is not listed below, that means it's not currently implemented. We are continuously expanding the S3-compatible API based on customer needs and usage patterns.
@@ -319,7 +319,7 @@ If a function is not listed below, that means it's not currently implemented. We
 | Operation | Supported | CLI Command | Notes |
 |------------------|--------|-----------------|-------|
 | `CopyObject` | ✅ | `aws s3 cp`, `aws s3api copy-object` | Copy objects between locations |
-| `DeleteObject` | ✅ | `aws s3 rm`, `aws s3api delete-object` | Remove individual objects. `aws s3 rm --recursive` is not supported. |
+| `DeleteObject` | ✅ | `aws s3 rm`, `aws s3api delete-object` | Remove individual objects |
 | `GetObject` | ✅ | `aws s3 cp`, `aws s3api get-object` | Download objects |
 | `HeadBucket` | ✅ | `aws s3 ls`, `aws s3api head-bucket` | Verify bucket exists and permissions |
 | `HeadObject` | ✅ | `aws s3api head-object` | Retrieve object metadata |
@@ -419,24 +419,29 @@ Workarounds:
 
 #### Timeout configuration for large files
 
-When uploading large files, you may encounter timeout errors during the `CompleteMultipartUpload` operation. To resolve this, increase the timeout settings in your AWS tools:
+When uploading large files (12GB+), you may encounter timeout errors during the `CompleteMultipartUpload` operation. To resolve this, increase the timeout settings in your AWS tools:
 
-**AWS CLI (`aws s3` and `aws s3api`):**
+<Tabs>
+  <Tab title="AWS CLI">
 
-Option 1: Use the `--cli-read-timeout` parameter:
+For `aws s3` and `aws s3api`, use the `--cli-read-timeout` parameter:
+
 ```bash
 aws s3 cp large-file.zip s3://your-volume-name/ --cli-read-timeout 7200 --endpoint-url https://storage.datacenter.runpod.io
 ```
 
-Option 2: Configure timeout in `~/.aws/config`:
+Or, configure timeout in `~/.aws/config`:
+
 ```ini
 [default]
 cli_read_timeout = 7200
 ```
 
-**Boto3 (Python SDK):**
+</Tab>
+<Tab title="Boto3">
 
-Configure a custom timeout when creating the S3 client:
+Use the `read_timeout` parameter to configure the timeout when creating the S3 client:
+
 ```python
 import boto3
 from botocore.config import Config
@@ -450,22 +455,8 @@ custom_config = Config(
 s3_client = boto3.client('s3', config=custom_config)
 ```
 
-Or with a session:
-```python
-import boto3
-from botocore.config import Config
-
-custom_config = Config(
-    read_timeout=7200,
-)
-
-session = boto3.Session()
-s3_client = session.client('s3', config=custom_config)
-```
-
-<Note>
-The timeout value of 7200 seconds (2 hours) should handle most large file uploads. For extremely large files, you may need to increase this value further.
-</Note>
+</Tab>
+</Tabs>
 
 ### Unsupported S3 features
 
