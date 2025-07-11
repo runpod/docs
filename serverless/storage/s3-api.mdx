@@ -151,7 +151,7 @@ aws s3 sync --region [DATACENTER] \
 
 ## s3api CLI example
 
-You can also use `aws s3api` commands (instead of the `aws s3`) to interact with the S3-compatible API.
+You can also use `aws s3api` commands (instead of `aws s3`) to interact with the S3-compatible API.
 
 For example, here's how you could use `aws s3api get-object` to download an object from a network volume:
 
@@ -177,9 +177,6 @@ Your Runpod S3 API key credentials must be set as environment variables using th
 
 *   `AWS_ACCESS_KEY_ID`: Should be set to your Runpod S3 API key **access key** (e.g., `user_***...`).
 *   `AWS_SECRET_ACCESS_KEY`: Should be set to your Runpod S3 API key's **secret** (e.g., `rps_***...`).
-
-
-
 
 ```python
 #!/usr/bin/env python3
@@ -307,27 +304,82 @@ With that in mind, here's an example of how to run the script above using comman
     --file 'local_directory/file.txt'
 ```
 
-## Supported S3 actions
+## S3 API compatibility reference
 
-The S3-compatible API supports the following operations. For detailed information on each, refer to the [AWS S3 API documentation](https://docs.aws.amazon.com/AmazonS3/latest/API/API_Operations_Amazon_Simple_Storage_Service.html).
+The tables below show which S3 API operations and AWS CLI commands are currently supported. Use the tables below to understand what functionality is available and plan your development workflows accordingly.
 
-| Operation                 | Description                                  |
-| ------------------------- | -------------------------------------------- |
-| `CopyObject`             | Copy objects between locations.              |
-| `DeleteObject`           | Remove objects.                              |
-| `GetObject`              | Download objects.                   |
-| `HeadBucket`             | Verify bucket exists and you have permissions. |
-| `HeadObject`             | Retrieve object metadata.                    |
-| `ListBuckets`            | List available buckets.                      |
-| `ListObjects`            | List objects in a bucket. Unlike standard S3, this includes empty directories.                    |
-| `PutObject`              | Upload objects (\<500MB).                       |
-| `CreateMultipartUpload` | Start a multipart upload for large files.    |
-| `UploadPart`             | Upload a part of a multipart upload.         |
-| `CompleteMultipartUpload`| Finish a multipart upload.                   |
-| `AbortMultipartUpload`  | Cancel a multipart upload.                   |
-| `ListMultipartUploads`  | View in-progress multipart uploads.          |
+For detailed information these operations, refer to the [AWS S3 API documentation](https://docs.aws.amazon.com/AmazonS3/latest/API/API_Operations_Amazon_Simple_Storage_Service.html).
 
-Files larger than 500MB must be uploaded using multipart uploads.
+<Note>
+If a function is not listed below, that means it's not currently implemented. We are continuously expanding the S3-compatible API based on customer needs and usage patterns.
+</Note>
+
+### Core operations
+
+| Operation | Supported | CLI Command | Notes |
+|------------------|--------|-----------------|-------|
+| `CopyObject` | ✅ | `aws s3 cp`, `aws s3api copy-object` | Copy objects between locations |
+| `DeleteObject` | ✅ | `aws s3 rm`, `aws s3api delete-object` | Remove individual objects. `aws s3 rm --recursive` is not supported. |
+| `GetObject` | ✅ | `aws s3 cp`, `aws s3api get-object` | Download objects |
+| `HeadBucket` | ✅ | `aws s3 ls`, `aws s3api head-bucket` | Verify bucket exists and permissions |
+| `HeadObject` | ✅ | `aws s3api head-object` | Retrieve object metadata |
+| `ListBuckets` | ✅ | `aws s3 ls`, `aws s3api list-buckets` | List available network volumes |
+| `ListObjects` | ✅ | `aws s3 ls`, `aws s3api list-objects` | List objects in a bucket (includes empty directories) |
+| `ListObjectsV2` | ✅ | `aws s3 ls`, `aws s3api list-objects-v2` | Enhanced version of ListObjects |
+| `PutObject` | ✅ | `aws s3 cp`, `aws s3api put-object` | Upload objects (\<500MB) |
+| `DeleteObjects` | ❌ | `aws s3api delete-objects` | Planned |
+| `RestoreObject` | ❌ | `aws s3api restore-object` | Not supported |
+
+### Multipart upload operations
+
+Files larger than 500MB must be uploaded using multipart uploads. The AWS CLI performs multipart uploads automatically.
+
+| Operation | Supported | CLI Command | Notes |
+|------------------|--------|-----------------|-------|
+| `CreateMultipartUpload` | ✅ | `aws s3api create-multipart-upload` | Start multipart upload for large files |
+| `UploadPart` | ✅ | `aws s3api upload-part` | Upload individual parts |
+| `CompleteMultipartUpload` | ✅ | `aws s3api complete-multipart-upload` | Finish multipart upload |
+| `AbortMultipartUpload` | ✅ | `aws s3api abort-multipart-upload` | Cancel multipart upload |
+| `ListMultipartUploads` | ✅ | `aws s3api list-multipart-uploads` | View in-progress uploads |
+| `ListParts` | ✅ | `aws s3api list-parts` | List parts of a multipart upload |
+
+### Bucket management operations
+
+| Operation | Supported | CLI Command | Notes |
+|------------------|--------|-----------------|-------|
+| `CreateBucket` | ❌ | `aws s3api create-bucket` | Use the Runpod console to create network volumes |
+| `DeleteBucket` | ❌ | `aws s3api delete-bucket` | Use the Runpod console to delete network volumes |
+| `GetBucketLocation` | ❌ | `aws s3api get-bucket-location` | Datacenter info available in the Runpod console |
+| `GetBucketVersioning` | ❌ | `aws s3api get-bucket-versioning` | Versioning is not supported |
+| `PutBucketVersioning` | ❌ | `aws s3api put-bucket-versioning` | Versioning is not supported |
+
+### Access control and permissions
+
+| Operation | Supported | CLI Command | Notes |
+|------------------|--------|-----------------|-------|
+| `GetBucketAcl` | ❌ | N/A | ACLs are not supported |
+| `PutBucketAcl` | ❌ | N/A | ACLs are not supported |
+| `GetObjectAcl` | ❌ | N/A | ACLs are not supported |
+| `PutObjectAcl` | ❌ | N/A | ACLs are not supported |
+| `GetBucketPolicy` | ❌ | N/A | Bucket policies are not supported |
+| `PutBucketPolicy` | ❌ | N/A | Bucket policies are not supported |
+
+### Object metadata and tagging
+
+| Operation | Supported | CLI Command | Notes |
+|------------------|--------|-----------------|-------|
+| `GetObjectTagging` | ❌ | N/A | Object tagging is not supported |
+| `PutObjectTagging` | ❌ | N/A | Object tagging is not supported |
+| `DeleteObjectTagging` | ❌ | N/A | Object tagging is not supported |
+
+### Encryption and security
+
+| Operation | Supported | CLI Command | Notes |
+|------------------|--------|-----------------|-------|
+| `GetBucketEncryption` | ❌ | N/A | Encryption is not supported |
+| `PutBucketEncryption` | ❌ | N/A | Encryption is not supported |
+| `GetObjectLockConfiguration` | ❌ | N/A | Object locking is not supported |
+| `PutObjectLockConfiguration` | ❌ | N/A | Object locking is not supported |
 
 <Warning>
 
@@ -374,6 +426,8 @@ Workarounds:
 -   Object locking.
 -   Website redirects.
 -   Storage classes besides `STANDARD`.
+-   S3 static website hosting (`aws s3 website`).
+-   Presigned URLs (`aws s3 presign`).
 
 ## Reference documentation
 
