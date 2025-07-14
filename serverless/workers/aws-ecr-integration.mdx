@@ -1,0 +1,273 @@
+---
+title: "Deploy from AWS ECR"
+sidebarTitle: "AWS ECR integration"
+---
+
+Learn how to deploy Serverless workers from private container images stored in Amazon Elastic Container Registry (ECR) with automated credential management.
+
+## Overview
+
+While RunPod supports pulling container images from AWS ECR, ECR credentials expire every 12 hours by default. This requires setting up automated credential refresh to ensure your Serverless endpoints can continuously access your private ECR repositories.
+
+<Warning>
+ECR integration requires additional setup compared to other container registries due to AWS's temporary credential system. Consider using Docker Hub or GitHub Container Registry for simpler workflows if ECR-specific features aren't required.
+</Warning>
+
+## Prerequisites
+
+Before integrating ECR with RunPod, ensure you have:
+
+* An AWS account with ECR access
+* A private ECR repository with your container image
+* AWS CLI configured with appropriate permissions
+* A RunPod account with API access
+
+## Step 1: Set up ECR repository and image
+
+First, create your ECR repository and push your container image:
+
+```bash
+# Create ECR repository
+aws ecr create-repository --repository-name my-serverless-worker --region us-east-1
+
+# Get login token and authenticate Docker
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 123456789012.dkr.ecr.us-east-1.amazonaws.com
+
+# Build and tag your image
+docker build --platform linux/amd64 -t my-serverless-worker .
+docker tag my-serverless-worker:latest 123456789012.dkr.ecr.us-east-1.amazonaws.com/my-serverless-worker:latest
+
+# Push to ECR
+docker push 123456789012.dkr.ecr.us-east-1.amazonaws.com/my-serverless-worker:latest
+```
+
+Replace `123456789012` with your actual AWS account ID and adjust the region as needed.
+
+## Step 2: Create initial container registry credentials
+
+Generate ECR credentials and add them to RunPod:
+
+```bash
+# Get ECR authorization token
+aws ecr get-authorization-token --region us-east-1 --query 'authorizationData[0].authorizationToken' --output text | base64 -d
+```
+
+This returns credentials in the format `AWS:password`. Use these to create container registry authentication in RunPod:
+
+<Tabs>
+<Tab title="REST API">
+```bash
+curl -X POST "https://rest.runpod.io/v1/containerregistryauth" \
+  -H "Authorization: Bearer YOUR_RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "ECR Credentials",
+    "username": "AWS",
+    "password": "YOUR_ECR_TOKEN_PASSWORD"
+  }'
+```
+</Tab>
+
+<Tab title="Python">
+```python
+import requests
+
+response = requests.post(
+    "https://rest.runpod.io/v1/containerregistryauth",
+    headers={
+        "Authorization": "Bearer YOUR_RUNPOD_API_KEY",
+        "Content-Type": "application/json"
+    },
+    json={
+        "name": "ECR Credentials",
+        "username": "AWS", 
+        "password": "YOUR_ECR_TOKEN_PASSWORD"
+    }
+)
+
+registry_auth_id = response.json()["id"]
+print(f"Registry auth ID: {registry_auth_id}")
+```
+</Tab>
+</Tabs>
+
+Save the returned `id` value - you'll need it for the automation script and endpoint configuration.
+
+## Step 3: Set up automated credential refresh
+
+Create an AWS Lambda function to automatically refresh ECR credentials in RunPod:
+
+### Lambda function code
+
+```python
+import json
+import boto3
+import requests
+import base64
+import os
+
+def lambda_handler(event, context):
+    # Initialize AWS clients
+    ecr_client = boto3.client('ecr')
+    
+    # RunPod configuration
+    runpod_api_key = os.environ['RUNPOD_API_KEY']
+    registry_auth_id = os.environ['REGISTRY_AUTH_ID']
+    
+    try:
+        # Get new ECR authorization token
+        response = ecr_client.get_authorization_token()
+        auth_data = response['authorizationData'][0]
+        
+        # Decode the authorization token
+        token = base64.b64decode(auth_data['authorizationToken']).decode('utf-8')
+        username, password = token.split(':', 1)
+        
+        # Update RunPod container registry credentials
+        update_response = requests.patch(
+            f"https://rest.runpod.io/v1/containerregistryauth/{registry_auth_id}",
+            headers={
+                "Authorization": f"Bearer {runpod_api_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "username": username,
+                "password": password
+            }
+        )
+        
+        if update_response.status_code == 200:
+            print("Successfully updated RunPod ECR credentials")
+            return {
+                'statusCode': 200,
+                'body': json.dumps('ECR credentials updated successfully')
+            }
+        else:
+            print(f"Failed to update credentials: {update_response.text}")
+            return {
+                'statusCode': 500,
+                'body': json.dumps('Failed to update credentials')
+            }
+            
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return {
+            'statusCode': 500,
+            'body': json.dumps(f'Error: {str(e)}')
+        }
+```
+
+### Lambda configuration
+
+1. Create a new Lambda function in the AWS Console
+2. Set the runtime to Python 3.9 or later
+3. Add the following environment variables:
+   - `RUNPOD_API_KEY`: Your RunPod API key
+   - `REGISTRY_AUTH_ID`: The container registry auth ID from Step 2
+4. Attach an IAM role with the `AmazonEC2ContainerRegistryReadOnly` policy
+5. Set up a CloudWatch Events rule to trigger the function every 6 hours:
+
+```json
+{
+  "Rules": [
+    {
+      "Name": "ECRCredentialRefresh",
+      "ScheduleExpression": "rate(6 hours)",
+      "State": "ENABLED",
+      "Targets": [
+        {
+          "Id": "1",
+          "Arn": "arn:aws:lambda:us-east-1:123456789012:function:refresh-ecr-credentials"
+        }
+      ]
+    }
+  ]
+}
+```
+
+## Step 4: Deploy Serverless endpoint with ECR image
+
+Once credential automation is set up, create your Serverless endpoint:
+
+### Using the RunPod Console
+
+1. Navigate to the [Serverless section](https://www.console.runpod.io/serverless)
+2. Click **New Endpoint**
+3. Select **Docker Image** as your source
+4. Enter your ECR image URL: `123456789012.dkr.ecr.us-east-1.amazonaws.com/my-serverless-worker:latest`
+5. In the **Advanced** section, select your ECR credentials from the **Container Registry Auth** dropdown
+6. Configure other endpoint settings as needed
+7. Click **Create Endpoint**
+
+### Using the REST API
+
+```bash
+curl -X POST "https://rest.runpod.io/v1/endpoints" \
+  -H "Authorization: Bearer YOUR_RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "ECR Serverless Worker",
+    "template": {
+      "imageName": "123456789012.dkr.ecr.us-east-1.amazonaws.com/my-serverless-worker:latest",
+      "containerRegistryAuthId": "YOUR_REGISTRY_AUTH_ID"
+    },
+    "workersMax": 3,
+    "workersMin": 0,
+    "gpuIds": "AMPERE_16"
+  }'
+```
+
+## Step 5: Monitor and troubleshoot
+
+### Monitoring credential refresh
+
+Check your Lambda function logs in CloudWatch to ensure credentials are being refreshed successfully:
+
+```bash
+aws logs filter-log-events \
+  --log-group-name /aws/lambda/refresh-ecr-credentials \
+  --start-time $(date -d '1 hour ago' +%s)000
+```
+
+### Common issues and solutions
+
+**Image pull failures**: If your endpoint fails to pull the ECR image:
+
+1. Verify the ECR image URL is correct
+2. Check that the Lambda function is running successfully
+3. Ensure the container registry auth ID is properly configured
+4. Confirm your ECR repository permissions allow the necessary access
+
+**Credential expiration**: If you see authentication errors:
+
+1. Manually trigger the Lambda function to refresh credentials immediately
+2. Check that the CloudWatch Events rule is properly configured
+3. Verify the Lambda function has the correct IAM permissions
+
+**Performance considerations**: ECR image pulls may be slower than Docker Hub:
+
+1. Consider using smaller base images to reduce pull times
+2. Enable FlashBoot in your endpoint configuration for faster cold starts
+3. Use network volumes to cache frequently accessed data
+
+## Best practices
+
+* **Monitor Lambda execution**: Set up CloudWatch alarms for Lambda function failures
+* **Use specific image tags**: Avoid using `:latest` tags in production deployments
+* **Implement retry logic**: Add error handling and retry mechanisms to your Lambda function
+* **Regional considerations**: Deploy Lambda functions in the same region as your ECR repositories
+* **Security**: Use least-privilege IAM policies and rotate RunPod API keys regularly
+
+## Alternative approaches
+
+If automated credential refresh adds complexity to your workflow, consider these alternatives:
+
+* **Docker Hub**: Simpler authentication with longer-lived credentials
+* **GitHub Container Registry**: Integrated with GitHub workflows and repositories
+* **Public ECR**: Use Amazon's public ECR for open-source projects without authentication
+
+## Next steps
+
+* [Learn about endpoint configurations](/serverless/endpoints/endpoint-configurations)
+* [Explore GitHub integration for automated deployments](/serverless/workers/github-integration)
+* [Set up monitoring and logging for your endpoints](/serverless/endpoints/job-states)
