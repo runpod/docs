@@ -1,0 +1,210 @@
+---
+title: "Serverless logs"
+---
+
+Runpod provides comprehensive logging capabilities for Serverless endpoints to help you monitor, debug, and troubleshoot your applications. Understanding the different types of logs and their persistence characteristics is crucial for effective application management.
+
+## Log Types
+
+### Serverless Logs
+
+Serverless logs are automatically collected from your worker instances and streamed to RunPod's centralized logging system. These logs include:
+
+- **Standard output (stdout)** from your handler functions
+- **Standard error (stderr)** from your applications
+- **System messages** related to worker lifecycle events
+- **Framework logs** from the RunPod SDK
+
+**Key characteristics:**
+- **Retention period**: 90 days minimum
+- **Access**: Available through the Logs tab in the RunPod console
+- **Streaming**: Near real-time log streaming with minimal lag (seconds)
+- **Throttling**: Logs may be dropped if workers generate excessive output to prevent system overload
+
+### Worker Logs
+
+Worker logs are temporary logs that exist only on the specific server where the worker is running. These logs:
+
+- Have **no throttling** applied
+- Are **not persistent** and are removed when workers terminate
+- Provide **immediate access** during worker execution
+- Are **not centrally stored**
+
+## Accessing Serverless Logs
+
+### Through the RunPod Console
+
+1. Navigate to your Serverless endpoint in the [RunPod console](https://console.runpod.io)
+2. Click on the **Logs** tab
+3. View real-time and historical logs for up to 90 days
+4. Use the search and filtering capabilities to find specific log entries
+5. Download logs as text files for offline analysis
+
+### Log Retention Policy
+
+- **Minimum retention**: 90 days for all serverless logs
+- **Automatic cleanup**: Logs older than the retention period are automatically removed
+- **No user control**: The retention period cannot be extended through the UI
+
+## Persistent Log Storage
+
+If you need to retain logs beyond the 90-day period, you can implement custom logging within your handler functions to write logs to persistent storage.
+
+### Using Network Volumes
+
+The most straightforward approach is to write logs to a [network volume](/serverless/storage/network-volumes) attached to your endpoint:
+
+```python
+import runpod
+import logging
+import os
+from datetime import datetime
+
+# Configure logging to write to network volume
+log_dir = "/runpod-volume/logs"
+os.makedirs(log_dir, exist_ok=True)
+
+# Create a timestamped log file
+log_filename = f"{log_dir}/worker_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+
+# Set up file logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_filename),
+        logging.StreamHandler()  # Also log to console for RunPod logs
+    ]
+)
+
+def handler(job):
+    request_id = job.get('id', 'unknown')
+    
+    # Log with request ID for traceability
+    logging.info(f"Processing request {request_id}")
+    
+    try:
+        # Your application logic here
+        result = process_request(job['input'])
+        logging.info(f"Request {request_id} completed successfully")
+        return result
+    except Exception as e:
+        logging.error(f"Request {request_id} failed: {str(e)}")
+        raise
+
+runpod.serverless.start({"handler": handler})
+```
+
+### Best Practices for Persistent Logging
+
+1. **Use request IDs**: Include the `RUNPOD_REQUEST_ID` environment variable or job ID in log entries for traceability
+2. **Structured logging**: Use JSON format for easier parsing and analysis
+3. **Log rotation**: Implement log rotation to prevent disk space issues
+4. **Separate log files**: Create separate log files per request or time period for better organization
+
+```python
+import json
+import os
+from datetime import datetime
+
+def structured_log(level, message, request_id=None, **kwargs):
+    log_entry = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "level": level,
+        "message": message,
+        "request_id": request_id or os.environ.get('RUNPOD_REQUEST_ID'),
+        **kwargs
+    }
+    
+    # Write to network volume
+    log_file = f"/runpod-volume/logs/{datetime.now().strftime('%Y-%m-%d')}.jsonl"
+    with open(log_file, 'a') as f:
+        f.write(json.dumps(log_entry) + '\n')
+    
+    # Also print to console for RunPod logs
+    print(json.dumps(log_entry))
+```
+
+### External Logging Services
+
+For enterprise applications, you may want to integrate your handler with external logging services:
+
+```python
+import requests
+import json
+
+def send_to_external_service(log_data):
+    """Send logs to external logging service like Datadog, Elasticsearch, etc."""
+    try:
+        response = requests.post(
+            "https://your-logging-service.com/api/logs",
+            headers={"Authorization": "Bearer YOUR_TOKEN"},
+            json=log_data,
+            timeout=5
+        )
+        response.raise_for_status()
+    except Exception as e:
+        # Fallback to local logging if external service fails
+        print(f"Failed to send to external service: {e}")
+```
+
+## Log Management and Analysis
+
+### Accessing Stored Logs
+
+To access logs stored in network volumes:
+
+1. **SSH into a Pod** with the same network volume attached
+2. **Use the S3-compatible API** to programmatically access log files
+3. **Download logs** through the RunPod console's file browser
+
+### Log Analysis Tools
+
+Consider using log analysis tools for better insights:
+
+- **grep/awk** for basic text processing
+- **jq** for JSON log parsing
+- **ELK Stack** (Elasticsearch, Logstash, Kibana) for advanced analysis
+- **Cloud logging services** like AWS CloudWatch, Google Cloud Logging, or Azure Monitor
+
+## Troubleshooting Common Issues
+
+### Missing Logs
+
+If logs are not appearing in the Logs tab:
+
+1. **Check log throttling**: Excessive logging may trigger throttling
+2. **Verify output streams**: Ensure you're writing to stdout/stderr
+3. **Check worker status**: Logs only appear for successfully initialized workers
+4. **Review retention period**: Logs older than 90 days are automatically removed
+
+### Log Throttling
+
+To avoid log throttling:
+
+1. **Reduce log verbosity** in production environments
+2. **Use structured logging** to make logs more efficient
+3. **Implement log sampling** for high-frequency events
+4. **Store detailed logs** in network volumes instead of console output
+
+### Performance Impact
+
+Excessive logging can impact performance:
+
+1. **Use appropriate log levels** (ERROR, WARN, INFO, DEBUG)
+2. **Avoid logging in tight loops**
+3. **Buffer log writes** when writing to network volumes
+4. **Consider asynchronous logging** for high-throughput applications
+
+## Differences from Pod Logs
+
+| Feature | Serverless Logs | Pod Logs |
+|---------|----------------|----------|
+| **Retention** | 90 days minimum | Temporary, removed when Pod stops |
+| **Storage** | Centralized logging system | Local to Pod server |
+| **Throttling** | Yes, to prevent system overload | No throttling |
+| **Access** | Logs tab in console | Logs button on Pod dashboard |
+| **Persistence** | Survives worker termination | Lost when Pod terminates |
+| **Streaming** | Real-time with minimal lag | Real-time while Pod runs |
+
+Understanding these differences helps you choose the appropriate logging strategy for your specific use case and ensures you have the visibility needed to maintain and debug your applications effectively.
