@@ -308,7 +308,7 @@ With that in mind, here's an example of how to run the script above using comman
 
 The tables below show which S3 API operations and AWS CLI commands are currently supported. Use the tables below to understand what functionality is available and plan your development workflows accordingly.
 
-For detailed information these operations, refer to the [AWS S3 API documentation](https://docs.aws.amazon.com/AmazonS3/latest/API/API_Operations_Amazon_Simple_Storage_Service.html).
+For detailed information on these operations, refer to the [AWS S3 API documentation](https://docs.aws.amazon.com/AmazonS3/latest/API/API_Operations_Amazon_Simple_Storage_Service.html).
 
 <Note>
 If a function is not listed below, that means it's not currently implemented. We are continuously expanding the S3-compatible API based on customer needs and usage patterns.
@@ -319,7 +319,7 @@ If a function is not listed below, that means it's not currently implemented. We
 | Operation | Supported | CLI Command | Notes |
 |------------------|--------|-----------------|-------|
 | `CopyObject` | ✅ | `aws s3 cp`, `aws s3api copy-object` | Copy objects between locations |
-| `DeleteObject` | ✅ | `aws s3 rm`, `aws s3api delete-object` | Remove individual objects. `aws s3 rm --recursive` is not supported. |
+| `DeleteObject` | ✅ | `aws s3 rm`, `aws s3api delete-object` | Remove individual objects |
 | `GetObject` | ✅ | `aws s3 cp`, `aws s3api get-object` | Download objects |
 | `HeadBucket` | ✅ | `aws s3 ls`, `aws s3api head-bucket` | Verify bucket exists and permissions |
 | `HeadObject` | ✅ | `aws s3api head-object` | Retrieve object metadata |
@@ -417,17 +417,47 @@ Workarounds:
 -   The AWS S3 minimum part size of 5MB is not enforced.
 -   Multipart upload parts and metadata are stored in a hidden `.s3compat_uploads/` folder. This folder and its contents are automatically cleaned up when you call `CompleteMultipartUpload` or `AbortMultipartUpload`.
 
-### Unsupported S3 features
+#### Timeout configuration for large files
 
--   Object versioning.
--   Object encryption.
--   Object tagging.
--   Object ACLs.
--   Object locking.
--   Website redirects.
--   Storage classes besides `STANDARD`.
--   S3 static website hosting (`aws s3 website`).
--   Presigned URLs (`aws s3 presign`).
+When uploading large files (12GB+), you may encounter timeout errors during the `CompleteMultipartUpload` operation. To resolve this, increase the timeout settings in your AWS tools:
+
+<Tabs>
+  <Tab title="AWS CLI">
+
+For `aws s3` and `aws s3api`, use the `--cli-read-timeout` parameter:
+
+```bash
+# Sets the timeout to 7200 seconds (2 hours)
+aws s3 cp large-file.zip s3://your-volume-name/ --cli-read-timeout 7200 --endpoint-url https://storage.datacenter.runpod.io
+```
+
+Or, configure timeout in `~/.aws/config`:
+
+```ini
+[default]
+cli_read_timeout = 7200
+```
+
+</Tab>
+<Tab title="Boto3">
+
+Use the `read_timeout` parameter to configure the timeout when creating the S3 client:
+
+```python
+import boto3
+from botocore.config import Config
+
+# Sets the timeout to 7200 seconds (2 hours)
+custom_config = Config(
+    read_timeout=7200,
+)
+
+# Create S3 client with custom timeout
+s3_client = boto3.client('s3', config=custom_config)
+```
+
+</Tab>
+</Tabs>
 
 ## Reference documentation
 
