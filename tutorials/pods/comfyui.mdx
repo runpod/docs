@@ -1,0 +1,209 @@
+---
+title: "Generate images with ComfyUI"
+sidebarTitle: "Generate images with ComfyUI"
+description: "Deploy ComfyUI on Runpod to create AI-generated images."
+tag: "NEW"
+---
+
+This tutorial walks you through how to configure ComfyUI on a [GPU Pod](/pods/overview) and use it to generate images with text-to-image models.
+
+[ComfyUI](https://www.comfy.org/) is a node-based graphical interface for creating AI image generation workflows. Instead of writing code, you connect different components visually to build custom image generation pipelines. This approach provides flexibility to experiment with various models and techniques while maintaining an intuitive interface.
+
+This tutorial uses the [SDXL-Turbo](https://huggingface.co/stabilityai/sdxl-turbo) model and a matching template, but you can adapt these instructions for any model/template combination you want to use.
+
+<Tip>
+When you're just getting started with ComfyUI, it's important to use a workflow that was created for the specific model you intend to use. You usually cannot simply switch the Load Checkpoint node from one model to another and expect optimal performance or results.
+
+For example, if you load a workflow created for the Flux Dev model and try to use it with SDXL-Turbo, the workflow may run, but with poor speed or image quality.
+</Tip>
+
+## What you'll learn
+
+In this tutorial, you'll learn how to:
+
+- Deploy a Pod with ComfyUI pre-installed.
+- Connect to the ComfyUI web interface.
+- Browse pre-configured workflow templates.
+- Install new models to your Pod.
+- Generate an image.
+
+## Requirements
+
+Before you begin, you'll need:
+
+- A [Runpod account](/get-started/manage-accounts).
+- At least $10 in Runpod credits.
+- A basic understanding of AI image generation.
+
+## Step 1: Deploy a ComfyUI Pod
+
+First, you'll deploy a Pod using a template that pre-installs ComfyUI and the ComfyUI Manager plugin:
+
+<Steps>
+  <Step title="Deploy a Pod from the ComfyUI template">
+    Go to the [Better Comfy Slim](https://console.runpod.io/explore/cndsag8ob0) template in the Runpod console and click **Deploy**.
+    
+    <Note>
+    There are several ComfyUI templates available in the Runpod console, many with pre-installed models. We're using this one because it's extremely lightweight, but it comes with the ComfyUI Manager plugin pre-installed so you can easily install the specific models/nodes you need after deployment.
+    </Note>
+  </Step>
+
+  <Step title="Configure your Pod">
+    Configure your Pod with these settings:
+    
+    - **GPU selection:** Choose an L40 or RTX 4090 for optimal performance with SDXL-Turbo. Lower VRAM GPUs may work for smaller models.
+    - **Storage:** The default container and disk volume sizes set by the template should be sufficient for SDXL-Turbo. You can also add a [network volume](/pods/storage/create-network-volumes) to your Pod if you want persistent storage.
+    - **Deployment type:** Select **On-Demand** for flexibility.
+  </Step>
+
+  <Step title="Deploy and wait">
+    Click **Deploy On-Demand** to create your Pod.
+    
+    The Pod can take up to 30 minutes to initialize the container and start the ComfyUI HTTP service.
+  </Step>
+</Steps>
+
+## Step 2: Open the ComfyUI interface
+
+Once your Pod has finished initializing, you can open the ComfyUI interface:
+
+<Steps>
+  <Step title="Open your Pod in the console">
+    Go to the [Pods section](https://www.runpod.io/console/pods) in the Runpod console, then find your deployed ComfyUI Pod and expand it.
+
+    <Warning>
+    The Pod may take up to 30 minutes to initialize when first deployed. Future starts will generally take much less time.
+    </Warning>
+  </Step>
+
+  <Step title="Start the ComfyUI service">
+    Click **Connect** on your Pod, then select the last HTTP service button in the list, labeled **Connect to HTTP Service [Port 8188]**.
+
+    This will open the ComfyUI interface in a new browser tab. The URL follows the format: `https://[POD_ID]-8188.proxy.runpod.net`.
+
+    <Note>
+    If you see the label "Not Ready" on the HTTP service button, or you get a "Bad Gateway" error when first connecting, wait 2–3 minutes for the service to fully start, then refresh the page.
+    </Note>
+
+  </Step>
+
+</Steps>
+
+## Step 3: Load a workflow template
+
+ComfyUI workflows consist of a series of nodes that are connected to each other to create a AI generation pipeline. Rather than creating our own workflow from scratch, we'll load a pre-configured workflow that was created for the specific model we intend to use:
+
+<Steps>
+  <Step title="Open the template browser">
+   When you first open the ComfyUI interface, the template browser should open automatically. If it doesn't, click the **Workflow** button in the top right corner of the ComfyUI interface, then select **Browse Templates**.
+  </Step>
+
+  <Step title="Load the SDXL-Turbo template">
+    In the sidebar to the left of the browser, select the **Image** tab. Find the **SDXL-Turbo** template and click on it to load a basic image generation workflow.
+  </Step>
+</Steps>
+
+## Step 4: Install the SDXL-Turbo model
+
+As soon as you load the workflow, you'll see a popup labeled **Missing Models**. This happens because the Pod template we deployed doesn't come pre-installed with any models, so we'll need to install them now.
+
+Rather than clicking the download button (which downloads the missing model to your local machine), use the ComfyUI Manager plugin to install the missing model directly onto the Pod:
+
+<Steps>
+  <Step title="Open the ComfyUI Manager">
+    Close the **Missing Models** popup by clicking the **X** in the top right corner. Then click **Manager** in the top right of the ComfyUI interface, and select **Model Manager** from the list of options.
+  </Step>
+
+  <Step title="Install the SDXL-Turbo model checkpoint">
+    In the search bar, enter `SDXL-Turbo 1.0 (fp16)`, then click **Install**.
+  </Step>
+
+  <Step title="Refresh the interface">
+    Before you can use the model, you'll need to refresh the ComfyUI interface. You can do this by either refreshing the browser tab where it's running, or by pressing <kbd>R</kbd>.
+  </Step>
+
+  <Step title="Configure the checkpoint node">
+    Find the node labeled **Load Checkpoint** in the workflow. It should be the first node on the left side of the canvas.
+
+    Click on the dropdown menu labeled `ckpt_name` and select the SDXL-Turbo model checkpoint you just installed (named `SDXL-TURBO/sd_xl_turbo_1.0_fp16.safetensors`).
+  </Step>
+</Steps>
+
+## Step 5: Generate an image
+
+Your workflow is now ready! Follow these steps to generate an image:
+
+<Steps>
+  <Step title="Customize your prompt">
+    Locate the text input node labeled **CLIP Text Encode (Prompt)** in the workflow. 
+    
+    Click on the text field containing the default prompt and replace it with your desired image description.
+    
+    Example prompts:
+    - "A serene mountain landscape at sunset with a crystal clear lake."
+    - "A futuristic cityscape with neon lights and flying vehicles."
+    - "A detailed portrait of a robot reading a book in a library."
+  </Step>
+
+  <Step title="Start generation">
+    Click **Run** at the bottom of the workflow (or press <kbd>Ctrl</kbd>+<kbd>Enter</kbd>) to begin the image generation process.
+    
+    Watch as the workflow progresses through each node:
+    - Text encoding.
+    - Model loading.
+    - Image generation steps.
+    - Final output processing.
+
+    <Note>
+    The first generation may take a few minutes to complete as the model checkpoint must be loaded. Subsequent generations will be much faster.
+    </Note>
+
+  </Step>
+
+  <Step title="View your result">
+    The generated image appears in the output node when complete. 
+    
+    Right-click the image to save it to your local machine, view it at full resolution, or copy it to your clipboard.
+  </Step>
+</Steps>
+
+Congratulations! You've just generated your first image with ComfyUI on Runpod.
+
+## What's next
+
+Once you're comfortable with basic image generation, explore the [ComfyUI documentation](https://docs.comfy.org/) to learn how to build more advanced workflows.
+
+Here are some ideas for where to start:
+
+### Experiment with different workflow templates
+
+Use the template browser from [Step 3](#step-3%3A-load-a-workflow-template) to test out new models and find a workflow that suits your needs.
+
+You can also browse the web for a preconfigured workflow and import it by clicking **Workflow** in the top right corner of the ComfyUI interface, selecting **Open**, then selecting the workflow file you want to import.
+
+Don't forget to install any missing models using the model manager. If you need a model that isn't available in the model manager, you can download it from the web to your local machine, then use the [Runpod CLI](/runpodctl/transfer-files) to transfer the model files directly into your Pod's `/workspace/madapps/ComfyUI/models` directory.
+
+### Create custom workflows
+
+Build your own workflows by:
+
+1. Right-clicking the canvas to add new nodes.
+2. Connecting node outputs to inputs by dragging between connection points.
+3. Saving your custom workflow with <kbd>Ctrl</kbd>+<kbd>S</kbd> or by clicking **Workflow** and selecting **Save**.
+
+### Manage your Pod
+
+While working with ComfyUI, you can monitor your usage by checking GPU/disk utilization in the [Pods page](https://console.runpod.io/pods) of the Runpod console.
+
+Stop your Pod when you're finished to avoid unnecessary charges.
+
+It's also a good practice to download any custom workflows to your local machine before stopping the Pod. For persistent storage of models and outputs across sessions, consider using a [network volume](/pods/storage/create-network-volumes).
+
+## Troubleshooting
+
+Here are some common issues and solutions:
+
+- **Connection errors**: Wait for the Pod to fully initialize (up to 30 minutes for initial deployment).
+- **HTTP service not ready**: Wait at least 2–3 minutes after Pod deployment for the HTTP service to fully start. You can also check the Pod logs in the Runpod console to look for deployment errors.
+- **Out of memory errors**: Reduce image resolution or batch size in your workflow.
+- **Slow generation**: Make sure you're using an appropriate GPU for your selected model. See [Choose a Pod](/pods/choose-a-pod) for guidance.

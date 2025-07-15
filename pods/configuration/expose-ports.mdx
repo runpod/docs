@@ -1,88 +1,155 @@
 ---
 title: "Expose ports"
+description: "Learn how to make your Pod services accessible from the internet using HTTP proxy and TCP port forwarding"
 ---
 
-There are a few ways to expose ports on your pod to the outside world. The first thing that you should understand is that the publicly exposed port is most likely NOT going to be the same as the port that you expose on your container. Let's look at an example to illustrate this.
+Runpod provides flexible options for exposing your Pod services to the internet. This guide explains how to configure port exposure for different use cases and requirements.
 
-Let's say that I want to run a public API on my pod using uvicorn with the following command:
+## Understanding port mapping
 
-```
+When exposing services from your Pod, it's important to understand that the publicly accessible port usually differs from your internal service port. This mapping ensures security and allows multiple Pods to coexist on the same infrastructure.
+
+For example, if you run a web API inside your Pod on port 4000 like this:
+
+```bash
 uvicorn main:app --host 0.0.0.0 --port 4000
 ```
 
-This means that uvicorn would be listening on all interfaces on port 4000. Let's now expose this port to the public internet using two different methods.
+The external port users connect to will be different, depending on your chosen exposure method.
 
-### Through RunPod's Proxy
+## HTTP access via Runpod proxy
 
-In this case, you would want to make sure that the port you want to expose (4000 in this case) is set on the [Template](https://www.runpod.io/console/user/templates) or [Pod](https://www.runpod.io/console/pods) configuration page. You can see here that I have added 4000 to the HTTP port list in my pod config. You can also do this on your template definition.
+Runpod's HTTP proxy provides the easiest way to expose web services from your Pod. This method works well for REST APIs, web applications, and any HTTP-based service.
 
-<Frame caption="">
-  <img src="/images/f750ab73-1386a3c-image-00ce91cf90cd62e743f1382d8d722b0a.png" />
-</Frame>
+### Configure external HTTP ports
 
-Once you have done this, and your server is running, you should be able to hit your server using the pod's proxy address, which is formed in this programmatic way, where the pod ID is the unique ID of your pod, and the internal port in this case is 4000:
+To configure HTTP ports during Pod deployment, click **Edit Template** and add a comma-separated list of ports to the **Expose HTTP Ports (Max 10)** field.
 
-```
-https://{POD_ID}-{INTERNAL_PORT}.proxy.runpod.net
-```
+To configure HTTP ports for an existing Pod, navigate to the [Pod page](https://www.console.runpod.io/pods), expand your Pod, click the hamburger menu on the bottom-left, select **Edit Pod**, then add your port(s) to the **Expose HTTP Ports (Max 10)** field.
 
-Keep in mind that this exposed to the public internet. While your pod ID can act as a password of sorts, it's not a replacement for real authentication, which should be implemented at your API level.
+You can also configure HTTP ports for a Pod template in the [My Templates](https://www.console.runpod.io/user/templates) section of the console.
 
-#### Important Proxy Behavior Notes
+### Access your service
 
-When users access their pods via the RunPod proxy, the connection follows this chain:
+Once your Pod is running and your service is active, access it using the proxy URL format:
 
 ```
-User -> Cloudflare -> RunPod Loadbalancer -> Pod
+https://[POD_ID]-[INTERNAL_PORT].proxy.runpod.net
 ```
 
-It's crucial to be aware of the following behavior:
+Replace `[POD_ID]` with your Pod's unique identifier and `[INTERNAL_PORT]` with your service's internal port. For example:
+- Pod ID: `abc123xyz`
+- Internal port: `4000`
+- Access URL: `https://abc123xyz-4000.proxy.runpod.net`
 
-* Cloudflare has a 100-second limit for a connection to remain open.
-* If your service does not respond within 100 seconds of a request, the connection will be closed.
-* In such cases, the user will receive a `524` error code.
+### Proxy limitations and behavior
 
-This timeout limit is particularly important for long-running operations or services that might take more than 100 seconds to respond. Make sure to design your applications with this limitation in mind, potentially implementing progress updates or chunked responses for longer operations.
-
-### Through TCP Public IP
-
-If your pod supports a public IP address, you can also expose your API over public TCP. In this case, you would add the port to the TCP side of the configuration.
-
-<Frame caption="">
-  <img src="/images/4afbcf63-49ebb9a-image-e69eedd0c7d53775006fdc73b0dcaabc.png" />
-</Frame>
-
-The only difference here is that you will receive an external port mapping and a public IP address to access your service. For example, your connect menu may look something like this:
-
-<Frame caption="">
-  <img src="/images/5f093b77-5e76c21-image-e7c348174fb6dd2ac5846743a696481a.png" />
-</Frame>
-
-In this case, you would be hitting your service running on 4000 with the following ip:port combination
+The HTTP proxy route includes several intermediaries that affect connection behavior:
 
 ```
-73.10.226.56:10027
+User → Cloudflare → Runpod Load Balancer → Your Pod
 ```
 
-Be aware that the public IP could potentially change when using Community Cloud, but should not change when using Secure Cloud. The port will change if your pod gets reset.
+This architecture introduces important limitations:
 
-### Requesting a Symmetrical Port Mapping
+- **100-second timeout**: Cloudflare enforces a maximum connection time of 100 seconds. If your service doesn't respond within this time, the connection closes with a `524` error.
+- **HTTPS only**: All connections are secured with HTTPS, even if your internal service uses HTTP.
+- **Public accessibility**: Your service becomes publicly accessible. While the Pod ID provides some obscurity, implement proper authentication in your application.
 
-For some applications, asymmetrical port mappings are not ideal. In the above case, we have external port 10027 mapping to internal port 4000. If you need to have a symmetrical port mapping, you can request them by putting in ports above 70000 in your TCP port field.
+Design your application with these constraints in mind. For long-running operations, consider:
+- Implementing progress endpoints that return status updates.
+- Using background job queues with status polling.
+- Breaking large operations into smaller chunks.
+- Returning immediate responses with job IDs for later retrieval.
 
-<Frame caption="">
-  <img src="/images/d14daea4-23c4178-image-4dc70800a254094973ca20d2132112f3.png" />
-</Frame>
+## TCP access via public IP
 
-Of course, 70000 isn't a valid port number, but what this does is it tells RunPod that you don't care what the actual port number is on launch, but to rather give you a symmetrical mapping. You can inspect the actual mapping via your connect menu:
+For services requiring direct TCP connections, lower latency, or protocols other than HTTP, use TCP port exposure with public IP addresses.
 
-<Frame caption="">
-  <img src="/images/53d7e096-92e4f90-image-ce4e1e6f45d585a6ecc5f03583a23ab2.png" />
-</Frame>
+### Configure TCP ports
 
-In this case, I have requested two symmetrical ports and they ended up being 10030:10030 and 10031:10031. If you need programmatic access to these in your pod, you can access them via environment variable:
+In your Pod or template configuration, follow the same steps as for [HTTP ports](#configure-external-http-ports), but add ports to the **Expose TCP Ports** field. This enables direct TCP forwarding with a public IP address.
+
+### Find your connection details
+
+After your Pod starts, check the **Connect** menu to find your assigned public IP and external port mapping under **Direct TCP Ports**. For example:
 
 ```
-RUNPOD_TCP_PORT_70001=10031
-RUNPOD_TCP_PORT_70000=10030
+TCP port   213.173.109.39:13007 -> :22
 ```
+
+<Warning>
+Public IP addresses may change for Community Cloud Pods if your Pod is migrated or restarted, but they should remain stable for Secure Cloud Pods.
+
+External port mappings change whenever your Pod resets.
+</Warning>
+
+## Symmetrical port mapping
+
+Some applications require the external port to match the internal port. Runpod supports this through a special configuration syntax.
+
+### Requesting symmetrical ports
+
+To request symmetrical mapping, specify port numbers above 70000 in your TCP configuration. These aren't valid port numbers, but signal Runpod to allocate matching internal and external ports.
+
+After Pod creation, check the **Connect** menu to see which symmetrical ports were assigned under **Direct TCP Ports**.
+
+### Accessing port mappings programmatically
+
+Your application can discover assigned ports through environment variables. For example, if you specify `70000` and `70001` in your Pod configuration, you could use the following commands to retrieve the assigned ports:
+
+```bash
+echo $RUNPOD_TCP_PORT_70000
+echo $RUNPOD_TCP_PORT_70001
+```
+
+You can use these environment variables (e.g., `RUNPOD_TCP_PORT_70000`) in your application configuration to automatically adapt to assigned ports.
+
+## Best practices
+
+When exposing ports from your Pods, follow these guidelines for security and reliability:
+
+### Security considerations
+
+- **Implement authentication**: Both HTTP proxy and TCP access make your services publicly accessible. Always implement proper authentication and authorization in your applications.
+- **Use HTTPS for sensitive data**: While the proxy automatically provides HTTPS, TCP connections do not. Implement TLS in your application when handling sensitive data over TCP.
+- **Validate input**: Public endpoints are targets for malicious traffic. Implement robust input validation and rate limiting.
+
+### Performance optimization
+
+- **Choose the right method**: Use HTTP proxy for web services and TCP for everything else. The proxy adds latency but provides automatic HTTPS and load balancing.
+- **Handle timeouts gracefully**: Design your application to work within the 100-second proxy timeout or use TCP for long-running connections.
+- **Monitor your services**: Implement health checks and monitoring to ensure your exposed services remain accessible.
+
+### Configuration tips
+
+- **Document your ports**: Maintain clear documentation of which services run on which ports, especially in complex deployments.
+- **Use templates**: Define port configurations in templates for consistent deployments across multiple Pods.
+- **Test thoroughly**: Verify your port configurations work correctly before deploying production workloads.
+
+## Common use cases
+
+Different types of applications benefit from different exposure methods:
+
+- **Web APIs and REST services**: Use HTTP proxy for automatic HTTPS and simple configuration.
+- **WebSocket applications**: TCP exposure often works better for persistent connections that might exceed timeout limits.
+- **Database connections**: Use TCP with proper security measures. Consider using Runpod's global networking for internal-only databases.
+- **Development environments**: HTTP proxy works well for web-based IDEs and development servers.
+
+## Troubleshooting
+
+Try these fixes if you're having issues with port exposure:
+
+- **Service not accessible via proxy**: Ensure your service binds to `0.0.0.0` (all interfaces) not just `localhost` or `127.0.0.1`.
+- **524 timeout errors**: If your service takes longer than 100 seconds to respond, consider using TCP or restructuring your application for faster responses.
+- **Connection refused**: Verify your service is running and listening on the correct port inside the Pod.
+- **Port already in use**: Check that no other services in your Pod are using the same port.
+- **Unstable connections**: For Community Cloud Pods, implement reconnection logic to handle IP address changes.
+
+## Next steps
+
+Once you've exposed your ports, consider:
+
+- Setting up [SSH access](/pods/configuration/use-ssh) for secure Pod administration.
+- Implementing [global networking](/pods/networking) for secure Pod-to-Pod communication.
+- Configuring health checks and monitoring for your exposed services.
