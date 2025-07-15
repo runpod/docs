@@ -8,7 +8,210 @@ Connecting to a Pod through an SSH (Secure Shell) terminal provides a secure and
 
 Every Pod offers the ability to connect through SSH using the [basic proxy method](#basic-ssh-connection) below (which does not support commands like SCP or SFTP), but not all Pods support the [full public IP method](#full-ssh-connection-via-public-ip).
 
+There are two methods to cover:
+1. Password based SSH
+This is best for an already running pod and to avoid SSH key configurations and complexity. Recommended if you just need a quick-and-easy way to get SSH running.
+
+2. SSH Key
+This is best for long-term usage. If you plan to SSH into your pods frequently such as setting up to work with VSCode or to manage your pods through terminal then this is recommended.
+
+## Password-based SSH
+
+<Warning>
+**Prerequisites for password-based SSH:**
+- Your Pod must have a public IP address (available on most GPU instances)
+- Your Pod template must expose TCP port 22 (SSH will be accessible on a mapped external port)
+
+Note: While SSH runs on port 22 inside your Pod, RunPod maps it to a different external port. The script will automatically uses the correct external port from the `RUNPOD_TCP_PORT_22` environment variable.
+
+If you see "Environment variables RUNPOD_PUBLIC_IP or RUNPOD_TCP_PORT_22 are missing" when running the script you might be missing one of the prerequisites.
+</Warning>
+
+To quickly set up password-based SSH, copy and paste this one-liner into your Pod's terminal:
+
+```bash expandable Password-based SSH Script
+cat > /tmp/setup_ssh.sh << 'EOF' && chmod +x /tmp/setup_ssh.sh && /tmp/setup_ssh.sh
+#!/bin/bash
+
+# Function to print in color
+print_color() {
+    COLOR=$1
+    TEXT=$2
+    case $COLOR in
+        "green") echo -e "\e[32m$TEXT\e[0m" ;;
+        "red") echo -e "\e[31m$TEXT\e[0m" ;;
+        "yellow") echo -e "\e[33m$TEXT\e[0m" ;;
+        "blue") echo -e "\e[34m$TEXT\e[0m" ;;
+        *) echo "$TEXT" ;;
+    esac
+}
+
+# Function to prompt for password
+get_password() {
+    while true; do
+        print_color "blue" "Enter a password for root user:"
+        read -s root_password
+        echo
+        
+        print_color "blue" "Confirm password:"
+        read -s confirm_password
+        echo
+        
+        if [ "$root_password" = "$confirm_password" ]; then
+            print_color "green" "Password confirmed successfully."
+            break
+        else
+            print_color "red" "Passwords do not match. Please try again."
+        fi
+    done
+}
+
+# Check for OS Type
+print_color "blue" "Detecting Linux Distribution..."
+os_info=$(cat /etc/*release)
+print_color "yellow" "OS Detected: $os_info"
+
+# Check for SSH Server and install if necessary
+if ! command -v sshd >/dev/null; then
+    print_color "yellow" "SSH server not found. Installing..."
+    if [[ $os_info == *"debian"* || $os_info == *"ubuntu"* ]]; then
+        apt-get update && apt-get install -y openssh-server
+    elif [[ $os_info == *"redhat"* || $os_info == *"centos"* ]]; then
+        yum install -y openssh-server
+    else
+        print_color "red" "Unsupported Linux distribution for automatic SSH installation."
+        exit 1
+    fi
+    print_color "green" "SSH Server Installed Successfully."
+else
+    print_color "green" "SSH Server is already installed."
+fi
+
+# Configure SSH to allow root login
+print_color "blue" "Configuring SSH to allow root login with a password..."
+sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+sed -i 's/#PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+service ssh restart
+print_color "green" "SSH Configuration Updated."
+
+# Get custom password from user
+get_password
+
+# Set the custom password for root
+print_color "blue" "Setting custom password for root..."
+echo "root:$root_password" | chpasswd
+echo $root_password > /workspace/root_password.txt
+print_color "green" "Root password set and saved in /workspace/root_password.txt"
+
+# Check if environment variables are set
+print_color "blue" "Checking environment variables..."
+if [ -z "$RUNPOD_PUBLIC_IP" ] || [ -z "$RUNPOD_TCP_PORT_22" ]; then
+    print_color "red" "Environment variables RUNPOD_PUBLIC_IP or RUNPOD_TCP_PORT_22 are missing."
+    exit 1
+fi
+print_color "green" "Environment variables are set."
+
+# Create connection script for Windows (.bat)
+print_color "blue" "Creating connection script for Windows..."
+echo "@echo off" > /workspace/connect_windows.bat
+echo "echo ========================================" >> /workspace/connect_windows.bat
+echo "echo SSH CONNECTION" >> /workspace/connect_windows.bat
+echo "echo ========================================" >> /workspace/connect_windows.bat
+echo "echo Root password: $root_password" >> /workspace/connect_windows.bat
+echo "echo." >> /workspace/connect_windows.bat
+echo "echo To connect via SSH:" >> /workspace/connect_windows.bat
+echo "echo ssh root@$RUNPOD_PUBLIC_IP -p $RUNPOD_TCP_PORT_22" >> /workspace/connect_windows.bat
+echo "echo." >> /workspace/connect_windows.bat
+echo "echo ========================================" >> /workspace/connect_windows.bat
+echo "echo FILE TRANSFER EXAMPLES (SCP)" >> /workspace/connect_windows.bat
+echo "echo ========================================" >> /workspace/connect_windows.bat
+echo "echo." >> /workspace/connect_windows.bat
+echo "echo Copy file TO pod:" >> /workspace/connect_windows.bat
+echo "echo scp -P $RUNPOD_TCP_PORT_22 yourfile.txt root@$RUNPOD_PUBLIC_IP:/workspace/" >> /workspace/connect_windows.bat
+echo "echo." >> /workspace/connect_windows.bat
+echo "echo Copy file FROM pod:" >> /workspace/connect_windows.bat
+echo "echo scp -P $RUNPOD_TCP_PORT_22 root@$RUNPOD_PUBLIC_IP:/workspace/yourfile.txt ." >> /workspace/connect_windows.bat
+echo "echo." >> /workspace/connect_windows.bat
+echo "echo Copy entire folder TO pod:" >> /workspace/connect_windows.bat
+echo "echo scp -P $RUNPOD_TCP_PORT_22 -r yourfolder root@$RUNPOD_PUBLIC_IP:/workspace/" >> /workspace/connect_windows.bat
+echo "echo ========================================" >> /workspace/connect_windows.bat
+print_color "green" "Windows connection script created in /workspace."
+
+# Create connection script for Linux/Mac (.sh)
+print_color "blue" "Creating connection script for Linux/Mac..."
+echo "#!/bin/bash" > /workspace/connect_linux.sh
+echo "echo '========================================'" >> /workspace/connect_linux.sh
+echo "echo 'SSH CONNECTION'" >> /workspace/connect_linux.sh
+echo "echo '========================================'" >> /workspace/connect_linux.sh
+echo "echo 'Root password: $root_password'" >> /workspace/connect_linux.sh
+echo "echo ''" >> /workspace/connect_linux.sh
+echo "echo 'To connect via SSH:'" >> /workspace/connect_linux.sh
+echo "echo 'ssh root@$RUNPOD_PUBLIC_IP -p $RUNPOD_TCP_PORT_22'" >> /workspace/connect_linux.sh
+echo "echo ''" >> /workspace/connect_linux.sh
+echo "echo '========================================'" >> /workspace/connect_linux.sh
+echo "echo 'FILE TRANSFER EXAMPLES (SCP)'" >> /workspace/connect_linux.sh
+echo "echo '========================================'" >> /workspace/connect_linux.sh
+echo "echo ''" >> /workspace/connect_linux.sh
+echo "echo 'Copy file TO pod:'" >> /workspace/connect_linux.sh
+echo "echo 'scp -P $RUNPOD_TCP_PORT_22 yourfile.txt root@$RUNPOD_PUBLIC_IP:/workspace/'" >> /workspace/connect_linux.sh
+echo "echo ''" >> /workspace/connect_linux.sh
+echo "echo 'Copy file FROM pod:'" >> /workspace/connect_linux.sh
+echo "echo 'scp -P $RUNPOD_TCP_PORT_22 root@$RUNPOD_PUBLIC_IP:/workspace/yourfile.txt .'" >> /workspace/connect_linux.sh
+echo "echo ''" >> /workspace/connect_linux.sh
+echo "echo 'Copy entire folder TO pod:'" >> /workspace/connect_linux.sh
+echo "echo 'scp -P $RUNPOD_TCP_PORT_22 -r yourfolder root@$RUNPOD_PUBLIC_IP:/workspace/'" >> /workspace/connect_linux.sh
+echo "echo '========================================'" >> /workspace/connect_linux.sh
+chmod +x /workspace/connect_linux.sh
+print_color "green" "Linux/Mac connection script created in /workspace."
+
+print_color "green" "Setup Completed Successfully!"
+echo ""
+print_color "yellow" "========================================" 
+print_color "yellow" "SSH CONNECTION"
+print_color "yellow" "========================================"
+print_color "yellow" "Connect using: ssh root@$RUNPOD_PUBLIC_IP -p $RUNPOD_TCP_PORT_22"
+print_color "yellow" "Password: $root_password"
+echo ""
+print_color "blue" "========================================"
+print_color "blue" "FILE TRANSFER EXAMPLES (SCP)"
+print_color "blue" "========================================"
+print_color "blue" "Copy file TO pod:"
+echo "scp -P $RUNPOD_TCP_PORT_22 yourfile.txt root@$RUNPOD_PUBLIC_IP:/workspace/"
+echo ""
+print_color "blue" "Copy file FROM pod:"
+echo "scp -P $RUNPOD_TCP_PORT_22 root@$RUNPOD_PUBLIC_IP:/workspace/yourfile.txt ."
+echo ""
+print_color "blue" "Copy entire folder TO pod:"
+echo "scp -P $RUNPOD_TCP_PORT_22 -r yourfolder root@$RUNPOD_PUBLIC_IP:/workspace/"
+echo ""
+print_color "green" "Connection scripts saved in /workspace/connect_windows.bat and /workspace/connect_linux.sh"
+EOF
+```
+
+After pasting the script into your terminal and following the prompt for password, you'll see example commands you can use for SSH or SCP.
+```bash
+========================================
+SSH CONNECTION
+========================================
+Connect using: ssh root@38.80.152.73 -p 32061
+Password: helloworld
+
+========================================
+FILE TRANSFER EXAMPLES (SCP)
+========================================
+Copy file TO pod:
+scp -P 32061 yourfile.txt root@38.80.152.73:/workspace/
+
+Copy file FROM pod:
+scp -P 32061 root@38.80.152.73:/workspace/yourfile.txt .
+
+Copy entire folder TO pod:
+scp -P 32061 -r yourfolder root@38.80.152.73:/workspace/
+```
+
 ## Generate an SSH key and add it to your Runpod account
+
+This is best for long term usage of SSH as every time you start up a pod, the SSH key will be set to the environment variable of the pod.
 
 1. Generate an SSH key using this command on your local terminal:
 
