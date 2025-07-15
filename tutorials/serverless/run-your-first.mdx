@@ -1,35 +1,51 @@
 ---
-title: "Run your first serverless endpoint with Stable Diffusion"
+title: "Run your first Serverless endpoint with Stable Diffusion"
 ---
 
+This tutorial demonstrates how to deploy and use Runpod's asynchronous Serverless API with Stable Diffusion v1.5, covering the complete workflow from Quick Deploy setup through job submission, status polling, and image output decoding.
+
+## What you'll learn
+
+In this tutorial, you'll learn how to use Runpod's Serverless platform to generate AI images. You'll understand the asynchronous nature of the API, how to submit jobs, monitor their progress, and retrieve results. By the end, you'll have successfully generated an image using Stable Diffusion and decoded the base64 output.
+
+## Requirements
+
+Before starting this tutorial, you'll need:
+
+- A Runpod account with available credits.
+- A Runpod API key (available in your user settings).
+- Basic familiarity with command-line tools like `curl`.
+- Python installed on your system (for the image decoding step).
+- The `jq` command-line JSON processor (optional but recommended).
+
+<Info>
+Keep your API key secure and never share it publicly. Remember to retrieve your results within 30 minutes, as inputs and outputs are not stored longer than this for privacy protection.
 <Info>
 
-Before we begin, ensure you have a Runpod API key, available under your user settings. This key is crucial for identification and billing purposes. Keep it secure! Also, remember to retrieve your results via the status endpoint within 30 minutes, as your inputs and outputs are not stored longer than this for privacy protection.
+## Step 1: Deploy a Serverless endpoint
 
-</Info>
+Navigate to the Runpod console and create your first Serverless endpoint using the Quick Deploy feature.
 
-### Overview
+From the Runpod dashboard, click **Serverless** in the navigation menu. On the Serverless page, locate the **Quick Deploy** section and find the **Stable Diffusion v1.5** option. Click **Deploy** to begin the setup process.
 
-In this section, we'll explore how Runpod's API works. It's asynchronous, meaning that when you send a request, you get a job ID back almost instantly. Next, we'll show you how to use this job ID to check the status and retrieve your results.
+Configure your endpoint settings by selecting an appropriate GPU type. For this tutorial, choose a GPU with at least 16GB of VRAM, such as an RTX 4090 or A100. Set your worker configuration with a minimum of 0 workers and a maximum of 3 workers to allow for auto-scaling.
 
-Let's dive into an example using the Stable Diffusion v1 inference endpoint.
+Once deployed, your endpoint will be assigned a unique ID. Your endpoint URL will follow this pattern: `https://api.runpod.ai/v2/{ENDPOINT_ID}/run` for asynchronous requests.
 
-## Create a serverless worker
+## Step 2: Submit your first job
 
-First, let's set up your serverless worker. Begin by selecting **Quick Deploy** on the Runpod interface. Then choose **Start** from the **Stable Diffusion v1.5** options. Pick a GPU, say a 24 GB GPU, and click **Deploy**. Here’s an example endpoint you might use: `https://api.runpod.ai/v2/{ID}/runsync`
+Use the `/run` endpoint to submit an asynchronous job that will generate an image based on your text prompt.
 
-### Start Your Job
+Replace `{ENDPOINT_ID}` with your actual endpoint ID and `{YOUR_API_KEY}` with your Runpod API key in the following command:
 
-Now, to initiate a job, you'll make a request like the one shown below. This sends your parameters to the API and starts the process.
-
-```cpp
-curl -X POST https://api.runpod.ai/v2/{ID}/run \
+```bash
+curl -X POST https://api.runpod.ai/v2/{ENDPOINT_ID}/run \
     -H 'Content-Type: application/json'                             \
-    -H 'Authorization: Bearer [Your API Key]'    \
+    -H 'Authorization: Bearer {YOUR_API_KEY}' \
     -d '{"input": {"prompt": "A cute fluffy white dog in the style of a Pixar animation 3D drawing."}}'
 ```
 
-Upon doing this, you'll receive a response like this, containing your unique job ID:
+The API will respond immediately with a job ID and status. You'll receive a response similar to this:
 
 ```json
 {
@@ -38,17 +54,21 @@ Upon doing this, you'll receive a response like this, containing your unique job
 }
 ```
 
-### Check the Status of Your Job
+The job ID is crucial for tracking your request's progress. Save this ID as you'll need it to check the status and retrieve results.
 
-Since your initial response doesn't include the output, a subsequent call is necessary. Use your job ID to check the job's status as follows:
+## Step 3: Monitor job progress
+
+Check your job's status using the `/status` endpoint with the job ID you received in the previous step.
+
+Use the following command to check your job's progress, replacing the placeholders with your actual values:
 
 ```bash
-curl https://api.runpod.ai/v2/{ID}/status/c80ffee4-f315-4e25-a146-0f3d98cf024b \
+curl https://api.runpod.ai/v2/{ENDPOINT_ID}/status/c80ffee4-f315-4e25-a146-0f3d98cf024b \
 -H 'Content-Type: application/json' \
--H 'Authorization: Bearer [Your API Key]'
+    -H 'Authorization: Bearer {YOUR_API_KEY}'
 ```
 
-If your job is still processing, the response will indicate that. Here's an example:
+While your job is processing, you'll receive a response indicating the current status:
 
 ```json
 {
@@ -61,9 +81,13 @@ If your job is still processing, the response will indicate that. Here's an exam
 }
 ```
 
-### Get Completed Job Status
+The `delayTime` field shows how long the job waited in the queue before processing began, measured in milliseconds. Continue polling this endpoint until the status changes to `COMPLETED`.
 
-Once your job is complete, you'll receive a final response like this:
+## Step 4: Retrieve completed results
+
+Once your job completes, the status endpoint will return the generated image data encoded in base64 format.
+
+When your job finishes successfully, you'll receive a response containing the output:
 
 ```json
 {
@@ -80,23 +104,25 @@ Once your job is complete, you'll receive a final response like this:
 }
 ```
 
-To save the output, use the following command:
+The `executionTime` field shows how long the actual image generation took, while `delayTime` indicates the initial queue wait time. Both values are in milliseconds.
+
+To save the complete response for processing, use this command:
 
 ```bash
-curl https://api.runpod.ai/v2/{ID}/status/c80ffee4-f315-4e25-a146-0f3d98cf024b \
+curl https://api.runpod.ai/v2/{ENDPOINT_ID}/status/c80ffee4-f315-4e25-a146-0f3d98cf024b \
     -H 'Content-Type: application/json' \
-    -H 'Authorization: Bearer [Your API Key]' | jq . > output.json
+    -H 'Authorization: Bearer {YOUR_API_KEY}' | jq . > output.json
 ```
 
 <Info>
-
-Remember, you have up to 1 hour to retrieve your results via the status endpoint for privacy reasons.
-
+You have up to 30 minutes to retrieve your results via the status endpoint. After this time, the results are automatically deleted for privacy protection.
 </Info>
 
-### Get Your Results
+## Step 5: Decode and save your image
 
-Finally, to view your results, decode the base64 image from the output. Here's how you can do it in Python:
+Convert the base64-encoded image data into a viewable image file using Python.
+
+Create a Python script to decode the base64 image data from your JSON response:
 
 ```python
 import json
@@ -104,42 +130,65 @@ import base64
 
 
 def decode_and_save_image(json_file_path, output_image_path):
+    """
+    Decode base64 image data from Runpod response and save as image file.
+    
+    Args:
+        json_file_path (str): Path to the JSON file containing the API response
+        output_image_path (str): Desired path for the output image file
+    """
     try:
-        # Reading the JSON file
+        # Read the JSON response file
         with open(json_file_path, "r") as file:
             data = json.load(file)
 
-        # Extracting the base64 encoded image data
+        # Extract the base64 encoded image data
         base64_image = data["output"][0]["image"]
 
-        # Decode the Base64 string
+        # Decode the base64 string to binary data
         decoded_image_data = base64.b64decode(base64_image)
 
-        # Writing the decoded data to an image file
+        # Write the decoded data to an image file
         with open(output_image_path, "wb") as image_file:
             image_file.write(decoded_image_data)
 
         print(f"Image successfully decoded and saved as '{output_image_path}'.")
 
+        # Display additional information from the response
+        if "seed" in data["output"][0]:
+            print(f"Generation seed: {data['output'][0]['seed']}")
+        
+        print(f"Execution time: {data['executionTime']}ms")
+        print(f"Queue delay time: {data['delayTime']}ms")
+
     except FileNotFoundError:
-        print(
-            "File not found. Please ensure the JSON file exists in the specified path."
-        )
+        print("File not found. Please ensure the JSON file exists in the specified path.")
     except KeyError as e:
-        print(f"Error in JSON structure: {e}")
+        print(f"Error in JSON structure: Missing key {e}")
     except Exception as e:
         print(f"An error occurred: {e}")
 
 
-# Usage
-json_file_path = "output.json"  # Path to your JSON file
-output_image_path = "decoded_image.png"  # Desired path for the output image
+# Usage example
+json_file_path = "output.json"  # Path to your saved JSON response
+output_image_path = "generated_image.png"  # Desired path for the output image
 
 decode_and_save_image(json_file_path, output_image_path)
 ```
 
-Congratulations! You've now successfully used Runpod's Stable Diffusion API to generate images.
+Run this script to convert your base64 image data into a PNG file. The script will also display useful information about the generation process, including the seed used and timing metrics.
 
-<Frame caption="">
+Congratulations! You've successfully used Runpod's Serverless platform to generate an AI image using Stable Diffusion. You now understand the complete workflow of submitting asynchronous jobs, monitoring their progress, and retrieving results.
+
+<Frame caption="Example output: AI-generated image of a cute fluffy white dog in Pixar animation style">
   <img src="/images/3598b038-decoded_image-4eee516fb849fc806d4aeb5804c59f9c.png" />
 </Frame>
+
+## Next steps
+
+Now that you've completed your first Serverless request, consider exploring these advanced topics:
+
+- Learn about [synchronous requests](/serverless/endpoints/operations) using the `/runsync` endpoint for faster responses.
+- Explore [endpoint configurations](/serverless/endpoints/endpoint-configurations) to optimize performance and cost.
+- Discover how to [send requests](/serverless/endpoints/send-requests) with advanced parameters and webhook notifications.
+- Try deploying your own [custom worker](/serverless/workers/custom-worker) for specialized AI models.
