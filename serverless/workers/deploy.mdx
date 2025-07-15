@@ -124,6 +124,48 @@ docker push [DOCKER_USERNAME]/[WORKER_NAME]:v1.0.0
 
 Once your image is in the Docker container registry, you can [create a Serverless endpoint](/serverless/endpoints/manage-endpoints#create-an-endpoint) through the Runpod console.
 
+## Deploying from AWS ECR
+
+You can deploy Serverless workers from AWS Elastic Container Registry (ECR), but this requires additional setup due to ECR's credential expiration policy.
+
+### Requirements for ECR deployment
+
+* An AWS account with ECR access.
+* ECR repository containing your worker image.
+* A Runpod API key.
+
+### Setting up credential automation
+
+ECR credentials expire every 12 hours, so you'll need to automate credential updates. The recommended approach is to use an AWS Lambda function that refreshes your Runpod container registry credentials:
+
+1. **Create an AWS Lambda function** that runs every few hours to refresh ECR credentials.
+2. **Configure the Lambda function** to call Runpod's container registry API to update stored credentials.
+3. **Use the GraphQL API** to programmatically update credentials.
+
+### API-based credential management
+
+To programmatically update credentials in your Lambda function, use the [Runpod GraphQL API](https://graphql-spec.runpod.io/#mutation-saveRegistryAuth)::
+
+```graphql
+mutation SaveRegistryAuth($input: SaveRegistryAuthInput!) {
+  saveRegistryAuth(input: $input) {
+    id
+    name
+    username
+  }
+}
+```
+
+This allows your Lambda function to automatically update stored ECR credentials before they expire.
+
+### Deploying your ECR image
+
+Once you have credential automation in place:
+
+1. **Push your image to ECR** following standard ECR procedures.
+2. **Configure container registry credentials** in the Runpod console with your ECR repository URL and current credentials.
+3. **Create your Serverless endpoint** using the ECR image URL in the format: `[AWS_ACCOUNT_ID].dkr.ecr.[REGION].amazonaws.com/[REPOSITORY_NAME]:[TAG]`
+
 ## Image versioning
 
 For production workloads, use SHA tags for absolute reproducibility:
