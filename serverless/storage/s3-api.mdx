@@ -2,12 +2,8 @@
 title: "S3-compatible API"
 sidebarTitle: "S3-compatible API"
 description: "Use Runpod's S3-compatible API to access and manage your network volumes."
-tag: "BETA"
+tag: "NEW"
 ---
-
-<Note>
-The S3-compatible API is currently in beta. If you'd like to provide feedback, please [join our Discord](https://discord.gg/runpod).
-</Note>
 
 Runpod provides an S3-protocol compatible API for direct access to your [network volumes](/serverless/storage/network-volumes). This allows you to manage files on your network volumes without launching a Pod, reducing cost and operational friction.
 
@@ -21,6 +17,8 @@ The S3-compatible API is available for network volumes in select datacenters. Ea
 |------------|--------------|
 | `EUR-IS-1` | `https://s3api-eur-is-1.runpod.io/` |
 | `EU-RO-1`  | `https://s3api-eu-ro-1.runpod.io/`  |
+| `EU-CZ-1`  | `https://s3api-eu-cz-1.runpod.io/`  |
+| `US-KS-2`  | `https://s3api-us-ks-2.runpod.io/`  |
 
 Create your network volume in a supported datacenter to use the S3-compatible API.
 
@@ -76,13 +74,13 @@ Core AWS CLI operations such as `ls`, `cp`, `mv`, `rm`, and `sync` function as e
 
 ## s3 CLI examples
 
-When using `aws s3` commands, you must pass in the [endpoint URL](#datacenter-availability) for your network volume using the `--endpoint-url` flag.
+When using `aws s3` commands, you must pass in the [endpoint URL](#datacenter-availability) for your network volume using the `--endpoint-url` flag and the datacenter ID using the `--region` flag.
 
-<Note>
+<Warning>
+The `--region` flag is case-sensitive. For instance, `--region EU-RO-1` is a valid input, whereas `--region eu-ro-1` will be rejected.
+</Warning>
 
-Unlike traditional S3 key-value stores, object names in the Runpod S3-compatible API correspond to actual file paths on your network volume. Object names containing special characters (e.g., `#`) may need to be URL encoded to ensure proper processing.
-
-</Note>
+Unlike traditional S3 key-value stores, object names in the Runpod S3-compatible API correspond to actual file paths on your network volume. Object names containing special characters (e.g., `#`) may need to be URL-encoded to ensure proper processing.
 
 ### List objects
 
@@ -94,11 +92,13 @@ aws s3 ls --region [DATACENTER] \
     s3://[NETWORK_VOLUME_ID]/[REMOTE_DIR]
 ```
 
+Unlike standard S3 buckets, `ls` and `ListObjects` operations will list empty directories.
+
 <Warning>
-
-`ls` operations may timeout when used on network volumes containing many files (over 50,000 files) or large amounts of data. For more information, see [S3-compatible API limitations](#listobjects-timeout-with-large-file-counts).
-
+`ls` operations may take a long time when used on a directory containing many files (over 10,000) or large amounts of data (over 10GB), or when used recursively on a network volume containing either.
 </Warning>
+
+
 
 ### Transfer files
 
@@ -151,7 +151,7 @@ aws s3 sync --region [DATACENTER] \
 
 ## s3api CLI example
 
-You can also use `aws s3api` commands (instead of the `aws s3`) to interact with the S3-compatible API.
+You can also use `aws s3api` commands (instead of `aws s3`) to interact with the S3-compatible API.
 
 For example, here's how you could use `aws s3api get-object` to download an object from a network volume:
 
@@ -227,7 +227,7 @@ def put_object(s3_client, bucket_name: str, object_name: str, file_path: str):
     #   s3_client: The S3 client object (e.g., returned by create_s3_client).
     #   bucket_name (str): The ID of the target Runpod network volume.
     #   object_name (str): The desired file path for the object on the network volume.
-    #   file_path (str): The local path to the file that needs to be uploaded.
+    #   file_path (str): The local path to the file (including the filename) that will be uploaded.
 
     try:
         # Attempt to upload the file to the Runpod network volume.
@@ -287,39 +287,123 @@ if __name__ == "__main__":
     main()
 ```
 
-Example usage:
+When uploading files with Boto3, you must specify the complete file path (including the filename) for both source and destination files.
+
+For example, for the `put_objects` method above, you must specify these arguments:
+
+- `file_path`: The local source file (e.g., `local_directory/file.txt`).
+- `object_name`: The remote destination file to be created on the network volume (e.g., `remote_directory/file.txt`).
+
+With that in mind, here's an example of how to run the script above using command-line arguments:
 
 ```bash
 ./s3_example_put.py --endpoint https://s3api-eur-is-1.runpod.io/ \
     --region 'EUR-IS-1' \
     --bucket 'network_volume_id' \
-    --object 'path/to/model_file.bin' \
-    --file 'model_file.bin'
+    --object 'remote_directory/file.txt' \
+    --file 'local_directory/file.txt'
 ```
 
-## Supported S3 actions
+## S3 API compatibility reference
 
-The S3-compatible API supports the following operations. For detailed information on each, refer to the [AWS S3 API documentation](https://docs.aws.amazon.com/AmazonS3/latest/API/API_Operations_Amazon_Simple_Storage_Service.html).
+The tables below show which S3 API operations and AWS CLI commands are currently supported. Use the tables below to understand what functionality is available and plan your development workflows accordingly.
 
-| Operation                 | Description                                  |
-| ------------------------- | -------------------------------------------- |
-| `CopyObject`             | Copy objects between locations.              |
-| `DeleteObject`           | Remove objects.                              |
-| `GetObject`              | Download objects.                            |
-| `HeadBucket`             | Verify bucket exists and you have permissions. |
-| `HeadObject`             | Retrieve object metadata.                    |
-| `ListBuckets`            | List available buckets.                      |
-| `ListObjects`            | List objects in a bucket.                    |
-| `PutObject`              | Upload objects.                              |
-| `CreateMultipartUpload` | Start a multipart upload for large files.    |
-| `UploadPart`             | Upload a part of a multipart upload.         |
-| `CompleteMultipartUpload`| Finish a multipart upload.                   |
-| `AbortMultipartUpload`  | Cancel a multipart upload.                   |
-| `ListMultipartUploads`  | View in-progress multipart uploads.          |
+For detailed information on these operations, refer to the [AWS S3 API documentation](https://docs.aws.amazon.com/AmazonS3/latest/API/API_Operations_Amazon_Simple_Storage_Service.html).
 
-Large file handling is supported through multipart uploads, allowing you to transfer files larger than 5GB.
+<Note>
+If a function is not listed below, that means it's not currently implemented. We are continuously expanding the S3-compatible API based on customer needs and usage patterns.
+</Note>
 
-## Limitations
+### Core operations
+
+| Operation | Supported | CLI Command | Notes |
+|------------------|--------|-----------------|-------|
+| `CopyObject` | ✅ | `aws s3 cp`, `aws s3api copy-object` | Copy objects between locations |
+| `DeleteObject` | ✅ | `aws s3 rm`, `aws s3api delete-object` | Remove individual objects |
+| `GetObject` | ✅ | `aws s3 cp`, `aws s3api get-object` | Download objects |
+| `HeadBucket` | ✅ | `aws s3 ls`, `aws s3api head-bucket` | Verify bucket exists and permissions |
+| `HeadObject` | ✅ | `aws s3api head-object` | Retrieve object metadata |
+| `ListBuckets` | ✅ | `aws s3 ls`, `aws s3api list-buckets` | List available network volumes |
+| `ListObjects` | ✅ | `aws s3 ls`, `aws s3api list-objects` | List objects in a bucket (includes empty directories) |
+| `ListObjectsV2` | ✅ | `aws s3 ls`, `aws s3api list-objects-v2` | Enhanced version of ListObjects |
+| `PutObject` | ✅ | `aws s3 cp`, `aws s3api put-object` | Upload objects (\<500MB) |
+| `DeleteObjects` | ❌ | `aws s3api delete-objects` | Planned |
+| `RestoreObject` | ❌ | `aws s3api restore-object` | Not supported |
+
+### Multipart upload operations
+
+Files larger than 500MB must be uploaded using multipart uploads. The AWS CLI performs multipart uploads automatically.
+
+| Operation | Supported | CLI Command | Notes |
+|------------------|--------|-----------------|-------|
+| `CreateMultipartUpload` | ✅ | `aws s3api create-multipart-upload` | Start multipart upload for large files |
+| `UploadPart` | ✅ | `aws s3api upload-part` | Upload individual parts |
+| `CompleteMultipartUpload` | ✅ | `aws s3api complete-multipart-upload` | Finish multipart upload |
+| `AbortMultipartUpload` | ✅ | `aws s3api abort-multipart-upload` | Cancel multipart upload |
+| `ListMultipartUploads` | ✅ | `aws s3api list-multipart-uploads` | View in-progress uploads |
+| `ListParts` | ✅ | `aws s3api list-parts` | List parts of a multipart upload |
+
+### Bucket management operations
+
+| Operation | Supported | CLI Command | Notes |
+|------------------|--------|-----------------|-------|
+| `CreateBucket` | ❌ | `aws s3api create-bucket` | Use the Runpod console to create network volumes |
+| `DeleteBucket` | ❌ | `aws s3api delete-bucket` | Use the Runpod console to delete network volumes |
+| `GetBucketLocation` | ❌ | `aws s3api get-bucket-location` | Datacenter info available in the Runpod console |
+| `GetBucketVersioning` | ❌ | `aws s3api get-bucket-versioning` | Versioning is not supported |
+| `PutBucketVersioning` | ❌ | `aws s3api put-bucket-versioning` | Versioning is not supported |
+| `GeneratePresignedURL` | ❌ | `aws s3 presign` | Pre-signed URLs are not supported |
+
+### Access control and permissions
+
+| Operation | Supported | CLI Command | Notes |
+|------------------|--------|-----------------|-------|
+| `GetBucketAcl` | ❌ | N/A | ACLs are not supported |
+| `PutBucketAcl` | ❌ | N/A | ACLs are not supported |
+| `GetObjectAcl` | ❌ | N/A | ACLs are not supported |
+| `PutObjectAcl` | ❌ | N/A | ACLs are not supported |
+| `GetBucketPolicy` | ❌ | N/A | Bucket policies are not supported |
+| `PutBucketPolicy` | ❌ | N/A | Bucket policies are not supported |
+
+### Object metadata and tagging
+
+| Operation | Supported | CLI Command | Notes |
+|------------------|--------|-----------------|-------|
+| `GetObjectTagging` | ❌ | N/A | Object tagging is not supported |
+| `PutObjectTagging` | ❌ | N/A | Object tagging is not supported |
+| `DeleteObjectTagging` | ❌ | N/A | Object tagging is not supported |
+
+### Encryption and security
+
+| Operation | Supported | CLI Command | Notes |
+|------------------|--------|-----------------|-------|
+| `GetBucketEncryption` | ❌ | N/A | Encryption is not supported |
+| `PutBucketEncryption` | ❌ | N/A | Encryption is not supported |
+| `GetObjectLockConfiguration` | ❌ | N/A | Object locking is not supported |
+| `PutObjectLockConfiguration` | ❌ | N/A | Object locking is not supported |
+
+<Warning>
+
+`ListObjects` operations may take a long time when used on a directory containing many files (over 10,000) or large amounts of data (over 10GB), or when used recursively on a network volume containing either.
+
+</Warning>
+
+
+## Known issues and limitations
+
+### ListObjects runs slowly or fails with "same next token" error
+
+When running `aws s3 ls` or `ListObjects` on a directory with many files or large amounts of data (typically >10,000 files or >10 GB of data) for the first time, it may run very slowly, or you may encounter the following error: 
+
+```bash
+"fatal error: Error during pagination: The same next token was received twice: ..."
+```
+
+This occurs because Runpod must compute and cache the MD5 checksum (i.e., ETag) for files created without the S3-compatible API. This computation can take several minutes for large directories or files, as the `ListObjects` request must wait until the checksum is ready.
+
+Workarounds:
+* The operation will typically complete successfully if you wait for the process to finish.
+* If the client aborts with a pagination error, retry the operation after a brief pause.
 
 ### Storage and time synchronization
 
@@ -330,32 +414,51 @@ Large file handling is supported through multipart uploads, allowing you to tran
 
 ### Multipart uploads
 
--   The S3-compatible API enforces a 500MB maximum on upload part size.
--   The 5MB minimum part size for multipart uploads is not enforced.
--   Parts from multipart uploads are stored on disk until either `CompleteMultipartUpload` or `AbortMultipartUpload` is called.
+-   The maximum size for a single part of a multipart upload is 500MB.
+-   The AWS S3 minimum part size of 5MB is not enforced.
+-   Multipart upload parts and metadata are stored in a hidden `.s3compat_uploads/` folder. This folder and its contents are automatically cleaned up when you call `CompleteMultipartUpload` or `AbortMultipartUpload`.
 
-### ListObjects timeout with large file counts
+#### Timeout configuration for large files
 
-The `ListObjects` and `ListObjectsV2` operations may timeout when used on network volumes containing many files (over 50,000 files) or large amounts of data.
+When uploading large files (12GB+), you may encounter timeout errors during the `CompleteMultipartUpload` operation. To resolve this, increase the timeout settings in your AWS tools:
 
-**Symptoms:**
-- `aws s3 ls` commands result in `504 Gateway Timeout` errors.
-- File uploads and downloads work normally, but you cannot list directory contents.
-- The issue primarily affects network volumes that were populated using Pod templates or other non-S3 methods.
+<Tabs>
+  <Tab title="AWS CLI">
 
-**Workarounds:**
-1. **Use alternative access methods**: Access your network volume [through a Pod](/pods/storage/create-network-volumes) instead of the S3 API when browsing large directories.
-2. **Target specific subdirectories**: If possible, list specific subdirectories rather than the root directory to reduce the number of files being processed.
+For `aws s3` and `aws s3api`, use the `--cli-read-timeout` parameter:
 
-### Unsupported S3 features
+```bash
+# Sets the timeout to 7200 seconds (2 hours)
+aws s3 cp large-file.zip s3://your-volume-name/ --cli-read-timeout 7200 --endpoint-url https://storage.datacenter.runpod.io
+```
 
--   Object versioning.
--   Object encryption.
--   Object tagging.
--   Object ACLs.
--   Object locking.
--   Website redirects.
--   Storage classes besides `STANDARD`.
+Or, configure timeout in `~/.aws/config`:
+
+```ini
+[default]
+cli_read_timeout = 7200
+```
+
+</Tab>
+<Tab title="Boto3">
+
+Use the `read_timeout` parameter to configure the timeout when creating the S3 client:
+
+```python
+import boto3
+from botocore.config import Config
+
+# Sets the timeout to 7200 seconds (2 hours)
+custom_config = Config(
+    read_timeout=7200,
+)
+
+# Create S3 client with custom timeout
+s3_client = boto3.client('s3', config=custom_config)
+```
+
+</Tab>
+</Tabs>
 
 ## Reference documentation
 
