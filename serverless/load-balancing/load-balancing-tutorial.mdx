@@ -7,6 +7,12 @@ tag: "BETA"
 
 # Build a load balancing Serverless worker
 
+<Note>
+
+Load balancing endpoints are currently in beta. We're actively addressing issues and working to improve the user experience. [Join our Discord](https://discord.gg/runpod) if you'd like to provide feedback.
+
+</Note>
+
 This tutorial will guide you through creating a load balancing Serverless endpoint on Runpod. Unlike traditional queue-based endpoints, load balancing endpoints allow you to expose custom REST APIs directly, giving you complete control over your API's structure and behavior, while still leveraging the scalability and reliability of Runpod's Serverless infrastructure.
 
 ## What you'll learn
@@ -129,7 +135,7 @@ Build and push your Docker image to a container registry:
 
 ```bash
 # Build the image
-docker build -t YOUR_DOCKER_USERNAME/loadbalancer-example:v1.0 .
+docker build --platform linux/amd64 -t YOUR_DOCKER_USERNAME/loadbalancer-example:v1.0 . 
 
 # Push to Docker Hub
 docker push YOUR_DOCKER_USERNAME/loadbalancer-example:v1.0
@@ -139,15 +145,19 @@ docker push YOUR_DOCKER_USERNAME/loadbalancer-example:v1.0
 
 Now, let's deploy our application as a load balancing endpoint:
 
-1. Go to the [Runpod Serverless console](https://www.runpod.io/console/serverless)
+1. Go to the [Serverless page](https://www.runpod.io/console/serverless) in the Runpod console.
 2. Click **New Endpoint**
 3. Under **Custom Source**, select **Docker Image**, then click **Next**
-4. In the **Container Image** field, enter your Docker image URL: `yourusername/loadbalancer-example:v1.0` 
+4. In the **Container Image** field, enter your Docker image URL: 
+    ```
+    YOUR_DOCKER_USERNAME/loadbalancer-example:v1.0
+    ```
+    Then click **Next**.
 5. Give your endpoint a name.
-6. Under **Endpoint Type**, selecent **Load Balancer**.
-7. Under **Worker Configuration**, select at least one GPU type.
+6. Under **Endpoint Type**, select **Load Balancer**.
+7. Under **Worker Configuration**, select at least one GPU type (16 GB or 24 GB are fine for this example).
 8. Leave all other settings at their defaults.
-9. Click **Create Endpoint.**
+9. Click **Create Endpoint**.
 
 ## Step 5: Access your custom API
 
@@ -155,7 +165,6 @@ Once your endpoint is created, you can access your custom APIs at:
 
 ```
 https://ENDPOINT_ID.api.runpod.ai/PATH
-
 ```
 
 For example, the load balancing worker we defined in step 1 exposes these endpoints:
@@ -164,14 +173,47 @@ For example, the load balancing worker we defined in step 1 exposes these endpoi
 - Generate text: `https://ENDPOINT_ID.api.runpod.ai/generate`
 - Get request count: `https://ENDPOINT_ID.api.runpod.ai/stats`
 
-To make a request to the mock generation endpoint, run this command, replacing `ENDPOINT_ID` with your actual endpoint ID:
+Try running one or more of these commands, replacing `ENDPOINT_ID` and `RUNPOD_API_KEY` with your actual endpoint ID and API key:
 
-```bash
+<CodeGroup>
+
+
+```bash generate
 curl -X POST "https://ENDPOINT_ID.api.runpod.ai/generate" \
-     -H "Content-Type: application/json" \
-     -d '{"prompt": "Once upon a time"}'
+    -H 'Authorization: Bearer RUNPOD_API_KEY' \
+    -H "Content-Type: application/json" \
+```
+
+```bash ping
+curl -X POST "https://ENDPOINT_ID.api.runpod.ai/ping" \
+    -H 'Authorization: Bearer RUNPOD_API_KEY' \
+    -H "Content-Type: application/json" \
+```
+
+```bash stats
+curl -X POST "https://ENDPOINT_ID.api.runpod.ai/stats" \
+    -H 'Authorization: Bearer RUNPOD_API_KEY' \
+    -H "Content-Type: application/json" \
+```
+
+</CodeGroup>
+
+If you send this request, your workers will take some time to initialize (you can check the logs in the **Workers** tab of your endpoint page to track their progress) before returning the following response:
+
+```json
+{"generated_text":"Response to: Hello, world! (request #1)"}%   
+```
+
+<Tip>
+If you see the following error:
 
 ```
+{"error":"no workers available"}%
+```
+
+This means means your workers did not initialize in time to process the request. Try running the request again.
+
+</Tip>
 
 ## Step 6: Implement a real model (vLLM example)
 
@@ -342,7 +384,7 @@ Build and push this Docker image, then deploy it as a load balancing endpoint ju
 Make sure to:
 
 1. Select a GPU instance type appropriate for the model.
-2. Set environment variables (**Public Environment Variables** in the endpoint configuration form) to:
+2. Set **Environment Variables** in the endpoint configuration form to:
     - `PORT_HEALTH`: `5000`
     - `PORT`: `8000`
     - `MODEL_NAME`: e.g., `facebook/opt-1.3b` (or your preferred model)
