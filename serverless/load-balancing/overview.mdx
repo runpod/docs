@@ -1,0 +1,181 @@
+---
+title: "Load balancing Serverless endpoints"
+sidebarTitle: "Overview"
+description: "Deploy custom direct-access REST APIs with load balancing Serverless endpoints."
+tag: "BETA"
+---
+
+Load balancing endpoints offer a completely new paradigm for Serverless endpoint creation, enabling direct access to worker HTTP servers without an intermediary queueing system.
+
+Unlike traditional queue-based endpoints that process requests sequentially, load balancing endpoints route incoming traffic directly to available workers, distributing requests across the worker pool.
+
+By enabling load balancing, you're no longer limited to the standard `/run` or `/runsync` endpoints. Instead, you can create custom REST endpoints that are accessible via a unique URL:
+
+```
+https://ENDPOINT_ID.api.runpod.ai/YOUR_CUSTOM_PATH
+```
+
+## Key features
+
+- **Direct HTTP access**: Connect directly to worker HTTP servers, bypassing queue infrastructure for lower latency.
+- **Custom REST API endpoints**: Define your own API paths, methods, and contracts to match your specific application needs.
+- **Environment variable port configuration**: Control which ports your API listens on through standardized environment variables.
+- **Framework agnostic**: Build with FastAPI, Flask, Express.js, or any HTTP server framework of your choice.
+- **Multi-endpoint support**: Expose multiple API endpoints through a single worker, creating complete REST API services.
+- **Health-based routing**: Requests are only sent to healthy workers, with automatic removal of unhealthy instances.
+
+## Load balancing vs. queue-based endpoints
+
+Here are the key differences between the two endpoint types:
+
+### Queue-based endpoints (traditional)
+
+With queue-based endpoints, requests are placed in a queue and processed in order. They use the standard handler pattern (`def handler(job)`) and are accessed through fixed endpoints like `/run` and `/runsync`.
+
+These endpoints are better for tasks that can be processed asynchronously and guarantee request processing, similar to how TCP guarantees packet delivery in networking.
+
+### Load balancing endpoints (new)
+
+Load balancing endpoints send requests directly to workers without queuing. You can use any HTTP framework such as FastAPI or Flask, and define custom URL paths and API contracts to suit your specific needs.
+
+These endpoints are ideal for real-time applications and streaming, but provide no queuing mechanism for request backlog, similar to UDP's behavior in networking.
+
+## Endpoint type comparison table
+
+| **Aspect** | **Load Balancing** | **Queue-Based** |
+| --- | --- | --- |
+| Request flow | Direct to worker HTTP server | Through queueing system |
+| Implementation | Custom HTTP server | Handler function |
+| Protocol flexibility | Supports any HTTP capability | JSON input/output only |
+| Backpressure handling | Request drop when overloaded | Queue buffering |
+| Latency | Lower (single-hop) | Higher (queue+worker) |
+| Error recovery | No built-in retry mechanism | Automatic retries |
+
+## Worker implementation comparison
+
+### Queue-based Serverless worker
+
+Traditional Serverless workers require a specific handler function structure:
+
+```python
+import runpod
+
+def handler(job):
+    """Handler function that will be used to process jobs."""
+    job_input = job["input"]
+    prompt = job_input.get("prompt", "Hello world")
+
+    # Process the request
+    result = f"Generated text for: {prompt}"
+
+    return {"generated_text": result}
+
+runpod.serverless.start({"handler": handler})
+```
+
+With traditional endpoints:
+
+- Requests are processed through Runpod's queueing system.
+- Access is available via fixed the endpoints `/run` and `/runsync`.
+- You implement a single handler function.
+- You’re limited to JSON input/output.
+
+### Load balancing worker
+
+Load balancing workers do not use handlers at all. Instead, you can create full REST APIs using frameworks like FastAPI:
+
+```python
+from fastapi import FastAPI
+from pydantic import BaseModel
+import os
+
+app = FastAPI()
+
+class GenerationRequest(BaseModel):
+    prompt: str
+    max_tokens: int = 100
+
+@app.get("/ping")
+async def health_check():
+    return {"status": "healthy"}
+
+@app.post("/generate")
+async def generate(request: GenerationRequest):
+    # Process the request
+    result = f"Generated text for: {request.prompt}"
+    return {"generated_text": result}
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT_HEALTH", "5000"))
+    uvicorn.run(app, host="0.0.0.0", port=port)
+
+```
+
+Once deployed, this example would expose two custom endpoints on each Serverless worker:
+
+```
+https://ENDPOINT_ID.api.runpod.ai/ping
+https://ENDPOINT_ID.api.runpod.ai/generate
+```
+
+With load balancing endpoints:
+
+- Endpoint requests go directly to your HTTP server.
+- You can define custom URL paths and endpoints.
+- You have control over your entire API structure.
+
+## When to use load balancing endpoints
+
+Consider using load balancing endpoints when you need:
+
+- Direct access to your model's HTTP server
+- To leverage internal batching systems, like those provided by vLLM.
+- The ability to return non-JSON payloads
+- To implement multiple endpoints within a single worker.
+- Lower latency for real-time applications, where immediate processing is more important than guaranteed execution.
+
+## Worker health management
+
+Runpod continuously monitors worker health through a dedicated health check mechanism. Workers must expose a `/ping` endpoint on the port specified by the `PORT_HEALTH` environment variable. The load balancer periodically sends requests to this endpoint. Workers respond with appropriate HTTP status codes:
+
+- `200` : healthy
+- `204` : initializing
+- Any other code: unhealthy
+
+Unhealthy workers are automatically removed from the routing pool.
+
+<Note>
+
+When calculating endpoint metrics, Runpod calculates the cold start time for load balancing workers by measuring the time it takes between  `/ping`  first returning `204` until it first returns `200`. 
+
+</Note>
+
+## Environment variables
+
+Load balancing workers rely on environment variables for port configuration:
+
+- `PORT`: The port for the main application server (default: `8888`).
+- `PORT_HEALTH`: The port for the health check endpoint (default: `PORT`).
+- Additional custom variables (e.g., `MODEL_NAME`) for application-specific configuration.
+
+## Request timeouts
+
+Requests made to a load balancing endpoint have two timeout scenarios:
+
+1. **Request timeout (2 minutes)**: If no worker is available to process your request within 2 minutes (e.g., if a worker can’t be initialized fast enough, or the endpoint has reached `MAX_WORKERS`), the system returns a `400` error. To implement retries, you should account for this response code in your client-side application.
+2. **Processing timeout (5.5 minutes)**: Once a worker receives and begins processing your request, there is a maximum processing time of 5.5 minutes. If processing exceeds this limit, the connection will be terminated with a `524` error. For tasks that consistently take longer than 5.5 minutes to process, load balancing endpoints may not be suitable.
+
+## Technical details
+
+The load balancing system employs an HTTP load balancer that inspects application-level protocols to make routing decisions. When a request arrives at `https://ENDPOINT_ID.api.runpod.ai/PATH`, the system:
+
+1. Identifies available healthy workers within the endpoint's worker pool.
+2. Routes the request to a worker's exposed HTTP server.
+3. Returns the worker's response directly to the client.
+
+Each worker runs an independent HTTP server (such as FastAPI, Flask, or Express) that:
+
+- Listens on ports specified via environment variables.
+- Handles requests according to its custom API contract.
+- Implements a required health check endpoint.

@@ -1,0 +1,431 @@
+---
+title: "Build a load balancing Serverless worker"
+sidebarTitle: "Build a load balancing worker"
+description: "Deploy a load balancing Serverless endpoint on Runpod."
+tag: "BETA"
+---
+
+# Build a load balancing Serverless worker
+
+This tutorial will guide you through creating a load balancing Serverless endpoint on Runpod. Unlike traditional queue-based endpoints, load balancing endpoints allow you to expose custom REST APIs directly, giving you complete control over your API's structure and behavior, while still leveraging the scalability and reliability of Runpod's Serverless infrastructure.
+
+## What you'll learn
+
+In this tutorial you'll learn how to:
+
+- Understand the difference between queue-based and load balancing endpoints.
+- Create a FastAPI application that serves as your API endpoint.
+- Implement proper health checks for your workers.
+- Deploy your application as a load balancing serverless endpoint.
+- Test and interact with your custom API endpoints.
+
+## Requirements
+
+Before you begin you'll need:
+
+- A Runpod account.
+- Basic familiarity with Python and REST APIs.
+- Docker installed on your local machine.
+
+## Step 1: Create a basic FastAPI application
+
+First, let's create a simple FastAPI application that will serve as our API.
+
+Create a file named `app.py`:
+
+```python
+import os
+
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+
+# Create FastAPI app
+app = FastAPI()
+
+# Define request models
+class GenerationRequest(BaseModel):
+    prompt: str
+    max_tokens: int = 100
+    temperature: float = 0.7
+
+class GenerationResponse(BaseModel):
+    generated_text: str
+
+# Global variable to track requests
+request_count = 0
+
+# Health check endpoint; required for Runpod to monitor worker health
+@app.get("/ping")
+async def health_check():
+    return {"status": "healthy"}
+
+# Our custom generation endpoint
+@app.post("/generate", response_model=GenerationResponse)
+async def generate(request: GenerationRequest):
+    global request_count
+    request_count += 1
+
+    # A simple mock implementation; we'll replace this with an actual model later
+    generated_text = f"Response to: {request.prompt} (request #{request_count})"
+
+    return {"generated_text": generated_text}
+
+# A simple endpoint to show request stats
+@app.get("/stats")
+async def stats():
+    return {"total_requests": request_count}
+
+# Run the app when the script is executed
+if __name__ == "__main__":
+    import uvicorn
+
+    # Get port from environment variable or use default
+    port = int(os.getenv("PORT_HEALTH", "5000"))
+
+    # Start the server
+    uvicorn.run(app, host="0.0.0.0", port=port)
+```
+
+This simple application defines the following endpoints:
+
+- A health check endpoint at `/ping`
+- A text generation endpoint at `/generate`
+- A statistics endpoint at `/stats`
+
+## Step 2: Create a Dockerfile
+
+Now, let's create a `Dockerfile` to package our application:
+
+```
+FROM nvidia/cuda:12.1.0-base-ubuntu22.04 
+
+RUN apt-get update -y \
+    && apt-get install -y python3-pip
+
+RUN ldconfig /usr/local/cuda-12.1/compat/
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY app.py .
+
+# Start the handler
+CMD ["python3", "app.py"]
+```
+
+You'll also need to create a `requirements.txt` file:
+
+```
+fastapi==0.95.1
+uvicorn==0.22.0
+pydantic==1.10.7
+```
+
+## Step 3: Build and push the Docker image
+
+Build and push your Docker image to a container registry:
+
+```bash
+# Build the image
+docker build -t YOUR_DOCKER_USERNAME/loadbalancer-example:v1.0 .
+
+# Push to Docker Hub
+docker push YOUR_DOCKER_USERNAME/loadbalancer-example:v1.0
+```
+
+## Step 4: Deploy a load balancing endpoint
+
+Now, let's deploy our application as a load balancing endpoint:
+
+1. Go to the [Runpod Serverless console](https://www.runpod.io/console/serverless)
+2. Click **New Endpoint**
+3. Under **Custom Source**, select **Docker Image**, then click **Next**
+4. In the **Container Image** field, enter your Docker image URL: `yourusername/loadbalancer-example:v1.0` 
+5. Give your endpoint a name.
+6. Under **Endpoint Type**, selecent **Load Balancer**.
+7. Under **Worker Configuration**, select at least one GPU type.
+8. Leave all other settings at their defaults.
+9. Click **Create Endpoint.**
+
+## Step 5: Access your custom API
+
+Once your endpoint is created, you can access your custom APIs at:
+
+```
+https://ENDPOINT_ID.api.runpod.ai/PATH
+
+```
+
+For example, the load balancing worker we defined in step 1 exposes these endpoints:
+
+- Health check: `https://ENDPOINT_ID.api.runpod.ai/ping`
+- Generate text: `https://ENDPOINT_ID.api.runpod.ai/generate`
+- Get request count: `https://ENDPOINT_ID.api.runpod.ai/stats`
+
+To make a request to the mock generation endpoint, run this command, replacing `ENDPOINT_ID` with your actual endpoint ID:
+
+```bash
+curl -X POST "https://ENDPOINT_ID.api.runpod.ai/generate" \
+     -H "Content-Type: application/json" \
+     -d '{"prompt": "Once upon a time"}'
+
+```
+
+## Step 6: Implement a real model (vLLM example)
+
+Now, let's make our example more practical by implementing a real model with vLLM. Create a new file named `vllm_app.py` and add the following code:
+
+```python
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
+import subprocess
+import os
+import time
+import requests
+from typing import Optional, List
+from pydantic import BaseModel, Field
+
+app = FastAPI()
+
+# Models for request and response
+class GenerationRequest(BaseModel):
+    prompt: str
+    max_tokens: int = Field(100, ge=1, description="Maximum number of tokens to generate")
+    temperature: float = Field(0.7, ge=0.0, le=2.0, description="Sampling temperature")
+    top_p: float = Field(1.0, ge=0.0, le=1.0, description="Nucleus sampling parameter")
+    top_k: int = Field(-1, description="Top-k sampling parameter")
+
+# vLLM worker class to manage the model server
+class vLLMWorker:
+    def __init__(self):
+        self.port = int(os.getenv("PORT", "8888"))
+        self.health_port = int(os.getenv("PORT_HEALTH", "8888"))
+        self.host = "0.0.0.0"
+        self.model_name = os.getenv("MODEL_NAME", "facebook/opt-125m")
+        self.process: Optional[subprocess.Popen] = None
+        self.initialized = False
+        self.start_server()
+
+    def check_ready(self) -> bool:
+        try:
+            response = requests.get(
+                f"http://{self.host}:{self.port}/v1/models",
+                timeout=5
+            )
+            return response.status_code == 200
+        except:
+            return False
+
+    def start_server(self):
+        if self.process is not None:
+            try:
+                self.process.kill()
+            except:
+                pass
+
+        cmd = [
+            "python", "-m", "vllm.entrypoints.api_server",
+            "--model", self.model_name,
+            "--host", self.host,
+            "--port", str(self.port),
+            "--trust-remote-code"
+        ]
+
+        self.process = subprocess.Popen(cmd)
+
+        # Wait for initial startup
+        start_time = time.time()
+        timeout = 600  # 10 minute timeout
+        while time.time() - start_time < timeout:
+            if self.check_ready():
+                self.initialized = True
+                break
+            time.sleep(1)
+
+    def generate(self, params: GenerationRequest) -> dict:
+        if not self.initialized:
+            raise HTTPException(status_code=503, detail="Server still initializing")
+
+        try:
+            response = requests.post(
+                f"http://{self.host}:{self.port}/v1/completions",
+                json={
+                    "prompt": params.prompt,
+                    "max_tokens": params.max_tokens,
+                    "temperature": params.temperature,
+                    "top_p": params.top_p,
+                    "top_k": params.top_k,
+                    "stream": False
+                },
+                timeout=30
+            )
+
+            if response.status_code == 200:
+                return {
+                    "generated_text": response.json()["choices"][0]["text"]
+                }
+            else:
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"vLLM server error: {response.text}"
+                )
+
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+# Create global worker instance
+worker = vLLMWorker()
+
+# Health check endpoint
+@app.get("/ping")
+async def health_check():
+    if worker.process is None or worker.process.poll() is not None:
+        raise HTTPException(status_code=500, detail="Server is unhealthy")
+    if not worker.initialized:
+        return JSONResponse(content={"status": "initializing"}, status_code=204)
+    if worker.check_ready():
+        return JSONResponse(content={"status": "ready"}, status_code=200)
+    raise HTTPException(status_code=500, detail="Server is unhealthy")
+
+# Generation endpoint
+@app.post("/generate")
+async def generate(request: GenerationRequest):
+    return worker.generate(request)
+
+# Get model info
+@app.get("/model")
+async def model_info():
+    return {"model_name": worker.model_name, "initialized": worker.initialized}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=worker.health_port)
+
+```
+
+Update your `requirements.txt` to include these dependencies:
+
+```
+fastapi==0.95.1
+uvicorn==0.22.0
+pydantic==1.10.7
+requests==2.28.2
+vllm==0.1.4
+```
+
+Update your `Dockerfile` with these build rules:
+
+```
+FROM nvidia/cuda:11.8.0-devel-ubuntu22.04
+
+# Install Python and pip
+RUN apt-get update && \
+    apt-get install -y python3 python3-pip && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY vllm_app.py
+
+# Start the application
+CMD ["python3", "vllm_app.py"]
+```
+
+Build and push this Docker image, then deploy it as a load balancing endpoint just like you did in step 4.
+
+Make sure to:
+
+1. Select a GPU instance type appropriate for the model.
+2. Set environment variables (**Public Environment Variables** in the endpoint configuration form) to:
+    - `PORT_HEALTH`: `5000`
+    - `PORT`: `8000`
+    - `MODEL_NAME`: e.g., `facebook/opt-1.3b` (or your preferred model)
+
+You can now make requests to your load balancing vLLM endpoint, replacing `ENDPOINT_ID` and `RUNPOD_API_KEY` with the actual values:
+
+```bash
+curl -X POST "https://ENDPOINT_ID.api.runpod.ai/generate" \
+		 -H 'Authorization: Bearer RUNPOD_API_KEY' \
+     -H 'Content-Type: application/json' \
+     -d '{"prompt": "Once upon a time", "max_tokens": 50, "temperature": 0.8}'
+```
+
+Congrats! You've created a load balancing endpoint and used it to serve a large language model.
+
+## (Optional) Advanced endpoint definitions
+
+For a more complex API, you can define multiple endpoints and organize them logically. Here's an example of how to structure a more complex API:
+
+```python
+from fastapi import FastAPI, HTTPException, Depends, Query
+from pydantic import BaseModel
+import os
+
+app = FastAPI()
+
+# --- Authentication middleware ---
+def verify_api_key(api_key: str = Query(None, alias="api_key")):
+    if api_key != os.getenv("API_KEY", "test_key"):
+        raise HTTPException(401, "Invalid API key")
+    return api_key
+
+# --- Models ---
+class TextRequest(BaseModel):
+    text: str
+    max_length: int = 100
+
+class ImageRequest(BaseModel):
+    prompt: str
+    width: int = 512
+    height: int = 512
+
+# --- Text endpoints ---
+@app.post("/v1/text/summarize")
+async def summarize(request: TextRequest, api_key: str = Depends(verify_api_key)):
+    # Implement text summarization
+    return {"summary": f"Summary of: {request.text[:30]}..."}
+
+@app.post("/v1/text/translate")
+async def translate(request: TextRequest, target_lang: str, api_key: str = Depends(verify_api_key)):
+    # Implement translation
+    return {"translation": f"Translation to {target_lang}: {request.text[:30]}..."}
+
+# --- Image endpoints ---
+@app.post("/v1/image/generate")
+async def generate_image(request: ImageRequest, api_key: str = Depends(verify_api_key)):
+    # Implement image generation
+    return {"image_url": f"https://example.com/images/{hash(request.prompt)}.jpg"}
+
+# --- Health check ---
+@app.get("/ping")
+async def health_check():
+    return {"status": "healthy"}
+
+```
+
+Using this structure you can expose multiple endpoints, organize your endpoints by resource type, and implement API key authentication.
+
+## Troubleshooting
+
+Here are some common issues and methods for troubleshooting:
+
+- **Worker unhealthy**: Check your health endpoint implementation and ensure it's returning proper status codes.
+- **API not accessible**: Verify that your endpoint type is set to "Load Balancer".
+- **Port issues**: Make sure the environment variables `PORT_HEALTH` and `PORT` match what your application is using.
+- **Model errors**: Check your model's requirements and whether it's compatible with your GPU.
+
+## Next steps
+
+Now that you've deployed a load balancing endpoint, you can try:
+
+- Experimenting with different models and frameworks.
+- Implementing streaming responses.
+- Adding authentication to your API.
+- Exploring advanced FastAPI features like background tasks and WebSockets.
+- Optimizing your application for performance and reliability.
