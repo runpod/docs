@@ -35,6 +35,12 @@ Before you begin you'll need:
 
 ## Step 1: Create a basic FastAPI application
 
+<Tip>
+
+You can download a preconfigured repository with all the files in this tutorial [on GitHub](https://github.com/muhsinking/load-balancing-worker).
+
+</Tip>
+
 First, let's create a simple FastAPI application that will serve as our API.
 
 Create a file named `app.py`:
@@ -155,10 +161,13 @@ Now, let's deploy our application as a load balancing endpoint:
 5. Give your endpoint a name.
 6. Under **Endpoint Type**, select **Load Balancer**.
 7. Under **Worker Configuration**, select at least one GPU type (16 GB or 24 GB are fine for this example).
-{/* DOES THIS BY DEFAULT: N. Expand **Container Configuration** and under **Expose HTTP Ports (Max 10)**, add `5000` to the list. */}
-8. Expand **Environment Variables** and add the key `PORT` with the value `5000` to the list.
-9. Leave all other settings at their defaults.
-10. Click **Create Endpoint**.
+8. Expand **Container Configuration** and under **Expose HTTP Ports (Max 10)**, add `5000, 5001`.
+9. Expand **Environment Variables** and add the following variables:
+    - `PORT`: `5000`
+    - `PORT_HEALTH`: `5001`
+    These will be automatically exposed in the container configuration.
+10. Leave all other settings at their defaults.
+11. Click **Create Endpoint**.
 
 ## Step 5: Access your custom API
 
@@ -178,21 +187,21 @@ Try running one or more of these commands, replacing `ENDPOINT_ID` and `RUNPOD_A
 
 <CodeGroup>
 
-
 ```bash generate
 curl -X POST "https://ENDPOINT_ID.api.runpod.ai/generate" \
     -H 'Authorization: Bearer RUNPOD_API_KEY' \
     -H "Content-Type: application/json" \
+    -d '{"prompt": "Hello, world!"}'
 ```
 
 ```bash ping
-curl -X POST "https://ENDPOINT_ID.api.runpod.ai/ping" \
+curl -X GET "https://ENDPOINT_ID.api.runpod.ai/ping" \
     -H 'Authorization: Bearer RUNPOD_API_KEY' \
     -H "Content-Type: application/json" \
 ```
 
 ```bash stats
-curl -X POST "https://ENDPOINT_ID.api.runpod.ai/stats" \
+curl -X GET "https://ENDPOINT_ID.api.runpod.ai/stats" \
     -H 'Authorization: Bearer RUNPOD_API_KEY' \
     -H "Content-Type: application/json" \
 ```
@@ -213,7 +222,6 @@ If you see the following error:
 ```
 
 This means means your workers did not initialize in time to process the request. Try running the request again.
-
 </Tip>
 
 ## Step 6: Implement a real model (vLLM example)
@@ -344,6 +352,14 @@ async def model_info():
 
 if __name__ == "__main__":
     import uvicorn
+    
+    
+    # When you deploy the endpoint, make sure to expose port 5000
+    port = int(os.getenv("PORT", "5000"))
+
+    # Start the server
+    uvicorn.run(app, host="0.0.0.0", port=port)
+    
     uvicorn.run(app, host="0.0.0.0", port=worker.health_port)
 
 ```
