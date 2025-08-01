@@ -21,9 +21,8 @@ In this tutorial you'll learn how to:
 
 - Create a FastAPI application that serves as your API endpoint.
 - Implement proper health checks for your workers.
-- Deploy your application as a load balancing serverless endpoint.
+- Deploy your application as a load balancing Serverless endpoint.
 - Test and interact with your custom API endpoints.
-- Implement a real model with vLLM.
 
 ## Requirements
 
@@ -37,7 +36,7 @@ Before you begin you'll need:
 
 <Tip>
 
-You can download a preconfigured repository that includes all the files created in this tutorial [on GitHub](https://github.com/runpod-workers/worker-load-balancing/).
+You can download a preconfigured repository that includes the completed code for this tutorial [on GitHub](https://github.com/runpod-workers/worker-load-balancing/).
 
 </Tip>
 
@@ -220,198 +219,7 @@ If you see the following error:
 This means means your workers did not initialize in time to process the request. Try running the request again.
 </Tip>
 
-## Step 6: Implement a real model (vLLM example)
-
-Now, let's make our example more practical by implementing a real model with vLLM. Create a new file named `vllm_app.py` and add the following code:
-
-```python
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
-import subprocess
-import os
-import time
-import requests
-from typing import Optional, List
-from pydantic import BaseModel, Field
-
-app = FastAPI()
-
-# Models for request and response
-class GenerationRequest(BaseModel):
-    prompt: str
-    max_tokens: int = Field(100, ge=1, description="Maximum number of tokens to generate")
-    temperature: float = Field(0.7, ge=0.0, le=2.0, description="Sampling temperature")
-    top_p: float = Field(1.0, ge=0.0, le=1.0, description="Nucleus sampling parameter")
-    top_k: int = Field(-1, description="Top-k sampling parameter")
-
-# vLLM worker class to manage the model server
-class vLLMWorker:
-    def __init__(self):
-        self.port = int(os.getenv("PORT", "8888"))
-        self.health_port = int(os.getenv("PORT_HEALTH", "8888"))
-        self.host = "0.0.0.0"
-        self.model_name = os.getenv("MODEL_NAME", "facebook/opt-125m")
-        self.process: Optional[subprocess.Popen] = None
-        self.initialized = False
-        self.start_server()
-
-    def check_ready(self) -> bool:
-        try:
-            response = requests.get(
-                f"http://{self.host}:{self.port}/v1/models",
-                timeout=5
-            )
-            return response.status_code == 200
-        except:
-            return False
-
-    def start_server(self):
-        if self.process is not None:
-            try:
-                self.process.kill()
-            except:
-                pass
-
-        cmd = [
-            "python", "-m", "vllm.entrypoints.api_server",
-            "--model", self.model_name,
-            "--host", self.host,
-            "--port", str(self.port),
-            "--trust-remote-code"
-        ]
-
-        self.process = subprocess.Popen(cmd)
-
-        # Wait for initial startup
-        start_time = time.time()
-        timeout = 600  # 10 minute timeout
-        while time.time() - start_time < timeout:
-            if self.check_ready():
-                self.initialized = True
-                break
-            time.sleep(1)
-
-    def generate(self, params: GenerationRequest) -> dict:
-        if not self.initialized:
-            raise HTTPException(status_code=503, detail="Server still initializing")
-
-        try:
-            response = requests.post(
-                f"http://{self.host}:{self.port}/v1/completions",
-                json={
-                    "prompt": params.prompt,
-                    "max_tokens": params.max_tokens,
-                    "temperature": params.temperature,
-                    "top_p": params.top_p,
-                    "top_k": params.top_k,
-                    "stream": False
-                },
-                timeout=30
-            )
-
-            if response.status_code == 200:
-                return {
-                    "generated_text": response.json()["choices"][0]["text"]
-                }
-            else:
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=f"vLLM server error: {response.text}"
-                )
-
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-
-# Create global worker instance
-worker = vLLMWorker()
-
-# Health check endpoint
-@app.get("/ping")
-async def health_check():
-    if worker.process is None or worker.process.poll() is not None:
-        raise HTTPException(status_code=500, detail="Server is unhealthy")
-    if not worker.initialized:
-        return JSONResponse(content={"status": "initializing"}, status_code=204)
-    if worker.check_ready():
-        return JSONResponse(content={"status": "ready"}, status_code=200)
-    raise HTTPException(status_code=500, detail="Server is unhealthy")
-
-# Generation endpoint
-@app.post("/generate")
-async def generate(request: GenerationRequest):
-    return worker.generate(request)
-
-# Get model info
-@app.get("/model")
-async def model_info():
-    return {"model_name": worker.model_name, "initialized": worker.initialized}
-
-if __name__ == "__main__":
-    import uvicorn
-    
-    
-    # When you deploy the endpoint, make sure to expose port 5000
-    port = int(os.getenv("PORT", "5000"))
-
-    # Start the server
-    uvicorn.run(app, host="0.0.0.0", port=port)
-    
-    uvicorn.run(app, host="0.0.0.0", port=worker.health_port)
-
-```
-
-Update your `requirements.txt` to include these dependencies:
-
-```
-fastapi==0.95.1
-uvicorn==0.22.0
-pydantic==1.10.7
-requests==2.28.2
-vllm==0.10.0
-```
-
-Update your `Dockerfile` with these build rules:
-
-```
-FROM nvidia/cuda:11.8.0-devel-ubuntu22.04
-
-# Install Python and pip
-RUN apt-get update && \
-    apt-get install -y python3 python3-pip && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
-# Install dependencies
-COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
-
-# Copy application code
-COPY vllm_app.py .
-
-# Start the application
-CMD ["python3", "vllm_app.py"]
-```
-
-Build and push this Docker image, then deploy it as a load balancing endpoint just like you did in step 4.
-
-Make sure to:
-
-1. Select a GPU instance type appropriate for the model.
-2. Set **Environment Variables** in the endpoint configuration form to:
-    - `PORT_HEALTH`: `5001`
-    - `PORT`: `5000`
-    - `MODEL_NAME`: e.g., `facebook/opt-1.3b` (or your preferred model)
-
-You can now make requests to your load balancing vLLM endpoint, replacing `ENDPOINT_ID` and `RUNPOD_API_KEY` with the actual values:
-
-```bash
-curl -X POST "https://ENDPOINT_ID.api.runpod.ai/generate" \
-		 -H 'Authorization: Bearer RUNPOD_API_KEY' \
-     -H 'Content-Type: application/json' \
-     -d '{"prompt": "Once upon a time", "max_tokens": 50, "temperature": 0.8}'
-```
-
-Congrats! You've created a load balancing endpoint and used it to serve a large language model.
+Congratulations! You've now successfully deployed and tested a load balancing endpoint. If you want to use a real model, you can follow the [vLLM worker](/serverless/load-balancing/vllm-worker) tutorial.
 
 ## (Optional) Advanced endpoint definitions
 
@@ -464,8 +272,6 @@ async def health_check():
 
 ```
 
-Using this structure you can expose multiple endpoints, organize your endpoints by resource type, and implement API key authentication.
-
 ## Troubleshooting
 
 Here are some common issues and methods for troubleshooting:
@@ -478,10 +284,4 @@ Here are some common issues and methods for troubleshooting:
 
 ## Next steps
 
-Now that you've deployed a load balancing endpoint, you can try:
-
-- Experimenting with different models and frameworks.
-- Implementing streaming responses.
-- Adding authentication to your API.
-- Exploring advanced FastAPI features like background tasks and WebSockets.
-- Optimizing your application for performance and reliability.
+Now that you've learned how to build a basic load balancing worker, you can try [implementing a real model with vLLM](/serverless/load-balancing/vllm-worker).
