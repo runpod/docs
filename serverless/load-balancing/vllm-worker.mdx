@@ -36,7 +36,7 @@ Before you begin you'll need:
 - Basic familiarity with Python, REST APIs, and vLLM.
 - Docker installed on your local machine.
 
-## Step 1: Set up project files
+## Step 1: Create your project files
 
 <Tip>
 
@@ -74,7 +74,7 @@ vllm_worker/
     └── utils.py
 ```
 
-## Step 2: Define your data models
+## Step 2: Define data models
 
 We'll start by creating the data models that define the structure of your API. These models specify what data your endpoints expect to receive and what they'll return.
 
@@ -84,11 +84,9 @@ Add the following code to `src/models.py`:
 from typing import Optional, List, Union, Literal
 from pydantic import BaseModel, Field
 
-
 class ChatMessage(BaseModel):
     role: Literal["system", "user", "assistant"]
     content: str
-
 
 class GenerationRequest(BaseModel):
     prompt: str
@@ -101,14 +99,12 @@ class GenerationRequest(BaseModel):
     stop: Optional[Union[str, List[str]]] = None
     stream: bool = Field(default=False)
 
-
 class GenerationResponse(BaseModel):
     text: str
     finish_reason: str
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int
-
 
 class ChatCompletionRequest(BaseModel):
     messages: List[ChatMessage]
@@ -118,18 +114,19 @@ class ChatCompletionRequest(BaseModel):
     stop: Optional[Union[str, List[str]]] = None
     stream: bool = Field(default=False)
 
-
 class ErrorResponse(BaseModel):
     error: str
     detail: str
     request_id: Optional[str] = None
 ```
 
-This file defines the data contracts for your API. The `GenerationRequest` and `ChatCompletionRequest` models specify what data clients need to send, while `GenerationResponse` and `ErrorResponse` define what they'll receive back. Each model includes validation rules using Pydantic's `Field` function to ensure parameters stay within acceptable ranges.
+The `GenerationRequest` and `ChatCompletionRequest` models specify what data clients need to send, while `GenerationResponse` and `ErrorResponse` define what they'll receive back.
+
+Each data model includes validation rules using Pydantic's `Field` function to ensure parameters stay within acceptable ranges.
 
 ## Step 3: Create utility functions
 
-Next, we'll create helper functions that support the main application. These utilities handle common tasks like formatting chat prompts and creating standardized error responses.
+Next, we'll create a few helper functions to support the main application. These utilities handle common tasks like formatting chat prompts and creating standardized error responses.
 
 Add the following code to `src/utils.py`:
 
@@ -181,7 +178,7 @@ The `create_error_response` function provides a consistent way to generate error
 
 ## Step 4: Build the main FastAPI application
 
-Now we'll create the core FastAPI application that brings everything together. This file manages the vLLM engine, handles incoming requests, and serves your API endpoints.
+Now we'll build the main application file, `src/handler.py`. This file acts as the orchestrator, bringing together the models and utilities we just created. It uses FastAPI to create the server, defines the API endpoints, and manages the vLLM engine's lifecycle.
 
 Add the following code to `src/handler.py`:
 
@@ -462,7 +459,7 @@ if __name__ == "__main__":
     )
 ```
 
-This is the heart of your vLLM application. It creates a FastAPI server that manages the vLLM engine and exposes three API endpoints: 
+This file creates a FastAPI server that manages the vLLM engine and exposes three API endpoints: 
 
 - A health check at `/ping` that tells the load balancer when your worker is ready.
 - A text completion endpoint at `/v1/completions`.
@@ -472,56 +469,58 @@ The application handles both streaming and non-streaming responses, manages the 
 
 ## Step 5: Set up dependencies and build steps
 
-Add the following dependencies to `requirements.txt`:
+With the application code complete, we still need to define its dependencies and create a Dockerfile to package it into a container image.
 
-```
-ray
-pandas
-pyarrow
-runpod~=1.7.0
-huggingface-hub
-packaging
-typing-extensions==4.7.1
-pydantic
-pydantic-settings
-hf-transfer
-transformers
-```
+1. Add the following dependencies to `requirements.txt`:
 
-Then add the following build steps to your `Dockerfile`:
+    ```
+    ray
+    pandas
+    pyarrow
+    runpod~=1.7.0
+    huggingface-hub
+    packaging
+    typing-extensions==4.7.1
+    pydantic
+    pydantic-settings
+    hf-transfer
+    transformers
+    ```
 
-```dockerfile
-FROM nvidia/cuda:12.1.0-base-ubuntu22.04 
+2. Add the following build steps to your `Dockerfile`:
 
-RUN apt-get update -y \
-    && apt-get install -y python3-pip
+    ```dockerfile
+    FROM nvidia/cuda:12.1.0-base-ubuntu22.04 
 
-RUN ldconfig /usr/local/cuda-12.1/compat/
+    RUN apt-get update -y \
+        && apt-get install -y python3-pip
 
-# Install Python dependencies
-RUN --mount=type=cache,target=/root/.cache/pip \
-    python3 -m pip install --upgrade pip && \
-    python3 -m pip install --upgrade -r /requirements.txt
+    RUN ldconfig /usr/local/cuda-12.1/compat/
 
-# Pin vLLM version for stability - 0.9.1 is latest stable as of 2024-07
-# FlashInfer provides optimized attention for better performance
-ARG VLLM_VERSION=0.9.1
-ARG CUDA_VERSION=cu121
-ARG TORCH_VERSION=torch2.3
+    # Install Python dependencies
+    RUN --mount=type=cache,target=/root/.cache/pip \
+        python3 -m pip install --upgrade pip && \
+        python3 -m pip install --upgrade -r /requirements.txt
 
-RUN python3 -m pip install vllm==${VLLM_VERSION} && \
-    python3 -m pip install flashinfer -i https://flashinfer.ai/whl/${CUDA_VERSION}/${TORCH_VERSION}
+    # Pin vLLM version for stability - 0.9.1 is latest stable as of 2024-07
+    # FlashInfer provides optimized attention for better performance
+    ARG VLLM_VERSION=0.9.1
+    ARG CUDA_VERSION=cu121
+    ARG TORCH_VERSION=torch2.3
 
-ENV PYTHONPATH="/:/vllm-workspace"
+    RUN python3 -m pip install vllm==${VLLM_VERSION} && \
+        python3 -m pip install flashinfer -i https://flashinfer.ai/whl/${CUDA_VERSION}/${TORCH_VERSION}
 
-COPY src /src
+    ENV PYTHONPATH="/:/vllm-workspace"
 
-WORKDIR /src
+    COPY src /src
 
-CMD ["python3", "handler.py"]
-```
+    WORKDIR /src
 
-## Step 6: Build and pushyour Docker image
+    CMD ["python3", "handler.py"]
+    ```
+
+## Step 6: Build and push your Docker image
 
 Build and push your Docker image to a container registry:
 
@@ -533,9 +532,9 @@ docker build --platform linux/amd64 -t YOUR_DOCKER_USERNAME/vllm-loadbalancer:v1
 docker push YOUR_DOCKER_USERNAME/vllm-loadbalancer:v1.0
 ```
 
-## Step 6: Deploy a load balancing endpoint
+## Step 7: Deploy to Serverless
 
-Now, let's deploy our application as a load balancing endpoint:
+Now, let's deploy our application to Runpod:
 
 1. Go to the [Serverless page](https://www.runpod.io/console/serverless) in the Runpod console.
 2. Click **New Endpoint**
@@ -551,7 +550,7 @@ Now, let's deploy our application as a load balancing endpoint:
 8. Leave all other settings at their defaults.
 9. Click **Create Endpoint**.
 
-## Step 6: Test your endpoint
+## Step 7: Test your endpoints
 
 <Tip>
 You can find a Python script for to comprehensive local testing of your vLLM load balancer [on GitHub](https://github.com/runpod-workers/vllm-loadbalancer-ep/blob/main/example.py).
