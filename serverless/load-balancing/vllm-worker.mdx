@@ -1,6 +1,6 @@
-title: "Build a load balancing vLLM worker"
-sidebarTitle: "Build a load balancing vLLM worker"
-description: "Learn how to implement and deploy a load balancing worker with vLLM."
+title: "Build a vLLM load balancer"
+sidebarTitle: "Build a vLLM load balancer"
+description: "Learn how to build and deploy a vLLM load balancer."
 tag: "BETA"
 ---
 
@@ -10,7 +10,7 @@ Load balancing endpoints are currently in beta. We're actively addressing issues
 
 </Note>
 
-This tutorial shows how to build a vLLM worker using FastAPI and deploy it as a load balancing Serverless endpoint on Runpod.
+This tutorial shows how to build a load balancing vLLM worker using FastAPI and deploy it as a Serverless endpoint on Runpod.
 
 <Tip>
 
@@ -43,23 +43,23 @@ You can download a preconfigured repository that includes the completed code for
 
 </Tip>
 
-1. Start by creating a new directory for your project:
+Start by creating a new directory for your project:
 
-    ```bash
-    mkdir vllm_worker
-    cd vllm_worker
-    ```
+```bash
+mkdir vllm_worker
+cd vllm_worker
+```
 
-2. Then, create the following files and directories:
+Then, create the following files and directories:
 
-    ```bash
-    touch Dockerfile
-    touch requirements.txt
-    mkdir src
-    touch src/handler.py
-    touch src/models.py
-    touch src/utils.py
-    ```
+```bash
+touch Dockerfile
+touch requirements.txt
+mkdir src
+touch src/handler.py
+touch src/models.py
+touch src/utils.py
+```
 
 Your project structure should now look like this:
 
@@ -73,9 +73,116 @@ vllm_worker/
     └── utils.py
 ```
 
-## Step 2: Create a basic FastAPI application
+## Step 2: Define your data models
 
-First, let's create a simple FastAPI application that will serve as our vLLM endpoint. Add the following code to `src/handler.py`:
+We'll start by creating the data models that define the structure of your API. These models specify what data your endpoints expect to receive and what they'll return.
+
+Add the following code to `src/models.py`:
+
+```python
+from typing import Optional, List, Union, Literal
+from pydantic import BaseModel, Field
+
+
+class ChatMessage(BaseModel):
+    role: Literal["system", "user", "assistant"]
+    content: str
+
+
+class GenerationRequest(BaseModel):
+    prompt: str
+    max_tokens: int = Field(default=512, ge=1, le=4096)
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    top_p: float = Field(default=0.9, ge=0.0, le=1.0)
+    top_k: int = Field(default=-1, ge=-1)
+    frequency_penalty: float = Field(default=0.0, ge=-2.0, le=2.0)
+    presence_penalty: float = Field(default=0.0, ge=-2.0, le=2.0)
+    stop: Optional[Union[str, List[str]]] = None
+    stream: bool = Field(default=False)
+
+
+class GenerationResponse(BaseModel):
+    text: str
+    finish_reason: str
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+
+class ChatCompletionRequest(BaseModel):
+    messages: List[ChatMessage]
+    max_tokens: int = Field(default=512, ge=1, le=4096)
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    top_p: float = Field(default=0.9, ge=0.0, le=1.0)
+    stop: Optional[Union[str, List[str]]] = None
+    stream: bool = Field(default=False)
+
+
+class ErrorResponse(BaseModel):
+    error: str
+    detail: str
+    request_id: Optional[str] = None
+```
+
+This file defines the data contracts for your API. The `GenerationRequest` and `ChatCompletionRequest` models specify what data clients need to send, while `GenerationResponse` and `ErrorResponse` define what they'll receive back. Each model includes validation rules using Pydantic's `Field` function to ensure parameters stay within acceptable ranges.
+
+## Step 3: Create utility functions
+
+Next, we'll create helper functions that support the main application. These utilities handle common tasks like formatting chat prompts and creating standardized error responses.
+
+Add the following code to `src/utils.py`:
+
+```python
+from typing import List
+from transformers import AutoTokenizer
+from .models import ChatMessage, ErrorResponse
+
+
+def get_tokenizer(model_name: str):
+    """Get tokenizer for the given model"""
+    return AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+
+
+def format_chat_prompt(messages: List[ChatMessage], model_name: str) -> str:
+    """Format messages using the model's chat template"""
+    tokenizer = get_tokenizer(model_name)
+
+    # Use model's built-in chat template if available
+    if hasattr(tokenizer, 'apply_chat_template'):
+        message_dicts = [{"role": msg.role, "content": msg.content} for msg in messages]
+        return tokenizer.apply_chat_template(
+            message_dicts,
+            tokenize=False,
+            add_generation_prompt=True
+        )
+
+    # Fallback to common format
+    formatted_prompt = ""
+    for message in messages:
+        if message.role == "system":
+            formatted_prompt += f"System: {message.content}\n\n"
+        elif message.role == "user":
+            formatted_prompt += f"Human: {message.content}\n\n"
+        elif message.role == "assistant":
+            formatted_prompt += f"Assistant: {message.content}\n\n"
+
+    formatted_prompt += "Assistant: "
+    return formatted_prompt
+
+
+def create_error_response(error: str, detail: str, request_id: str = None) -> ErrorResponse:
+    return ErrorResponse(error=error, detail=detail, request_id=request_id)
+```
+
+The `format_chat_prompt` function converts chat-style conversations into the text format expected by language models. It first tries to use the model's built-in chat template, then falls back to a generic format if that's not available.
+
+The `create_error_response` function provides a consistent way to generate error messages throughout your application.
+
+## Step 4: Build the main FastAPI application
+
+Now we'll create the core FastAPI application that brings everything together. This file manages the vLLM engine, handles incoming requests, and serves your API endpoints.
+
+Add the following code to `src/handler.py`:
 
 ```python
 from fastapi import FastAPI, HTTPException, status
@@ -354,158 +461,166 @@ if __name__ == "__main__":
     )
 ```
 
-## Step 3: Create the utils.py helper file
+This is the heart of your vLLM application. It creates a FastAPI server that manages the vLLM engine and exposes three API endpoints: 
 
-Add the following code to `src/utils.py`:
+- A health check at `/ping` that tells the load balancer when your worker is ready.
+- A text completion endpoint at `/v1/completions`.
+- An OpenAI-compatible chat endpoint at `/v1/chat/completions`.
 
-```python
-from typing import Optional, List, Union, Literal
-from pydantic import BaseModel, Field
+The application handles both streaming and non-streaming responses, manages the language model lifecycle, and includes comprehensive error handling and logging.
 
+## Step 5: Set up dependencies and build steps
 
-class ChatMessage(BaseModel):
-    role: Literal["system", "user", "assistant"]
-    content: str
-
-
-class GenerationRequest(BaseModel):
-    prompt: str
-    max_tokens: int = Field(default=512, ge=1, le=4096)
-    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
-    top_p: float = Field(default=0.9, ge=0.0, le=1.0)
-    top_k: int = Field(default=-1, ge=-1)
-    frequency_penalty: float = Field(default=0.0, ge=-2.0, le=2.0)
-    presence_penalty: float = Field(default=0.0, ge=-2.0, le=2.0)
-    stop: Optional[Union[str, List[str]]] = None
-    stream: bool = Field(default=False)
-
-
-class GenerationResponse(BaseModel):
-    text: str
-    finish_reason: str
-    prompt_tokens: int
-    completion_tokens: int
-    total_tokens: int
-
-
-class ChatCompletionRequest(BaseModel):
-    messages: List[ChatMessage]
-    max_tokens: int = Field(default=512, ge=1, le=4096)
-    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
-    top_p: float = Field(default=0.9, ge=0.0, le=1.0)
-    stop: Optional[Union[str, List[str]]] = None
-    stream: bool = Field(default=False)
-
-
-class ErrorResponse(BaseModel):
-    error: str
-    detail: str
-    request_id: Optional[str] = None
-```
-
-```python
-from typing import List
-from transformers import AutoTokenizer
-from .models import ChatMessage, ErrorResponse
-
-
-def get_tokenizer(model_name: str):
-    """Get tokenizer for the given model"""
-    return AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-
-
-def format_chat_prompt(messages: List[ChatMessage], model_name: str) -> str:
-    """Format messages using the model's chat template"""
-    tokenizer = get_tokenizer(model_name)
-
-    # Use model's built-in chat template if available
-    if hasattr(tokenizer, 'apply_chat_template'):
-        message_dicts = [{"role": msg.role, "content": msg.content} for msg in messages]
-        return tokenizer.apply_chat_template(
-            message_dicts,
-            tokenize=False,
-            add_generation_prompt=True
-        )
-
-    # Fallback to common format
-    formatted_prompt = ""
-    for message in messages:
-        if message.role == "system":
-            formatted_prompt += f"System: {message.content}\n\n"
-        elif message.role == "user":
-            formatted_prompt += f"Human: {message.content}\n\n"
-        elif message.role == "assistant":
-            formatted_prompt += f"Assistant: {message.content}\n\n"
-
-    formatted_prompt += "Assistant: "
-    return formatted_prompt
-
-
-def create_error_response(error: str, detail: str, request_id: str = None) -> ErrorResponse:
-    return ErrorResponse(error=error, detail=detail, request_id=request_id)
-```
-
-Update your `requirements.txt` to include these dependencies:
+Add the following dependencies to `requirements.txt`:
 
 ```
-fastapi==0.95.1
-uvicorn==0.22.0
-pydantic==1.10.7
-requests==2.28.2
-vllm==0.10.0
+ray
+pandas
+pyarrow
+runpod~=1.7.0
+huggingface-hub
+packaging
+typing-extensions==4.7.1
+pydantic
+pydantic-settings
+hf-transfer
+transformers
 ```
 
-Update your `Dockerfile` with these build rules:
+Then add the following build steps to your `Dockerfile`:
 
+```dockerfile
+FROM nvidia/cuda:12.1.0-base-ubuntu22.04 
+
+RUN apt-get update -y \
+    && apt-get install -y python3-pip
+
+RUN ldconfig /usr/local/cuda-12.1/compat/
+
+# Install Python dependencies
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python3 -m pip install --upgrade pip && \
+    python3 -m pip install --upgrade -r /requirements.txt
+
+# Pin vLLM version for stability - 0.9.1 is latest stable as of 2024-07
+# FlashInfer provides optimized attention for better performance
+ARG VLLM_VERSION=0.9.1
+ARG CUDA_VERSION=cu121
+ARG TORCH_VERSION=torch2.3
+
+RUN python3 -m pip install vllm==${VLLM_VERSION} && \
+    python3 -m pip install flashinfer -i https://flashinfer.ai/whl/${CUDA_VERSION}/${TORCH_VERSION}
+
+ENV PYTHONPATH="/:/vllm-workspace"
+
+COPY src /src
+
+WORKDIR /src
+
+CMD ["python3", "handler.py"]
 ```
-FROM nvidia/cuda:11.8.0-devel-ubuntu22.04
 
-# Install Python and pip
-RUN apt-get update && \
-    apt-get install -y python3 python3-pip && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+## Step 6: Build and pushyour Docker image
 
-# Install dependencies
-COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
-
-# Copy application code
-COPY vllm_app.py .
-
-# Start the application
-CMD ["python3", "vllm_app.py"]
-```
-
-Build and push this Docker image, then deploy it as a load balancing endpoint just like you did in step 4.
-
-Make sure to:
-
-1. Select a GPU instance type appropriate for the model.
-2. Set **Environment Variables** in the endpoint configuration form to:
-    - `PORT_HEALTH`: `5001`
-    - `PORT`: `5000`
-    - `MODEL_NAME`: e.g., `facebook/opt-1.3b` (or your preferred model)
-
-You can now make requests to your load balancing vLLM endpoint, replacing `ENDPOINT_ID` and `RUNPOD_API_KEY` with the actual values:
+Build and push your Docker image to a container registry:
 
 ```bash
-curl -X POST "https://ENDPOINT_ID.api.runpod.ai/generate" \
-		 -H 'Authorization: Bearer RUNPOD_API_KEY' \
+# Build the image
+docker build --platform linux/amd64 -t YOUR_DOCKER_USERNAME/vllm-loadbalancer:v1.0 . 
+
+# Push to Docker Hub
+docker push YOUR_DOCKER_USERNAME/vllm-loadbalancer:v1.0
+```
+
+## Step 6: Deploy a load balancing endpoint
+
+Now, let's deploy our application as a load balancing endpoint:
+
+1. Go to the [Serverless page](https://www.runpod.io/console/serverless) in the Runpod console.
+2. Click **New Endpoint**
+3. Under **Custom Source**, select **Docker Image**, then click **Next**
+4. In the **Container Image** field, enter your Docker image URL: 
+    ```
+    YOUR_DOCKER_USERNAME/vllm-loadbalancer:v1.0
+    ```
+    Then click **Next**.
+5. Give your endpoint a name.
+6. Under **Endpoint Type**, select **Load Balancer**.
+7. Under **Worker Configuration**, select at least one GPU type (16 GB or 24 GB are fine for this example).
+8. Leave all other settings at their defaults.
+9. Click **Create Endpoint**.
+
+## Step 6: Test your endpoint
+
+Once your endpoint is created, you can access your vLLM APIs at:
+
+```
+https://ENDPOINT_ID.api.runpod.ai/PATH
+```
+
+For example, the load balancing worker we defined in step 4 exposes these endpoints:
+
+- Health check: `https://ENDPOINT_ID.api.runpod.ai/ping`
+- Generate text: `https://ENDPOINT_ID.api.runpod.ai/v1/completions`
+- Chat completions: `https://ENDPOINT_ID.api.runpod.ai/v1/chat/completions`
+
+You can now make requests to your load balancing vLLM endpoint. Replace `ENDPOINT_ID` and `RUNPOD_API_KEY` with your actual values:
+
+To run a health check, use this command:
+
+```bash ping
+curl -X GET "https://ENDPOINT_ID.api.runpod.ai/ping" \
+    -H 'Authorization: Bearer RUNPOD_API_KEY' \
+    -H "Content-Type: application/json" \
+```
+
+For text completions:
+
+```bash
+curl -X POST "https://ENDPOINT_ID.api.runpod.ai/v1/completions" \
+     -H 'Authorization: Bearer RUNPOD_API_KEY' \
      -H 'Content-Type: application/json' \
      -d '{"prompt": "Once upon a time", "max_tokens": 50, "temperature": 0.8}'
 ```
 
-Congrats! You've created a load balancing endpoint and used it to serve a large language model.
+For chat completions:
 
-Using this structure you can expose multiple endpoints, organize your endpoints by resource type, and implement API key authentication.
+```bash
+curl -X POST "https://ENDPOINT_ID.api.runpod.ai/v1/chat/completions" \
+     -H 'Authorization: Bearer RUNPOD_API_KEY' \
+     -H 'Content-Type: application/json' \
+     -d '{
+       "messages": [
+         {"role": "user", "content": "Tell me a short story"}
+       ],
+       "max_tokens": 100,
+       "temperature": 0.8
+     }'
+```
+
+After sending a request, your workers will take some time to initialize. You can track their progress by checking the logs in the **Workers** tab of your endpoint page.
+
+<Tip>
+If you see the following error:
+
+```
+{"error":"no workers available"}%
+```
+
+This means your workers did not initialize in time to process the request. Try running the request again.
+</Tip>
+
+Congrats! You've created a load balancing vLLM endpoint and used it to serve a large language model.
+
+<Note>
+You can find a Python script for to comprehensive local testing of your vLLM load balancer [on GitHub](https://github.com/runpod-workers/vllm-loadbalancer-ep/blob/main/example.py).
+</Note>
 
 ## Next steps
 
-Now that you've deployed a load balancing vLLM endpoint, you can try:
+Now that you've deployed a vLLM load balancer, you can try:
 
 - Experimenting with different models and frameworks.
-- Implementing streaming responses.
 - Adding authentication to your API.
 - Exploring advanced FastAPI features like background tasks and WebSockets.
 - Optimizing your application for performance and reliability.
