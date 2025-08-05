@@ -1,4 +1,4 @@
-# RunPod documentation site
+# Runpod documentation site
 
 This website is built using [Mintlify](https://mintlify.com/).
 
