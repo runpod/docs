@@ -46,7 +46,7 @@ with open(file_path, "w") as file:
 title: Serverless CPU types
 ---
 
-The following list contains all CPU types available on RunPod.
+The following list contains all CPU types available on Runpod.
 
 <!--
 Table last generated: {date}
