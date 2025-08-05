@@ -1,0 +1,280 @@
+---
+title: "Build a load balancing Serverless worker"
+sidebarTitle: "Build a load balancing worker"
+description: "Learn how to implement and deploy a load balancing worker with FastAPI."
+tag: "BETA"
+---
+
+<Note>
+
+Load balancing endpoints are currently in beta. We're actively addressing issues and working to improve the user experience. [Join our Discord](https://discord.gg/runpod) if you'd like to provide feedback.
+
+</Note>
+
+This tutorial shows how to build a load balancing worker using FastAPI and deploy it as a Serverless endpoint on Runpod.
+
+## What you'll learn
+
+In this tutorial you'll learn how to:
+
+- Create a FastAPI application to serve your API endpoints.
+- Implement proper health checks for your workers.
+- Deploy your application as a load balancing Serverless endpoint.
+- Test and interact with your custom APIs.
+
+## Requirements
+
+Before you begin you'll need:
+
+- A Runpod account.
+- Basic familiarity with Python and REST APIs.
+- Docker installed on your local machine.
+
+## Step 1: Create a basic FastAPI application
+
+<Tip>
+
+You can download a preconfigured repository containing the completed code for this tutorial [on GitHub](https://github.com/runpod-workers/worker-load-balancing/).
+
+</Tip>
+
+First, let's create a simple FastAPI application that will serve as our API.
+
+Create a file named `app.py`:
+
+```python
+import os
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+
+# Create FastAPI app
+app = FastAPI()
+
+# Define request models
+class GenerationRequest(BaseModel):
+    prompt: str
+    max_tokens: int = 100
+    temperature: float = 0.7
+
+class GenerationResponse(BaseModel):
+    generated_text: str
+
+# Global variable to track requests
+request_count = 0
+
+# Health check endpoint; required for Runpod to monitor worker health
+@app.get("/ping")
+async def health_check():
+    return {"status": "healthy"}
+
+# Our custom generation endpoint
+@app.post("/generate", response_model=GenerationResponse)
+async def generate(request: GenerationRequest):
+    global request_count
+    request_count += 1
+
+    # A simple mock implementation; we'll replace this with an actual model later
+    generated_text = f"Response to: {request.prompt} (request #{request_count})"
+
+    return {"generated_text": generated_text}
+
+# A simple endpoint to show request stats
+@app.get("/stats")
+async def stats():
+    return {"total_requests": request_count}
+
+# Run the app when the script is executed
+if __name__ == "__main__":
+    import uvicorn
+
+    port = int(os.getenv("PORT", 8000))
+    logger.info(f"Starting vLLM server on port {port}")
+
+    # Start the server
+    uvicorn.run(app, host="0.0.0.0", port=port)
+```
+
+This simple application defines the following endpoints:
+
+- A health check endpoint at `/ping`
+- A text generation endpoint at `/generate`
+- A statistics endpoint at `/stats`
+
+## Step 2: Create a Dockerfile
+
+Now, let's create a `Dockerfile` to package our application:
+
+```
+FROM nvidia/cuda:12.1.0-base-ubuntu22.04 
+
+RUN apt-get update -y \
+    && apt-get install -y python3-pip
+
+RUN ldconfig /usr/local/cuda-12.1/compat/
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY app.py .
+
+# Start the handler
+CMD ["python3", "app.py"]
+```
+
+You'll also need to create a `requirements.txt` file:
+
+```
+fastapi==0.95.1
+uvicorn==0.22.0
+pydantic==1.10.7
+```
+
+## Step 3: Build and push the Docker image
+
+Build and push your Docker image to a container registry:
+
+```bash
+# Build the image
+docker build --platform linux/amd64 -t YOUR_DOCKER_USERNAME/loadbalancer-example:v1.0 . 
+
+# Push to Docker Hub
+docker push YOUR_DOCKER_USERNAME/loadbalancer-example:v1.0
+```
+
+## Step 4: Deploy to Runpod
+
+Now, let's deploy our application to a Serverless endpoint:
+
+1. Go to the [Serverless page](https://www.runpod.io/console/serverless) in the Runpod console.
+2. Click **New Endpoint**
+3. Under **Custom Source**, select **Docker Image**, then click **Next**
+4. In the **Container Image** field, enter your Docker image URL: 
+    ```
+    YOUR_DOCKER_USERNAME/loadbalancer-example:v1.0
+    ```
+    Then click **Next**.
+5. Give your endpoint a name.
+6. Under **Endpoint Type**, select **Load Balancer**.
+7. Under **Worker Configuration**, select at least one GPU type (16 GB or 24 GB are fine for this example).
+8. Leave all other settings at their defaults.
+9. Click **Create Endpoint**.
+
+## Step 5: Access your custom API
+
+Once your endpoint is created, you can access your custom APIs at:
+
+```
+https://ENDPOINT_ID.api.runpod.ai/PATH
+```
+
+For example, the load balancing worker we defined in step 1 exposes these endpoints:
+
+- Health check: `https://ENDPOINT_ID.api.runpod.ai/ping`
+- Generate text: `https://ENDPOINT_ID.api.runpod.ai/generate`
+- Get request count: `https://ENDPOINT_ID.api.runpod.ai/stats`
+
+Try running one or more of these commands, replacing `ENDPOINT_ID` and `RUNPOD_API_KEY` with your actual endpoint ID and API key:
+
+<CodeGroup>
+
+```bash generate
+curl -X POST "https://ENDPOINT_ID.api.runpod.ai/generate" \
+    -H 'Authorization: Bearer RUNPOD_API_KEY' \
+    -H "Content-Type: application/json" \
+    -d '{"prompt": "Hello, world!"}'
+```
+
+```bash ping
+curl -X GET "https://ENDPOINT_ID.api.runpod.ai/ping" \
+    -H 'Authorization: Bearer RUNPOD_API_KEY' \
+    -H "Content-Type: application/json" \
+```
+
+```bash stats
+curl -X GET "https://ENDPOINT_ID.api.runpod.ai/stats" \
+    -H 'Authorization: Bearer RUNPOD_API_KEY' \
+    -H "Content-Type: application/json" \
+```
+
+</CodeGroup>
+
+After sending a request, your workers will take some time to initialize. You can track their progress by checking the logs in the **Workers** tab of your endpoint page.
+
+<Tip>
+If you see the following error:
+
+```
+{"error":"no workers available"}%
+```
+
+This means your workers did not initialize in time to process the request. If you try running the request again, this will usually resolve the issue.
+</Tip>
+
+Congratulations! You've now successfully deployed and tested a load balancing endpoint. If you want to use a real model, you can follow the [vLLM worker](/serverless/load-balancing/vllm-worker) tutorial.
+
+## (Optional) Advanced endpoint definitions
+
+For a more complex API, you can define multiple endpoints and organize them logically. Here's an example of how to structure a more complex API:
+
+```python
+from fastapi import FastAPI, HTTPException, Depends, Query
+from pydantic import BaseModel
+import os
+
+app = FastAPI()
+
+# --- Authentication middleware ---
+def verify_api_key(api_key: str = Query(None, alias="api_key")):
+    if api_key != os.getenv("API_KEY", "test_key"):
+        raise HTTPException(401, "Invalid API key")
+    return api_key
+
+# --- Models ---
+class TextRequest(BaseModel):
+    text: str
+    max_length: int = 100
+
+class ImageRequest(BaseModel):
+    prompt: str
+    width: int = 512
+    height: int = 512
+
+# --- Text endpoints ---
+@app.post("/v1/text/summarize")
+async def summarize(request: TextRequest, api_key: str = Depends(verify_api_key)):
+    # Implement text summarization
+    return {"summary": f"Summary of: {request.text[:30]}..."}
+
+@app.post("/v1/text/translate")
+async def translate(request: TextRequest, target_lang: str, api_key: str = Depends(verify_api_key)):
+    # Implement translation
+    return {"translation": f"Translation to {target_lang}: {request.text[:30]}..."}
+
+# --- Image endpoints ---
+@app.post("/v1/image/generate")
+async def generate_image(request: ImageRequest, api_key: str = Depends(verify_api_key)):
+    # Implement image generation
+    return {"image_url": f"https://example.com/images/{hash(request.prompt)}.jpg"}
+
+# --- Health check ---
+@app.get("/ping")
+async def health_check():
+    return {"status": "healthy"}
+
+```
+
+## Troubleshooting
+
+Here are some common issues and methods for troubleshooting:
+
+- **No workers available**: If your request returns `{"error":"no workers available"}%`, this means means your workers did not initialize in time to process the request. Running the request again will usually fix this issue.
+- **Worker unhealthy**: Check your health endpoint implementation and ensure it's returning proper status codes.
+- **API not accessible**: If your request returns `{"error":"not allowed for QB API"}`, verify that your endpoint type is set to "Load Balancer".
+- **Port issues**: Make sure the environment variable for `PORT` matches what your application is using, and that the `PORT_HEALTH` variable is set to a different port.
+- **Model errors**: Check your model's requirements and whether it's compatible with your GPU.
+
+## Next steps
+
+Now that you've learned how to build a basic load balancing worker, you can try [implementing a real model with vLLM](/serverless/load-balancing/vllm-worker).
