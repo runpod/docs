@@ -40,7 +40,7 @@ with open(file_path, "w") as file:
 title: GPU types
 ---
 
-The following list contains all GPU types available on RunPod.
+The following list contains all GPU types available on Runpod.
 
 For more information, see [GPU pricing](https://www.runpod.io/gpu-instance/pricing).
 
