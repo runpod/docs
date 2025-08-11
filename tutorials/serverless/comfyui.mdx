@@ -30,21 +30,28 @@ Before starting this tutorial you'll need:
 - The `jq` command-line JSON processor (optional but recommended).
 - Basic understanding of JSON structure for workflow configuration.
 
-<Warning>
-Keep your API key secure and never share it publicly. Remember to retrieve your results within 30 minutes, as inputs and outputs are not stored longer than this for privacy protection.
-</Warning>
-
 ## Step 1: Deploy a ComfyUI Serverless endpoint using the Runpod Hub
 
-1. Navigate to the [Runpod Hub](https://console.runpod.io/hub?createListing=false) in the web interface.
-2. In the **Serverless Repos** tab, use the search bar to find the **ComfyUI** listing. Click the listing to expand it.
-3. Click **Deploy [VERSION_NUMBER]**, then click **Create Endpoint** to confirm. This creates a fully configured endpoint with the FLUX.1-dev-fp8 model pre-installed and appropriate GPU settings for running ComfyUI workflows.
 
-<Note>
-The ComfyUI Hub listing comes with the FLUX.1-dev-fp8 model pre-installed and works only with this model when deployed from the Hub. If you need different models, you'll need to deploy using custom Docker images.
-</Note>
+<Accordion title="Using a different model" icon="gear">
+The ComfyUI Hub listing comes with the FLUX.1-dev-fp8 model pre-installed and works only with this model when deployed from the Hub. 
 
-4. On the endpoint page, make a note of the **Endpoint ID**. You'll need this value to submit jobs and retrieve results.
+If you want to use a different model, you can also [deploy the endpoint](https://github.com/runpod-workers/worker-comfyui/blob/main/docs/deployment.md) using one of these pre-defined Docker images:
+
+- `runpod/worker-comfyui:<version>-base` - Clean ComfyUI install with no models.
+- `runpod/worker-comfyui:<version>-flux1-schnell` - FLUX.1 schnell model.
+- `runpod/worker-comfyui:<version>-flux1-dev` - FLUX.1 dev model.
+- `runpod/worker-comfyui:<version>-sdxl` - Stable Diffusion XL model.
+- `runpod/worker-comfyui:<version>-sd3` - Stable Diffusion 3 medium model.
+
+Replace `<version>` with the latest release version from GitHub Releases.
+
+If you need a model that's not listed here, or have your own LoRA, or need custom nodes, you can use this [customization guide](https://github.com/runpod-workers/worker-comfyui/blob/main/docs/customization.md) to create your own custom worker.
+</Accordion>
+
+1. Navigate to the [ComfyUI Hub listing](https://console.runpod.io/hub/runpod-workers/worker-comfyui) in the Runpod web interface.
+2. Click **Deploy [VERSION_NUMBER]**, then click **Next** and then **Create Endpoint** to confirm. This creates a fully configured endpoint with the FLUX.1-dev-fp8 model pre-installed and appropriate GPU settings for running ComfyUI workflows.
+3. On the endpoint page, make a note of the **Endpoint ID**. You'll need this value to submit jobs and retrieve results.
 
 Once deployed, your endpoint will be assigned a unique ID (e.g. `32vgrms732dkwi`). Your endpoint URL will follow this pattern: `https://api.runpod.ai/v2/ENDPOINT_ID/run` for asynchronous requests.
 
@@ -52,7 +59,7 @@ Once deployed, your endpoint will be assigned a unique ID (e.g. `32vgrms732dkwi`
 
 ComfyUI uses workflow JSON to define the image generation process. The workflow contains nodes that represent different steps in the generation pipeline, such as loading models, encoding prompts, and saving images.
 
-Create a file called `comfyui_workflow.json` with the following FLUX.1-dev-fp8 workflow:
+On your local machine, create a file called `comfyui_workflow.json` with the following FLUX.1-dev-fp8 workflow:
 
 ```json
 {
@@ -60,7 +67,7 @@ Create a file called `comfyui_workflow.json` with the following FLUX.1-dev-fp8 w
     "workflow": {
       "6": {
         "inputs": {
-          "text": "anime cat with massive fluffy fennec ears and a big fluffy tail blonde messy long hair blue eyes wearing a construction outfit placing a fancy black forest cake with candles on top of a dinner table of an old dark Victorian mansion lit by candlelight with a bright window to the foggy forest and very expensive stuff everywhere there are paintings on the walls",
+          "text": "masterpiece, best quality, a whimsical and intricate treehouse nestled in the branches of a giant, ancient cherry blossom tree, surrounded by a field of glowing flowers. A gentle stream flows nearby. Fantasy art, cinematic, volumetric lighting, epic scale.",
           "clip": ["30", 1]
         },
         "class_type": "CLIPTextEncode",
@@ -226,7 +233,7 @@ While your job is processing, you'll receive a response indicating the current s
     "workflow": {
       "6": {
         "inputs": {
-          "text": "anime cat with massive fluffy fennec ears...",
+          "text": "masterpiece, best quality, a whimsical and intricate treehouse...",
           "clip": ["30", 1]
         }
       }
@@ -297,10 +304,10 @@ def decode_comfyui_json_and_save_image(json_filepath, output_filename="comfyui_g
             data = json.load(f)
         
         # Extract the base64 string from the ComfyUI response structure
-        base64_url = data.get("output", {}).get("message")
+        base64_url = data['output']['images'][0]['data']
 
         if not base64_url:
-            print("Error: 'message' not found in the JSON output.")
+            print("Error: 'images[0]' not found in the JSON output.")
             return
 
         # Remove data URI prefix if present
@@ -345,7 +352,7 @@ ComfyUI image successfully saved as 'comfyui_generated_image.png'
 Image path: /Users/path/to/your/project/comfyui_generated_image.png
 ```
 
-Congratulations! You've successfully used Runpod's Serverless platform to generate an AI image using ComfyUI with the FLUX.1-dev-fp8 model. You now understand the complete workflow of submitting ComfyUI jobs, monitoring their progress, and retrieving results.
+Congratulations! You've successfully used Runpod's Serverless platform to generate an AI image using ComfyUI with the FLUX.1-dev-fp8 model. You now understand the complete workflow for submitting ComfyUI jobs, monitoring their progress, and retrieving results.
 
 ## Understanding ComfyUI workflows
 
@@ -355,22 +362,11 @@ ComfyUI workflows are JSON structures that define the image generation pipeline 
 - **Class type**: The operation this node performs.
 - **Meta information**: Human-readable titles and descriptions.
 
-Key workflow concepts:
+You can create custom workflows by modifying node parameters or [opening the ComfyUI interface in a Pod](/tutorials/pods/comfyui) and exporting the workflow to JSON.
 
-- **Node connections**: Arrays like `["30", 1]` reference output 1 from node 30.
-- **Model loading**: Node 30 loads the checkpoint file.
-- **Text encoding**: Nodes 6 and 33 encode positive and negative prompts.
-- **Sampling**: Node 31 performs the actual image generation.
-- **Image output**: Nodes 8, 9, and 40 handle image decoding and saving.
-
-You can create custom workflows by modifying node parameters or using the ComfyUI interface to export workflow JSON.
+To learn more about creating your own ComfyUI workflows, see the [ComfyUI documentation](https://docs.comfy.org/development/core-concepts/workflow).
 
 ## Next steps
 
-Now that you've learned how to generate images with ComfyUI on Serverless, consider exploring these advanced topics:
+Now that you've learned how to generate images with ComfyUI on Serverless, you can explore advanced configuration options for the ComfyUI Serverless worker on the [runpod-workers/worker-comfyui](https://github.com/runpod-workers/worker-comfyui) GitHub repository.
 
-- Learn how to create [synchronous requests](/serverless/endpoints/operations) using the `/runsync` endpoint for faster responses.
-- Explore [endpoint configurations](/serverless/endpoints/endpoint-configurations) to optimize performance and cost.
-- Discover how to [send requests](/serverless/endpoints/send-requests) with advanced parameters and webhook notifications.
-- Try deploying your own [custom worker](/serverless/workers/custom-worker) with different ComfyUI models or custom nodes.
-- Learn about [network volumes](/serverless/storage/network-volumes) for storing custom models and workflows.
