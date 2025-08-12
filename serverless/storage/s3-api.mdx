@@ -2,7 +2,6 @@
 title: "S3-compatible API"
 sidebarTitle: "S3-compatible API"
 description: "Use Runpod's S3-compatible API to access and manage your network volumes."
-tag: "NEW"
 ---
 
 Runpod provides an S3-protocol compatible API for direct access to your [network volumes](/serverless/storage/network-volumes). This allows you to manage files on your network volumes without launching a Pod, reducing cost and operational friction.
@@ -59,26 +58,50 @@ Create your network volume in a supported datacenter to use the S3-compatible AP
 
     This will configure the AWS CLI to use your Runpod S3 API key by storing these details in your AWS credentials file (typically at `~/.aws/credentials`).
 
-    <Tip>
-    **Verify your configuration**: After configuring your credentials, you can verify what credentials are currently being used by running:
-    
-    ```bash
-    aws configure list
-    ```
-    
-    This command shows which credentials are active and their source (config file, environment variables, etc.). Note that environment variables like `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` will override your config file settings if they are set.
-    </Tip>
+<Accordion title="Managing credentials">
+
+### Verifying your AWS configuration
+
+If you're experiencing authentication issues, use the following command to check your current AWS configuration:
+
+```bash
+aws configure list
+```
+
+This command displays which credentials are currently active, the source of each credential (such as the config file or environment variables), and whether all required credentials are properly set.
+
+### Environment variables override config files
+
+AWS CLI uses the following priority order for credentials (highest to lowest):
+1. **Environment variables** (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
+2. **AWS credentials file** (`~/.aws/credentials`)
+3. **AWS config file** (`~/.aws/config`)
+
+If you have environment variables set from a previous session, they will override your config file settings. To resolve this:
+
+1. Check for existing environment variables:
+   ```bash
+   echo $AWS_ACCESS_KEY_ID
+   echo $AWS_SECRET_ACCESS_KEY
+   ```
+
+2. If outdated environment variables are set, unset them:
+   ```bash
+   unset AWS_ACCESS_KEY_ID
+   unset AWS_SECRET_ACCESS_KEY
+   ```
+
+3. Verify your configuration again:
+   ```bash
+   aws configure list
+   ```
+
+</Accordion>
+
+
     
   </Step>
 </Steps>
-
-## Understanding network volume path mapping
-
-Network volumes are mounted to Serverless workers at `/runpod-volume`, and to Pods at `/workspace` by default. The S3-compatible API maps these paths as follows:
-
-- **Pod filesystem path**: `/workspace/my-folder/file.txt`
-- **Serverless worker path**: `/runpod-volume/my-folder/file.txt`
-- **S3 API path**: `s3://[NETWORK_VOLUME_ID]/my-folder/file.txt`
 
 ## Using the S3-compatible API
 
@@ -90,6 +113,16 @@ You can use the S3-compatible API to interact with your Runpod network volumes u
 
 Core AWS CLI operations such as `ls`, `cp`, `mv`, `rm`, and `sync` function as expected.
 
+<Accordion title="Network volume path mapping">
+
+Network volumes are mounted to Serverless workers at `/runpod-volume` and to Pods at `/workspace` by default. The S3-compatible API maps file paths as follows:
+
+- **Pod filesystem path**: `/workspace/my-folder/file.txt`
+- **Serverless worker path**: `/runpod-volume/my-folder/file.txt`
+- **S3 API path**: `s3://NETWORK_VOLUME_ID/my-folder/file.txt`
+
+</Accordion>
+
 ## s3 CLI examples
 
 When using `aws s3` commands, you must pass in the [endpoint URL](#datacenter-availability) for your network volume using the `--endpoint-url` flag and the datacenter ID using the `--region` flag.
@@ -100,14 +133,16 @@ The `--region` flag is case-sensitive. For instance, `--region EU-RO-1` is a val
 
 Unlike traditional S3 key-value stores, object names in the Runpod S3-compatible API correspond to actual file paths on your network volume. Object names containing special characters (e.g., `#`) may need to be URL-encoded to ensure proper processing.
 
-### List objects
+<AccordionGroup>
+
+<Accordion title="List objects">
 
 Use `ls` to list objects in a network volume directory:
 
 ```bash
-aws s3 ls --region [DATACENTER] \
-    --endpoint-url https://s3api-[DATACENTER].runpod.io/ \ 
-    s3://[NETWORK_VOLUME_ID]/[REMOTE_DIR]
+aws s3 ls --region DATACENTER \
+    --endpoint-url https://s3api-DATACENTER.runpod.io/ \ 
+    s3://NETWORK_VOLUME_ID/REMOTE_DIR
 ```
 
 Unlike standard S3 buckets, `ls` and `ListObjects` operations will list empty directories.
@@ -116,33 +151,37 @@ Unlike standard S3 buckets, `ls` and `ListObjects` operations will list empty di
 `ls` operations may take a long time when used on a directory containing many files (over 10,000) or large amounts of data (over 10GB), or when used recursively on a network volume containing either.
 </Warning>
 
+</Accordion>
 
-
-### Transfer files
+<Accordion title="Transfer files">
 
 Use `cp` to copy a file to a network volume:
 
 ```bash
-aws s3 cp --region [DATACENTER] \
-    --endpoint-url https://s3api-[DATACENTER].runpod.io/ \
-    [LOCAL_FILE] \
-    s3://[NETWORK_VOLUME_ID]
+aws s3 cp --region DATACENTER \
+    --endpoint-url https://s3api-DATACENTER.runpod.io/ \
+    LOCAL_FILE \
+    s3://NETWORK_VOLUME_ID
 ```
 
 Use `cp` to copy a file from a network volume to a local directory:
 
 ```bash
-aws s3 cp --region [DATACENTER] \
-    --endpoint-url https://s3api-[DATACENTER].runpod.io/ \
-    s3://[NETWORK_VOLUME_ID]/remote-file.txt ./[LOCAL_DIR]
+aws s3 cp --region DATACENTER \
+    --endpoint-url https://s3api-DATACENTER.runpod.io/ \
+    s3://NETWORK_VOLUME_ID/remote-file.txt LOCAL_DIR
 ```
+
+</Accordion>
+
+<Accordion title="Remove files">
 
 Use `rm` to remove a file from a network volume:
 
 ```bash
-aws s3 rm --region [DATACENTER] \
-    --endpoint-url https://s3api-[DATACENTER].runpod.io/ \
-    s3://[NETWORK_VOLUME_ID]/remote-file.txt
+aws s3 rm --region DATACENTER \
+    --endpoint-url https://s3api-DATACENTER.runpod.io/ \
+    s3://NETWORK_VOLUME_ID/remote-file.txt
 ```
 
 <Tip>
@@ -156,16 +195,22 @@ export AWS_MAX_ATTEMPTS=10
 
 </Tip>
 
-### Sync directories
+</Accordion>
+
+<Accordion title="Sync directories">
 
 This command syncs a local directory (source) to a network volume directory (destination):
 
 ```bash
-aws s3 sync --region [DATACENTER] \
-    --endpoint-url https://s3api-[DATACENTER].runpod.io/ \
-    ./[LOCAL_DIR] \
-    s3://[NETWORK_VOLUME_ID]/[REMOTE_DIR]
+aws s3 sync --region DATACENTER \
+    --endpoint-url https://s3api-DATACENTER.runpod.io/ \
+    LOCAL_DIR \
+    s3://NETWORK_VOLUME_ID/REMOTE_DIR
 ```
+
+</Accordion>
+
+</AccordionGroup>
 
 ## s3api CLI example
 
@@ -174,14 +219,14 @@ You can also use `aws s3api` commands (instead of `aws s3`) to interact with the
 For example, here's how you could use `aws s3api get-object` to download an object from a network volume:
 
 ```bash
-aws s3api get-object --bucket [NETWORK_VOLUME_ID] \
-    --key [REMOTE_FILE] \
-    --region [DATACENTER] \
-    --endpoint-url https://s3api-[DATACENTER].runpod.io/ \
-    [LOCAL_FILE]
+aws s3api get-object --bucket NETWORK_VOLUME_ID \
+    --key REMOTE_FILE \
+    --region DATACENTER \
+    --endpoint-url https://s3api-DATACENTER.runpod.io/ \
+    LOCAL_FILE
 ```
 
-Replace `[LOCAL_FILE]` with the desired path and name of the file after download—for example: `~/local-dir/my-file.txt`.
+Replace `LOCAL_FILE` with the desired path and name of the file after download—for example: `~/local-dir/my-file.txt`.
 
 For a list of available `s3api` commands, see the [AWS s3api reference](https://docs.aws.amazon.com/cli/latest/reference/s3api/).
 
@@ -191,7 +236,11 @@ You can also use the Boto3 library to interact with the S3-compatible API, using
 
 The script below demonstrates how to upload a file to a Runpod network volume using the Boto3 library. It takes command-line arguments for the network volume ID (as an S3 bucket), the datacenter-specific S3 endpoint URL, the local file path, the desired object (file path on the network volume), and the AWS Region (which corresponds to the Runpod datacenter ID).
 
-Your Runpod S3 API key credentials must be set as environment variables using the values from the [Setup and authentication](#setup-and-authentication) step:
+<AccordionGroup>
+
+<Accordion title="Boto3 script">
+
+To run this script, your Runpod S3 API key credentials must be set as environment variables using the values from the [Setup and authentication](#setup-and-authentication) step:
 
 *   `AWS_ACCESS_KEY_ID`: Should be set to your Runpod S3 API key **access key** (e.g., `user_***...`).
 *   `AWS_SECRET_ACCESS_KEY`: Should be set to your Runpod S3 API key's **secret** (e.g., `rps_***...`).
@@ -275,7 +324,7 @@ def main():
     parser.add_argument(
         "-e", "--endpoint",
         required=True,
-        help="The S3 endpoint URL for your Runpod datacenter (e.g., 'https://s3api-[DATACENTER].runpod.io/')."
+        help="The S3 endpoint URL for your Runpod datacenter (e.g., 'https://s3api-DATACENTER.runpod.io/')."
     )
     parser.add_argument(
         "-f", "--file",
@@ -305,6 +354,10 @@ if __name__ == "__main__":
     main()
 ```
 
+</Accordion>
+
+<Accordion title="Example usage">
+
 When uploading files with Boto3, you must specify the complete file path (including the filename) for both source and destination files.
 
 For example, for the `put_objects` method above, you must specify these arguments:
@@ -322,9 +375,13 @@ With that in mind, here's an example of how to run the script above using comman
     --file 'local_directory/file.txt'
 ```
 
+</Accordion>
+
+</AccordionGroup>
+
 ## Uploading very large files
 
-You can upload large files to network volumes using S3 multipart upload operations (see the [compatibility reference](#multipart-upload-operations) below). You can also download [this helper script](https://github.com/runpod/runpod-s3-examples/blob/main/upload_large_file.py), which dramatically improves reliability when uploading very large files (10GB+) by handling timeouts and retries automatically.
+You can upload large files to network volumes using S3 multipart upload operations (see the [compatibility reference](#s3-api-compatibility-reference) below). You can also download [this helper script](https://github.com/runpod/runpod-s3-examples/blob/main/upload_large_file.py), which dramatically improves reliability when uploading very large files (10GB+) by handling timeouts and retries automatically.
 
 [Click here to download the script on GitHub.](https://github.com/runpod/runpod-s3-examples/blob/main/upload_large_file.py)
 
@@ -346,10 +403,12 @@ The tables below show which S3 API operations and AWS CLI commands are currently
 For detailed information on these operations, refer to the [AWS S3 API documentation](https://docs.aws.amazon.com/AmazonS3/latest/API/API_Operations_Amazon_Simple_Storage_Service.html).
 
 <Note>
-If a function is not listed below, that means it's not currently implemented. We are continuously expanding the S3-compatible API based on customer needs and usage patterns.
+If a function is not listed below, that means it's not currently implemented. We are continuously expanding the S3-compatible API based on user needs and usage patterns.
 </Note>
 
-### Core operations
+<AccordionGroup>
+
+<Accordion title="Core operations">
 
 | Operation | Supported | CLI Command | Notes |
 |------------------|--------|-----------------|-------|
@@ -365,7 +424,15 @@ If a function is not listed below, that means it's not currently implemented. We
 | `DeleteObjects` | ❌ | `aws s3api delete-objects` | Planned |
 | `RestoreObject` | ❌ | `aws s3api restore-object` | Not supported |
 
-### Multipart upload operations
+<Warning>
+
+`ListObjects` operations may take a long time when used on a directory containing many files (over 10,000) or large amounts of data (over 10GB), or when used recursively on a network volume containing either.
+
+</Warning>
+
+</Accordion>
+
+<Accordion title="Multipart upload operations">
 
 Files larger than 500MB must be uploaded using multipart uploads. The AWS CLI performs multipart uploads automatically.
 
@@ -378,7 +445,9 @@ Files larger than 500MB must be uploaded using multipart uploads. The AWS CLI pe
 | `ListMultipartUploads` | ✅ | `aws s3api list-multipart-uploads` | View in-progress uploads |
 | `ListParts` | ✅ | `aws s3api list-parts` | List parts of a multipart upload |
 
-### Bucket management operations
+</Accordion>
+
+<Accordion title="Bucket management operations">
 
 | Operation | Supported | CLI Command | Notes |
 |------------------|--------|-----------------|-------|
@@ -389,7 +458,9 @@ Files larger than 500MB must be uploaded using multipart uploads. The AWS CLI pe
 | `PutBucketVersioning` | ❌ | `aws s3api put-bucket-versioning` | Versioning is not supported |
 | `GeneratePresignedURL` | ❌ | `aws s3 presign` | Pre-signed URLs are not supported |
 
-### Access control and permissions
+</Accordion>
+
+<Accordion title="Access control and permissions">
 
 | Operation | Supported | CLI Command | Notes |
 |------------------|--------|-----------------|-------|
@@ -400,7 +471,9 @@ Files larger than 500MB must be uploaded using multipart uploads. The AWS CLI pe
 | `GetBucketPolicy` | ❌ | N/A | Bucket policies are not supported |
 | `PutBucketPolicy` | ❌ | N/A | Bucket policies are not supported |
 
-### Object metadata and tagging
+</Accordion>
+
+<Accordion title="Object metadata and tagging">
 
 | Operation | Supported | CLI Command | Notes |
 |------------------|--------|-----------------|-------|
@@ -408,7 +481,9 @@ Files larger than 500MB must be uploaded using multipart uploads. The AWS CLI pe
 | `PutObjectTagging` | ❌ | N/A | Object tagging is not supported |
 | `DeleteObjectTagging` | ❌ | N/A | Object tagging is not supported |
 
-### Encryption and security
+</Accordion>
+
+<Accordion title="Encryption and security">
 
 | Operation | Supported | CLI Command | Notes |
 |------------------|--------|-----------------|-------|
@@ -417,56 +492,15 @@ Files larger than 500MB must be uploaded using multipart uploads. The AWS CLI pe
 | `GetObjectLockConfiguration` | ❌ | N/A | Object locking is not supported |
 | `PutObjectLockConfiguration` | ❌ | N/A | Object locking is not supported |
 
-<Warning>
+</Accordion>
 
-`ListObjects` operations may take a long time when used on a directory containing many files (over 10,000) or large amounts of data (over 10GB), or when used recursively on a network volume containing either.
-
-</Warning>
-
-## Troubleshooting credentials
-
-### Verifying your AWS configuration
-
-If you're experiencing authentication issues, use the following command to check your current AWS configuration:
-
-```bash
-aws configure list
-```
-
-This command displays:
-- Which credentials are currently active
-- The source of each credential (config file, environment variables, etc.)
-- Whether all required credentials are properly set
-
-### Environment variables override config files
-
-AWS CLI uses the following priority order for credentials (highest to lowest):
-1. **Environment variables** (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
-2. **AWS credentials file** (`~/.aws/credentials`)
-3. **AWS config file** (`~/.aws/config`)
-
-If you have environment variables set from a previous session, they will override your config file settings. To resolve this:
-
-1. Check for existing environment variables:
-   ```bash
-   echo $AWS_ACCESS_KEY_ID
-   echo $AWS_SECRET_ACCESS_KEY
-   ```
-
-2. If outdated environment variables are set, unset them:
-   ```bash
-   unset AWS_ACCESS_KEY_ID
-   unset AWS_SECRET_ACCESS_KEY
-   ```
-
-3. Verify your configuration again:
-   ```bash
-   aws configure list
-   ```
+</AccordionGroup>
 
 ## Known issues and limitations
 
-### ListObjects runs slowly or fails with "same next token" error
+<AccordionGroup>
+
+<Accordion title="ListObjects runs slowly or fails with &quot;same next token&quot; error">
 
 When running `aws s3 ls` or `ListObjects` on a directory with many files or large amounts of data (typically >10,000 files or >10 GB of data) for the first time, it may run very slowly, or you may encounter the following error: 
 
@@ -480,20 +514,26 @@ Workarounds:
 * The operation will typically complete successfully if you wait for the process to finish.
 * If the client aborts with a pagination error, retry the operation after a brief pause.
 
-### Storage and time synchronization
+</Accordion>
+
+<Accordion title="Storage and time synchronization">
 
 -   **Storage capacity**: Network volumes have a fixed storage capacity, unlike the virtually unlimited storage of standard S3 buckets. The `CopyObject` and `UploadPart` actions do not check for available free space beforehand and may fail if the volume runs out of space.
 -   **Maximum file size**: 4TB (the maximum size of a network volume).
 -   **Object names**: Unlike traditional S3 key-value stores, object names in the Runpod S3-compatible API correspond to actual file paths on your network volume. Object names containing special characters (e.g., `#`) may need to be URL encoded to ensure proper processing.
 -   **Time synchronization**: Requests that are out of time sync by 1 hour will be rejected. This is more lenient than the 15-minute window specified by the AWS SigV4 authentication specification.
 
-### Multipart uploads
+</Accordion>
+
+<Accordion title="Multipart uploads">
 
 -   The maximum size for a single part of a multipart upload is 500MB.
 -   The AWS S3 minimum part size of 5MB is not enforced.
 -   Multipart upload parts and metadata are stored in a hidden `.s3compat_uploads/` folder. This folder and its contents are automatically cleaned up when you call `CompleteMultipartUpload` or `AbortMultipartUpload`.
 
-#### Timeout configuration for large files
+</Accordion>
+
+<Accordion title="Timeout configuration for large files">
 
 When uploading large files (10GB+), you may encounter timeout errors during the `CompleteMultipartUpload` operation. To resolve this, we recommend using the [multipart upload helper script](#uploading-very-large-files).
 
@@ -536,6 +576,10 @@ s3_client = boto3.client('s3', config=custom_config)
 
 </Tab>
 </Tabs>
+
+</Accordion>
+
+</AccordionGroup>
 
 ## Reference documentation
 
