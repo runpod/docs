@@ -1,0 +1,372 @@
+---
+title: "Deploy ComfyUI with Serverless"
+sidebarTitle: "Deploy ComfyUI with Serverless"
+description: "Learn how to deploy a Serverless endpoint running ComfyUI from the Runpod Hub and use it to generate images with FLUX Dev."
+tag: "NEW"
+---
+
+In this tutorial, you will learn how to deploy a Serverless endpoint running [ComfyUI](https://github.com/comfyanonymous/ComfyUI) on Runpod, submit image generation jobs using workflow JSON, monitor their progress, and decode the resulting images.
+
+[Runpod's Serverless platform](/serverless/overview) allows you to run AI/ML models in the cloud without managing infrastructure, automatically scaling resources as needed. ComfyUI is a powerful node-based interface for Stable Diffusion that provides fine-grained control over the image generation process through customizable workflows.
+
+## What you'll learn
+
+In this tutorial you'll learn:
+
+- How to deploy a ComfyUI Serverless endpoint using the [Runpod Hub](/hub/overview).
+- How to structure ComfyUI workflow JSON for API requests.
+- How to submit jobs, monitor their progress, and retrieve results.
+- How to generate images using the FLUX.1-dev-fp8 model.
+- How to decode the base64 output to retrieve the generated image.
+
+## Requirements
+
+Before starting this tutorial you'll need:
+
+- A Runpod account with available credits.
+- A Runpod API key (available in your user settings).
+- Basic familiarity with command-line tools like `curl`.
+- Python installed on your system (for the image decoding step).
+- The `jq` command-line JSON processor (optional but recommended).
+- Basic understanding of JSON structure for workflow configuration.
+
+## Step 1: Deploy a ComfyUI Serverless endpoint using the Runpod Hub
+
+
+<Accordion title="Using a different model" icon="gear">
+The ComfyUI Hub listing comes with the FLUX.1-dev-fp8 model pre-installed and works only with this model when deployed from the Hub. 
+
+If you want to use a different model, you can also [deploy the endpoint](https://github.com/runpod-workers/worker-comfyui/blob/main/docs/deployment.md) using one of these pre-defined Docker images:
+
+- `runpod/worker-comfyui:<version>-base` - Clean ComfyUI install with no models.
+- `runpod/worker-comfyui:<version>-flux1-schnell` - FLUX.1 schnell model.
+- `runpod/worker-comfyui:<version>-flux1-dev` - FLUX.1 dev model.
+- `runpod/worker-comfyui:<version>-sdxl` - Stable Diffusion XL model.
+- `runpod/worker-comfyui:<version>-sd3` - Stable Diffusion 3 medium model.
+
+Replace `<version>` with the latest release version from GitHub Releases.
+
+If you need a model that's not listed here, or have your own LoRA, or need custom nodes, you can use this [customization guide](https://github.com/runpod-workers/worker-comfyui/blob/main/docs/customization.md) to create your own custom worker.
+</Accordion>
+
+1. Navigate to the [ComfyUI Hub listing](https://console.runpod.io/hub/runpod-workers/worker-comfyui) in the Runpod web interface.
+2. Click **Deploy [VERSION_NUMBER]**, then click **Next** and then **Create Endpoint** to confirm. This creates a fully configured endpoint with the FLUX.1-dev-fp8 model pre-installed and appropriate GPU settings for running ComfyUI workflows.
+3. On the endpoint page, make a note of the **Endpoint ID**. You'll need this value to submit jobs and retrieve results.
+
+Once deployed, your endpoint will be assigned a unique ID (e.g. `32vgrms732dkwi`). Your endpoint URL will follow this pattern: `https://api.runpod.ai/v2/ENDPOINT_ID/run` for asynchronous requests.
+
+## Step 2: Prepare your ComfyUI workflow
+
+ComfyUI uses workflow JSON to define the image generation process. The workflow contains nodes that represent different steps in the generation pipeline, such as loading models, encoding prompts, and saving images.
+
+On your local machine, create a file called `comfyui_workflow.json` with the following FLUX.1-dev-fp8 workflow:
+
+```json
+{
+  "input": {
+    "workflow": {
+      "6": {
+        "inputs": {
+          "text": "a whimsical and intricate treehouse nestled in the branches of a giant, ancient cherry blossom tree, surrounded by a field of glowing flowers. A gentle stream flows nearby. Fantasy art, cinematic, volumetric lighting, epic scale.",
+          "clip": ["30", 1]
+        },
+        "class_type": "CLIPTextEncode",
+        "_meta": {
+          "title": "CLIP Text Encode (Positive Prompt)"
+        }
+      },
+      "8": {
+        "inputs": {
+          "samples": ["31", 0],
+          "vae": ["30", 2]
+        },
+        "class_type": "VAEDecode",
+        "_meta": {
+          "title": "VAE Decode"
+        }
+      },
+      "9": {
+        "inputs": {
+          "filename_prefix": "ComfyUI",
+          "images": ["8", 0]
+        },
+        "class_type": "SaveImage",
+        "_meta": {
+          "title": "Save Image"
+        }
+      },
+      "27": {
+        "inputs": {
+          "width": 512,
+          "height": 512,
+          "batch_size": 1
+        },
+        "class_type": "EmptySD3LatentImage",
+        "_meta": {
+          "title": "EmptySD3LatentImage"
+        }
+      },
+      "30": {
+        "inputs": {
+          "ckpt_name": "flux1-dev-fp8.safetensors"
+        },
+        "class_type": "CheckpointLoaderSimple",
+        "_meta": {
+          "title": "Load Checkpoint"
+        }
+      },
+      "31": {
+        "inputs": {
+          "seed": 243057879077961,
+          "steps": 10,
+          "cfg": 1,
+          "sampler_name": "euler",
+          "scheduler": "simple",
+          "denoise": 1,
+          "model": ["30", 0],
+          "positive": ["35", 0],
+          "negative": ["33", 0],
+          "latent_image": ["27", 0]
+        },
+        "class_type": "KSampler",
+        "_meta": {
+          "title": "KSampler"
+        }
+      },
+      "33": {
+        "inputs": {
+          "text": "",
+          "clip": ["30", 1]
+        },
+        "class_type": "CLIPTextEncode",
+        "_meta": {
+          "title": "CLIP Text Encode (Negative Prompt)"
+        }
+      },
+      "35": {
+        "inputs": {
+          "guidance": 3.5,
+          "conditioning": ["6", 0]
+        },
+        "class_type": "FluxGuidance",
+        "_meta": {
+          "title": "FluxGuidance"
+        }
+      },
+      "38": {
+        "inputs": {
+          "images": ["8", 0]
+        },
+        "class_type": "PreviewImage",
+        "_meta": {
+          "title": "Preview Image"
+        }
+      },
+      "40": {
+        "inputs": {
+          "filename_prefix": "ComfyUI",
+          "images": ["8", 0]
+        },
+        "class_type": "SaveImage",
+        "_meta": {
+          "title": "Save Image"
+        }
+      }
+    }
+  }
+}
+```
+
+This workflow defines a complete image generation pipeline using the FLUX.1-dev-fp8 model. Key components include:
+
+- **Node 6**: Encodes the positive text prompt using CLIP.
+- **Node 30**: Loads the FLUX.1-dev-fp8 checkpoint.
+- **Node 31**: Performs the sampling process with specified parameters.
+- **Node 8**: Decodes the latent image to a viewable format.
+- **Node 9/40**: Saves the generated image.
+
+You can customize the prompt by modifying the `text` field in node 6, or adjust generation parameters like `steps`, `cfg`, `width`, and `height` in their respective nodes.
+
+## Step 3: Submit your first job
+
+Use the `/run` endpoint to submit an asynchronous job that will generate an image based on your ComfyUI workflow.
+
+Replace `ENDPOINT_ID` with your actual endpoint ID and `YOUR_API_KEY` with your Runpod API key in the following command:
+
+```bash
+curl -X POST https://api.runpod.ai/v2/ENDPOINT_ID/run \
+    -H 'Content-Type: application/json' \
+    -H 'Authorization: Bearer YOUR_API_KEY' \
+    -d @comfyui_workflow.json
+```
+
+The API will respond immediately with a job ID and status. You'll receive a response similar to this:
+
+```json
+{
+  "id": "c80ffee4-f315-4e25-a146-0f3d98cf024b",
+  "status": "IN_QUEUE"
+}
+```
+
+The job ID is crucial for tracking your request's progress. Save this ID as you'll need it to check the status and retrieve results.
+
+## Step 4: Monitor job progress
+
+Check your job's status using the `/status` endpoint with the job ID you received in the previous step.
+
+Use the following command to check your job's progress, replacing the placeholders (`ENDPOINT_ID`, `JOB_ID`, and `YOUR_API_KEY`) with your actual values:
+
+```bash
+curl https://api.runpod.ai/v2/ENDPOINT_ID/status/JOB_ID \
+    -H 'Content-Type: application/json' \
+    -H 'Authorization: Bearer YOUR_API_KEY'
+```
+
+While your job is processing, you'll receive a response indicating the current status:
+
+```json
+{
+  "delayTime": 2188,
+  "id": "c80ffee4-f315-4e25-a146-0f3d98cf024b",
+  "input": {
+    "workflow": {
+      "6": {
+        "inputs": {
+          "text": "masterpiece, best quality, a whimsical and intricate treehouse...",
+          "clip": ["30", 1]
+        }
+      }
+    }
+  },
+  "status": "IN_PROGRESS"
+}
+```
+
+The `delayTime` field shows how long the job waited in the queue before processing began, measured in milliseconds.
+
+## Step 5: Retrieve completed results
+
+Continue polling the status endpoint until the status changes to `COMPLETED`. Once your job completes, the status endpoint will return the generated image data encoded in base64 format.
+
+When your job finishes successfully, you'll receive a response containing the output:
+
+```json
+{
+  "delayTime": 2188,
+  "executionTime": 2297,
+  "id": "sync-c0cd1eb2-068f-4ecf-a99a-55770fc77391-e1",
+  "output": {
+    "message": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAAQACAIAAADwf7zU...",
+    "status": "success"
+  },
+  "status": "COMPLETED"
+}
+```
+
+The `executionTime` field shows how long the actual image generation took, while `delayTime` indicates the initial queue wait time. Both values are in milliseconds.
+
+To save the complete response for processing, use this command:
+
+```bash
+curl https://api.runpod.ai/v2/ENDPOINT_ID/status/JOB_ID \
+    -H 'Content-Type: application/json' \
+    -H 'Authorization: Bearer YOUR_API_KEY' | jq . > comfyui_output.json
+```
+
+<Warning>
+You have up to 30 minutes to retrieve your results via the status endpoint, after which results will be automatically deleted for security.
+</Warning>
+
+## Step 6: Decode and save your image
+
+Now we'll convert the base64-encoded image data into a viewable image file using Python.
+
+Create a Python script called `decode_comfyui_image.py` to decode the base64 image data from your JSON response:
+
+```python
+import base64
+from PIL import Image
+import io
+import os
+import json
+
+def decode_comfyui_json_and_save_image(json_filepath, output_filename="comfyui_generated_image.png"):
+    """
+    Reads a ComfyUI JSON response file, extracts the base64 image string, decodes it, and saves it as an image file.
+
+    Args:
+        json_filepath (str): The path to the input JSON file.
+        output_filename (str): The name for the output image file.
+    """
+    try:
+        with open(json_filepath, 'r') as f:
+            data = json.load(f)
+        
+        # Extract the base64 string from the ComfyUI response structure
+        base64_url = data['output']['images'][0]['data']
+
+        if not base64_url:
+            print("Error: 'images[0]' not found in the JSON output.")
+            return
+
+        # Remove data URI prefix if present
+        if "," in base64_url:
+            _, encoded_data = base64_url.split(",", 1)
+        else:
+            encoded_data = base64_url
+
+        # Decode base64 to bytes
+        image_data = base64.b64decode(encoded_data)
+        image_stream = io.BytesIO(image_data)
+        image = Image.open(image_stream)
+        image.save(output_filename)
+
+        print(f"ComfyUI image successfully saved as '{output_filename}'")
+        print(f"Image path: {os.path.abspath(output_filename)}")
+
+    except FileNotFoundError:
+        print(f"Error: The file '{json_filepath}' was not found.")
+    except json.JSONDecodeError:
+        print(f"Error: Could not decode JSON from the file '{json_filepath}'.")
+    except base64.binascii.Error as e:
+        print(f"Error decoding base64 string: {e}")
+        print("Please ensure the input is a valid base64 string.")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+
+# Process the comfyui_output.json file
+decode_comfyui_json_and_save_image("comfyui_output.json", "comfyui_generated_image.png")
+```
+
+Run the script to decode the image data and save it as a PNG file:
+
+```bash
+python decode_comfyui_image.py
+```
+
+You should see the following output:
+
+```bash
+ComfyUI image successfully saved as 'comfyui_generated_image.png'
+Image path: /Users/path/to/your/project/comfyui_generated_image.png
+```
+
+Congratulations! You've successfully used Runpod's Serverless platform to generate an AI image using ComfyUI with the FLUX.1-dev-fp8 model. You now understand the complete workflow for submitting ComfyUI jobs, monitoring their progress, and retrieving results.
+
+## Understanding ComfyUI workflows
+
+ComfyUI workflows are JSON structures that define the image generation pipeline through interconnected nodes. Each node has:
+
+- **Inputs**: Parameters and connections to other nodes.
+- **Class type**: The operation this node performs.
+- **Meta information**: Human-readable titles and descriptions.
+
+You can create custom workflows by modifying node parameters or [opening the ComfyUI interface in a Pod](/tutorials/pods/comfyui) and exporting the workflow to JSON.
+
+To learn more about creating your own ComfyUI workflows, see the [ComfyUI documentation](https://docs.comfy.org/development/core-concepts/workflow).
+
+## Next steps
+
+Now that you've learned how to generate images with ComfyUI on Serverless, you can explore advanced configuration options for the ComfyUI Serverless worker on the [runpod-workers/worker-comfyui](https://github.com/runpod-workers/worker-comfyui) GitHub repository.
+
