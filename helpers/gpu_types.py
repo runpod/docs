@@ -30,23 +30,24 @@ file_path = os.path.join(
     os.path.dirname(__file__), "../references/gpu-types.mdx"
 )
 
-table = tabulate(gpus_df, headers=["GPU ID", "Display Name", "Memory (GB)"], tablefmt="github", showindex=False)
+table = tabulate(gpus_df.values.tolist(), headers=["GPU ID", "Display Name", "Memory (GB)"], tablefmt="github", showindex=False)
 
 with open(file_path, "w") as file:
     # Write the table headers
     date = datetime.now().strftime("%Y-%m-%d")
     file.write(
         f"""---
-title: GPU types
+title: "GPU types"
+description: "Explore the GPUs available on Runpod."
 ---
 
-The following list contains all GPU types available on Runpod.
+For information on pricing, see [GPU pricing](https://www.runpod.io/gpu-instance/pricing).
 
-For more information, see [GPU pricing](https://www.runpod.io/gpu-instance/pricing).
+## GPU types
 
-<!--
-Table last generated: {date}
--->
+This table lists all GPU types available on Runpod:
+{{/* Table last generated: {date} */}}
+
 {table}
 """)
 
