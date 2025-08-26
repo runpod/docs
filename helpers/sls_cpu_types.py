@@ -36,7 +36,7 @@ file_path = os.path.join(
     os.path.dirname(__file__), "../references/cpu-types.mdx"
 )
 
-table = tabulate(cpus_df, headers=["Display Name", "Cores", "Threads Per Core"], tablefmt="github", showindex=False)
+table = tabulate(cpus_df.values.tolist(), headers=["Display Name", "Cores", "Threads Per Core"], tablefmt="github", showindex=False)
 
 with open(file_path, "w") as file:
     # Write the headers and table
@@ -48,9 +48,8 @@ title: Serverless CPU types
 
 The following list contains all CPU types available on Runpod.
 
-<!--
-Table last generated: {date}
--->
+{{/* Table last generated: {date} */}}
+
 {table}
 """)
 
