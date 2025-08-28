@@ -1,27 +1,35 @@
 ---
 title: Pod idle monitor
 sidebar_label: Pod idle monitor
-description: Monitor and auto-manage your RunPod instances to reduce costs
+description: Monitor your idle & unused pods
 icon: "gauge"
 ---
 
-GitHub repository: [github.com/justinwlin/Runpod-Idle-Pod-Monitor](https://github.com/justinwlin/Runpod-Idle-Pod-Monitor)
+[Idle Pod Monitor](https://github.com/justinwlin/Runpod-Idle-Pod-Monitor) is a repository that helps you save money by providing a way to manage pods that are not being utilized or forgot to turn off. The repository provides either a self-contained CLI script that can be executed inside of a pod directly for self-pod idle monitoring or a runpod template for team level pod management and monitoring with a full-on UI.
 
-RunPod Monitor helps you save money by automatically stopping idle pods. It provides both organization-level monitoring with a web dashboard and self-contained monitoring that runs directly within your pod.
+## Configuration modes
 
-## Quick deployment
+The monitor operates in two modes:
 
-Deploy the organization monitor on RunPod: [Deploy template](https://console.runpod.io/deploy?template=xe00ihiurd&ref=p1oqnqy1)
+### 🛑 Auto-Stop mode
+Automatically **stops** (not terminates) pods when utilization falls below defined thresholds for a specified duration.
+- **Saves:** GPU/CPU compute costs
+- **Preserves:** Pod /workspace storage
+
+### 📊 Monitor-only mode  
+Tracks and alerts on idle pods without taking action.
+- **Purpose:** Surface idle pods for manual review
+- **Benefit:** Visibility into resource utilization patterns
+
+## Quick deployment for team level monitoring
+
+Deploy the team monitor on Runpod: [Deploy template](https://console.runpod.io/deploy?template=xe00ihiurd&ref=p1oqnqy1)
 
 For the cheapest option, run on a CPU pod. The monitor automatically excludes itself from monitoring.
 
-## Self-contained monitoring
+## Quick deployment for self-pod monitoring
 
-For individual pod monitoring without external dependencies, use the self-contained version that runs directly in your pod.
-
-### One-line installation
-
-Inside your RunPod pod terminal:
+For individual pod monitoring without external dependencies, use the self-contained CLI version that runs directly in your pod.
 
 ```bash
 apt-get update && apt-get install -y tmux curl && \
@@ -29,77 +37,31 @@ curl -sSL https://raw.githubusercontent.com/justinwlin/Runpod-Idle-Pod-Monitor/r
 chmod +x /tmp/quick_install.sh && /tmp/quick_install.sh
 ```
 
-This installs a monitor that:
-- Runs in tmux and survives SSH disconnections
-- Monitors CPU, GPU, and memory usage
-- Automatically stops your pod when idle
-- Provides real-time resource monitoring
+## How it works
 
-### Managing the monitor
+Define idle thresholds for your pods (e.g., ≤1% GPU, CPU, or memory usage). The monitor samples utilization every minute:
 
-- **Detach from monitor:** `Ctrl+B` then `D`
-- **Reattach to monitor:** `tmux attach -t monitor`
-- **Check status:** `cat /tmp/monitor_counter.json`
+- **Below threshold:** Counter increments toward your defined duration limit
+- **Above threshold:** Counter resets, monitoring continues
+- **Duration reached:** Triggers auto-stop or alert based on your configuration
 
-## Organization-level monitoring
+This ensures pods are only flagged as idle after sustained low utilization, preventing false positives from temporary dips.
 
-The web dashboard provides centralized monitoring for all your pods with a clean interface for managing auto-stop rules.
+## Team level monitoring feature preview
 
-### Features
+### Home dashboard
+![Home Dashboard](./HomeView.png)
+Main dashboard showing pod status, real-time monitoring, and quick actions for managing your pods*
 
-- **Real-time monitoring** - View all pod statuses at a glance
-- **Auto-stop configuration** - Set CPU/GPU/memory thresholds
-- **Historical metrics** - Track usage patterns over time
-- **Exclude lists** - Protect critical workloads
-- **Network storage support** - Handles paused pods with storage
+### Configuration management  
+![Configuration View](./ConfigurationView.png)
+Configure auto-stop settings, set CPU/GPU/memory thresholds
 
-### Running with Docker
+### Monitoring table
+![Monitoring Table](./MonitoringTable.png)
+Table view of pods versus their threshold monitoring
 
-```bash
-docker run -d \
-  -p 8080:8080 \
-  -e RUNPOD_API_KEY=your_api_key_here \
-  -v $(pwd)/data:/app/data \
-  docker.io/justinrunpod/runpodidlemonitor:2.3
-```
+### Performance metrics
+![Graph View](./GraphView.png)
+Visualize historical usage data
 
-Access the dashboard at `http://localhost:8080`
-
-### Configuration
-
-Configure auto-stop settings through the web UI:
-
-- **CPU threshold** - Stop when CPU usage ≤5% (adjustable)
-- **GPU threshold** - Stop when GPU usage ≤5% (adjustable)  
-- **Memory threshold** - Stop when memory usage is low
-- **Duration** - How long conditions must persist (e.g., 45 minutes)
-- **No-change detection** - Stop completely idle pods
-
-## Development setup
-
-To run locally for development:
-
-```bash
-git clone https://github.com/justinwlin/Runpod-Idle-Pod-Monitor.git
-cd Runpod-Idle-Pod-Monitor
-echo "RUNPOD_API_KEY=your_api_key_here" > .env
-pip install uv
-uv pip install .
-python server.py
-```
-
-## Cost optimization tips
-
-1. **Start with monitoring only** - Test thresholds before enabling auto-stop
-2. **Use exclude lists** - Protect production workloads
-3. **Set appropriate durations** - Avoid stopping pods too quickly
-4. **Monitor network storage pods** - They can be paused instead of stopped
-5. **Review historical data** - Optimize thresholds based on actual usage patterns
-
-## Version history
-
-- **v2.3** - Data cleanup for non-existing pods
-- **v2.2** - Beta memory management improvements
-- **v2.1** - Fixed server startup issues
-- **v2.0** - Added data migration, hooks, and graph compaction
-- **v1.0** - Initial JSON-based implementation
