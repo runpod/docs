@@ -1,159 +1,177 @@
 ---
 title: "Transfer files"
+description: "Move files between your local machine and Pods with a variety of secure transfer methods."
 ---
 
-Learn to transfer files to and from Runpod.
+## Choose your transfer method
 
-<Frame>
-    
-<iframe width="900" height="508" src="https://www.youtube.com/embed/Z3bCRDvBSY8?si=45Y2bRLXF6Pt-s95" title="YouTube video player" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowFullScreen></iframe>
+Runpod supports four different file transfer methods, each optimized for specific use cases:
 
-</Frame>
+| Method | Best for | Setup required | File size limit |
+|--------|----------|----------------|-----------------|
+| **runpodctl** | Quick, occasional transfers | Preinstalled on Pods | Small to medium files |
+| **SCP** | Standard file operations | SSH configuration | Any size |
+| **rsync** | Large datasets, syncing | SSH + rsync installation | Any size |
+| **Cloud sync** | Backup, multi-environment sharing | Cloud provider setup | Provider dependent |
 
-## Overview
+### runpodctl
+The simplest option for occasional transfers. Uses secure one-time codes and requires no setup since it's pre-installed on all Pods. Perfect for quick file exchanges.
 
-There are several methods to transfer files between your local machine and Pods. Each method has different advantages depending on your use case:
+To install `runpodctl` on your local machine, see the [installation guide](/runpodctl/install-runpodctl).
 
-**runpodctl** is the simplest option for occasional small file transfers. It's pre-installed on all Pods, requires no setup, and uses secure one-time codes for authentication. Best for quick transfers of individual files or small datasets.
+### SCP
+A reliable, standard method that works over SSH. Ideal for users comfortable with command-line tools who need to transfer both individual files and directories.
 
-**SCP** provides a standard, reliable way to transfer files over SSH. It works well for both individual files and directories, and is ideal for users already familiar with command-line tools. Requires SSH configuration on your Pod.
+To configure your Pod for SSH access, see the ([SSH setup guide](/pods/configuration/use-ssh)).
 
-**rsync** offers the most advanced features, including incremental transfers, compression, and detailed progress reporting. It's perfect for large datasets, regular synchronization tasks, or when you need to preserve file attributes. Also requires SSH configuration.
+### rsync
+The most powerful option, featuring incremental transfers, compression, and detailed progress reporting. Essential for large datasets, regular synchronization, and preserving file attributes.
 
-**Cloud sync** enables direct synchronization with cloud storage providers like AWS S3, Google Cloud Storage, or Dropbox. Best for backing up data or sharing files across multiple environments.
+To set up `rsync`:
+- Configure SSH access (same as for SCP).
+- Install rsync on both machines: `apt install rsync`
+- Ensure your local machine is running a Linux or WSL environment.
 
-## Prerequisites
+### Cloud sync
+Direct synchronization with cloud storage providers like AWS S3, Google Cloud Storage, or Dropbox. Best for creating backups or sharing files across multiple environments.
 
-* If you intend to use `runpodctl`, make sure it's installed on your machine, see [install runpodctl](/runpodctl/install-runpodctl)
+To learn more, see the [cloud sync configuration guide](/pods/storage/cloud-sync).
 
-* If you intend to use `scp`, make sure your Pod is configured to use real SSH. For more information, see [use SSH](/pods/configuration/use-ssh).
+## Transfer with runpodctl
 
-* If you intend to use `rsync`, make sure it's installed on both your local machine and your Pod with `apt install rsync`.
+The [Runpod CLI](/runpodctl/overview) offers the most straightforward approach to file transfer using secure one-time codes. This method works great for occasional transfers but consider other options for large files.
 
-* Note the public IP address and external port from the SSH over exposed TCP command (you'll need these for the SCP/rsync commands).
+### Send a file
 
-## Transferring with [runpodctl](/runpodctl/overview#data-transfer)
+From the source machine (your local computer or a Pod), run:
 
-The Runpod CLI (runpodctl) provides simple commands for transferring data between your machine and Runpod. **It’s preinstalled on all Runpod Pods** and uses one-time codes for secure authentication, so no API keys are required. If you are transferring large files, it is recommended to use the other methods such as ssh/scp.
-
-#### Sending a File
-
-To send a file from source machine:
-
+```bash
+runpodctl send YOUR_FILE
 ```
-runpodctl send data.txt
-```
 
-Example output:
+You'll see output like this:
 
-```
-Sending 'data.txt' (5 B)
+```text
+Sending 'YOUR_FILE' (5 B)
 Code is: 8338-galileo-collect-fidel
 On the other computer run
 
 runpodctl receive 8338-galileo-collect-fidel
 ```
 
-#### Receiving a File
+The code `8338-galileo-collect-fidel` is your unique, one-time transfer code.
 
-To receive a file on destination machine:
+### Receive a file
 
-```
+On the destination machine, use the code provided by the send command:
+
+```bash
 runpodctl receive 8338-galileo-collect-fidel
 ```
 
-Example output:
+You'll see confirmation of the transfer:
 
-```
-Receiving 'data.txt' (5 B)
+```text
+Receiving 'YOUR_FILE' (5 B)
 
 Receiving (<-149.36.0.243:8692)
 data.txt 100% |████████████████████| ( 5/ 5B, 0.040 kB/s)
 ```
 
-## Transferring with SCP
+## Transfer with SCP
 
-The general syntax for sending files to a Pod with SCP is as follows (execute this on your local machine, and replace the x's with your Pod's external TCP port and IP; for this example, they are 43201 and 194.26.196.6, respectively):
+SCP provides reliable file transfer over SSH connections. Use this method when you need standard command-line file operations.
 
-```sh
+### Basic syntax
+
+The general format for SCP commands (replace `43201` and `194.26.196.6` with your Pod's port and IP):
+
+```bash
 scp -P 43201 -i ~/.ssh/id_ed25519 /local/file/path root@194.26.196.6:/destination/file/path
 ```
 
-<Info>
+<Tip>
+If your private key is stored elsewhere or you're using Windows Command Prompt, update the key path accordingly. For quick one-time setups, consider [password-based SSH](/pods/configuration/use-ssh#password-based-ssh).
+</Tip>
 
-If your private key file is in a location other than `~/.ssh/id_ed25519` or you're using the Windows Command Prompt, make sure you update this path accordingly in your command. 
+### Send files to your Pod
 
-It is also recommended to look to the [password based ssh](/pods/configuration/use-ssh#password-based-ssh) if you just need a quick-one-time setup.
+Transfer a single file:
 
-</Info>
-
-Example of sending a file to a Pod:
-
-```sh
+```bash
 scp -P 43201 -i ~/.ssh/id_ed25519 ~/documents/example.txt root@194.26.196.6:/root/example.txt
 ```
 
-If you want to receive a file from your Pod, switch the source and destination arguments:
+Transfer a directory (use `-r` for recursive copying):
 
-```sh
-scp -P 43201 -i ~/.ssh/id_ed25519 root@194.26.196.6:/root/example.txt ~/documents/example.txt
-```
-
-If you need to transfer a directory, use the `-r` flag to recursively copy files and subdirectories (this will follow any symbolic links encountered as well):
-
-```sh
+```bash
 scp -r -P 43201 -i ~/.ssh/id_ed25519 ~/documents/example_dir root@194.26.196.6:/root/example_dir
 ```
 
-## Transferring with rsync
+### Download files from your Pod
 
-<Info>
+Simply reverse the source and destination:
 
-Your local machine must be running Linux or a [WSL instance](https://learn.microsoft.com/en-us/windows/wsl/about) in order to use rsync.
+```bash
+scp -P 43201 -i ~/.ssh/id_ed25519 root@194.26.196.6:/root/example.txt ~/documents/example.txt
+```
 
-</Info>
+## Transfer with rsync
 
-The general syntax for sending files to a Pod with rsync is as follows (execute this on your local machine, and replace the x's with your Pod's external TCP port and IP):
+`rsync` offers advanced synchronization features and is the best choice for large datasets or regular backup operations.
 
-```sh
+<Warning>
+`rsync` requires a Linux environment or WSL on Windows.
+</Warning>
+
+### Basic syntax
+
+```bash
 rsync -e "ssh -p 43201" /source/file/path root@194.26.196.6:/destination/file/path
 ```
 
-Some helpful flags include:
+### Essential flags
 
-* `-a`/`--archive` - archive mode (ensures that permissions, timestamps, and other attributes are preserved during the transfer; use this when transferring directories or their contents)
-* `-d`/`--delete` - deletes files in the destination directory that are not present in the source
-* `-p`/`--progress` - displays file transfer progress
-* `-v`/`--verbose` - verbose output
-* `-z`/`--compress` - compresses data as it's being sent and uncompresses as it's received (heavier on your CPU, but easier on your network connection)
+- `-a` (archive) - Preserves permissions, timestamps, and attributes (essential for directories)
+- `-v` (verbose) - Shows detailed transfer information
+- `-z` (compress) - Compresses data during transfer (saves bandwidth, uses more CPU)
+- `-p` (progress) - Displays transfer progress
+- `-d` (delete) - Removes files from destination that don't exist in source
 
-Example of sending a file to a Pod using rsync:
+### Send files to your Pod
 
-```sh
+Transfer with progress and compression:
+
+```bash
 rsync -avz -e "ssh -p 43201" ~/documents/example.txt root@194.26.196.6:/root/example.txt
 ```
 
-If you want to receive a file from your Pod, switch the source and destination arguments:
+### Download from your Pod
 
-```sh
+```bash
 rsync -avz -e "ssh -p 43201" root@194.26.196.6:/root/example.txt ~/documents/example.txt
 ```
 
-To transfer the contents of a directory (without transferring the directory itself), use a trailing slash in the file path:
+### Directory synchronization
 
-```sh
+Transfer directory contents only (note the trailing slash):
+
+```bash
 rsync -avz -e "ssh -p 43201" ~/documents/example_dir/ root@194.26.196.6:/root/example_dir/
 ```
 
-Without a trailing slash, the directory itself is transferred:
+Transfer the directory itself (no trailing slash):
 
-```sh
+```bash
 rsync -avz -e "ssh -p 43201" ~/documents/example_dir root@194.26.196.6:/root/
 ```
 
-An advantage of rsync is that files that already exist at the destination aren't transferred again if you attempt to copy them twice (note the minimal data transfer after the second execution):
+### Incremental transfers
 
-```sh
+rsync's key advantage is intelligent synchronization. Files that already exist at the destination aren't transferred again:
+
+First transfer (full copy):
+```bash
 rsync -avz -e "ssh -p 43201" ~/documents/example.txt root@194.26.196.6:/root/example.txt
 sending incremental file list
 example.txt
@@ -161,14 +179,51 @@ example.txt
 
 sent 243 bytes  received 35 bytes  185.33 bytes/sec
 total size is 119  speedup is 0.43
+```
 
-$ rsync -avz -e "ssh -p 43201" ~/documents/example.txt root@194.26.196.6:/root/example.txt
+Second transfer (minimal data):
+```bash
+rsync -avz -e "ssh -p 43201" ~/documents/example.txt root@194.26.196.6:/root/example.txt
 sending incremental file list
 
 sent 120 bytes  received 12 bytes  88.00 bytes/sec
 total size is 119  speedup is 0.90
 ```
 
-## Sync a volume to a cloud provider
+## Sync with cloud storage
 
-You can sync your volume to a cloud provider by clicking the **Cloud Sync** option under your **My Pods** page, For detailed instructions on connecting to AWS S3, Google Cloud Storage, Azure, Backblaze, Dropbox, and configuring these services, please refer to this [configuration guide](/pods/storage/cloud-sync).
+Connect your Pod storage directly to cloud providers for seamless backup and synchronization.
+
+To set up cloud sync:
+
+1. Navigate to your **My Pods** page
+2. Click the **Cloud Sync** option for your Pod
+3. Follow the provider-specific configuration steps
+
+For detailed setup instructions with AWS S3, Google Cloud Storage, Azure, Backblaze, and Dropbox, see the [cloud sync configuration guide](/pods/storage/cloud-sync).
+
+## Transfer with Google Drive
+
+You can also use these Colab notebooks to transfer files between Pods and Google Drive:
+- [Send files](https://colab.research.google.com/drive/1UaODD9iGswnKF7SZfsvwHDGWWwLziOsr#scrollTo=2nlcIAY3gGLt)
+- [Receive files](https://colab.research.google.com/drive/1ot8pODgystx1D6_zvsALDSvjACBF1cj6#scrollTo=RF1bMqhBOpSZ)
+
+
+## Troubleshooting
+
+Here are some common issues and possible fixes:
+
+**Connection refused errors:**
+- Verify SSH is properly configured on your Pod.
+- Check that the correct port and IP address are being used.
+- Ensure port 22 is exposed in your Pod configuration.
+
+**Permission denied:**
+- Confirm your SSH key is correctly specified with `-i`
+- Verify the key has appropriate permissions (`chmod 600 ~/.ssh/id_ed25519`)
+- Try password-based authentication for quick tests.
+
+**Large file transfers timing out:**
+- Use `rsync` instead of SCP for better reliability.
+- Add the `-z` flag to compress data during transfer.
+- Consider splitting very large files before transfer.
