@@ -1,0 +1,598 @@
+---
+title: "Build and deploy custom images"
+sidebarTitle: "Build and deploy custom images"
+description: "Create custom Docker images using Dockerfiles, build reusable containers with entrypoint scripts, and learn deployment best practices."
+---
+
+This tutorial teaches you how to create custom Docker images using Dockerfiles, implement entrypoint scripts for flexible container behavior, and follow best practices for building production-ready containers. You'll build complete example applications including Runpod-specific patterns like handler functions for Serverless workers and optimized environments for Pod deployments.
+
+Custom Docker images allow you to package your applications with specific configurations, dependencies, and runtime environments. This is essential for Runpod's BYOC (bring your own container) approach, where you create specialized containers for GPU workloads, AI model inference, and distributed training across Pods, Serverless workers, and Instant Clusters.
+
+## What you'll learn
+
+In this tutorial, you'll learn how to:
+
+- Write Dockerfiles to define custom image builds for Runpod deployment.
+- Create handler functions and entrypoint scripts for Serverless workers.
+- Build optimized Docker images with proper tagging and platform specifications.
+- Optimize images for fast cold starts and minimal resource usage.
+- Deploy images through Docker Hub and integrate with Runpod Hub templates.
+- Follow best practices for production-ready containers on GPU infrastructure.
+- Implement BYOC patterns for both persistent Pods and auto-scaling Serverless workflows.
+
+## Requirements
+
+Before starting this tutorial, you'll need:
+
+- Docker Desktop installed and running (see [Docker fundamentals](/tutorials/introduction/containers/intro-to-docker)).
+- Basic understanding of containers and Docker commands.
+- A text editor for creating files.
+- A Docker Hub account for pushing images (free to create).
+- Basic familiarity with shell scripting and Python (for handler functions).
+- Understanding of Runpod's platform concepts from [Pods overview](/pods/overview) and [Serverless overview](/serverless/overview).
+
+## Step 1: Create your first Dockerfile
+
+A Dockerfile is a text file containing instructions for building a Docker image. Let's start by creating a simple custom image.
+
+### Set up your project directory
+
+Create a new directory for your project and navigate to it:
+
+```bash
+mkdir my-custom-app
+cd my-custom-app
+```
+
+### Write a basic Dockerfile
+
+Create a file named `Dockerfile` (no extension) with the following content:
+
+```dockerfile
+FROM busybox
+COPY entrypoint.sh /
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+```
+
+Let's understand each instruction:
+
+- `FROM busybox`: Specifies the base image to build upon.
+- `COPY entrypoint.sh /`: Copies a file from your local directory into the image.
+- `RUN chmod +x /entrypoint.sh`: Executes a command during the build process.
+- `ENTRYPOINT ["/entrypoint.sh"]`: Defines the default command to run when the container starts.
+
+### Create an entrypoint script
+
+Create a file named `entrypoint.sh` with the following content:
+
+```bash
+#!/bin/sh
+echo "=== Custom Container Started ==="
+echo "Current time: $(date)"
+echo "Container hostname: $(hostname)"
+echo "=== Container Ready ==="
+```
+
+This script will run every time a container is created from your image.
+
+### Build your first custom image
+
+Build the Docker image using the `docker build` command with Runpod's required platform specification:
+
+```bash
+docker build --platform=linux/amd64 -t my-time-app:v1.0 .
+```
+
+Breaking down this command:
+
+- `docker build`: The command to build an image.
+- `--platform=linux/amd64`: Required platform specification for Runpod compatibility.
+- `-t my-time-app:v1.0`: Tags the image with a name and version.
+- `.`: Specifies the build context (current directory).
+
+You should see output showing each build step being executed.
+
+<Info>
+The `--platform=linux/amd64` flag is essential for Runpod deployment, ensuring your containers run correctly on Runpod's GPU infrastructure regardless of your local development machine's architecture.
+</Info>
+
+### Test your custom image
+
+Run a container from your newly built image:
+
+```bash
+docker run my-time-app:v1.0
+```
+
+You should see output from your entrypoint script showing the current time and hostname.
+
+## Step 2: Build a more complex application
+
+Let's create a more realistic example that demonstrates common Dockerfile patterns and best practices.
+
+### Create a Python web application
+
+First, create a simple Python web application. Create a file named `app.py`:
+
+```python
+#!/usr/bin/env python3
+import http.server
+import socketserver
+import os
+from datetime import datetime
+
+class CustomHandler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/':
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+            
+            html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>My Custom Container App</title>
+                <style>
+                    body {{ font-family: Arial, sans-serif; margin: 40px; }}
+                    .container {{ max-width: 600px; margin: 0 auto; }}
+                    .info {{ background: #f0f0f0; padding: 20px; border-radius: 5px; }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>Welcome to My Custom Container!</h1>
+                    <div class="info">
+                        <p><strong>Current Time:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                        <p><strong>Container ID:</strong> {os.environ.get('HOSTNAME', 'unknown')}</p>
+                        <p><strong>Python Version:</strong> {os.sys.version}</p>
+                        <p><strong>Environment:</strong> {os.environ.get('APP_ENV', 'development')}</p>
+                    </div>
+                    <p>This application is running inside a custom Docker container!</p>
+                </div>
+            </body>
+            </html>
+            """
+            
+            self.wfile.write(html_content.encode())
+        else:
+            super().do_GET()
+
+if __name__ == "__main__":
+    PORT = int(os.environ.get('PORT', 8080))
+    
+    with socketserver.TCPServer(("", PORT), CustomHandler) as httpd:
+        print(f"Server starting on port {PORT}")
+        print(f"Environment: {os.environ.get('APP_ENV', 'development')}")
+        httpd.serve_forever()
+```
+
+### Create an advanced Dockerfile
+
+Replace your existing Dockerfile with this more comprehensive version:
+
+```dockerfile
+# Use Python 3.11 slim image as base
+FROM python:3.11-slim
+
+# Set metadata labels
+LABEL maintainer="your-email@example.com"
+LABEL description="Custom Python web application"
+LABEL version="1.0"
+
+# Set environment variables
+ENV APP_ENV=production
+ENV PORT=8080
+ENV PYTHONUNBUFFERED=1
+
+# Create a non-root user for security
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+# Set working directory
+WORKDIR /app
+
+# Copy application files
+COPY app.py .
+COPY entrypoint.sh .
+
+# Make entrypoint script executable
+RUN chmod +x entrypoint.sh
+
+# Change ownership to non-root user
+RUN chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
+
+# Expose the port the app runs on
+EXPOSE 8080
+
+# Use entrypoint script for flexible startup
+ENTRYPOINT ["./entrypoint.sh"]
+
+# Default command (can be overridden)
+CMD ["python3", "app.py"]
+```
+
+### Update the entrypoint script
+
+Update your `entrypoint.sh` file to be more flexible:
+
+```bash
+#!/bin/bash
+set -e
+
+echo "=== Starting Custom Python Application ==="
+echo "Environment: $APP_ENV"
+echo "Port: $PORT"
+echo "Time: $(date)"
+
+# Allow for custom initialization
+if [ -f "/app/init.sh" ]; then
+    echo "Running custom initialization..."
+    source /app/init.sh
+fi
+
+# Execute the main command
+echo "Starting application..."
+exec "$@"
+```
+
+This entrypoint script:
+
+- Sets error handling with `set -e`.
+- Displays startup information.
+- Allows for optional custom initialization.
+- Uses `exec "$@"` to run the command passed to the container.
+
+## Step 3: Build and test the advanced image
+
+Now let's build and test our more sophisticated container.
+
+### Build the new image
+
+Build the updated image with a new tag:
+
+```bash
+docker build -t my-python-app:v2.0 .
+```
+
+### Test the web application
+
+Run the container with port mapping to access the web application:
+
+```bash
+docker run -p 8080:8080 my-python-app:v2.0
+```
+
+Open your web browser and navigate to `http://localhost:8080` to see your custom web application running.
+
+To stop the container, press `Ctrl+C` in the terminal.
+
+### Test with custom environment variables
+
+Run the container with custom environment variables:
+
+```bash
+docker run -p 8080:8080 -e APP_ENV=staging -e PORT=8080 my-python-app:v2.0
+```
+
+Notice how the environment variable appears in the web interface.
+
+### Run with a custom command
+
+You can override the default command while still using the entrypoint:
+
+```bash
+docker run my-python-app:v2.0 python3 -c "print('Custom command executed!')"
+```
+
+## Step 4: Optimize your Docker images
+
+Learn techniques to make your images smaller, faster, and more secure.
+
+### Use multi-stage builds
+
+Create a new file called `Dockerfile.optimized`:
+
+```dockerfile
+# Build stage
+FROM python:3.11-slim as builder
+
+WORKDIR /app
+
+# Install build dependencies if needed
+# RUN apt-get update && apt-get install -y build-essential
+
+# Copy and install Python dependencies
+# COPY requirements.txt .
+# RUN pip install --user -r requirements.txt
+
+# Production stage
+FROM python:3.11-slim
+
+# Install only runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+# Set environment variables
+ENV APP_ENV=production
+ENV PORT=8080
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Copy application files
+COPY --chown=appuser:appuser app.py entrypoint.sh ./
+
+# Make entrypoint executable
+RUN chmod +x entrypoint.sh
+
+# Switch to non-root user
+USER appuser
+
+EXPOSE 8080
+
+ENTRYPOINT ["./entrypoint.sh"]
+CMD ["python3", "app.py"]
+```
+
+### Build the optimized image
+
+```bash
+docker build -f Dockerfile.optimized -t my-python-app:optimized .
+```
+
+### Compare image sizes
+
+Check the sizes of your different images:
+
+```bash
+docker images | grep my-python-app
+```
+
+You'll see the different versions and their sizes.
+
+## Step 5: Push your image to Docker Hub
+
+Share your custom image by pushing it to Docker Hub.
+
+### Log in to Docker Hub
+
+```bash
+docker login
+```
+
+Enter your Docker Hub username and password when prompted.
+
+### Tag your image for Docker Hub
+
+Tag your image with your Docker Hub username:
+
+```bash
+docker tag my-python-app:v2.0 yourusername/my-python-app:v2.0
+docker tag my-python-app:v2.0 yourusername/my-python-app:latest
+```
+
+Replace `yourusername` with your actual Docker Hub username.
+
+### Push the image
+
+Push your image to Docker Hub:
+
+```bash
+docker push yourusername/my-python-app:v2.0
+docker push yourusername/my-python-app:latest
+```
+
+### Test pulling and running from Docker Hub
+
+Remove your local image and pull it from Docker Hub to verify the upload:
+
+```bash
+docker rmi yourusername/my-python-app:v2.0
+docker run -p 8080:8080 yourusername/my-python-app:v2.0
+```
+
+## Step 6: Best practices for production images
+
+Follow these guidelines when building images for production deployment.
+
+### Security best practices
+
+1. **Use official base images** from trusted sources.
+2. **Run as non-root user** whenever possible.
+3. **Keep images updated** with security patches.
+4. **Minimize attack surface** by installing only necessary packages.
+
+### Performance optimization
+
+1. **Use .dockerignore** to exclude unnecessary files:
+
+Create a `.dockerignore` file:
+
+```
+.git
+.gitignore
+README.md
+Dockerfile*
+.dockerignore
+node_modules
+*.log
+```
+
+2. **Layer caching**: Order Dockerfile instructions from least to most frequently changing.
+
+3. **Multi-stage builds**: Separate build and runtime environments.
+
+### Image tagging strategy
+
+Use semantic versioning and meaningful tags:
+
+```bash
+# Version tags
+docker tag myapp:latest myapp:1.0.0
+docker tag myapp:latest myapp:1.0
+docker tag myapp:latest myapp:1
+
+# Environment tags
+docker tag myapp:1.0.0 myapp:1.0.0-production
+docker tag myapp:1.0.0 myapp:1.0.0-staging
+```
+
+### Documentation and metadata
+
+Include helpful metadata in your Dockerfile:
+
+```dockerfile
+LABEL org.opencontainers.image.title="My Python App"
+LABEL org.opencontainers.image.description="A custom Python web application"
+LABEL org.opencontainers.image.version="2.0.0"
+LABEL org.opencontainers.image.authors="your-email@example.com"
+LABEL org.opencontainers.image.source="https://github.com/yourusername/my-python-app"
+```
+
+## Step 7: Build RunPod Serverless containers
+
+Learn how to create containers specifically designed for RunPod Serverless workers with handler functions and optimized startup patterns.
+
+### Create a Serverless handler function
+
+Create a new directory for your Serverless project:
+
+```bash
+mkdir runpod-serverless-example
+cd runpod-serverless-example
+```
+
+Create a handler function file named `rp_handler.py`:
+
+```python
+import runpod
+import time
+import os
+
+def handler(event):
+    """
+    RunPod Serverless handler function
+    Processes input and returns results for auto-scaling workloads
+    """
+    # Extract input from the event
+    user_input = event.get("input", {})
+    message = user_input.get("message", "Hello from RunPod!")
+    
+    # Simulate some processing work
+    time.sleep(2)
+    
+    # Return response in expected format
+    return {
+        "message": f"Processed: {message}",
+        "timestamp": time.time(),
+        "worker_id": os.environ.get("RUNPOD_POD_ID", "unknown")
+    }
+
+# Start the RunPod serverless handler
+if __name__ == "__main__":
+    runpod.serverless.start({"handler": handler})
+```
+
+### Create the Serverless Dockerfile
+
+Create a `Dockerfile` optimized for Serverless workers:
+
+```dockerfile
+# Use Python base image optimized for fast startup
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies (minimal for faster builds)
+RUN apt-get update && apt-get install -y \
+    --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better layer caching
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY rp_handler.py .
+
+# Set environment variables for optimization
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Expose the port (optional, as RunPod handles networking)
+EXPOSE 8000
+
+# Run the handler
+CMD ["python", "rp_handler.py"]
+```
+
+Create a `requirements.txt` file:
+
+```text
+runpod>=1.6.0
+```
+
+### Build and test the Serverless container
+
+Build your Serverless container:
+
+```bash
+docker build --platform=linux/amd64 -t my-serverless-worker:latest .
+```
+
+Test locally by running the container:
+
+```bash
+docker run -p 8000:8000 my-serverless-worker:latest
+```
+
+### Deploy to RunPod Hub
+
+To share your container template on [RunPod Hub](/hub/overview):
+
+1. **Tag for Docker Hub**:
+```bash
+docker tag my-serverless-worker:latest yourusername/my-serverless-worker:latest
+```
+
+2. **Push to Docker Hub**:
+```bash
+docker push yourusername/my-serverless-worker:latest
+```
+
+3. **Create Hub template**: Visit [RunPod Hub](/hub/publishing-guide) to publish your container as a reusable template.
+
+### Optimization tips for Serverless workers
+
+For optimal performance in RunPod Serverless environments:
+
+- **Minimize image size**: Use slim base images and multi-stage builds.
+- **Cache dependencies**: Install packages in separate layers for better caching.
+- **Implement cleanup**: Use proper resource cleanup to prevent memory leaks.
+- **Handle cold starts**: Minimize initialization time in your handler function.
+- **Use environment variables**: Configure behavior through ENV vars for flexibility.
+
+Congratulations! You've successfully learned how to build custom Docker images, implement flexible entrypoint scripts, follow production best practices, and create specialized containers for RunPod Serverless workers. Your images are now ready for deployment across RunPod's platform.
+
+## Next steps with RunPod
+
+Now that you can build custom images optimized for RunPod, explore these deployment options:
+
+- Learn about [data persistence and volumes](/tutorials/introduction/containers/data-persistence) for managing data across container lifecycles.
+- Deploy your containers on [RunPod Pods](/pods/overview) for persistent GPU workloads and interactive development.
+- Create [Serverless workers](/serverless/overview) for auto-scaling AI inference and batch processing.
+- Explore [RunPod Hub](/hub/overview) to publish and discover GPU-optimized container templates.
+- Learn about [network volumes](/pods/storage/create-network-volumes) for persistent storage across deployments.
+
+You can also experiment with different base images optimized for AI/ML workloads, such as `pytorch/pytorch`, `tensorflow/tensorflow`, or specialized CUDA images from the `nvidia/cuda` repository.

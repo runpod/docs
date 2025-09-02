@@ -85,3 +85,385 @@ docker run --network=<name>     # Connect container
 docker exec
 docker exec mycontainer ls -l /etc     # List files in container
 ```
+
+
+
+{/* NEW VERSION: */}
+
+---
+title: "Docker commands reference"
+sidebarTitle: "Docker commands reference"
+description: "Quick reference guide for essential Docker commands used in container development and deployment workflows."
+---
+
+This reference guide provides essential Docker commands for container development, image management, and deployment workflows, with specific emphasis on RunPod BYOC (Bring Your Own Container) requirements. Use this as a quick lookup when working with Docker containers locally or preparing optimized deployments for RunPod Pods, Serverless Workers, and Instant Clusters.
+
+## Authentication and registry operations
+
+### Log in to Docker registries
+
+```bash
+# Log in to Docker Hub (default registry)
+docker login
+
+# Log in with specific username
+docker login -u myusername
+
+# Log in to a private registry
+docker login myregistry.com
+```
+
+## Image management
+
+### Building images
+
+```bash
+# Build image from Dockerfile in current directory
+docker build -t myapp:latest .
+
+# Build for RunPod deployment (required platform specification)
+docker build --platform=linux/amd64 -t myapp:latest .
+
+# Build RunPod Serverless worker with handler
+docker build --platform=linux/amd64 -t myuser/my-worker:latest .
+
+# Build with custom Dockerfile for specific RunPod use case
+docker build --platform=linux/amd64 -f Dockerfile.runpod -t myapp:runpod .
+```
+# Build with build arguments for RunPod optimization
+docker build --platform=linux/amd64 --build-arg CUDA_VERSION=11.8 -t myapp:cuda .
+
+# Multi-stage build for smaller RunPod images
+docker build --platform=linux/amd64 --target production -t myapp:optimized .
+```
+
+<Info>
+Always use `--platform=linux/amd64` when building images for RunPod deployment to ensure compatibility with RunPod's GPU infrastructure.
+</Info>
+
+### Image operations
+
+```bash
+# List local images
+docker images
+
+# Pull RunPod-optimized base images
+docker pull runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04
+docker pull runpod/tensorflow:2.13.0-py3.10-cuda11.8.0-devel-ubuntu22.04
+
+# Pull image from registry
+docker pull nginx:latest
+
+# Push image for RunPod deployment
+docker push myusername/my-runpod-worker:latest
+
+# Tag images for RunPod Hub deployment
+docker tag myapp:latest myusername/runpod-myapp:v1.0
+docker tag myapp:latest myusername/runpod-myapp:latest
+
+# Remove local image
+docker rmi myapp:latest
+
+# Remove unused images to free space
+docker image prune
+
+# Clean up build cache (useful for RunPod image optimization)
+docker builder prune
+```
+
+<Info>
+When pushing to Docker Hub for RunPod deployment, use descriptive tags that indicate RunPod compatibility and version information.
+</Info>
+
+## Container lifecycle
+
+### Running containers
+
+```bash
+# Run container from image
+docker run nginx
+
+# Run RunPod Serverless worker locally for testing
+docker run -p 8000:8000 myuser/my-worker:latest
+
+# Run with RunPod-style environment variables
+docker run -e RUNPOD_POD_ID=local-test -e MODEL_PATH=/workspace/models myapp
+
+# Run with volume mount simulating RunPod network volumes
+docker run -v ./workspace:/workspace myapp
+
+# Run interactively for debugging RunPod containers
+docker run -it --platform=linux/amd64 myapp bash
+
+# Test RunPod handler function locally
+docker run --rm -p 8000:8000 -e RUNPOD_DEBUG=1 myuser/my-worker:latest
+
+# Run container with GPU access (if available locally)
+docker run --gpus all myuser/my-cuda-app:latest
+```
+# Run with resource limits similar to RunPod constraints
+docker run --memory=8g --cpus=2 myapp
+```
+
+<Info>
+Use environment variables and volume mounts during local testing to simulate RunPod deployment conditions.
+</Info>
+
+### Container management
+
+```bash
+# List running containers
+docker ps
+
+# List all containers (including stopped)
+docker ps -a
+
+# Stop running container
+docker stop container_name
+
+# Start stopped container
+docker start container_name
+
+# Restart container
+docker restart container_name
+
+# Remove container
+docker rm container_name
+
+# Remove all stopped containers
+docker container prune
+```
+
+### Container inspection and debugging
+
+```bash
+# View container logs
+docker logs container_name
+
+# Follow log output in real-time
+docker logs -f container_name
+
+# Execute command in running container
+docker exec container_name ls -la
+
+# Open interactive shell in running container
+docker exec -it container_name bash
+
+# Inspect container details
+docker inspect container_name
+
+# View container resource usage
+docker stats container_name
+```
+
+## Volume management
+
+### Volume operations
+
+```bash
+# Create named volume
+docker volume create myvolume
+
+# List volumes
+docker volume ls
+
+# Inspect volume details
+docker volume inspect myvolume
+
+# Remove volume
+docker volume rm myvolume
+
+# Remove unused volumes
+docker volume prune
+
+# Run container with named volume
+docker run -v myvolume:/app/data myapp
+
+# Run container with bind mount
+docker run -v /host/path:/container/path myapp
+```
+
+## Network management
+
+### Network operations
+
+```bash
+# List networks
+docker network ls
+
+# Create custom network
+docker network create mynetwork
+
+# Run container on specific network
+docker run --network=mynetwork myapp
+
+# Connect running container to network
+docker network connect mynetwork container_name
+
+# Disconnect container from network
+docker network disconnect mynetwork container_name
+
+# Remove network
+docker network rm mynetwork
+```
+
+## System management
+
+### System information and cleanup
+
+```bash
+# Show Docker system information
+docker info
+
+# Show disk usage
+docker system df
+
+# Show detailed disk usage
+docker system df -v
+
+# Remove unused containers, networks, images, and build cache
+docker system prune
+
+# Remove everything including unused volumes
+docker system prune -a --volumes
+```
+
+### Docker Compose (if available)
+
+```bash
+# Start services defined in docker-compose.yml
+docker-compose up
+
+# Start services in background
+docker-compose up -d
+
+# Stop services
+docker-compose down
+
+# View service logs
+docker-compose logs
+
+# Build services
+docker-compose build
+```
+
+## Runpod-specific considerations
+
+When preparing containers for deployment on Runpod, keep these points in mind:
+
+### Platform compatibility
+
+Always build images for the correct platform:
+
+```bash
+docker build --platform=linux/amd64 -t myapp:latest .
+```
+
+### Storage integration
+
+When using Runpod, replace local volumes with [network volumes](/pods/storage/create-network-volumes):
+
+```bash
+# Local development
+docker run -v mydata:/app/data myapp
+
+# On Runpod: Use network volumes through the console interface
+```
+
+### Port exposure
+
+Configure port exposure for Runpod's HTTP proxy:
+
+```bash
+# Expose ports in Dockerfile
+EXPOSE 8080
+
+# Or when running locally for testing
+docker run -p 8080:8080 myapp
+```
+
+### Environment variables
+
+Use environment variables for configuration:
+
+```bash
+# Set environment variables
+docker run -e API_KEY=your_key -e PORT=8080 myapp
+```
+
+## Common workflows
+
+### Development workflow
+
+```bash
+# 1. Build image
+docker build -t myapp:dev .
+
+# 2. Run for testing
+docker run -p 8080:8080 -v $(pwd):/app myapp:dev
+
+# 3. Debug if needed
+docker exec -it container_name bash
+
+# 4. Clean up
+docker stop container_name && docker rm container_name
+```
+
+### Production deployment workflow
+
+```bash
+# 1. Build production image
+docker build --platform=linux/amd64 -t myapp:prod .
+
+# 2. Tag for registry
+docker tag myapp:prod myregistry/myapp:1.0
+
+# 3. Push to registry
+docker push myregistry/myapp:1.0
+
+# 4. Deploy on Runpod using the pushed image
+```
+
+### Debugging workflow
+
+```bash
+# 1. Check if container is running
+docker ps
+
+# 2. View logs
+docker logs container_name
+
+# 3. Execute commands inside container
+docker exec -it container_name bash
+
+# 4. Inspect container configuration
+docker inspect container_name
+
+# 5. Check resource usage
+docker stats container_name
+```
+
+## Tips and best practices
+
+### Image optimization
+
+- Use `.dockerignore` to exclude unnecessary files from build context.
+- Use multi-stage builds to reduce final image size.
+- Choose appropriate base images (prefer slim or alpine variants).
+- Combine RUN commands to reduce layers.
+
+### Security
+
+- Run containers as non-root users when possible.
+- Use official images from trusted sources.
+- Keep base images updated with security patches.
+- Avoid storing secrets in images.
+
+### Performance
+
+- Use volume mounts for frequently changing data.
+- Leverage Docker's layer caching for faster builds.
+- Use appropriate resource limits for containers.
+- Monitor container resource usage regularly.
+
+This reference covers the most commonly used Docker commands for container development and deployment. For more detailed information about specific commands, use `docker COMMAND --help` or consult the [official Docker documentation](https://docs.docker.com/).
