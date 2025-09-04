@@ -1,0 +1,143 @@
+---
+title: "Storage 101"
+sidebarTitle: "Storage 101"
+description: "How storage options work on Runpod"
+---
+
+RunPod offers multiple storage options that has some initial confusing nuance. This guide explains the fundamentals of Pod storage, network volumes, and how these concepts apply to different deployment types.
+
+## Pod Storage
+When you launch a Pod, you are generally asked to set up two primary configurations:
+- Container Disk
+- Volume Disk
+
+![Pod Basic Storage](/images/pod-basic-storage.png) 
+*Pod storage configuration showing container storage, volume storage, and volume mount path settings*
+
+Your docker image defines the files and directories that your Pod will have. By default, the `volume mount path` defines what the Pod will consider as a local persistent storage, meaning that any file that you create or your Docker image put under that folder will be persisted throughout the Pod's lifecycle until you terminate the Pod. What this means is that if you stop a pod, then start it, only the /workspace will be persisted and everything else will be reset to it's base-state from the Docker image.
+
+![Pod Basic Storage](/images/pod-diagram-storage-basic.png) 
+*Lifecycle example of Pod storage showing how data persists in the volume mount path*
+
+![Stop Pod](/images/stop-pod.png) 
+*Example of the Stop button for stopping a running Pod*
+
+![Stop Pod Warning](/images/stop-pod-warning.png) 
+*Warning message displayed when stopping a Pod - data outside the persistent local storage path will be discarded*
+
+![Start Terminate](/images/start-terminate.png) 
+*Options available after stopping a Pod - users can choose to Start or Terminate the Pod*
+
+
+
+## Pod Storage with Network Volumes
+
+Network volumes provide persistent, shareable storage through MooseFS, a distributed file system that functions like a detachable hard drive for secure pods. Unlike standard volume disks, network volumes persist beyond a Pod's lifecycle and enable efficient storage of large files without bloating your Docker image.
+
+![network storage diagram](/images/network-storage-diagram.png) 
+*Example of how many pods can attach to a network volume*
+
+### Key Benefits
+
+**Multi-Pod Access**: Network volumes can be attached to multiple Pods simultaneously, functioning as a shared drive accessible across your infrastructure.
+
+**True Persistence**: Data remains intact even after Pod termination. When you create a new Pod, you can reattach the same network volume and access all your files immediately.
+
+**Simplified Pod Management**: Pods with network volumes only display a "Terminate" button (no "Stop" option) because your data is always safe in the network volume. This eliminates the risk of data loss that exists with standard volume disks.
+
+**GPU Availability**: Network volumes provide flexibility when GPU availability changes. If you stop a standard Pod and the original machine's GPUs become unavailable, you might get stuck with zero GPUs. With network volumes, you can simply terminate and launch a new Pod on any available machine with GPUs. [Learn more about zero GPU situations](/references/faq#why-do-i-have-zero-gpus-assigned-to-my-pod).
+
+### Limitations
+
+**Limited GPU Availability**: Not all GPU machines support network storage. You may notice GPU availability decrease when selecting network storage, as only specific machines in a data center have network volume support.
+
+**Regional Lock-in**: Network volumes are bound to specific regions. During peak traffic periods, this regional constraint may limit your access to certain GPU types within your network storage region. There are some mitigations that will be discussed later.
+
+**Storage Overhead for Small Files**: MooseFS uses a chunk-based storage system with minimum chunk sizes. This means small files consume more storage than their actual size, leading to inefficient storage utilization for many tiny files.
+
+**Network Latency**: As a distributed file system, MooseFS operations traverse the network, introducing latency. Meaning that I/O operations will be slower versus local read/writes.
+
+### How to Create Network Storage
+
+To create a network storage you can simply go to the  storage  on the left side to create and view your existing network storage.
+
+![Where to find network storage](/images/where-to-find-network-storage.png)
+*Navigate to the Network Storage section in the RunPod console*
+
+![How to create network storage](/images/how-to-create-network-storage.png)
+*Network storage creation interface showing configuration options*
+
+<Tip>
+**Maximize Data Access Flexibility**
+
+When creating network storage, consider selecting regions with:
+- **S3 API support**: Access your data directly via [S3-compatible APIs](/serverless/storage/s3-api) without needing to spin up a Pod
+- **CPU availability**: Use cost-effective CPU Pods as intermediary instances for data processing, transfers, or syncing to external systems
+
+This combination ensures you always have affordable fallback options for accessing and managing your data.
+</Tip>
+
+## How to Use Network Storage with Pods
+
+Once your network storage is created, you can attach it when creating or editing a Pod.
+
+![Use network storage](/images/use-network-storage.png)
+*Select your network storage when creating a new Pod*
+
+![Network storage pod edit](/images/network-storage-pod-edit.png)
+*Network storage configuration in the Pod edit interface*
+
+<Warning>
+**Volume Mount Hides Docker Image Files**
+
+Mounting a network volume will hide any existing files at the mount path in your Docker image. If your Docker image contains pre-initialized files in `/workspace`, these files will become inaccessible when you mount a network volume to the same path—only the network volume contents will be visible. The original files remain in the Docker image but are hidden by the mount.
+
+**Solution**: If you need access to Docker image files, modify the `volume mount path` to use a different directory (e.g., `/data` or `/storage`) instead of `/workspace`.
+</Warning>
+
+## Serverless
+
+Serverless is works very similarly to Pods other than a couple key points. The first is that you can only allocate container storage this is  because serverless itself is ephemeral, spinning up machines on demand on requests and then terminating. The other thing is that serverless is by default put network storage under `/runpod-volume` meaning that if you want it  under `/workspace` or elsewhere, you should edit your configurations when deploying.
+
+
+## When to Use Network Storage
+
+Network storage excels at persisting files across sessions and storing large ML models. However, choosing between network storage and Docker images requires careful consideration of your performance requirements.
+
+### Performance Considerations
+
+For optimal performance, we recommend baking ML models and dependencies directly into your Docker image when possible. Local files eliminate network latency and provide faster I/O operations during model execution.
+
+### When Network Storage Makes Sense
+
+Consider network storage when:
+- **Model size exceeds practical limits**: Models too large for Docker images (>30GB)
+- **Rapid iteration needed**: Faster deployments without rebuilding Docker images
+- **Dynamic data loading**: Flexibility to update models or datasets without redeployment
+
+For I/O-intensive operations, you can optimize performance by copying files from network storage to local directories outside the mount path. For example, store compressed datasets in network storage, then extract them to local storage for processing.
+
+<Tip>
+**Optimize File Storage**
+
+When storing thousands of small files, compress them into archives (`.tar.gz` or `.zip`) before uploading to network storage. This approach:
+- Reduces storage overhead from MooseFS chunk sizing
+- Speeds up file transfers
+- Simplifies file management
+</Tip>
+
+
+## Common Storage Issues
+
+<Warning>
+**Storage Capacity Exceeded**
+
+You may encounter storage capacity warnings even with large volume storage or network storage. For example:
+- Your Docker image size: 30 GB
+- Container storage allocated: 5 GB  
+- Volume storage or network storage: 100 GB at `/workspace`
+
+In this scenario, the 30 GB Docker image exceeds the 5 GB container storage limit. Files stored outside the `/workspace` mount path count against container storage, not network storage. This means system files, installed packages, and any data outside `/workspace` can quickly fill the limited container storage.
+
+**Solution**: Increase your container size to accomodate your Docker image size.
+</Warning> 
