@@ -4,17 +4,17 @@ sidebarTitle: "Storage 101"
 description: "How storage options work on Runpod"
 ---
 
-RunPod offers multiple storage options that has some initial confusing nuance. This guide explains the fundamentals of Pod storage, network volumes, and how these concepts apply to different deployment types.
+Runpod offers multiple storage options that has some initial confusing nuance. This guide explains the fundamentals of Pod storage, network volumes, and how these concepts apply to different deployment types.
 
-## Pod Storage
+## Pod storage
 When you launch a Pod, you are generally asked to set up two primary configurations:
-- Container Disk
-- Volume Disk
+- Container disk.
+- Volume disk.
 
 ![Pod Basic Storage](/images/pod-basic-storage.png) 
 *Pod storage configuration showing container storage, volume storage, and volume mount path settings*
 
-Your docker image defines the files and directories that your Pod will have. By default, the `volume mount path` defines what the Pod will consider as a local persistent storage, meaning that any file that you create or your Docker image put under that folder will be persisted throughout the Pod's lifecycle until you terminate the Pod. What this means is that if you stop a pod, then start it, only the /workspace will be persisted and everything else will be reset to it's base-state from the Docker image.
+Your docker image defines the files and directories that your Pod will have. By default, the `volume mount path` defines what the Pod will consider as a local persistent storage, meaning that any file that you create or your Docker image put under that folder will be persisted throughout the Pod's lifecycle until you terminate the Pod. What this means is that if you stop a pod, then start it, only the `/workspace` will be persisted and everything else will be reset to it's base-state from the Docker image.
 
 ![Pod Basic Storage](/images/pod-diagram-storage-basic.png) 
 *Lifecycle example of Pod storage showing how data persists in the volume mount path*
@@ -30,14 +30,14 @@ Your docker image defines the files and directories that your Pod will have. By 
 
 
 
-## Pod Storage with Network Volumes
+## Pod storage with network volumes
 
 Network volumes provide persistent, shareable storage through MooseFS, a distributed file system that functions like a detachable hard drive for secure pods. Unlike standard volume disks, network volumes persist beyond a Pod's lifecycle and enable efficient storage of large files without bloating your Docker image.
 
 ![network storage diagram](/images/network-storage-diagram.png) 
 *Example of how many pods can attach to a network volume*
 
-### Key Benefits
+### Key benefits
 
 **Multi-Pod Access**: Network volumes can be attached to multiple Pods simultaneously, functioning as a shared drive accessible across your infrastructure.
 
@@ -57,27 +57,27 @@ Network volumes provide persistent, shareable storage through MooseFS, a distrib
 
 **Network Latency**: As a distributed file system, MooseFS operations traverse the network, introducing latency. Meaning that I/O operations will be slower versus local read/writes.
 
-### How to Create Network Storage
+### How to create network storage
 
-To create a network storage you can simply go to the  storage  on the left side to create and view your existing network storage.
+To create network storage, navigate to the storage section on the left side to create and view your existing network storage.
 
 ![Where to find network storage](/images/where-to-find-network-storage.png)
-*Navigate to the Network Storage section in the RunPod console*
+*Navigate to the network storage section in the Runpod console*
 
 ![How to create network storage](/images/how-to-create-network-storage.png)
 *Network storage creation interface showing configuration options*
 
 <Tip>
-**Maximize Data Access Flexibility**
+**Maximize data access flexibility**
 
 When creating network storage, consider selecting regions with:
-- **S3 API support**: Access your data directly via [S3-compatible APIs](/serverless/storage/s3-api) without needing to spin up a Pod
-- **CPU availability**: Use cost-effective CPU Pods as intermediary instances for data processing, transfers, or syncing to external systems
+- **S3 API support**: Access your data directly via [S3-compatible APIs](/serverless/storage/s3-api) without needing to spin up a Pod.
+- **CPU availability**: Use cost-effective CPU Pods as intermediary instances for data processing, transfers, or syncing to external systems.
 
 This combination ensures you always have affordable fallback options for accessing and managing your data.
 </Tip>
 
-## How to Use Network Storage with Pods
+## How to use network storage with Pods
 
 Once your network storage is created, you can attach it when creating or editing a Pod.
 
@@ -88,7 +88,7 @@ Once your network storage is created, you can attach it when creating or editing
 *Network storage configuration in the Pod edit interface*
 
 <Warning>
-**Volume Mount Hides Docker Image Files**
+**Volume mount hides Docker image files**
 
 Mounting a network volume will hide any existing files at the mount path in your Docker image. If your Docker image contains pre-initialized files in `/workspace`, these files will become inaccessible when you mount a network volume to the same path—only the network volume contents will be visible. The original files remain in the Docker image but are hidden by the mount.
 
@@ -97,40 +97,41 @@ Mounting a network volume will hide any existing files at the mount path in your
 
 ## Serverless
 
-Serverless is works very similarly to Pods other than a couple key points. The first is that you can only allocate container storage this is  because serverless itself is ephemeral, spinning up machines on demand on requests and then terminating. The other thing is that serverless is by default put network storage under `/runpod-volume` meaning that if you want it  under `/workspace` or elsewhere, you should edit your configurations when deploying.
+Serverless operates similarly to Pods with two key differences. First, you can only allocate container storage because Serverless instances are ephemeral. They spin up on demand for each request and terminate afterward. Second, Serverless mounts network storage at `/runpod-volume` by default. If you need the mount at `/workspace` or another location, adjust your deployment configuration accordingly.
 
+When selecting network volumes for Serverless, choose regions with high availability for your target GPU types. We recommend selecting at least two GPU types to provide failover options, since network volumes are region-locked. Alternatively, consider embedding dependencies directly into your Docker image for better performance and availability.
 
-## When to Use Network Storage
+## When to use network storage
 
 Network storage excels at persisting files across sessions and storing large ML models. However, choosing between network storage and Docker images requires careful consideration of your performance requirements.
 
-### Performance Considerations
+### Performance considerations
 
 For optimal performance, we recommend baking ML models and dependencies directly into your Docker image when possible. Local files eliminate network latency and provide faster I/O operations during model execution.
 
-### When Network Storage Makes Sense
+### When network storage makes sense
 
 Consider network storage when:
-- **Model size exceeds practical limits**: Models too large for Docker images (>30GB)
-- **Rapid iteration needed**: Faster deployments without rebuilding Docker images
-- **Dynamic data loading**: Flexibility to update models or datasets without redeployment
+- **Model size exceeds practical limits**: Models too large for Docker images (>30GB).
+- **Rapid iteration needed**: Faster deployments without rebuilding Docker images.
+- **Dynamic data loading**: Flexibility to update models or datasets without redeployment.
 
 For I/O-intensive operations, you can optimize performance by copying files from network storage to local directories outside the mount path. For example, store compressed datasets in network storage, then extract them to local storage for processing.
 
 <Tip>
-**Optimize File Storage**
+**Optimize file storage**
 
 When storing thousands of small files, compress them into archives (`.tar.gz` or `.zip`) before uploading to network storage. This approach:
-- Reduces storage overhead from MooseFS chunk sizing
-- Speeds up file transfers
-- Simplifies file management
+- Reduces storage overhead from MooseFS chunk sizing.
+- Speeds up file transfers.
+- Simplifies file management.
 </Tip>
 
 
-## Common Storage Issues
+## Common storage issues
 
 <Warning>
-**Storage Capacity Exceeded**
+**Storage capacity exceeded**
 
 You may encounter storage capacity warnings even with large volume storage or network storage. For example:
 - Your Docker image size: 30 GB
