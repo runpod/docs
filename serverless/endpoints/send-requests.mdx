@@ -1,21 +1,31 @@
 ---
-title: "Send requests to queue-based endpoints"
-sidebarTitle: "Send requests"
+title: "Send API requests to queue-based endpoints"
+sidebarTitle: "Send API requests"
+description: "Learn how to send requests to Serverless endpoints"
 ---
 
-Queue-based endpoints provide asynchronous job processing with automatic worker scaling based on demand. This comprehensive guide covers everything from basic request structure to advanced operations, monitoring, and troubleshooting for queue-based endpoints.
-
 <Note>
-The operations and examples in this guide apply specifically to **queue-based endpoints**. If you're using [load balancing endpoints](/serverless/load-balancing/overview), the request structure and endpoints will depend on how you define your HTTP servers.
+This guide only applies to **queue-based (i.e. traditional) Serverless endpoints**. If you're using [load balancing endpoints](/serverless/load-balancing/overview), the request structure and endpoints will depend on how you define your HTTP servers.
 </Note>
 
-## Understanding request structure
+Serverless endpoints provide synchronous and asynchronous job processing with automatic worker scaling based on demand. This comprehensive guide covers everything from basic request structure to advanced operations, monitoring, and troubleshooting for queue-based endpoints.
 
-All requests to Runpod queue-based endpoints must include an `input` object containing parameters for your worker's [handler function](/serverless/workers/handler-functions), be formatted as valid JSON, and include your API key for authentication (unless sent from the Runpod console).
+## Key concepts
 
-### Basic request structure
+After you create a Serverless endpoint, you can send **API requests** to submit jobs and return results. The request can include parameters, payloads, and headers that define what the endpoint should process. For example, a `POST` request to submit a job, or a `GET` request to check status of a job, retrieve results, or check endpoint health.
 
-Every request must include a JSON object containing an `input` key:
+Queue-based endpoints provide a fixed set of operations for submitting and managing jobs. You can find a full list of operations in the [Endpoint operations](/serverless/endpoints/send-requests#endpoint-operations) section.
+
+When you submit a job request it can be either synchronous or asynchronous, depending on the operation you use:
+
+- `/run`: Submit an asynchronous job. A response is returned as soon as the job is complete.
+- `/runsync`: Submit a synchronous job. The job is processed in the background, and you can retrieve the result by sending a `GET` request to the `/status` endpoint.
+
+## Request structure
+
+When submitting a job with `/run` or `/runsync`, your request must include a JSON object the the key `input`, containing the parameters required by your worker's [handler function](/serverless/workers/handler-functions).
+
+For example:
 
 ```json
 {
@@ -25,11 +35,12 @@ Every request must include a JSON object containing an `input` key:
 }
 ```
 
+
 The exact parameters inside the `input` object depend on your specific worker implementation. Check your worker's documentation for required and optional parameters.
 
-## Testing your endpoint
+The request must also include your API key for authentication, unless it's sent from the Runpod console.
 
-### Test in the Runpod console
+## Send requests from the console
 
 The quickest way to test your endpoint is directly in the Runpod console. Navigate to the [Serverless section](https://www.console.runpod.io/serverless), select your endpoint, and click the **Requests** tab.
 
@@ -39,7 +50,7 @@ The quickest way to test your endpoint is directly in the Runpod console. Naviga
 
 You'll see a default test request that you can modify as needed, then click **Run** to test your endpoint. On first execution, your workers will need to initialize, which may take a moment.
 
-The initial response will look similar to this:
+The initial response will look something like this:
 
 ```json
 {
@@ -48,13 +59,26 @@ The initial response will look similar to this:
 }
 ```
 
-After processing completes, you'll see the full response. If there are any errors, the console will display error logs to help you troubleshoot.
+You'll see the full response after the job completes. If there are any errors, the console will display error logs to help you troubleshoot.
 
 ## Endpoint operations
 
 Queue-based endpoints support comprehensive job lifecycle management through multiple operations that allow you to submit, monitor, manage, and retrieve results from jobs.
 
-### Submit asynchronous jobs (`/run`)
+Here's a quick overview of the operations available for queue-based endpoints:
+
+| Endpoint         | HTTP method | Description                                                                                      |
+|------------------|------------|--------------------------------------------------------------------------------------------------|
+| `/run`           | POST       | Submit an asynchronous job that processes in the background, and returns an immediate job ID.|
+| `/runsync`       | POST       | Submit a synchronous job and wait for the complete results in a single response.                 |
+| `/status`        | GET        | Check the current status, execution details, and results of a submitted job.          |
+| `/stream`        | GET        | Receive incremental results from a job as they become available.                                 |
+| `/cancel`        | POST       | Stop a job that is in progress or waiting in the queue.                                          |
+| `/retry`         | POST       | Requeue a failed or timed-out job using the same job ID and input parameters.                    |
+| `/purge-queue`   | POST       | Clear all pending jobs from the queue without affecting jobs already in progress.                |
+| `/health`        | GET        | Monitor the operational status of your endpoint, including worker and job statistics.            |
+
+### `/run`
 
 Asynchronous jobs process in the background and return immediately with a job ID. This approach works best for longer-running tasks that don't require immediate results, operations requiring significant processing time, and managing multiple concurrent jobs.
 
@@ -169,7 +193,7 @@ func main() {
 </Tab>
 </Tabs>
 
-### Submit synchronous jobs (`/runsync`)
+### `/runsync`
 
 Synchronous jobs wait for completion and return the complete result in a single response. This approach works best for shorter tasks where you need immediate results, interactive applications, and simpler client code without status polling.
 
@@ -262,7 +286,7 @@ fmt.Printf("output: %s\n", data)
 </Tab>
 </Tabs>
 
-### Monitor job status (`/status`)
+### `/status`
 
 Check the current state, execution statistics, and results of previously submitted jobs. The status endpoint provides the current job state, execution statistics like queue delay and processing time, and job output if completed.
 
@@ -341,7 +365,7 @@ fmt.Printf("Status: %s\n", *statusOutput.Status)
 You can configure time-to-live (TTL) for individual jobs by appending a TTL parameter: `https://api.runpod.ai/v2/{endpoint_id}/status/{job_id}?ttl=6000` sets the TTL to 6 seconds.
 </Tip>
 
-### Stream job results (`/stream`)
+### `/stream`
 
 Receive incremental results as they become available from jobs that generate output progressively. This works especially well for text generation tasks where you want to display output as it's created, long-running jobs where you want to show progress, and large outputs that benefit from incremental processing.
 
@@ -415,7 +439,7 @@ async function streamJobResults(endpointId, jobId, apiKey) {
 The maximum size for a single streamed payload chunk is 1 MB. Larger outputs will be split across multiple chunks.
 </Info>
 
-### Cancel jobs (`/cancel`)
+### `/cancel`
 
 Stop jobs that are no longer needed or taking too long to complete. This operation stops in-progress jobs, removes queued jobs before they start, and returns immediately with the canceled status.
 
@@ -472,7 +496,7 @@ async function cancelJob(endpointId, jobId, apiKey) {
 </Tab>
 </Tabs>
 
-### Retry failed jobs (`/retry`)
+### `/retry`
 
 Requeue jobs that have failed or timed out without submitting a new request. This operation maintains the same job ID for tracking, requeues with original input parameters, and removes previous output. It can only be used for jobs with `FAILED` or `TIMED_OUT` status.
 
@@ -528,7 +552,7 @@ async function retryJob(endpointId, jobId, apiKey) {
 Job results expire after a set period. Asynchronous jobs (`/run`) results are available for 30 minutes, while synchronous jobs (`/runsync`) results are available for 1 minute. Once expired, jobs cannot be retried.
 </Note>
 
-### Clear job queue (`/purge-queue`)
+### `/purge-queue`
 
 Remove all pending jobs from the queue when you need to reset or handle multiple cancellations at once. This is useful for error recovery, clearing outdated requests, resetting after configuration changes, and managing resource allocation.
 
@@ -589,7 +613,7 @@ async function purgeQueue(endpointId, apiKey) {
 The purge-queue operation only affects jobs waiting in the queue. Jobs already in progress will continue to run.
 </Warning>
 
-### Monitor endpoint health (`/health`)
+### `/health`
 
 Get a quick overview of your endpoint's operational status including worker availability, job queue status, potential bottlenecks, and scaling requirements.
 
@@ -745,11 +769,9 @@ Requests receive a `429 (Too Many Requests)` status if queue size exceeds 50 job
 
 Follow these practices to optimize your queue-based endpoint usage:
 
-Use asynchronous endpoints for jobs taking more than a few seconds to complete. Implement polling with backoff when checking status of asynchronous jobs. Set appropriate timeouts in your client applications and monitor endpoint health regularly to detect issues early.
-
-Implement comprehensive error handling for all API calls. Use webhooks for notification-based workflows instead of polling to reduce API calls. Cancel unneeded jobs to free up resources and reduce costs.
-
-For development and testing, use the console testing interface before implementing programmatic integration. Consider using synchronous endpoints only for tasks under 30 seconds that need immediate results.
+- Use asynchronous endpoints for jobs that take more than a few seconds to complete. Implement polling with backoff when checking status of asynchronous jobs. Set appropriate timeouts in your client applications and monitor endpoint health regularly to detect issues early.
+- Implement comprehensive error handling for all API calls. Use webhooks for notification-based workflows instead of polling to reduce API calls. Cancel unneeded jobs to free up resources and reduce costs.
+- During development, use the console testing interface before implementing programmatic integration.
 
 ## Error handling and troubleshooting
 
