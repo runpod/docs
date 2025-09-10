@@ -1,29 +1,32 @@
 ---
-title: "Send API requests to queue-based endpoints"
+title: "Send API requests to Serverless endpoints"
 sidebarTitle: "Send API requests"
-description: "Learn how to send requests to Serverless endpoints"
+description: "Learn how to send API requests to submit and manage jobs for your queue-based endpoints"
 ---
 
 <Note>
-This guide only applies to **queue-based (i.e. traditional) Serverless endpoints**. If you're using [load balancing endpoints](/serverless/load-balancing/overview), the request structure and endpoints will depend on how you define your HTTP servers.
+This guide is for **queue-based (i.e. traditional) Serverless endpoints**. If you're using [load balancing endpoints](/serverless/load-balancing/overview), the request structure and endpoints will depend on how you define your HTTP servers.
 </Note>
 
-Serverless endpoints provide synchronous and asynchronous job processing with automatic worker scaling based on demand. This comprehensive guide covers everything from basic request structure to advanced operations, monitoring, and troubleshooting for queue-based endpoints.
+Serverless endpoints provide synchronous and asynchronous job processing with automatic worker scaling based on demand. This page covers everything from basic request structure to advanced operations, monitoring, and troubleshooting for queue-based endpoints.
 
 ## Key concepts
 
-After you create a Serverless endpoint, you can send **API requests** to submit jobs and return results. The request can include parameters, payloads, and headers that define what the endpoint should process. For example, a `POST` request to submit a job, or a `GET` request to check status of a job, retrieve results, or check endpoint health.
+After you create a Serverless endpoint, you can **send requests** to the endpoint to **submit jobs and retrieve results**. The request can include parameters, payloads, and headers that define what the endpoint should process. For example, a `POST` request to submit a job, or a `GET` request to check status of a job, retrieve results, or check endpoint health.
 
-Queue-based endpoints provide a fixed set of operations for submitting and managing jobs. You can find a full list of operations in the [Endpoint operations](/serverless/endpoints/send-requests#endpoint-operations) section.
+A **job** is a unit of work that's ready for processing by your [workers](/serverless/workers/overview), containing the input data from the request. If no worker is immediately available, the job is queued. Once a worker is available, the job is processed by a worker using your [handler function](/serverless/workers/handler-functions).
+
 
 When you submit a job request it can be either synchronous or asynchronous, depending on the operation you use:
 
-- `/run`: Submit an asynchronous job. A response is returned as soon as the job is complete.
 - `/runsync`: Submit a synchronous job. The job is processed in the background, and you can retrieve the result by sending a `GET` request to the `/status` endpoint.
+- `/run`: Submit an asynchronous job. A response is returned as soon as the job is complete.
 
-## Request structure
+Serverless endpoints provide a fixed set of operations for submitting and managing jobs. You can find a full list of operations in the [sections below](/serverless/endpoints/send-requests#operation-overview).
 
-When submitting a job with `/run` or `/runsync`, your request must include a JSON object the the key `input`, containing the parameters required by your worker's [handler function](/serverless/workers/handler-functions).
+## Request input structure
+
+When submitting a job with `/runsync` or `/run`, your request must include a JSON object the the key `input`, containing the parameters required by your worker's [handler function](/serverless/workers/handler-functions).
 
 For example:
 
@@ -35,10 +38,7 @@ For example:
 }
 ```
 
-
 The exact parameters inside the `input` object depend on your specific worker implementation. Check your worker's documentation for required and optional parameters.
-
-The request must also include your API key for authentication, unless it's sent from the Runpod console.
 
 ## Send requests from the console
 
@@ -61,16 +61,16 @@ The initial response will look something like this:
 
 You'll see the full response after the job completes. If there are any errors, the console will display error logs to help you troubleshoot.
 
-## Endpoint operations
+## Operation overview
 
 Queue-based endpoints support comprehensive job lifecycle management through multiple operations that allow you to submit, monitor, manage, and retrieve results from jobs.
 
 Here's a quick overview of the operations available for queue-based endpoints:
 
-| Endpoint         | HTTP method | Description                                                                                      |
+| Operation         | HTTP method | Description                                                                                      |
 |------------------|------------|--------------------------------------------------------------------------------------------------|
-| `/run`           | POST       | Submit an asynchronous job that processes in the background, and returns an immediate job ID.|
 | `/runsync`       | POST       | Submit a synchronous job and wait for the complete results in a single response.                 |
+| `/run`           | POST       | Submit an asynchronous job that processes in the background, and returns an immediate job ID.|
 | `/status`        | GET        | Check the current status, execution details, and results of a submitted job.          |
 | `/stream`        | GET        | Receive incremental results from a job as they become available.                                 |
 | `/cancel`        | POST       | Stop a job that is in progress or waiting in the queue.                                          |
@@ -78,20 +78,51 @@ Here's a quick overview of the operations available for queue-based endpoints:
 | `/purge-queue`   | POST       | Clear all pending jobs from the queue without affecting jobs already in progress.                |
 | `/health`        | GET        | Monitor the operational status of your endpoint, including worker and job statistics.            |
 
-### `/run`
+## Operation reference
 
-Asynchronous jobs process in the background and return immediately with a job ID. This approach works best for longer-running tasks that don't require immediate results, operations requiring significant processing time, and managing multiple concurrent jobs.
+Below you'll find detailed explanations and examples for each operation using `cURL` and the Runpod SDK.
 
-* **Payload limit**: 10 MB
-* **Job availability**: Results available for 30 minutes after completion
+<Tip>
+You can also send requests using standard APIs and libraries, like `fetch` (for JavaScript) and `requests` (for Python).
+</Tip>
+
+
+Before running these examples, you'll need to install the Runpod SDK:
+
+```bash
+# Python
+python -m pip install runpod
+
+# JavaScript
+npm install --save runpod-sdk
+
+# Go
+go get github.com/runpod/go-sdk && go mod tidy
+```
+
+You should also set your [API key](/get-started/api-keys) and endpoint ID (found on the Overview tab for your endpoint in the Runpod console) as environment variables. Run the following commands in your local terminal, replacing `YOUR_API_KEY` and `YOUR_ENDPOINT_ID` with your actual API key and endpoint ID:
+
+```bash
+export RUNPOD_API_KEY="YOUR_API_KEY"
+export ENDPOINT_ID="YOUR_ENDPOINT_ID"
+```
+
+### `/runsync`
+
+Synchronous jobs wait for completion and return the complete result in a single response. This approach works best for shorter tasks where you need immediate results, interactive applications, and simpler client code without status polling.
+
+* **Payload limit**: 20 MB  
+* **Job availability**: Results are available for 60 seconds after completion
 
 <Tabs>
 <Tab title="cURL">
 ```sh
-curl -X POST https://api.runpod.ai/v2/{endpoint_id}/run \
-    -H 'Content-Type: application/json' \
-    -H 'Authorization: Bearer ${API_KEY}' \
-    -d '{"input": {"prompt": "Your prompt"}}'
+curl --request POST \
+     --url https://api.runpod.ai/v2/$ENDPOINT_ID/runsync \
+     -H "accept: application/json" \
+     -H "authorization: $RUNPOD_API_KEY" \
+     -H "content-type: application/json" \
+     -d '{ "input": {  "prompt": "Hello, world!" }}'
 ```
 </Tab>
 
@@ -101,7 +132,131 @@ import runpod
 import os
 
 runpod.api_key = os.getenv("RUNPOD_API_KEY")
-endpoint = runpod.Endpoint("YOUR_ENDPOINT_ID")
+endpoint = runpod.Endpoint(os.getenv("ENDPOINT_ID"))
+
+try:
+    run_request = endpoint.run_sync(
+        {"prompt": "Hello, world!"},
+        timeout=60,  # Timeout in seconds
+    )
+    print(run_request)
+except TimeoutError:
+    print("Job timed out.")
+```
+</Tab>
+
+<Tab title="JavaScript">
+```javascript
+const { RUNPOD_API_KEY, ENDPOINT_ID } = process.env;
+import runpodSdk from "runpod-sdk";
+
+const runpod = runpodSdk(RUNPOD_API_KEY);
+const endpoint = runpod.endpoint(ENDPOINT_ID);
+
+const result = await endpoint.runSync({
+  "input": {
+    "prompt": "Hello, World!",
+  },
+});
+
+console.log(result);
+```
+</Tab>
+
+<Tab title="Go">
+```go
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/runpod/go-sdk/pkg/sdk"
+	"github.com.runpod/go-sdk/pkg/sdk/config"
+	rpEndpoint "github.com/runpod/go-sdk/pkg/sdk/endpoint"
+)
+
+func main() {
+	apiKey := os.Getenv("RUNPOD_API_KEY")
+	baseURL := os.Getenv("RUNPOD_BASE_URL")
+
+	endpoint, err := rpEndpoint.New(
+		&config.Config{ApiKey: &apiKey},
+		&rpEndpoint.Option{EndpointId: &baseURL},
+	)
+	if err != nil {
+		log.Fatalf("Failed to create endpoint: %v", err)
+	}
+
+	jobInput := rpEndpoint.RunSyncInput{
+		JobInput: &rpEndpoint.JobInput{
+			Input: map[string]interface{}{
+				"prompt": "Hello World",
+			},
+		},
+		Timeout: sdk.Int(120),
+	}
+
+	output, err := endpoint.RunSync(&jobInput)
+	if err != nil {
+		panic(err)
+	}
+
+	data, _ := json.Marshal(output)
+	fmt.Printf("output: %s\n", data)
+}
+```
+</Tab>
+
+<Tab title="Response">
+
+`/runsync` requests return a response as soon as the job is complete:
+
+```json
+{
+  "delayTime": 824,
+  "executionTime": 3391,
+  "id": "sync-79164ff4-d212-44bc-9fe3-389e199a5c15",
+  "output": [
+    {
+      "image": "https://image.url",
+      "seed": 46578
+    }
+  ],
+  "status": "COMPLETED"
+}
+```
+</Tab>
+</Tabs>
+
+### `/run`
+
+Asynchronous jobs process in the background and return immediately with a job ID. This approach works best for longer-running tasks that don't require immediate results, operations requiring significant processing time, and managing multiple concurrent jobs.
+
+* **Payload limit**: 10 MB
+* **Job availability**: Results are available for 30 minutes after completion
+
+<Tabs>
+<Tab title="cURL">
+```sh
+curl --request POST \
+     --url https://api.runpod.ai/v2/$ENDPOINT_ID/run \
+     -H "accept: application/json" \
+     -H "authorization: $RUNPOD_API_KEY" \
+     -H "content-type: application/json" \
+    -d '{"input": {"prompt": "Hello, world!"}}'
+```
+</Tab>
+
+<Tab title="Python">
+```python
+import runpod
+import os
+
+runpod.api_key = os.getenv("RUNPOD_API_KEY")
+endpoint = runpod.Endpoint(os.getenv("ENDPOINT_ID"))
 
 # Submit asynchronous job
 run_request = endpoint.run({"prompt": "Hello, World!"})
@@ -193,158 +348,135 @@ func main() {
 </Tab>
 </Tabs>
 
-### `/runsync`
-
-Synchronous jobs wait for completion and return the complete result in a single response. This approach works best for shorter tasks where you need immediate results, interactive applications, and simpler client code without status polling.
-
-* **Payload limit**: 20 MB  
-* **Job availability**: Results available for 60 seconds after completion
-
-<Tabs>
-<Tab title="cURL">
-```sh
-curl -X POST https://api.runpod.ai/v2/{endpoint_id}/runsync \
-    -H 'Content-Type: application/json' \
-    -H 'Authorization: Bearer ${API_KEY}' \
-    -d '{"input": {"prompt": "Your prompt"}}'
-```
-</Tab>
-
-<Tab title="Python">
-```python
-import runpod
-import os
-
-runpod.api_key = os.getenv("RUNPOD_API_KEY")
-endpoint = runpod.Endpoint("YOUR_ENDPOINT_ID")
-
-try:
-    run_request = endpoint.run_sync(
-        {"prompt": "Hello, world!"},
-        timeout=60,  # Timeout in seconds
-    )
-    print(run_request)
-except TimeoutError:
-    print("Job timed out.")
-```
-</Tab>
-
-<Tab title="JavaScript">
-```javascript
-const { RUNPOD_API_KEY, ENDPOINT_ID } = process.env;
-import runpodSdk from "runpod-sdk";
-
-const runpod = runpodSdk(RUNPOD_API_KEY);
-const endpoint = runpod.endpoint(ENDPOINT_ID);
-
-const result = await endpoint.runSync({
-  "input": {
-    "prompt": "Hello, World!",
-  },
-});
-
-console.log(result);
-```
-</Tab>
-
-<Tab title="Go">
-```go
-jobInput := rpEndpoint.RunSyncInput{
-	JobInput: &rpEndpoint.JobInput{
-		Input: map[string]interface{}{
-			"prompt": "Hello World",
-		},
-	},
-	Timeout: sdk.Int(120),
-}
-
-output, err := endpoint.RunSync(&jobInput)
-if err != nil {
-	panic(err)
-}
-
-data, _ := json.Marshal(output)
-fmt.Printf("output: %s\n", data)
-```
-</Tab>
-
-<Tab title="Response">
-```json
-{
-  "delayTime": 824,
-  "executionTime": 3391,
-  "id": "sync-79164ff4-d212-44bc-9fe3-389e199a5c15",
-  "output": [
-    {
-      "image": "https://image.url",
-      "seed": 46578
-    }
-  ],
-  "status": "COMPLETED"
-}
-```
-</Tab>
-</Tabs>
-
 ### `/status`
 
 Check the current state, execution statistics, and results of previously submitted jobs. The status endpoint provides the current job state, execution statistics like queue delay and processing time, and job output if completed.
 
 <Tabs>
 <Tab title="cURL">
+Replace `YOUR_JOB_ID` with the actual job ID you received in the response to the `/run` request.
+
 ```sh
-curl -X GET https://api.runpod.ai/v2/{endpoint_id}/status/{job_id} \
-    -H 'Authorization: Bearer ${API_KEY}'
+curl --request GET \
+     --url https://api.runpod.ai/v2/$ENDPOINT_ID/status/YOUR_JOB_ID \
+     -H "authorization: $RUNPOD_API_KEY" \
 ```
+
 </Tab>
 
 <Tab title="Python">
+
+Check the status of a job using the `status` method on the `run_request` object:
+
 ```python
-# Check status using run_request object
+
+import runpod
+
+runpod.api_key = os.getenv("RUNPOD_API_KEY")
+endpoint = runpod.Endpoint(os.getenv("ENDPOINT_ID"))
+
+input_payload = {"input": {"prompt": "Hello, World!"}}
+
+run_request = endpoint.run(input_payload)
+
+# Initial check without blocking, useful for quick tasks
 status = run_request.status()
-print(f"Current job status: {status}")
+print(f"Initial job status: {status}")
 
-# Or check specific job by ID
-import requests
+if status != "COMPLETED":
+    # Polling with timeout for long-running tasks
+    output = run_request.output(timeout=60)
+else:
+    output = run_request.output()
+print(f"Job output: {output}")
+print(f"An error occurred: {e}")
 
-def check_job_status(endpoint_id, job_id, api_key):
-    url = f"https://api.runpod.ai/v2/{endpoint_id}/status/{job_id}"
-    headers = {"Authorization": f"Bearer {api_key}"}
-    response = requests.get(url, headers=headers)
-    return response.json()
 ```
 </Tab>
 
 <Tab title="JavaScript">
+
+Check the status of a job using the ID returned by `endpoint.run`:
+
 ```javascript
-// Status is typically handled through the SDK's run methods
-// For direct API calls:
-async function checkJobStatus(endpointId, jobId, apiKey) {
-    const url = `https://api.runpod.ai/v2/${endpointId}/status/${jobId}`;
-    const headers = {"Authorization": `Bearer ${apiKey}`};
-    
-    const response = await fetch(url, { headers });
-    return await response.json();
+const { RUNPOD_API_KEY, ENDPOINT_ID } = process.env;
+import runpodSdk from "runpod-sdk";
+
+async function main() {
+  try {
+    const runpod = runpodSdk(RUNPOD_API_KEY);
+    const endpoint = runpod.endpoint(ENDPOINT_ID);
+    const result = await endpoint.run({
+      input: {
+        prompt: "Hello, World!",
+      },
+    });
+
+    const { id } = result;
+    if (!id) {
+      console.error("No ID returned from endpoint.run");
+      return;
+    }
+
+    const status = await endpoint.status(id);
+    console.log(status);
+  } catch (error) {
+    console.error("An error occurred:", error);
+  }
 }
+
+main();
 ```
 </Tab>
 
 <Tab title="Go">
+
+Replace `YOUR_JOB_ID` with the actual job ID you received in the response to the `/run` request.
+
 ```go
-statusInput := rpEndpoint.StatusInput{
-	Id: sdk.String(runID),
-}
 
-statusOutput, err := endpoint.Status(&statusInput)
-if err != nil {
-	log.Fatalf("Failed to check status: %v", err)
-}
+package main
 
-fmt.Printf("Status: %s\n", *statusOutput.Status)
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/runpod/go-sdk/pkg/sdk"
+	"github.com/runpod/go-sdk/pkg/sdk/config"
+	rpEndpoint "github.com/runpod/go-sdk/pkg/sdk/endpoint"
+)
+
+func main() {
+
+	apiKey := os.Getenv("RUNPOD_API_KEY")
+	baseURL := os.Getenv("RUNPOD_BASE_URL")
+
+	endpoint, err := rpEndpoint.New(
+		&config.Config{ApiKey: &apiKey},
+		&rpEndpoint.Option{EndpointId: &baseURL},
+	)
+	if err != nil {
+		log.Fatalf("Failed to create endpoint: %v", err)
+	}
+	input := rpEndpoint.StatusInput{
+		Id: sdk.String("YOUR_JOB_ID"),
+	}
+	output, err := endpoint.Status(&input)
+	if err != nil {
+		panic(err)
+	}
+	dt, _ := json.Marshal(output)
+	fmt.Printf("output:%s\n", dt)
+}
 ```
 </Tab>
 
 <Tab title="Response">
+
+`/status` requests return a JSON response with the job status (e.g. `IN_QUEUE`, `IN_PROGRESS`, `COMPLETED`, `FAILED`), and an optional `output` field if the job is completed:
+
 ```json
 {
   "delayTime": 31618,
@@ -369,41 +501,128 @@ You can configure time-to-live (TTL) for individual jobs by appending a TTL para
 
 Receive incremental results as they become available from jobs that generate output progressively. This works especially well for text generation tasks where you want to display output as it's created, long-running jobs where you want to show progress, and large outputs that benefit from incremental processing.
 
+To enable streaming, your handler must support the `"return_aggregate_stream": True` option on the `start` method of your handler. Once enabled, use the `stream` method to receive data as it becomes available.
+
+For implementation details, see [Streaming handlers](/serverless/workers/handler-functions#streaming-handlers).
+
+
 <Tabs>
 <Tab title="cURL">
+
+Replace `YOUR_JOB_ID` with the actual job ID you received in the response to the `/run` request.
+
 ```sh
-curl -X GET https://api.runpod.ai/v2/{endpoint_id}/stream/{job_id} \
-    -H 'Authorization: Bearer ${API_KEY}'
+curl --request GET \
+     --url https://api.runpod.ai/v2/$ENDPOINT_ID/stream/YOUR_JOB_ID \
+     -H "accept: application/json" \
+     -H "authorization: $RUNPOD_API_KEY" \
 ```
+
 </Tab>
 
 <Tab title="Python">
+
 ```python
-def stream_job_results(endpoint_id, job_id, api_key):
-    url = f"https://api.runpod.ai/v2/{endpoint_id}/stream/{job_id}"
-    headers = {"Authorization": f"Bearer {api_key}"}
-    
-    response = requests.get(url, headers=headers)
-    return response.json()
+import runpod
+
+runpod.api_key = os.getenv("RUNPOD_API_KEY")
+endpoint = runpod.Endpoint(os.getenv("ENDPOINT_ID"))
+
+run_request = endpoint.run(
+    {
+        "input": {
+            "prompt": "Hello, world!",
+        }
+    }
+)
+
+for output in run_request.stream():
+    print(output)
 ```
 </Tab>
 
 <Tab title="JavaScript">
 ```javascript
-async function streamJobResults(endpointId, jobId, apiKey) {
-    const url = `https://api.runpod.ai/v2/${endpointId}/stream/${jobId}`;
-    const headers = {"Authorization": `Bearer ${apiKey}`};
-    
-    const response = await fetch(url, { headers });
-    return await response.json();
+const { RUNPOD_API_KEY, ENDPOINT_ID } = process.env;
+import runpodSdk from "runpod-sdk";
+
+async function main() {
+  const runpod = runpodSdk(RUNPOD_API_KEY);
+  const endpoint = runpod.endpoint(ENDPOINT_ID);
+  const result = await endpoint.run({
+    input: {
+      prompt: "Hello, World!",
+    },
+  });
+
+  console.log(result);
+
+  const { id } = result;
+  for await (const result of endpoint.stream(id)) {
+    console.log(`${JSON.stringify(result, null, 2)}`);
+  }
+  console.log("done streaming");
 }
-```
+
+main();
 </Tab>
 
 <Tab title="Go">
 ```go
-// Streaming is typically handled through the Go SDK's streaming methods
-// Check the SDK documentation for specific streaming implementations
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/runpod/go-sdk/pkg/sdk/config"
+	rpEndpoint "github.com/runpod/go-sdk/pkg/sdk/endpoint"
+)
+
+func main() {
+
+	apiKey := os.Getenv("RUNPOD_API_KEY")
+	baseURL := os.Getenv("RUNPOD_BASE_URL")
+
+	endpoint, err := rpEndpoint.New(
+		&config.Config{ApiKey: &apiKey},
+		&rpEndpoint.Option{EndpointId: &baseURL},
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	request, err := endpoint.Run(&rpEndpoint.RunInput{
+		JobInput: &rpEndpoint.JobInput{
+			Input: map[string]interface{}{
+				"prompt": "Hello World",
+			},
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	streamChan := make(chan rpEndpoint.StreamResult, 100)
+
+	err = endpoint.Stream(&rpEndpoint.StreamInput{Id: request.Id}, streamChan)
+	if err != nil {
+		// timeout reached, if we want to get the data that has been streamed
+		if err.Error() == "ctx timeout reached" {
+			for data := range streamChan {
+				dt, _ := json.Marshal(data)
+				fmt.Printf("output:%s\n", dt)
+			}
+		}
+		panic(err)
+	}
+
+	for data := range streamChan {
+		dt, _ := json.Marshal(data)
+		fmt.Printf("output:%s\n", dt)
+	}
+
+}
 ```
 </Tab>
 
@@ -445,44 +664,130 @@ Stop jobs that are no longer needed or taking too long to complete. This operati
 
 <Tabs>
 <Tab title="cURL">
+
+Replace `YOUR_JOB_ID` with the actual job ID you received in the response to the `/run` request.
+
 ```sh
-curl -X POST https://api.runpod.ai/v2/{endpoint_id}/cancel/{job_id} \
-    -H 'Authorization: Bearer ${API_KEY}'
+curl --request POST \
+  --url https://api.runpod.ai/v2/$ENDPOINT_ID/cancel/YOUR_JOB_ID \
+  -H "authorization: $RUNPOD_API_KEY" \
 ```
 </Tab>
 
 <Tab title="Python">
-```python
-# Cancel using run_request object
-run_request.cancel()
-print("Job canceled.")
 
-# Or cancel specific job by ID
-def cancel_job(endpoint_id, job_id, api_key):
-    url = f"https://api.runpod.ai/v2/{endpoint_id}/cancel/{job_id}"
-    headers = {"Authorization": f"Bearer {api_key}"}
-    
-    response = requests.post(url, headers=headers)
-    return response.json()
+Cancel a job using the `cancel` method on the `run_request` object. The script below demonstrates how to cancel a job using a keyboard interrupt:
+
+```python
+import time
+import runpod
+
+runpod.api_key = os.getenv("RUNPOD_API_KEY")
+endpoint = runpod.Endpoint(os.getenv("ENDPOINT_ID"))
+
+run_request = endpoint.run(
+  {
+      "input": {
+          "prompt": "Hello, world!",
+      }
+  }
+)
+
+try:
+  while True:
+    status = run_request.status()
+    print(f"Current job status: {status}")
+
+    if status == "COMPLETED":
+      output = run_request.output()
+      print("Job output:", output)
+      break
+    elif status in ["FAILED", "ERROR"]:
+      print("Job failed to complete successfully.")
+      break
+    else:
+      time.sleep(10)
+except KeyboardInterrupt:  # Catch KeyboardInterrupt
+  print("KeyboardInterrupt detected. Canceling the job...")
+  if run_request:  # Check if a job is active
+    run_request.cancel()
+  print("Job canceled.")
 ```
 </Tab>
 
 <Tab title="JavaScript">
+
+Cancel a job by using the `cancel()` function on the run request.
+
 ```javascript
-async function cancelJob(endpointId, jobId, apiKey) {
-    const url = `https://api.runpod.ai/v2/${endpointId}/cancel/${jobId}`;
-    const headers = {"Authorization": `Bearer ${apiKey}`};
-    
-    const response = await fetch(url, { method: 'POST', headers });
-    return await response.json();
+const { RUNPOD_API_KEY, ENDPOINT_ID } = process.env;
+import runpodSdk from "runpod-sdk";
+
+async function main() {
+  try {
+    const runpod = runpodSdk(RUNPOD_API_KEY);
+    const endpoint = runpod.endpoint(ENDPOINT_ID);
+    const result = await endpoint.run({
+      input: {
+        prompt: "Hello, World!",
+      },
+    });
+
+    const { id } = result;
+    if (!id) {
+      console.error("No ID returned from endpoint.run");
+      return;
+    }
+
+    const cancel = await endpoint.cancel(id);
+    console.log(cancel);
+  } catch (error) {
+    console.error("An error occurred:", error);
+  }
 }
+
+main();
 ```
 </Tab>
 
 <Tab title="Go">
 ```go
-// Cancel operations through the Go SDK
-// Check SDK documentation for specific cancel implementations
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/runpod/go-sdk/pkg/sdk"
+	"github.com/runpod/go-sdk/pkg/sdk/config"
+	rpEndpoint "github.com/runpod/go-sdk/pkg/sdk/endpoint"
+)
+
+func main() {
+
+	apiKey := os.Getenv("RUNPOD_API_KEY")
+	baseURL := os.Getenv("RUNPOD_BASE_URL")
+
+	endpoint, err := rpEndpoint.New(
+		&config.Config{ApiKey: &apiKey},
+		&rpEndpoint.Option{EndpointId: &baseURL},
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	cancelInput := rpEndpoint.CancelInput{
+		Id: sdk.String("00edfd03-8094-46da-82e3-ea47dd9566dc-u1"),
+	}
+	output, err := endpoint.Cancel(&cancelInput)
+	if err != nil {
+		panic(err)
+	}
+
+	healthData, _ := json.Marshal(output)
+	fmt.Printf("health output: %s\n", healthData)
+
+}
 ```
 </Tab>
 
@@ -500,53 +805,22 @@ async function cancelJob(endpointId, jobId, apiKey) {
 
 Requeue jobs that have failed or timed out without submitting a new request. This operation maintains the same job ID for tracking, requeues with original input parameters, and removes previous output. It can only be used for jobs with `FAILED` or `TIMED_OUT` status.
 
-<Tabs>
-<Tab title="cURL">
+Replace `YOUR_JOB_ID` with the actual job ID you received in the response to the `/run` request.
+
 ```sh
-curl -X POST https://api.runpod.ai/v2/{endpoint_id}/retry/{job_id} \
-    -H 'Authorization: Bearer ${API_KEY}'
+curl --request POST \
+     --url https://api.runpod.ai/v2/$ENDPOINT_ID/retry/YOUR_JOB_ID \
+     -H "authorization: $RUNPOD_API_KEY"
 ```
-</Tab>
 
-<Tab title="Python">
-```python
-def retry_job(endpoint_id, job_id, api_key):
-    url = f"https://api.runpod.ai/v2/{endpoint_id}/retry/{job_id}"
-    headers = {"Authorization": f"Bearer {api_key}"}
-    
-    response = requests.post(url, headers=headers)
-    return response.json()
-```
-</Tab>
+You'll see the job status updated to `IN_QUEUE` when the job is retried:
 
-<Tab title="JavaScript">
-```javascript
-async function retryJob(endpointId, jobId, apiKey) {
-    const url = `https://api.runpod.ai/v2/${endpointId}/retry/${jobId}`;
-    const headers = {"Authorization": `Bearer ${apiKey}`};
-    
-    const response = await fetch(url, { method: 'POST', headers });
-    return await response.json();
-}
-```
-</Tab>
-
-<Tab title="Go">
-```go
-// Retry operations through the Go SDK
-// Check SDK documentation for specific retry implementations
-```
-</Tab>
-
-<Tab title="Response">
 ```json
 {
   "id": "60902e6c-08a1-426e-9cb9-9eaec90f5e2b-u1",
   "status": "IN_QUEUE"
 }
 ```
-</Tab>
-</Tabs>
 
 <Note>
 Job results expire after a set period. Asynchronous jobs (`/run`) results are available for 30 minutes, while synchronous jobs (`/runsync`) results are available for 1 minute. Once expired, jobs cannot be retried.
@@ -559,47 +833,55 @@ Remove all pending jobs from the queue when you need to reset or handle multiple
 <Tabs>
 <Tab title="cURL">
 ```sh
-curl -X POST https://api.runpod.ai/v2/{endpoint_id}/purge-queue \
-    -H 'Authorization: Bearer ${API_KEY}'
+curl --request POST \
+     --url https://api.runpod.ai/v2/$ENDPOINT_ID/purge-queue \
+     -H "authorization: $RUNPOD_API_KEY"
+    -H 'Authorization: Bearer RUNPOD_API_KEY'
 ```
 </Tab>
 
 <Tab title="Python">
 ```python
-# Using the SDK
-endpoint_health = endpoint.purge_queue()
-print(f"Queue purged: {endpoint_health}")
+import runpod
+import os
 
-# Or direct API call
-def purge_queue(endpoint_id, api_key):
-    url = f"https://api.runpod.ai/v2/{endpoint_id}/purge-queue"
-    headers = {"Authorization": f"Bearer {api_key}"}
-    
-    response = requests.post(url, headers=headers)
-    return response.json()
+runpod.api_key = os.getenv("RUNPOD_API_KEY")
+endpoint = runpod.Endpoint(os.getenv("ENDPOINT_ID"))
+
+endpoint.purge_queue(timeout=3)
 ```
 </Tab>
 
 <Tab title="JavaScript">
 ```javascript
-async function purgeQueue(endpointId, apiKey) {
-    const url = `https://api.runpod.ai/v2/${endpointId}/purge-queue`;
-    const headers = {"Authorization": `Bearer ${apiKey}`};
-    
-    const response = await fetch(url, { method: 'POST', headers });
-    return await response.json();
-}
-```
-</Tab>
+const { RUNPOD_API_KEY, ENDPOINT_ID } = process.env;
+import runpodSdk from "runpod-sdk";
 
-<Tab title="Go">
-```go
-// Purge queue operations through the Go SDK
-// Check SDK documentation for specific purge implementations
+async function main() {
+  try {
+    const runpod = runpodSdk(RUNPOD_API_KEY);
+    const endpoint = runpod.endpoint(ENDPOINT_ID);
+    await endpoint.run({
+      input: {
+        prompt: "Hello, World!",
+      },
+    });
+
+    const purgeQueue = await endpoint.purgeQueue();
+    console.log(purgeQueue);
+  } catch (error) {
+    console.error("An error occurred:", error);
+  }
+}
+
+main();
 ```
 </Tab>
 
 <Tab title="Response">
+
+`/purge-queue` requests return a JSON response with the number of jobs removed from the queue and the status of the purge operation:
+
 ```json
 {
   "removed": 2,
@@ -610,7 +892,7 @@ async function purgeQueue(endpointId, apiKey) {
 </Tabs>
 
 <Warning>
-The purge-queue operation only affects jobs waiting in the queue. Jobs already in progress will continue to run.
+`/purge-queue` operation only affects jobs waiting in the queue. Jobs already in progress will continue to run.
 </Warning>
 
 ### `/health`
@@ -620,10 +902,13 @@ Get a quick overview of your endpoint's operational status including worker avai
 <Tabs>
 <Tab title="cURL">
 ```sh
-curl -X GET https://api.runpod.ai/v2/{endpoint_id}/health \
-    -H 'Authorization: Bearer ${API_KEY}'
+curl --request GET \
+     --url https://api.runpod.ai/v2/$ENDPOINT_ID/health \
+     -H "authorization: $RUNPOD_API_KEY"
 ```
+
 </Tab>
+
 
 <Tab title="Python">
 ```python
@@ -632,7 +917,7 @@ import json
 import os
 
 runpod.api_key = os.getenv("RUNPOD_API_KEY")
-endpoint = runpod.Endpoint("YOUR_ENDPOINT_ID")
+endpoint = runpod.Endpoint(os.getenv("ENDPOINT_ID"))
 
 endpoint_health = endpoint.health()
 print(json.dumps(endpoint_health, indent=2))
@@ -641,24 +926,21 @@ print(json.dumps(endpoint_health, indent=2))
 
 <Tab title="JavaScript">
 ```javascript
-async function checkEndpointHealth(endpointId, apiKey) {
-    const url = `https://api.runpod.ai/v2/${endpointId}/health`;
-    const headers = {"Authorization": `Bearer ${apiKey}`};
-    
-    const response = await fetch(url, { headers });
-    return await response.json();
-}
-```
-</Tab>
+const { RUNPOD_API_KEY, ENDPOINT_ID } = process.env;
+import runpodSdk from "runpod-sdk";
 
-<Tab title="Go">
-```go
-// Health check operations through the Go SDK
-// Check SDK documentation for specific health check implementations
+const runpod = runpodSdk(RUNPOD_API_KEY);
+const endpoint = runpod.endpoint(ENDPOINT_ID);
+
+const health = await endpoint.health();
+console.log(health);
 ```
 </Tab>
 
 <Tab title="Response">
+
+`/health` requests return a JSON response with the current status of the endpoint, including the number of jobs completed, failed, in progress, in queue, and retried, as well as the status of workers.
+
 ```json
 {
   "jobs": {
@@ -677,7 +959,16 @@ async function checkEndpointHealth(endpointId, apiKey) {
 </Tab>
 </Tabs>
 
-## Advanced configuration options
+## vLLM and OpenAI requests
+
+[vLLM workers](/serverless/vllm/overview) are specialized containers designed to efficiently deploy and serve large language models (LLMs) on Runpod Serverless.
+
+[vLLM requests](/serverless/vllm/vllm-requests) use the standard format for endpoint operations, while providing additional flexibility and control over your requests compared to standard endpoints.
+
+vLLM workers also support [OpenAI compatible requests](/serverless/vllm/openai-compatibility), enabling you to use familiar OpenAI client libraries with your vLLM endpoints.
+
+
+## Advanced options
 
 Beyond the required `input` object, you can include optional top-level parameters to enable additional functionality for your queue-based endpoints.
 
@@ -735,10 +1026,10 @@ Configure S3-compatible storage for endpoints working with large files. This con
     "prompt": "Your input here"
   },
   "s3Config": {
-    "accessId": "[BUCKET_ACCESS_KEY_ID]",
-    "accessSecret": "[BUCKET_SECRET_ACCESS_KEY]",
-    "bucketName": "[BUCKET_NAME]",
-    "endpointUrl": "[BUCKET_ENDPOINT_URL]"
+    "accessId": "BUCKET_ACCESS_KEY_ID",
+    "accessSecret": "BUCKET_SECRET_ACCESS_KEY",
+    "bucketName": "BUCKET_NAME",
+    "endpointUrl": "BUCKET_ENDPOINT_URL"
   }
 }
 ```
@@ -764,6 +1055,9 @@ Runpod enforces rate limits to ensure fair platform usage. These limits apply pe
 | `/requests`                          | GET      | 10 requests per 10 seconds   | 2 concurrent     |
 
 Requests receive a `429 (Too Many Requests)` status if queue size exceeds 50 jobs AND queue size exceeds `endpoint.WorkersMax * 500`. Implement appropriate retry logic with exponential backoff to handle rate limiting gracefully.
+
+
+
 
 ## Best practices
 
