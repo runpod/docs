@@ -7,13 +7,15 @@ This guide covers the essential management operations for Runpod Serverless endp
 
 ## Create an endpoint
 
-Create a new Serverless endpoint through the Runpod web interface:
+<Tabs>
+<Tab title="Web">
+To create a new Serverless endpoint through the Runpod web interface:
 
 1. Navigate to the [Serverless section](https://www.console.runpod.io/serverless) of the Runpod console.
 2. Click **New Endpoint**.
 3. On the **Deploy a New Serverless Endpoint** screen, choose your deployment source:
-   * **Import Git Repository**: See [Deploy from GitHub] for details(/serverless/workers/github-integration).
-   * **Import from Docker Registry**: See [Deploy from Docker](/serverless/workers/deploy) for details.
+   * **Import Git Repository** (if GitHub is connected) (see [Deploy from GitHub](/serverless/workers/github-integration) for details.
+   * **Import from Docker Registry** (see [Deploy from Docker](/serverless/workers/deploy) for details.
    * Or select a preconfigured endpoint under **Ready-to-Deploy Repos**.
 4. Follow the UI steps to configure your selected source (Docker image, GitHub repo), then click **Next**.
 5. Configure your endpoint settings:
@@ -22,9 +24,53 @@ Create a new Serverless endpoint through the Runpod web interface:
    * **GPU Configuration**: Select the appropriate GPU types and configure worker settings.
    * **Model (optional)**: Select a model from Hugging Face to optimize worker startup times. When you specify a model, Runpod attempts to place your workers on host machines that already have the model cached locally, resulting in faster cold starts and cost savings (since you won't be charged while the model is downloading). You can either select from the dropdown list of pre-cached models or enter a custom Hugging Face model URL.
    * **Container Configuration**: Edit the container start command, specify the [container disk size](/serverless/storage/overview), and expose HTTP/TCP ports.
-   * **Environment Variables**: Add [environment variables](/serverless/development/environment-variables
-http://localhost:3000/community-solutions/overview) for your worker containers.
+   * **Environment Variables**: Add [environment variables](/serverless/development/environment-variables) for your worker containers.
 6. Click **Create Endpoint** to deploy.
+
+</Tab>
+
+<Tab title="REST API">
+To create a Serverless endpoint using the REST API, send a POST request to the `/endpoints` endpoint:
+
+```bash
+curl --request POST \
+  --url https://rest.runpod.io/v1/endpoints \
+  --header 'Authorization: Bearer RUNPOD_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "allowedCudaVersions": [
+    "12.8"
+  ],
+  "computeType": "GPU",
+  "cpuFlavorIds": [
+    "cpu3c"
+  ],
+  "dataCenterIds": [
+    "EU-RO-1",
+    "CA-MTL-1"
+  ],
+  "executionTimeoutMs": 600000,
+  "flashboot": true,
+  "gpuCount": 1,
+  "gpuTypeIds": [
+    "NVIDIA GeForce RTX 4090"
+  ],
+  "idleTimeout": 5,
+  "name": "my-endpoint",
+  "scalerType": "QUEUE_DELAY",
+  "scalerValue": 4,
+  "templateId": "30zmvf89kd",
+  "vcpuCount": 2,
+  "workersMax": 3,
+  "workersMin": 0
+}'
+```
+
+For complete API documentation and parameter details, see the [Serverless endpoint API reference](/api-reference/endpoints/POST/endpoints).
+
+</Tab>
+
+</Tabs>
 
 <Tip>
 
@@ -56,28 +102,13 @@ You can modify your endpoint's configuration at any time:
 
 5. Click **Save Endpoint** to apply your changes.
 
-Changes take effect over time as each worker is updated to the new configuration. 
-
-For a full description of all endpoint settings, see [Endpoint configurations](/serverless/endpoints/endpoint-configurations).
+Changes take effect over time as each worker is updated to the new configuration.
 
 <Tip>
 
 To force an immediate configuration update, temporarily set **Max Workers** to 0, trigger the **Release**, then restore your desired worker count and update again.
 
 </Tip>
-
-## Add a network volume
-
-Attach persistent storage to share data across workers:
-
-1. Navigate to the [Serverless section](https://www.console.runpod.io/serverless) in the Runpod console.
-2. Click the three dots in the bottom right corner of the endpoint you want to modify.
-3. Click **Edit Endpoint**.
-4. Expand the **Advanced** section.
-5. Select a volume from the dropdown below **Network Volume**.
-6. Click **Save Endpoint** to attach the volume to your endpoint.
-
-Network volumes are mounted to the same path on each worker, making them ideal for sharing large models, datasets, or any data that needs to persist across worker instances.
 
 ## Delete an endpoint
 
@@ -89,6 +120,21 @@ When you no longer need an endpoint, you can remove it from your account:
 4. Type the name of the endpoint, then click **Confirm**.
 
 After confirmation, the endpoint will be removed from your account, and you'll no longer be charged for its resources.
+
+## Attach a network volume
+
+Attach persistent storage to share data across workers:
+
+1. Navigate to the [Serverless section](https://www.console.runpod.io/serverless) in the Runpod console.
+2. Click the three dots in the bottom right corner of the endpoint you want to modify.
+3. Click **Edit Endpoint**.
+4. Expand the **Advanced** section.
+5. Select a volume from the dropdown below **Network Volume**.
+6. Click **Save Endpoint** to attach the volume to your endpoint.
+
+[Network volumes](/serverless/storage/network-volumes) are mounted to the same path on each worker, making them ideal for sharing large models, datasets, or any data that needs to persist across worker instances.
+
+To learn more about how storage works in Serverless, see [Serverless storage](/serverless/storage/overview).
 
 ## Best practices for endpoint management
 

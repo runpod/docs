@@ -1,0 +1,207 @@
+---
+title: "Environment variables"
+description: "Learn how to use environment variables in Runpod Pods for configuration, security, and automation"
+---
+
+Environment variables in are key-value pairs that you can configure for your Pods. They are accessible within your containerized application and provide a flexible way to pass configuration settings, secrets, and runtime information to your application without hardcoding them into your code or container image.
+
+## What are environment variables?
+
+Environment variables are dynamic values that exist in your Pod's operating system environment. They act as a bridge between your Pod's configuration and your running applications, allowing you to:
+
+- Store configuration settings that can change between deployments.
+- Pass sensitive information like API keys securely.
+- Access Pod metadata and system information.
+- Configure application behavior without modifying code.
+- Reference [Runpod secrets](/pods/templates/secrets) in your containers.
+
+When you set an environment variable in your Pod configuration, it becomes available to all processes running inside that Pod's container.
+
+## Why use environment variables in Pods?
+
+Environment variables offer several key benefits for containerized applications:
+
+**Configuration flexibility**: Environment variables allow you to easily change application settings without modifying your code or rebuilding your container image. For example, you can set different model names, API endpoints, or processing parameters for different deployments:
+
+```bash
+# Set a model name that your application can read
+MODEL_NAME=llama-2-7b-chat
+API_ENDPOINT=https://api.example.com/v1
+MAX_BATCH_SIZE=32
+```
+
+**Security**: Sensitive information such as API keys, database passwords, or authentication tokens can be injected as environment variables, keeping them out of your codebase and container images. This prevents accidental exposure in version control or public repositories.
+
+**Pod metadata access**: Runpod provides [predefined environment variables](#runpod-provided-environment-variables) that give your application information about the Pod's environment, resources, and network configuration. This metadata helps your application adapt to its runtime environment automatically.
+
+**Automation and scaling**: Environment variables make it easier to automate deployments and scale applications. You can use the same container image with different settings for development, staging, and production environments by simply changing the environment variables.
+
+## Setting environment variables
+
+You can configure up to 50 environment variables per Pod through the Runpod interface when creating or editing a Pod or Pod template.
+
+### During Pod creation
+
+1. When creating a new Pod, click **Edit Template** and expand the **Environment Variables** section.
+2. Click **Add Environment Variable**.
+3. Enter the **Key** (variable name) and **Value**.
+4. Repeat for additional variables.
+
+### In Pod templates
+
+1. Navigate to [My Templates](https://www.console.runpod.io/user/templates) in the console.
+2. Create a new template or edit an existing one.
+3. Add environment variables in the **Environment Variables** section.
+4. Save the template for reuse across multiple Pods.
+
+### Using secrets
+
+For sensitive data, you can reference [Runpod secrets](/pods/templates/secrets) in environment variables using the `RUNPOD_SECRET_` prefix. For example:
+
+```
+API_KEY={{ RUNPOD_SECRET_my_api_key }}
+DATABASE_PASSWORD={{ RUNPOD_SECRET_db_password }}
+```
+
+## Updating environment variables
+
+To update environment variables in your Pod:
+
+1. Navigate to the [Pods](https://www.console.runpod.io/user/pods) section of the console.
+2. Click the three dots to the right of the Pod you want to update and select **Edit Pod**.
+3. Click the **Environment Variables** section to expand it.
+4. Add or update the environment variables.
+5. Click **Save** to save your changes.
+
+<Warning>
+When you update environment variables your Pod will restart, clearing all data outside of your volume mount path (`/workspace` by default).
+</Warning>
+
+## Accessing environment variables
+
+Once set, environment variables are available to your application through standard operating system mechanisms.
+
+### Verify variables in your Pod
+
+You can check if environment variables are properly set by running commands in your Pod's terminal:
+
+```bash
+# View a specific environment variable
+echo $ENVIRONMENT_VARIABLE_KEY
+
+# List all environment variables
+env
+
+# Search for specific variables
+env | grep RUNPOD
+```
+
+### Accessing variables in your applications
+
+Different programming languages provide various ways to access environment variables:
+
+**Python:**
+```python
+import os
+
+model_name = os.environ.get('MODEL_NAME', 'default-model')
+api_key = os.environ['API_KEY']  # Raises error if not found
+```
+
+**Node.js:**
+```javascript
+const modelName = process.env.MODEL_NAME || 'default-model';
+const apiKey = process.env.API_KEY;
+```
+
+**Bash scripts:**
+```bash
+#!/bin/bash
+MODEL_NAME=${MODEL_NAME:-"default-model"}
+echo "Using model: $MODEL_NAME"
+```
+
+## Runpod-provided environment variables
+
+Runpod automatically sets several environment variables that provide information about your Pod's environment and resources:
+
+| Variable              | Description                                                                                      |
+| --------------------- | ------------------------------------------------------------------------------------------------ |
+| `RUNPOD_POD_ID`       | The unique identifier assigned to your Pod.                                                      |
+| `RUNPOD_DC_ID`        | The identifier of the data center where your Pod is located.                                     |
+| `RUNPOD_POD_HOSTNAME` | The hostname of the server where your Pod is running.                                            |
+| `RUNPOD_GPU_COUNT`    | The total number of GPUs available to your Pod.                                                  |
+| `RUNPOD_CPU_COUNT`    | The total number of CPUs available to your Pod.                                                  |
+| `RUNPOD_PUBLIC_IP`    | The publicly accessible IP address for your Pod, if available.                                   |
+| `RUNPOD_TCP_PORT_22`  | The public port mapped to SSH (port 22) for your Pod.                                            |
+| `RUNPOD_ALLOW_IP`     | A comma-separated list of IP addresses or ranges allowed to access your Pod.                     |
+| `RUNPOD_VOLUME_ID`    | The ID of the network volume attached to your Pod.                                               |
+| `RUNPOD_API_KEY`      | The API key for making Runpod API calls scoped specifically to this Pod.                         |
+| `PUBLIC_KEY`          | The SSH public keys authorized to access your Pod over SSH.                                      |
+| `CUDA_VERSION`        | The version of CUDA installed in your Pod environment.                                           |
+| `PYTORCH_VERSION`     | The version of PyTorch installed in your Pod environment.                                        |
+| `PWD`                 | The current working directory inside your Pod.                                                   |
+
+## Common use cases
+
+Environment variables are particularly useful for:
+
+**Model configuration**: Configure which AI models to load without rebuilding your container:
+
+```bash
+MODEL_NAME=gpt-3.5-turbo
+MODEL_PATH=/workspace/models
+MAX_TOKENS=2048
+TEMPERATURE=0.7
+```
+
+**Service configuration**: Set up web services and APIs with flexible configuration:
+
+```bash
+API_PORT=8000
+DEBUG_MODE=false
+LOG_LEVEL=INFO
+CORS_ORIGINS=https://myapp.com,https://staging.myapp.com
+```
+
+**Database and external service connections**: Connect to databases and external APIs securely:
+
+```bash
+DATABASE_URL=postgresql://user:pass@host:5432/db
+REDIS_URL=redis://localhost:6379
+API_BASE_URL=https://api.external-service.com
+```
+
+**Development vs. production settings**: Use different configurations for different environments:
+
+```bash
+ENVIRONMENT=production
+CACHE_ENABLED=true
+RATE_LIMIT=1000
+MONITORING_ENABLED=true
+```
+
+**Port management**: When configuring symmetrical ports, your application can discover assigned ports through environment variables. This is particularly useful for services that need to know their external port numbers.
+
+For more details, see [Expose ports](/pods/configuration/expose-ports#symmetrical-port-mapping).
+
+## Best practices
+
+Follow these guidelines when working with environment variables:
+
+**Security considerations**:
+
+- **Never hardcode secrets**: Use [Runpod secrets](/pods/templates/secrets) for sensitive data.
+- **Use descriptive names**: Choose clear, descriptive variable names like `DATABASE_PASSWORD` instead of `DB_PASS`.
+
+**Configuration management**:
+
+- **Provide defaults**: Use default values for non-critical configuration options.
+- **Document your variables**: Maintain clear documentation of what each environment variable does.
+- **Group related variables**: Use consistent prefixes for related configuration (for example, `DB_HOST`, `DB_PORT`, `DB_NAME`).
+
+**Application design**:
+
+- **Validate required variables**. Check that critical environment variables are set before your application starts. If the variable is missing, your application should throw an error or return a clear message indicating which variable is not set. This helps prevent unexpected failures and makes debugging easier.
+- **Type conversion**: Convert string environment variables to appropriate types (such as integers or booleans) in your application.
+- **Configuration validation**: Validate environment variable values to catch configuration errors early.
