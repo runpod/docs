@@ -112,16 +112,21 @@ export ENDPOINT_ID="YOUR_ENDPOINT_ID"
 
 ### `/runsync`
 
-Synchronous jobs wait for completion and return the complete result in a single response. This approach works best for shorter tasks where you need immediate results, interactive applications, and simpler client code without status polling.
+Synchronous jobs wait for completion and return the complete result in a single response. This approach works best for shorter tasks where you need immediate results, interactive applications, and simpler client code without status polling. 
 
-* **Payload limit**: 20 MB  
-* **Job availability**: Results are available for 60 seconds after completion
+* **Payload limit**: 20 MB 
+* **Result availability**: 1 minute by default, up to 5 minutes with `?wait=m` or `timeout=s` (depending on the SDK)
 
 <Tabs>
 <Tab title="cURL">
+
+Results are available for 1 minute by default, but you can append `?wait=m` to the request URL to extend the timeout up to 5 minutes, where `m` is the number of milliseconds to store the results, from 1000 (1 second) to 300000 (5 minutes). 
+
+For example, appending `?wait=120000` will keep your results available for 2 minutes.
+
 ```sh
 curl --request POST \
-     --url https://api.runpod.ai/v2/$ENDPOINT_ID/runsync \
+     --url https://api.runpod.ai/v2/$ENDPOINT_ID/runsync?wait=120000 \
      -H "accept: application/json" \
      -H "authorization: $RUNPOD_API_KEY" \
      -H "content-type: application/json" \
@@ -130,6 +135,9 @@ curl --request POST \
 </Tab>
 
 <Tab title="Python">
+
+Use the `timeout` parameter to set the duration for results to be available in seconds. For example, `timeout=120` will keep the results for 2 minutes.
+
 ```python
 import runpod
 import os
@@ -140,7 +148,7 @@ endpoint = runpod.Endpoint(os.getenv("ENDPOINT_ID"))
 try:
     run_request = endpoint.run_sync(
         {"prompt": "Hello, world!"},
-        timeout=60,  # Timeout in seconds
+        timeout=120,  # Results will be available for 120 seconds (2 minutes), up to 300 (5 minutes)
     )
     print(run_request)
 except TimeoutError:
@@ -149,6 +157,7 @@ except TimeoutError:
 </Tab>
 
 <Tab title="JavaScript">
+
 ```javascript
 const { RUNPOD_API_KEY, ENDPOINT_ID } = process.env;
 import runpodSdk from "runpod-sdk";
@@ -160,6 +169,7 @@ const result = await endpoint.runSync({
   "input": {
     "prompt": "Hello, World!",
   },
+}, 60000); // Results will be available for 60000 milliseconds (1 minute), up to 300000 (5 minutes)
 });
 
 console.log(result);
@@ -167,6 +177,9 @@ console.log(result);
 </Tab>
 
 <Tab title="Go">
+
+Use the `Timeout` parameter to set the duration for results to be available in seconds. For example, `Timeout=60` will keep the results for 60 seconds.
+
 ```go
 package main
 
@@ -199,7 +212,7 @@ func main() {
 				"prompt": "Hello World",
 			},
 		},
-		Timeout: sdk.Int(120),
+		Timeout: sdk.Int(60), // Results will be available for 60 seconds, up to 3000 (5 minutes)
 	}
 
 	output, err := endpoint.RunSync(&jobInput)
@@ -826,7 +839,7 @@ You'll see the job status updated to `IN_QUEUE` when the job is retried:
 ```
 
 <Note>
-Job results expire after a set period. Asynchronous jobs (`/run`) results are available for 30 minutes, while synchronous jobs (`/runsync`) results are available for 1 minute. Once expired, jobs cannot be retried.
+Job results expire after a set period. Asynchronous jobs (`/run`) results are available for 30 minutes, while synchronous jobs (`/runsync`) results are available for 1 minute (up to 5 minutes with `?wait=t`). Once expired, jobs cannot be retried.
 </Note>
 
 ### `/purge-queue`
