@@ -12,16 +12,31 @@ Serverless endpoints provide synchronous and asynchronous job processing with au
 
 ## How requests work
 
-After creating a Serverless [endpoint](/serverless/endpoints/overview), you can start sending it **requests** to submit jobs and retrieve results. A request can include parameters, payloads, and headers that define what the endpoint should process. For example, you can send a `POST` request to submit a job, or a `GET` request to check status of a job, retrieve results, or check endpoint health.
+After creating a Serverless [endpoint](/serverless/endpoints/overview), you can start sending it **requests** to submit jobs and retrieve results. 
 
-A **job** is a unit of work containing the input data from the request, packaged for processing by your [workers](/serverless/workers/overview). If no worker is immediately available, the job is queued. Once a worker is available, the job is processed by the worker using your [handler function](/serverless/workers/handler-functions).
+A request can include parameters, payloads, and headers that define what the endpoint should process. For example, you can send a `POST` request to submit a job, or a `GET` request to check status of a job, retrieve results, or check endpoint health.
+
+A **job** is a unit of work containing the input data from the request, packaged for processing by your [workers](/serverless/workers/overview).
+
+If no worker is immediately available, the job is queued. Once a worker is available, the job is processed by the worker using your [handler function](/serverless/workers/handler-functions).
+
+Queue-based endpoints provide a fixed set of operations for submitting and managing jobs. You can find a full list of operations and examples in the [sections below](/serverless/endpoints/send-requests#operation-overview).
+
+## Sync vs. async
 
 When you submit a job request, it can be either synchronous or asynchronous depending on the operation you use:
 
-- `/runsync` submits a synchronous job. A response is returned as soon as the job is complete.
-- `/run` submits an asynchronous job. The job is processed in the background, and you can retrieve the result by sending a `GET` request to the `/status` endpoint. 
+- `/runsync` submits a synchronous job.
+  - Client waits for the job to complete before returning the result.
+  - A response is returned as soon as the job is complete.
+  - Results are available for 1 minute by default (5 minutes max).
+  - Ideal for quick responses and interactive applications.
+- `/run` submits an asynchronous job.
+  - The job is processed in the background.
+  - Retrieve the result by sending a `GET` request to the `/status` endpoint.
+  - Results are available for 30 minutes after completion.
+  - Ideal for long-running tasks and batch processing.
 
-Queue-based endpoints provide a fixed set of operations for submitting and managing jobs. You can find a full list of operations and examples in the [sections below](/serverless/endpoints/send-requests#operation-overview).
 
 <Tip>
 If you need to create an endpoint that supports custom API paths, use [load balancing endpoints](/serverless/load-balancing/overview).
@@ -29,9 +44,7 @@ If you need to create an endpoint that supports custom API paths, use [load bala
 
 ## Request input structure
 
-When submitting a job with `/runsync` or `/run`, your request must include a JSON object the the key `input`, containing the parameters required by your worker's [handler function](/serverless/workers/handler-functions).
-
-For example:
+When submitting a job with `/runsync` or `/run`, your request must include a JSON object with the key `input` containing the parameters required by your worker's [handler function](/serverless/workers/handler-functions). For example:
 
 ```json
 {
@@ -41,7 +54,7 @@ For example:
 }
 ```
 
-The exact parameters inside the `input` object depend on your specific worker implementation. Check your worker's documentation for required and optional parameters.
+The exact parameters required in the `input` object depend on your specific worker implementation (e.g. `prompt` commonly used for endpoints serving LLMs, but not all workers accept it). Check your worker's documentation for a list of required and optional parameters.
 
 ## Send requests from the console
 
@@ -112,17 +125,24 @@ export ENDPOINT_ID="YOUR_ENDPOINT_ID"
 
 ### `/runsync`
 
-Synchronous jobs wait for completion and return the complete result in a single response. This approach works best for shorter tasks where you need immediate results, interactive applications, and simpler client code without status polling. 
+Synchronous jobs wait for completion and return the complete result in a single response. This approach works best for shorter tasks where you need immediate results, interactive applications, and simpler client code without status polling.
 
-* **Payload limit**: 20 MB 
-* **Result availability**: 1 minute by default, up to 5 minutes with `?wait=m` (for cURL) or `timeout=s` (for SDKs)
+`/runsync` requests have a maximum payload size of 20 MB.
+
+Results are available for 1 minute by default, but you can append `?wait=x` to the request URL to extend this up to 5 minutes, where `x` is the number of milliseconds to store the results, from 1000 (1 second) to 300000 (5 minutes).
+
+For example, `?wait=120000` will keep your results available for 2 minutes:
+
+```sh
+https://api.runpod.ai/v2/$ENDPOINT_ID/runsync?wait=120000
+```
+
+<Note>
+This is only available for `cURL` and standard HTTP request APIs/libraries.
+</Note>
 
 <Tabs>
 <Tab title="cURL">
-
-Results are available for 1 minute by default, but you can append `?wait=m` to the request URL to extend the timeout up to 5 minutes, where `m` is the number of milliseconds to store the results, from 1000 (1 second) to 300000 (5 minutes). 
-
-For example, appending `?wait=120000` will keep your results available for 2 minutes.
 
 ```sh
 curl --request POST \
@@ -136,8 +156,6 @@ curl --request POST \
 
 <Tab title="Python">
 
-Use the `timeout` parameter to set the duration for results to be available in seconds. For example, `timeout=120` will keep the results for 2 minutes.
-
 ```python
 import runpod
 import os
@@ -148,7 +166,7 @@ endpoint = runpod.Endpoint(os.getenv("ENDPOINT_ID"))
 try:
     run_request = endpoint.run_sync(
         {"prompt": "Hello, world!"},
-        timeout=120,  # Results will be available for 120 seconds (2 minutes), up to 300 (5 minutes)
+        timeout=60,  # Client timeout in seconds
     )
     print(run_request)
 except TimeoutError:
@@ -169,7 +187,8 @@ const result = await endpoint.runSync({
   "input": {
     "prompt": "Hello, World!",
   },
-}, 60000); // Results will be available for 60000 milliseconds (1 minute), up to 300000 (5 minutes)
+  timeout: 60000, // Client timeout in milliseconds
+}); 
 });
 
 console.log(result);
@@ -177,8 +196,6 @@ console.log(result);
 </Tab>
 
 <Tab title="Go">
-
-Use the `Timeout` parameter to set the duration for results to be available in seconds. For example, `Timeout=60` will keep the results for 60 seconds.
 
 ```go
 package main
@@ -212,7 +229,7 @@ func main() {
 				"prompt": "Hello World",
 			},
 		},
-		Timeout: sdk.Int(60), // Results will be available for 60 seconds, up to 3000 (5 minutes)
+		Timeout: sdk.Int(60), // Client timeout in seconds
 	}
 
 	output, err := endpoint.RunSync(&jobInput)
@@ -251,8 +268,9 @@ func main() {
 
 Asynchronous jobs process in the background and return immediately with a job ID. This approach works best for longer-running tasks that don't require immediate results, operations requiring significant processing time, and managing multiple concurrent jobs.
 
-* **Payload limit**: 10 MB
-* **Job availability**: Results are available for 30 minutes after completion
+`/run` requests have a maximum payload size of 10 MB.
+
+Job results are available for 30 minutes after completion.
 
 <Tabs>
 <Tab title="cURL">
@@ -355,14 +373,22 @@ func main() {
 </Tab>
 
 <Tab title="Response">
+
+TODO
+
+</Tab>
+</Tabs>
+
+`/run` requests return a response with the job ID and status:
+
 ```json
 {
   "id": "eaebd6e7-6a92-4bb8-a911-f996ac5ea99d",
   "status": "IN_QUEUE"
 }
 ```
-</Tab>
-</Tabs>
+
+Further results must be retrieved using the `/status` endpoint.
 
 ### `/status`
 
@@ -1111,13 +1137,3 @@ Here are some common issues and suggested solutions:
 | Missing results    | Results expired                                 | Retrieve results within expiration window (30 min for async, 1 min for sync) |
 
 Implementing proper error handling and retry logic will make your integrations more robust and reliable.
-
-## Related resources
-
-* [Endpoint configurations](/serverless/endpoints/endpoint-configurations)
-* [Python SDK for endpoints](/sdks/python/endpoints)
-* [JavaScript SDK for endpoints](/sdks/javascript/endpoints)
-* [Go SDK for endpoints](/sdks/go/endpoints)
-* [Handler functions](/serverless/workers/handler-functions)
-* [Local testing](/serverless/development/local-testing)
-* [GitHub integration](/serverless/workers/github-integration)
