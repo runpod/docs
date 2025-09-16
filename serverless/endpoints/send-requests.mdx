@@ -18,9 +18,9 @@ A request can include parameters, payloads, and headers that define what the end
 
 A **job** is a unit of work containing the input data from the request, packaged for processing by your [workers](/serverless/workers/overview).
 
-If no worker is immediately available, the job is queued. Once a worker is available, the job is processed by the worker using your [handler function](/serverless/workers/handler-functions).
+If no worker is immediately available, the job is queued. Once a worker is available, the job is processed using your worker's [handler function](/serverless/workers/handler-functions).
 
-Queue-based endpoints provide a fixed set of operations for submitting and managing jobs. You can find a full list of operations and examples in the [sections below](/serverless/endpoints/send-requests#operation-overview).
+Queue-based endpoints provide a fixed set of operations for submitting and managing jobs. You can find a full list of operations and sample code in the [sections below](/serverless/endpoints/send-requests#operation-overview).
 
 ## Sync vs. async
 
@@ -36,11 +36,6 @@ When you submit a job request, it can be either synchronous or asynchronous depe
   - Retrieve the result by sending a `GET` request to the `/status` endpoint.
   - Results are available for 30 minutes after completion.
   - Ideal for long-running tasks and batch processing.
-
-
-<Tip>
-If you need to create an endpoint that supports custom API paths, use [load balancing endpoints](/serverless/load-balancing/overview).
-</Tip>
 
 ## Request input structure
 
@@ -94,6 +89,10 @@ Here's a quick overview of the operations available for queue-based endpoints:
 | `/purge-queue`   | POST       | Clear all pending jobs from the queue without affecting jobs already in progress.                |
 | `/health`        | GET        | Monitor the operational status of your endpoint, including worker and job statistics.            |
 
+<Tip>
+If you need to create an endpoint that supports custom API paths, use [load balancing endpoints](/serverless/load-balancing/overview).
+</Tip>
+
 ## Operation reference
 
 Below you'll find detailed explanations and examples for each operation using `cURL` and the Runpod SDK.
@@ -138,7 +137,7 @@ https://api.runpod.ai/v2/$ENDPOINT_ID/runsync?wait=120000
 ```
 
 <Note>
-This is only available for `cURL` and standard HTTP request APIs/libraries.
+`?wait` is only available for `cURL` and standard HTTP request libraries.
 </Note>
 
 <Tabs>
@@ -146,7 +145,7 @@ This is only available for `cURL` and standard HTTP request APIs/libraries.
 
 ```sh
 curl --request POST \
-     --url https://api.runpod.ai/v2/$ENDPOINT_ID/runsync?wait=120000 \
+     --url https://api.runpod.ai/v2/$ENDPOINT_ID/runsync \
      -H "accept: application/json" \
      -H "authorization: $RUNPOD_API_KEY" \
      -H "content-type: application/json" \
@@ -242,10 +241,9 @@ func main() {
 }
 ```
 </Tab>
+</Tabs>
 
-<Tab title="Response">
-
-`/runsync` requests return a response as soon as the job is complete:
+`/runsync` returns a response as soon as the job is complete:
 
 ```json
 {
@@ -261,8 +259,6 @@ func main() {
   "status": "COMPLETED"
 }
 ```
-</Tab>
-</Tabs>
 
 ### `/run`
 
@@ -372,14 +368,9 @@ func main() {
 ```
 </Tab>
 
-<Tab title="Response">
-
-TODO
-
-</Tab>
 </Tabs>
 
-`/run` requests return a response with the job ID and status:
+`/run` returns a response with the job ID and status:
 
 ```json
 {
@@ -388,15 +379,21 @@ TODO
 }
 ```
 
-Further results must be retrieved using the `/status` endpoint.
+Further results must be retrieved using the `/status` operation.
 
 ### `/status`
 
-Check the current state, execution statistics, and results of previously submitted jobs. The status endpoint provides the current job state, execution statistics like queue delay and processing time, and job output if completed.
+Check the current state, execution statistics, and results of previously submitted jobs. The status operation provides the current job state, execution statistics like queue delay and processing time, and job output if completed.
+
+<Tip>
+You can configure time-to-live (TTL) for individual jobs by appending a TTL parameter to the request URL. 
+
+For example, `https://api.runpod.ai/v2/$ENDPOINT_ID/status/YOUR_JOB_ID?ttl=6000` sets the TTL to 6 seconds.
+</Tip>
 
 <Tabs>
 <Tab title="cURL">
-Replace `YOUR_JOB_ID` with the actual job ID you received in the response to the `/run` request.
+Replace `YOUR_JOB_ID` with the actual job ID you received in the response to the `/run` operation.
 
 ```sh
 curl --request GET \
@@ -515,9 +512,9 @@ func main() {
 ```
 </Tab>
 
-<Tab title="Response">
+</Tabs>
 
-`/status` requests return a JSON response with the job status (e.g. `IN_QUEUE`, `IN_PROGRESS`, `COMPLETED`, `FAILED`), and an optional `output` field if the job is completed:
+`/status` returns a JSON response with the job status (e.g. `IN_QUEUE`, `IN_PROGRESS`, `COMPLETED`, `FAILED`), and an optional `output` field if the job is completed:
 
 ```json
 {
@@ -532,12 +529,6 @@ func main() {
   "status": "COMPLETED"
 }
 ```
-</Tab>
-</Tabs>
-
-<Tip>
-You can configure time-to-live (TTL) for individual jobs by appending a TTL parameter: `https://api.runpod.ai/v2/$ENDPOINT_ID/status/YOUR_JOB_ID?ttl=6000` sets the TTL to 6 seconds.
-</Tip>
 
 ### `/stream`
 
