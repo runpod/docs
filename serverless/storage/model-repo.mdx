@@ -19,14 +19,26 @@ The Runpod private model repository allows you to upload your models directly to
 
 Using the private model repository provides several key advantages:
 
-- **Faster cold start times:** Models stored in the repository are pre-cached on Runpod's infrastructure, eliminating the need for workers to download them from external sources like Hugging Face. Our smart scheduler also prioritizes placing your jobs on machines that already have the required model, leading to near-instantaneous starts.
+- **Faster cold start times:** Models stored in the repository are pre-cached on Runpod's infrastructure, eliminating the need for workers to download them from external sources like Hugging Face.
 - **Reduced costs:** You aren't billed for worker time while your model is being downloaded. This is especially impactful for large models that can take several minutes to load.
 - **Improved reliability:** Storing models on Runpod reduces your dependency on external services, which can experience downtime or rate-limiting.
 - **Smaller container images:** By decoupling models from your container image, you can create smaller, more focused images that contain only your serving logic.
 
+## How it works
+
+You can upload and manage models using the Runpod CLI (`runpodctl`). 
+
+When you [select a model](#use-models-in-serverless-endpoints) during Serverless endpoint creation, Runpod will automatically try to start your workers on hosts that already contain your selected model.
+
+If no pre-cached host machines are available, the system will delay starting your workers until the model download completes, so you still won't be charged for the download time.
+
+## Pricing
+
+The private model repository feature is available at no additional cost during the beta launch period.
+
 ## Manage private models
 
-Models can be uploaded and managed using the Runpod CLI (`runpodctl`). Make sure you've [installed runpodctl](/runpodctl/install-runpodctl) and [configured your API key](/runpodctl/overview#configure-your-api-key).
+Make sure you've [installed runpodctl](/runpodctl/install-runpodctl) and [configured your API key](/runpodctl/overview#configure-your-api-key).
 
 ### Upload a model
 
@@ -51,7 +63,7 @@ runpodctl create model \
 
 ```
 
-### List your uploaded models
+### List your models
 
 To see a list of all models you've uploaded to the repository, run the following command:
 
@@ -98,7 +110,7 @@ regionSpecs:
 ```
 ### Remove a model
 
-When you no longer need a model uploaded to the global repository, you can remove it using `runpodctl`. This cleans up your repository list and frees up storage space.
+When you no longer need a model uploaded to the private repository, you can remove it using `runpodctl`. This cleans up your repository list and frees up storage space.
 
 To remove a model, run the following command:
 
@@ -114,42 +126,13 @@ Before removing a model, ensure that none of your active endpoints are using it.
 
 ## Use models in Serverless endpoints
 
-Once you've uploaded a model to the repository, you can use it in your Serverless endpoints to improve initialization performance.
+When creating a new Serverless endpoint or updating an existing one, you can select models from your private model repository.
 
-### Select private repository models when creating endpoints
+To select a model from the repository, follow these steps:
 
-When creating a new Serverless endpoint or updating an existing one, you can select models from your organization repository.
-
-To select a model from the repository, perform the following steps:
-
-1. In the [Runpod console](https://www.console.runpod.io/serverless), go to **Serverless** > **Endpoints**.
+1. Navigate to the [Serverless section](https://www.console.runpod.io/serverless) of the Runpod console.
 2. Click **New Endpoint**, or edit an existing endpoint.
-3. In the **Endpoint Configuration** screen, scroll down to **Model (optional)** and click the dropdown. Your uploaded models will be listed under **Organization Repository**.
+3. In the **Endpoint Configuration** step, scroll down to **Model (optional)** and click the dropdown. Your uploaded models will be listed under **Organization Repository**.
 4. Select your model from the list.
-5. Complete your endpoint configuration and click **Create Endpoint**.
-
-## How it works
-
-### Smart placement
-
-When you use a cached model at endpoint creation time, Runpod automatically checks throughout the infrastructure for hosts that already contain your selected model.
-
-If no pre-cached host workers are available, the system still gracefully provides fallbacks and will download the model to unoccupied workers, prioritizing local access.
-
-### Graceful fallback
-
-For scenarios where pre-cached models aren't immediately available, Runpod implements intelligent fallback handling:
-
-For uncached models:
-- Workers are started immediately during endpoint creation when the specs are selected.
-- Model download happens concurrently in the background, then the download process passes the right weights and config to the container code after extraction.
-
-For cached models:
-- Smart placement: Will check if it exists on machine.
-- Placement with pre-waiting is essentially identical to a fully downloaded model.
-
-The model caching process is largely transparent—you simply specify the desired cached model for your endpoint with deployment, and Runpod handles recognizing and optimizing both initial downloads and subsequent cached access.
-
-## Pricing
-
-The private model repository feature is available at no additional cost during the beta launch period.
+5. Enter a Hugging Face token if you're using a gated model.
+6. Complete your endpoint configuration and click **Deploy Endpoint**.
