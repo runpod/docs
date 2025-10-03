@@ -10,28 +10,45 @@ This guide is for **queue-based (i.e. traditional) Serverless endpoints**. If yo
 
 Serverless endpoints provide synchronous and asynchronous job processing with automatic worker scaling based on demand. This page covers everything from basic input structure and job submission, to monitoring, troubleshooting, and advanced options for queue-based endpoints.
 
+<iframe
+  className="w-full aspect-video rounded-xl"
+  src="https://www.youtube.com/embed/BURJRgjNNJI?si=wdbNI58YGdPI7JyE"
+  title="Send requests from the console"
+  frameBorder="0"
+  allow="fullscreen; accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+  allowFullScreen
+></iframe>
+
 ## How requests work
 
-After creating a Serverless [endpoint](/serverless/endpoints/overview), you can start sending it **requests** to submit jobs and retrieve results. A request can include parameters, payloads, and headers that define what the endpoint should process. For example, you can send a `POST` request to submit a job, or a `GET` request to check status of a job, retrieve results, or check endpoint health.
+After creating a Serverless [endpoint](/serverless/endpoints/overview), you can start sending it **requests** to submit jobs and retrieve results. 
 
-A **job** is a unit of work containing the input data from the request, packaged for processing by your [workers](/serverless/workers/overview). If no worker is immediately available, the job is queued. Once a worker is available, the job is processed by the worker using your [handler function](/serverless/workers/handler-functions).
+A request can include parameters, payloads, and headers that define what the endpoint should process. For example, you can send a `POST` request to submit a job, or a `GET` request to check status of a job, retrieve results, or check endpoint health.
+
+A **job** is a unit of work containing the input data from the request, packaged for processing by your [workers](/serverless/workers/overview).
+
+If no worker is immediately available, the job is queued. Once a worker is available, the job is processed using your worker's [handler function](/serverless/workers/handler-functions).
+
+Queue-based endpoints provide a fixed set of operations for submitting and managing jobs. You can find a full list of operations and sample code in the [sections below](/serverless/endpoints/send-requests#operation-overview).
+
+## Sync vs. async
 
 When you submit a job request, it can be either synchronous or asynchronous depending on the operation you use:
 
-- `/runsync` submits a synchronous job. A response is returned as soon as the job is complete.
-- `/run` submits an asynchronous job. The job is processed in the background, and you can retrieve the result by sending a `GET` request to the `/status` endpoint. 
-
-Queue-based endpoints provide a fixed set of operations for submitting and managing jobs. You can find a full list of operations and examples in the [sections below](/serverless/endpoints/send-requests#operation-overview).
-
-<Tip>
-If you need to create an endpoint that supports custom API paths, use [load balancing endpoints](/serverless/load-balancing/overview).
-</Tip>
+- `/runsync` submits a synchronous job.
+  - Client waits for the job to complete before returning the result.
+  - A response is returned as soon as the job is complete.
+  - Results are available for 1 minute by default (5 minutes max).
+  - Ideal for quick responses and interactive applications.
+- `/run` submits an asynchronous job.
+  - The job is processed in the background.
+  - Retrieve the result by sending a `GET` request to the `/status` endpoint.
+  - Results are available for 30 minutes after completion.
+  - Ideal for long-running tasks and batch processing.
 
 ## Request input structure
 
-When submitting a job with `/runsync` or `/run`, your request must include a JSON object the the key `input`, containing the parameters required by your worker's [handler function](/serverless/workers/handler-functions).
-
-For example:
+When submitting a job with `/runsync` or `/run`, your request must include a JSON object with the key `input` containing the parameters required by your worker's [handler function](/serverless/workers/handler-functions). For example:
 
 ```json
 {
@@ -41,7 +58,7 @@ For example:
 }
 ```
 
-The exact parameters inside the `input` object depend on your specific worker implementation. Check your worker's documentation for required and optional parameters.
+The exact parameters required in the `input` object depend on your specific worker implementation (e.g. `prompt` commonly used for endpoints serving LLMs, but not all workers accept it). Check your worker's documentation for a list of required and optional parameters.
 
 ## Send requests from the console
 
@@ -81,6 +98,10 @@ Here's a quick overview of the operations available for queue-based endpoints:
 | `/purge-queue`   | POST       | Clear all pending jobs from the queue without affecting jobs already in progress.                |
 | `/health`        | GET        | Monitor the operational status of your endpoint, including worker and job statistics.            |
 
+<Tip>
+If you need to create an endpoint that supports custom API paths, use [load balancing endpoints](/serverless/load-balancing/overview).
+</Tip>
+
 ## Operation reference
 
 Below you'll find detailed explanations and examples for each operation using `cURL` and the Runpod SDK.
@@ -114,11 +135,23 @@ export ENDPOINT_ID="YOUR_ENDPOINT_ID"
 
 Synchronous jobs wait for completion and return the complete result in a single response. This approach works best for shorter tasks where you need immediate results, interactive applications, and simpler client code without status polling.
 
-* **Payload limit**: 20 MB  
-* **Job availability**: Results are available for 60 seconds after completion
+`/runsync` requests have a maximum payload size of 20 MB.
+
+Results are available for 1 minute by default, but you can append `?wait=x` to the request URL to extend this up to 5 minutes, where `x` is the number of milliseconds to store the results, from 1000 (1 second) to 300000 (5 minutes).
+
+For example, `?wait=120000` will keep your results available for 2 minutes:
+
+```sh
+https://api.runpod.ai/v2/$ENDPOINT_ID/runsync?wait=120000
+```
+
+<Note>
+`?wait` is only available for `cURL` and standard HTTP request libraries.
+</Note>
 
 <Tabs>
 <Tab title="cURL">
+
 ```sh
 curl --request POST \
      --url https://api.runpod.ai/v2/$ENDPOINT_ID/runsync \
@@ -130,6 +163,7 @@ curl --request POST \
 </Tab>
 
 <Tab title="Python">
+
 ```python
 import runpod
 import os
@@ -140,7 +174,7 @@ endpoint = runpod.Endpoint(os.getenv("ENDPOINT_ID"))
 try:
     run_request = endpoint.run_sync(
         {"prompt": "Hello, world!"},
-        timeout=60,  # Timeout in seconds
+        timeout=60,  # Client timeout in seconds
     )
     print(run_request)
 except TimeoutError:
@@ -149,6 +183,7 @@ except TimeoutError:
 </Tab>
 
 <Tab title="JavaScript">
+
 ```javascript
 const { RUNPOD_API_KEY, ENDPOINT_ID } = process.env;
 import runpodSdk from "runpod-sdk";
@@ -160,6 +195,8 @@ const result = await endpoint.runSync({
   "input": {
     "prompt": "Hello, World!",
   },
+  timeout: 60000, // Client timeout in milliseconds
+}); 
 });
 
 console.log(result);
@@ -167,6 +204,7 @@ console.log(result);
 </Tab>
 
 <Tab title="Go">
+
 ```go
 package main
 
@@ -199,7 +237,7 @@ func main() {
 				"prompt": "Hello World",
 			},
 		},
-		Timeout: sdk.Int(120),
+		Timeout: sdk.Int(60), // Client timeout in seconds
 	}
 
 	output, err := endpoint.RunSync(&jobInput)
@@ -212,10 +250,9 @@ func main() {
 }
 ```
 </Tab>
+</Tabs>
 
-<Tab title="Response">
-
-`/runsync` requests return a response as soon as the job is complete:
+`/runsync` returns a response as soon as the job is complete:
 
 ```json
 {
@@ -231,15 +268,14 @@ func main() {
   "status": "COMPLETED"
 }
 ```
-</Tab>
-</Tabs>
 
 ### `/run`
 
 Asynchronous jobs process in the background and return immediately with a job ID. This approach works best for longer-running tasks that don't require immediate results, operations requiring significant processing time, and managing multiple concurrent jobs.
 
-* **Payload limit**: 10 MB
-* **Job availability**: Results are available for 30 minutes after completion
+`/run` requests have a maximum payload size of 10 MB.
+
+Job results are available for 30 minutes after completion.
 
 <Tabs>
 <Tab title="cURL">
@@ -341,23 +377,32 @@ func main() {
 ```
 </Tab>
 
-<Tab title="Response">
+</Tabs>
+
+`/run` returns a response with the job ID and status:
+
 ```json
 {
   "id": "eaebd6e7-6a92-4bb8-a911-f996ac5ea99d",
   "status": "IN_QUEUE"
 }
 ```
-</Tab>
-</Tabs>
+
+Further results must be retrieved using the `/status` operation.
 
 ### `/status`
 
-Check the current state, execution statistics, and results of previously submitted jobs. The status endpoint provides the current job state, execution statistics like queue delay and processing time, and job output if completed.
+Check the current state, execution statistics, and results of previously submitted jobs. The status operation provides the current job state, execution statistics like queue delay and processing time, and job output if completed.
+
+<Tip>
+You can configure time-to-live (TTL) for individual jobs by appending a TTL parameter to the request URL. 
+
+For example, `https://api.runpod.ai/v2/$ENDPOINT_ID/status/YOUR_JOB_ID?ttl=6000` sets the TTL to 6 seconds.
+</Tip>
 
 <Tabs>
 <Tab title="cURL">
-Replace `YOUR_JOB_ID` with the actual job ID you received in the response to the `/run` request.
+Replace `YOUR_JOB_ID` with the actual job ID you received in the response to the `/run` operation.
 
 ```sh
 curl --request GET \
@@ -476,9 +521,9 @@ func main() {
 ```
 </Tab>
 
-<Tab title="Response">
+</Tabs>
 
-`/status` requests return a JSON response with the job status (e.g. `IN_QUEUE`, `IN_PROGRESS`, `COMPLETED`, `FAILED`), and an optional `output` field if the job is completed:
+`/status` returns a JSON response with the job status (e.g. `IN_QUEUE`, `IN_PROGRESS`, `COMPLETED`, `FAILED`), and an optional `output` field if the job is completed:
 
 ```json
 {
@@ -493,12 +538,6 @@ func main() {
   "status": "COMPLETED"
 }
 ```
-</Tab>
-</Tabs>
-
-<Tip>
-You can configure time-to-live (TTL) for individual jobs by appending a TTL parameter: `https://api.runpod.ai/v2/$ENDPOINT_ID/status/YOUR_JOB_ID?ttl=6000` sets the TTL to 6 seconds.
-</Tip>
 
 ### `/stream`
 
@@ -629,7 +668,14 @@ func main() {
 ```
 </Tab>
 
-<Tab title="Response">
+</Tabs>
+
+<Info>
+The maximum size for a single streamed payload chunk is 1 MB. Larger outputs will be split across multiple chunks.
+</Info>
+
+Streaming response format:
+
 ```json
 [
   {
@@ -654,12 +700,6 @@ func main() {
   }
 ]
 ```
-</Tab>
-</Tabs>
-
-<Info>
-The maximum size for a single streamed payload chunk is 1 MB. Larger outputs will be split across multiple chunks.
-</Info>
 
 ### `/cancel`
 
@@ -794,15 +834,18 @@ func main() {
 ```
 </Tab>
 
-<Tab title="Response">
+</Tabs>
+
+
+`/cancel` requests return a JSON response with the status of the cancel operation:
+
 ```json
 {
   "id": "724907fe-7bcc-4e42-998d-52cb93e1421f-u1",
   "status": "CANCELLED"
 }
 ```
-</Tab>
-</Tabs>
+
 
 ### `/retry`
 
@@ -826,7 +869,7 @@ You'll see the job status updated to `IN_QUEUE` when the job is retried:
 ```
 
 <Note>
-Job results expire after a set period. Asynchronous jobs (`/run`) results are available for 30 minutes, while synchronous jobs (`/runsync`) results are available for 1 minute. Once expired, jobs cannot be retried.
+Job results expire after a set period. Asynchronous jobs (`/run`) results are available for 30 minutes, while synchronous jobs (`/runsync`) results are available for 1 minute (up to 5 minutes with `?wait=t`). Once expired, jobs cannot be retried.
 </Note>
 
 ### `/purge-queue`
@@ -881,7 +924,11 @@ main();
 ```
 </Tab>
 
-<Tab title="Response">
+</Tabs>
+
+<Warning>
+`/purge-queue` operation only affects jobs waiting in the queue. Jobs already in progress will continue to run.
+</Warning>
 
 `/purge-queue` requests return a JSON response with the number of jobs removed from the queue and the status of the purge operation:
 
@@ -891,12 +938,6 @@ main();
   "status": "completed"
 }
 ```
-</Tab>
-</Tabs>
-
-<Warning>
-`/purge-queue` operation only affects jobs waiting in the queue. Jobs already in progress will continue to run.
-</Warning>
 
 ### `/health`
 
@@ -940,7 +981,7 @@ console.log(health);
 ```
 </Tab>
 
-<Tab title="Response">
+</Tabs>
 
 `/health` requests return a JSON response with the current status of the endpoint, including the number of jobs completed, failed, in progress, in queue, and retried, as well as the status of workers.
 
@@ -959,8 +1000,6 @@ console.log(health);
   }
 }
 ```
-</Tab>
-</Tabs>
 
 ## vLLM and OpenAI requests
 
@@ -1098,13 +1137,3 @@ Here are some common issues and suggested solutions:
 | Missing results    | Results expired                                 | Retrieve results within expiration window (30 min for async, 1 min for sync) |
 
 Implementing proper error handling and retry logic will make your integrations more robust and reliable.
-
-## Related resources
-
-* [Endpoint configurations](/serverless/endpoints/endpoint-configurations)
-* [Python SDK for endpoints](/sdks/python/endpoints)
-* [JavaScript SDK for endpoints](/sdks/javascript/endpoints)
-* [Go SDK for endpoints](/sdks/go/endpoints)
-* [Handler functions](/serverless/workers/handler-functions)
-* [Local testing](/serverless/development/local-testing)
-* [GitHub integration](/serverless/workers/github-integration)
