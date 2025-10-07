@@ -5,6 +5,8 @@ description: "Explore model-specific parameters for all of Runpod's Public Endpo
 tag: "NEW"
 ---
 
+This page lists all available models for Runpod Public Endpoints, as well as the model-specific parameters you can use in your API calls. You can browse and test Public Endpoints using the [Runpod console](https://console.runpod.io/hub?tabSelected=public_endpoints).
+
 ## Available models
 
 The following models are currently available:
@@ -13,7 +15,7 @@ The following models are currently available:
 |-------|-------------|----------|------|-------|
 | **Flux Dev** | Offers exceptional prompt adherence, high visual fidelity, and rich image detail. | `https://api.runpod.ai/v2/black-forest-labs-flux-1-dev/` | Image | \$.02 per megapixel |
 | **Flux Schnell** | Fastest and most lightweight FLUX model, ideal for local development, prototyping, and personal use. | `https://api.runpod.ai/v2/black-forest-labs-flux-1-schnell/` | Image | \$.0024 per megapixel |
-| **FLUX.1 Kontext [dev]** | A 12 billion parameter rectified flow transformer capable of editing images based on text instructions. | `https://api.runpod.ai/v2/black-forest-labs-flux-1-kontext-dev/` | Image | \$0.03 per megapixel |
+| **Flux Kontext Dev** | A 12 billion parameter rectified flow transformer capable of editing images based on text instructions. | `https://api.runpod.ai/v2/black-forest-labs-flux-1-kontext-dev/` | Image | \$0.03 per megapixel |
 | **Qwen3 32B AWQ** | The latest LLM in the Qwen series, offering advancements in reasoning, instruction-following, agent capabilities, and multilingual support. | `https://api.runpod.ai/v2/qwen3-32b-awq/` | Text | \$0.01 per 1000 tokens |
 | **Qwen Image** | Image generation foundation model with advanced text rendering. | `https://api.runpod.ai/v2/qwen-image-t2i/` | Image | \$0.02 per megapixel
 | **Qwen Image LoRA** | Image generation with LoRA support and advanced text rendering. | `https://api.runpod.ai/v2/qwen-image-t2i-lora/` | Image | \$0.02 per megapixel
@@ -98,6 +100,124 @@ Flux Schnell is optimized for speed and real-time applications:
 <Warning>
 Flux Schnell is optimized for speed and works best with lower step counts. Using higher values may not improve quality significantly.
 </Warning>
+
+### Qwen3 32B AWQ
+
+Qwen3 is the latest generation of large language models in Qwen series, offering a comprehensive suite of dense and mixture-of-experts (MoE) models.
+
+| Parameter | Type | Required | Default | Range | Description |
+|-----------|------|----------|---------|-------|-------------|
+| `prompt` | string | Yes | - | - | Prompt for text generation. |
+| `max_tokens` | integer | No | 512 | - | Maximum number of tokens to output. |
+| `temperature` | float | No | 0.7 | 0.0 - 1.0 | Randomness of the output. Lower temperature makes the output more predictable and deterministic.  |
+| `top_p` |  | integer | No | - | Samples from the smallest set of words whose cumulative probability exceeds a given threshold (P).|
+| `top_k` | integer | No | - | 1-8 | Restricts sampling to the top K most probable words. |
+| `stop` | string | No | - | - | Stops generation if the given string is encountered. |
+
+The Qwen3 endpoint is fully compatible with vLLM and the OpenAI API, allowing you to use any of the parameters available in these frameworks. For more details, see [Send vLLM requests](/serverless/vllm/vllm-requests) and the [OpenAI API compatibility guide](/serverless/vllm/openai-compatibility). 
+
+Below you'll find examples for how to use the Qwen3 32B AWQ model with the OpenAI API:
+
+<AccordionGroup>
+<Accordion title="OpenAI API request example">
+
+```python
+from openai import OpenAI
+import os
+
+PUBLIC_ENDPOINT_ID = "qwen3-32b-awq"
+model_name = "Qwen/Qwen3-32B-AWQ"
+
+client = OpenAI(
+    api_key=RUNPOD_API_KEY,
+    base_url=f"https://api.runpod.ai/v2/{PUBLIC_ENDPOINT_ID}/openai/v1",
+)
+messages = [
+    {
+        "role": "system",
+        "content": "You are a pirate chatbot who always responds in pirate speak!",
+    },
+    {   "role": "user", 
+        "content": "Give me a short introduction to LLMs."
+    },
+]
+
+response = client.chat.completions.create(
+    model=model_name,
+    messages=messages,
+    max_tokens=525,
+)
+```
+</Accordion>
+
+<Accordion title="OpenAI API streaming example">
+You can stream responses from the OpenAI API using the `stream` and `stream_options` parameters:
+
+```python
+from openai import OpenAI
+import os
+
+PUBLIC_ENDPOINT_ID = "qwen3-32b-awq"
+model_name = "Qwen/Qwen3-32B-AWQ"
+
+client = OpenAI(
+    api_key=RUNPOD_API_KEY,
+    base_url=f"https://api.runpod.ai/v2/{PUBLIC_ENDPOINT_ID}/openai/v1",
+)
+messages = [
+    {
+        "role": "system",
+        "content": "You are a pirate chatbot who always responds in pirate speak!",
+    },
+    {   "role": "user", 
+        "content": "Give me a short introduction to LLMs."
+    },
+]
+
+response = client.chat.completions.create(
+    model=model_name,
+    messages=messages,
+    max_tokens=525,
+    stream_options={"include_usage": True},
+    stream=True
+)
+```
+
+<Tip>
+`stream_options={"include_usage": True}` is required for streaming to work with vLLM Public Endpoints.
+</Tip>
+</Accordion>
+
+<Accordion title="vLLM Response format">
+
+```json
+{
+  "delayTime": 25,
+  "executionTime": 3153,
+  "id": "sync-0f3288b5-58e8-46fd-ba73-53945f5e8982-u2",
+  "output": [
+    {
+      "choices": [
+        {
+          "tokens": [
+            "Large Language Models (LLMs) are AI systems trained to predict and understand human language. They learn patterns from vast amounts of text data, enabling them to generate responses, answer questions, and complete tasks in natural language. Key characteristics of LLMs include:\n1. Language Understanding\n- Can analyze and comprehend language structure, context, and nuances\n- Process both inputs and outputs in natural human language\n\n2. Pattern Recognition\n- Learn common phrases and relationships"
+          ]
+        }
+      ],
+      "cost": 0.0001,
+      "usage": {
+        "input": 10,
+        "output": 100
+      }
+    }
+  ],
+  "status": "COMPLETED",
+  "workerId": "pkej0t9bbyjrgy"
+}
+```
+</Accordion>
+
+</AccordionGroup>
 
 ### Qwen Image
 
@@ -373,7 +493,7 @@ Minimax Speech 02 HD is a high-definition text-to-speech model with emotional co
 | `english_normalization` | boolean | No | false | Enable English text normalization. |
 | `default_audio_url` | string | No | "" | Fallback audio URL. |
 
-### FLUX.1 Kontext [dev]
+### Flux Kontext Dev
 
 A 12 billion parameter model for editing images based on text instructions.
 
