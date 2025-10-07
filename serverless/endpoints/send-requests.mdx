@@ -1097,7 +1097,29 @@ Runpod enforces rate limits to ensure fair platform usage. These limits apply pe
 | `/openai/*`                          | POST     | 2000 requests per 10 seconds | 400 concurrent   |
 | `/requests`                          | GET      | 10 requests per 10 seconds   | 2 concurrent     |
 
-Requests receive a `429 (Too Many Requests)` status if queue size exceeds 50 jobs AND queue size exceeds `MAX_WORKERS * 500`. Implement appropriate retry logic with exponential backoff to handle rate limiting gracefully.
+### Dynamic rate limiting
+
+In addition to the base rate limits above, Runpod implements a dynamic rate limiting system that scales with your endpoint's worker count. This helps ensure platform stability while allowing higher throughput as you scale.
+
+Rate limits are calculated using two values:
+
+1. **Base limit**: A fixed rate limit per user per endpoint (shown in the table above)
+2. **Worker-based limit**: A dynamic limit calculated as `number_of_running_workers × requests_per_worker`
+
+The system uses **whichever limit is higher** between the base limit and worker-based limit. Requests are blocked with a `429 (Too Many Requests)` status when the request count exceeds this effective limit within a 10-second window. This means as your endpoint scales up workers, your effective rate limit increases proportionally.
+
+For example, if an endpoint has:
+- Base limit: 2000 requests per 10 seconds
+- Additional limit per worker: 50 requests per 10 seconds
+- 20 running workers
+
+The effective rate limit would be `max(2000, 20 × 50) = 2000` requests per 10 seconds (base limit applies). With 50 running workers, it would scale to `max(2000, 50 × 50) = 2500` requests per 10 seconds (worker-based limit applies).
+
+**Key points:**
+- Rate limiting is based on request count per 10-second time windows
+- The system automatically uses whichever limit gives you more requests
+
+Implement appropriate retry logic with exponential backoff to handle rate limiting gracefully.
 
 
 
