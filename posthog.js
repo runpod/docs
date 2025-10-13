@@ -45,3 +45,34 @@
 				defaults: "2025-05-24",
 				person_profiles: "identified_only", // or 'always' to create profiles for anonymous users as well
 			});
+
+document.addEventListener('DOMContentLoaded', (event) => {
+    // Function to handle feedback clicks
+    const handleFeedback = (isHelpful) => {
+        console.log('Feedback button clicked!', { page: window.location.pathname, helpful: isHelpful });
+        const pagePath = window.location.pathname;
+        if (window.posthog) {
+            posthog.capture('Feedback Submitted', {
+                page: pagePath,
+                helpful: isHelpful
+            });
+        }
+    };
+
+    // Find the feedback buttons. 
+    // Note: This is a best-effort attempt to find the buttons. 
+    // If this doesn't work, you may need to provide more specific CSS selectors.
+    const feedbackContainer = document.querySelector('.feedback-toolbar');
+    if (feedbackContainer) {
+        const yesButton = Array.from(feedbackContainer.querySelectorAll('button')).find(button => button.textContent.trim() === 'Yes');
+        const noButton = Array.from(feedbackContainer.querySelectorAll('button')).find(button => button.textContent.trim() === 'No');
+
+        if (yesButton) {
+            yesButton.addEventListener('click', () => handleFeedback(true));
+        }
+
+        if (noButton) {
+            noButton.addEventListener('click', () => handleFeedback(false));
+        }
+    }
+});
