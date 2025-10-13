@@ -2,6 +2,7 @@
 document.addEventListener('DOMContentLoaded', (event) => {
     // Function to handle feedback clicks
     const handleFeedback = (isHelpful) => {
+        console.log('Feedback button clicked!', { page: window.location.pathname, helpful: isHelpful });
         const pagePath = window.location.pathname;
         posthog.capture('Feedback Submitted', {
             page: pagePath,
