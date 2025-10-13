@@ -60,8 +60,6 @@ document.addEventListener('DOMContentLoaded', (event) => {
     };
 
     // Find the feedback buttons. 
-    // Note: This is a best-effort attempt to find the buttons. 
-    // If this doesn't work, you may need to provide more specific CSS selectors.
     const feedbackContainer = document.querySelector('.feedback-toolbar');
     if (feedbackContainer) {
         const yesButton = Array.from(feedbackContainer.querySelectorAll('button')).find(button => button.textContent.trim() === 'Yes');
