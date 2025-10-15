@@ -1,0 +1,183 @@
+---
+title: "Integrate with agentic frameworks"
+sidebarTitle: "Integrations"
+description: "Integrate Runpod Serverless endpoints with agentic frameworks and any tool that support custom endpoints."
+---
+
+Runpod Serverless works with any system that supports custom endpoint configuration. If a library or framework lets you set a custom `base_url`, you can connect it to your Runpod endpoints without specialized adapters or connectors.
+
+## How it works
+
+Integration is straightforward: any library or framework that accepts a custom `base_url` for API calls will work with Runpod. This means you can use Runpod with tools like n8n, CrewAI, LangChain, and many others by simply pointing them to your Runpod endpoint URL.
+
+## Deployment options
+
+Runpod offers four deployment options for integrations:
+
+### Public Endpoints
+
+Public Endpoints are pre-deployed AI models that you can use without setting up your own Serverless endpoint. They're vLLM-compatible and return OpenAI-compatible responses, so you can get started quickly or test things out without deploying infrastructure.
+
+The following Public Endpoint URLs are available for OpenAI-compatible models:
+
+```
+# Public Endpoint for Qwen3 32B AWQ
+https://api.runpod.ai/v2/qwen3-32b-awq/openai/v1
+
+# Public Endpoint for ibm/IBM Granite-4.0-H-Small
+https://api.runpod.ai/v2/granite-4-0-h-small/openai/v1
+```
+
+For pricing details and usage information, see [Public Endpoints](/hub/public-endpoints).
+
+### vLLM
+
+[vLLM workers](/serverless/vllm/overview) provide an inference engine that returns [OpenAI-compatible responses](/serverless/vllm/openai-compatibility), making it ideal for tools that expect OpenAI's API format.
+
+When you deploy a vLLM endpoint, access it using the OpenAI-compatible API at:
+
+```
+https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1
+```
+
+Where `ENDPOINT_ID` is your Serverless endpoint ID.
+
+### SGLang
+
+[SGLang workers](/serverless/sglang/overview) are an inference engine that returns OpenAI-compatible responses. It offers optimized performance for certain model types and use cases.
+
+To learn more, see the [runpod-workers/worker-sglang](https://github.com/runpod-workers/worker-sglang) repository on GitHub.
+
+### Load balancer
+
+[Load balancing endpoints](/serverless/load-balancing/overview) let you create custom endpoints where you define your own inputs and outputs. This gives you complete control over the API contract and is ideal when you need custom behavior beyond standard inference patterns.
+
+## Model configuration for compatibility
+
+Some models require specific vLLM environment variables to work with external tools and frameworks. You may need to set a custom chat template or [tool call parser](https://docs.vllm.ai/en/latest/features/tool_calling.html) to ensure your model returns responses in the format your integration expects.
+
+For example, you can configure the `Qwen/qwen3-32b-awq` model for OpenAI compatibility by adding these environment variables in your vLLM endpoint settings:
+
+```txt
+ENABLE_AUTO_TOOL_CHOICE=true
+REASONING_PARSER=qwen3
+TOOL_CALL_PARSER=hermes
+```
+
+These settings enable automatic tool choice selection and set the right parsers for the Qwen3 model to work with tools that expect OpenAI-formatted responses.
+
+For more information about tool calling configuration and available parsers, see the [vLLM tool calling documentation](https://docs.vllm.ai/en/latest/features/tool_calling.html).
+
+## Example: Integrating with CrewAI
+
+CrewAI is a framework for orchestrating role-playing autonomous AI agents. You can connect Runpod to CrewAI using a vLLM deployment.
+
+### On Runpod
+
+<Steps>
+  <Step title="Deploy a vLLM Serverless endpoint">
+    Deploy a vLLM Serverless endpoint with your desired model. Follow the [vLLM deployment guide](/serverless/vllm/get-started) if you need help getting started.
+  </Step>
+
+  <Step title="Get your endpoint ID">
+    Once deployed, navigate to your endpoint in the Runpod console and copy the endpoint ID from the endpoint details page.
+  </Step>
+</Steps>
+
+### On CrewAI
+
+<Steps>
+  <Step title="Open the LLM connections settings">
+    Open the CrewAI dashboard and look for the "LLM connections" section.
+  </Step>
+
+  <Step title="Select the custom OpenAI provider">
+    Under "Provider", select "custom-openai-compatible" from the dropdown menu.
+  </Step>
+
+  <Step title="Add your credentials">
+    Configure the connection with your Runpod credentials:
+    
+    - For `OPENAI_API_KEY`, use your Runpod API Key. You can find or create API keys in the [Runpod console](https://www.runpod.io/console/user/settings).
+    - For `OPENAI_API_BASE`, add the base URL for your vLLM's OpenAI compatible endpoint:
+    
+    ```
+    https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1
+    ```
+    
+    Replace `ENDPOINT_ID` with your actual endpoint ID from step 2.
+  </Step>
+
+  <Step title="Test the connection">
+    Click "Fetch Available Models" to test the connection. If successful, CrewAI will retrieve the list of models available on your endpoint.
+  </Step>
+</Steps>
+
+## Example: Integrating with n8n
+
+n8n is a workflow automation tool that supports custom OpenAI-compatible endpoints. You can connect Runpod to n8n using a vLLM deployment.
+
+### On Runpod
+
+<Steps>
+  <Step title="Deploy a vLLM Serverless endpoint">
+    Deploy a vLLM Serverless endpoint with your desired model. Follow the [vLLM deployment guide](/serverless/vllm/get-started) if you need help getting started.
+  </Step>
+
+  <Step title="Get your endpoint ID">
+    Once deployed, navigate to your endpoint in the Runpod console and copy the endpoint ID from the endpoint details page.
+  </Step>
+</Steps>
+
+### On n8n
+
+<Steps>
+  <Step title="Create an OpenAI Chat Model node">
+    In your n8n workflow, add a new "OpenAI Chat Model" node to your canvas.
+  </Step>
+
+  <Step title="Create a new credential">
+    Click the dropdown under "Credential to connect with" and select "Create new credential".
+  </Step>
+
+  <Step title="Add your API key">
+    Under API Key, add your Runpod API Key. You can find or create API keys in the [Runpod console](https://www.runpod.io/console/user/settings).
+  </Step>
+
+  <Step title="Configure the base URL">
+    Under Base URL, replace the default OpenAI URL with your Runpod endpoint URL:
+    
+    ```
+    https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1
+    ```
+    
+    Replace `ENDPOINT_ID` with your actual endpoint ID.
+  </Step>
+
+  <Step title="Save and test">
+    Click save. n8n will automatically test your endpoint connection. If successful, you can start using the node in your workflow.
+  </Step>
+</Steps>
+
+Monitor requests from your n8n workflow in the endpoint details page of the Runpod console.
+
+<Note>
+The n8n chat feature may have trouble parsing output from vLLM depending on your model. If you experience issues, try adjusting your model's output format or testing with a different model.
+</Note>
+
+## Compatible frameworks
+
+The same integration pattern works with any framework that supports custom OpenAI-compatible endpoints, including:
+
+- **CrewAI**: A framework for orchestrating role-playing autonomous AI agents.
+- **LangChain**: A framework for developing applications powered by language models.
+- **AutoGen**: Microsoft's framework for building multi-agent conversational systems.
+- **Haystack**: An end-to-end framework for building search systems and question answering.
+
+Configure these frameworks to use your Runpod endpoint URL as the base URL, and provide your Runpod API key for authentication.
+
+## Next steps
+
+- Learn more about [vLLM workers](/serverless/vllm/overview)
+- Explore [OpenAI API compatibility](/serverless/vllm/openai-compatibility)
+- Understand [load balancing endpoints](/serverless/load-balancing/overview)
