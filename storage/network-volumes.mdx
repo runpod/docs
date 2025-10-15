@@ -138,20 +138,7 @@ Data from the network volume will be accessible to the Pod from the volume mount
 
 You can attach a network volume to multiple Pods, allowing them to share data seamlessly. Multiple Pods can read files from the same volume concurrently, but you should avoid writing to the same file simultaneously to prevent conflicts or data corruption.
 
-### Migrate files between volumes
 
-You can migrate files from one network volume to another using `runpodctl send` and `receive` on two running Pods. Watch this video tutorial for a step-by-step walkthrough:
-
-<Frame>
-  <iframe width="900"
-  height="508"
-  src="https://www.youtube.com/embed/gnSLRrlBfcA" 
-  title="How to clone network volumes using runpodctl" 
-  frameborder="0" 
-  allow="fullscreen; accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
-  referrerpolicy="strict-origin-when-cross-origin">
-  </iframe>
-</Frame>
 
 ## Network volumes for Instant Clusters
 
@@ -183,3 +170,159 @@ The S3-compatible API supports standard S3 operations including file uploads, do
 The S3-compatible API is currently available for network volumes in the following datacenters: `EUR-IS-1`, `EU-RO-1`, `EU-CZ-1`, `US-KS-2`, `US-CA-2`.
 
 </Note>
+
+
+## Migrate files
+
+You can migrate files between network volumes (including between data centers) using the following methods:
+
+### Using runpodctl
+
+The simplest way to migrate files between network volumes is to use `runpodctl send` and `receive` on two running Pods.
+
+Before you begin, you'll need:
+
+- A source network volume containing the data you want to migrate.
+- A destination network volume (which can be empty or contain existing data).
+
+<Steps>
+<Step title="Deploy Pods with network volumes attached">
+Deploy two Pods using the default Runpod PyTorch template. Each Pod should have one [network volume attached](#attach-to-a-pod).
+
+1. Deploy the first Pod in the source data center and attach the source network volume.
+2. Deploy the second Pod in the target data center and attach the target network volume.
+3. Start the [web terminal](/pods/connect-to-a-pod#web-terminal) in both Pods.
+</Step>
+
+<Step title="Open the source volume">
+Using your source Pod's web terminal, navigate to the network volume directory (usually `/workspace`):
+
+```bash
+cd workspace
+```
+</Step>
+
+<Step title="Start the transfer">
+Use `runpodctl send` to start the transfer. To transfer the entire volume:
+
+```bash
+runpodctl send *
+```
+
+You can also specify specific files or directories instead of `*`.
+</Step>
+
+<Step title="Copy the receive command">
+After running the send command, copy the `receive` command from the output. It will look something like this:
+
+```bash
+runpodctl receive 8338-galileo-collect-fidel
+```
+</Step>
+
+<Step title="Open the destination volume">
+Using your destination Pod's web terminal, navigate to the network volume directory (usually `/workspace`):
+
+```bash
+cd workspace
+```
+</Step>
+
+<Step title="Receive your files">
+Paste and run the `receive` command you copied earlier:
+
+```bash
+runpodctl receive 8338-galileo-collect-fidel
+```
+
+The transfer will begin and show progress as it copies files from the source to the destination volume.
+</Step>
+</Steps>
+
+For a visual walkthrough using JupyterLab, check out this video tutorial:
+
+<Frame>
+  <iframe width="900"
+  height="508"
+  src="https://www.youtube.com/embed/gnSLRrlBfcA" 
+  title="How to clone network volumes using runpodctl" 
+  frameborder="0" 
+  allow="fullscreen; accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+  referrerpolicy="strict-origin-when-cross-origin">
+  </iframe>
+</Frame>
+
+### Using rsync over SSH
+
+For faster migration speed and more reliability for large transfers, you can use `rsync` over SSH on two running Pods.
+
+Before you begin, you'll need:
+
+- A network volume in the source data center containing the data you want to migrate.
+- A network volume in the target data center (which can be empty or contain existing data).
+
+<Steps>
+<Step title="Deploy Pods with network volumes attached">
+Deploy two Pods using the default Runpod PyTorch template. Each Pod should have one [network volume attached](#attach-to-a-pod).
+
+1. Deploy the first Pod in the source data center and attach the source network volume.
+2. Deploy the second Pod in the target data center and attach the target network volume.
+3. Start the [web terminal](/pods/connect-to-a-pod#web-terminal) in both Pods.
+</Step>
+
+<Step title="Set up SSH keys on the source Pod">
+On the source Pod, install required packages and generate an SSH key pair:
+
+```bash
+apt update && apt install -y vim rsync && \
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N "" -q && \
+cat ~/.ssh/id_ed25519.pub
+```
+
+Copy the public key that appears in the terminal output.
+</Step>
+
+<Step title="Configure the destination Pod">
+On the destination Pod, install required packages and add the source Pod's public key to `authorized_keys`:
+
+```bash
+apt update && apt install -y vim rsync && \
+ip=$(printenv RUNPOD_PUBLIC_IP) && \
+port=$(printenv RUNPOD_TCP_PORT_22) && \
+echo "rsync -avzP --inplace -e \"ssh -p $port\" /workspace/ root@$ip:/workspace" && \
+vi ~/.ssh/authorized_keys
+```
+
+In the editor that opens, paste the public key you copied from the source Pod, then save and exit (press `Esc`, type `:wq`, and press `Enter`).
+
+The command above also displays the `rsync` command you'll need to run on the source Pod. Copy this command for the next step.
+</Step>
+
+<Step title="Run the rsync command">
+On the source Pod, run the `rsync` command from the previous step. If you didn't copy it, you can construct it manually using the destination Pod's IP address and port number.
+
+```bash
+# Replace DESTINATION_PORT and DESTINATION_IP with values from the destination Pod
+rsync -avzP --inplace -e "ssh -p DESTINATION_PORT" /workspace/ root@DESTINATION_IP:/workspace
+
+# Example:
+rsync -avzP --inplace -e "ssh -p 18598" /workspace/ root@157.66.254.13:/workspace
+```
+
+The `rsync` command displays progress as it transfers files. Depending on the size of your data, this may take some time.
+</Step>
+
+<Step title="Verify the transfer">
+After the `rsync` command completes, verify the data transfer by checking disk usage on both Pods:
+
+```bash
+du -sh /workspace
+```
+
+The destination Pod should show similar disk usage to the source Pod if all files transferred successfully.
+
+<Tip>
+You can run the `rsync` command multiple times if the transfer is interrupted. The `--inplace` flag ensures that `rsync` resumes from where it left off rather than starting over.
+</Tip>
+</Step>
+</Steps>
