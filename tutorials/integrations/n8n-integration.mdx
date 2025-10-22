@@ -11,21 +11,20 @@ Learn how to integrate Runpod Serverless with n8n, a workflow automation tool. B
 
 In this tutorial, you'll learn how to:
 
-* Deploy a vLLM worker on Runpod Serverless.
-* Configure your vLLM endpoint for OpenAI compatibility.
-* Connect n8n to your Runpod endpoint.
-* Test your integration with a simple workflow.
+* Deploy a vLLM worker serving the `Qwen/qwen3-32b-awq` model.
+* Configure your environment variables for n8n compatibility.
+* Create a simple n8n workflow to test your integration.
+* Connect your workflow to your Runpod endpoint.
 
 ## Requirements
 
 * You've [created a Runpod account](/get-started/manage-accounts).
 * You've created a [Runpod API key](/get-started/api-keys).
 * You have [n8n](https://n8n.io/) installed and running.
-* (Optional) For gated models, you've created a [Hugging Face access token](https://huggingface.co/docs/hub/en/security-tokens).
 
 ## Step 1: Deploy a vLLM worker on Runpod
 
-First, you'll deploy a vLLM worker to serve your language model.
+First, you'll deploy a vLLM worker to serve the `Qwen/qwen3-32b-awq` model.
 
 <Steps>
   <Step title="Create a new vLLM endpoint">
@@ -42,12 +41,18 @@ First, you'll deploy a vLLM worker to serve your language model.
 
     In the deployment modal:
 
-    * Enter the model name or Hugging Face model URL (e.g., `openchat/openchat-3.5-0106`).
-    * Expand the **Advanced** section:
+    * In the **Model** field, enter `Qwen/qwen3-32b-awq`.
+    * Expand the **Advanced** section to configure your vLLM environment variables:
       * Set **Max Model Length** to `8192` (or an appropriate context length for your model).
-      * You may need to enable tool calling and set an appropriate reasoning parser depending on your model.
+      * Near the bottom of the page: Check **Enable Auto Tool Choice**.
+      * Set **Reasoning Parser** to `Qwen3`.
+      * Set **Tool Call Parser** to `Hermes`.
     * Click **Next**.
     * Click **Create Endpoint**.
+
+  <Warning>
+  When using a different model, you may need to adjust your vLLM environment variables to ensure your model returns responses in the format that n8n expects.
+  </Warning>
 
     Your endpoint will now begin initializing. This may take several minutes while Runpod provisions resources and downloads your model. Wait until the status shows as **Running**.
   </Step>
@@ -57,18 +62,37 @@ First, you'll deploy a vLLM worker to serve your language model.
   </Step>
 </Steps>
 
-## Step 2: Connect n8n to your Runpod endpoint
+## Step 2: Create an n8n workflow
 
-Now you'll configure n8n to use your Runpod endpoint as an OpenAI-compatible API.
+Next, you'll create a simple n8n workflow to test your integration.
 
 <Steps>
-  <Step title="Add an OpenAI Chat Model node">
-    In your n8n workflow, add a new **OpenAI Chat Model** node to your canvas. Double-click the node to configure it.
+  <Step title="Create a new workflow">
+      Open n8n and navigate to your workspace, then click **Create Workflow**.
+  </Step>
+  <Step title="Add a chat message trigger">
+    Click **Add first step** and select **On chat message**. Click **Test chat** to confirm.
+  </Step>
+
+  <Step title="Add AI Agent node">
+    Click the **+** button and search for **AI Agent** and select it. Click **Execute step** to confirm.
+  </Step>
+
+  <Step title="Add a Chat Model nodel">
+    Click the **+** button labeled **Chat Model**, search for **OpenAI Chat Model** and select it.
   </Step>
 
   <Step title="Create a new credential">
     Click the dropdown under **Credential to connect with** and select **Create new credential**.
   </Step>
+
+</Steps>
+
+## Step 3: Configure the OpenAI Chat Model node
+
+Now you'll configure the n8n OpenAI Chat Model node to use the model running on your Runpod endpoint.
+
+<Steps>
 
   <Step title="Add your Runpod API key">
     Under **API Key**, add your Runpod API Key. You can create an API key in the [Runpod console](/get-started/api-keys).
@@ -81,47 +105,39 @@ Now you'll configure n8n to use your Runpod endpoint as an OpenAI-compatible API
     https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1
     ```
     
-    Replace `ENDPOINT_ID` with your endpoint ID from Step 1.
+    Replace `ENDPOINT_ID` with your vLLM endpoint ID from Step 1.
   </Step>
 
-  <Step title="Save the credential">
-    Click **Save**. n8n will automatically test your endpoint connection. If successful, you can start using the node in your workflow.
-  </Step>
-</Steps>
+  <Step title="Test the connection">
+    Click **Save**. n8n will automatically test your endpoint connection. It may take a few minutes for your endpoint to scale up a worker to process the request. You can monitor the request using the **Workers** and **Requests** tabs for your vLLM endpoint in the Runpod console.
 
-## Step 3: Test your integration
-
-Create a simple workflow to test your integration.
-
-{/* TODO ... */}
-
-<Steps>
-  <Step title="Create a test workflow">
-    Add a **Manual Trigger** node and connect it to your **OpenAI Chat Model** node.
+    If you see the message "Connection tested successfully," that means your endpoint is reachable, but it doesn't gaurantee that it's fully compatible with n8n—we'll do that in the next step.
   </Step>
 
-  <Step title="Configure the chat model">
-    In the **OpenAI Chat Model** node, add a test message like "Hello, what can you help me with?"
+  <Step title="Select the Qwen3 model">
+    Press escape to return to the OpenAI Chat Model configuration modal.
+    
+    Under **Model**, select `qwen/qwen3-32b-awq`, then press escape to return to the workflow canvas.
+
   </Step>
 
-  <Step title="Execute the workflow">
-    Click **Execute Workflow** in n8n. You should see a response from your model running on Runpod.
-  </Step>
+  <Step title="Type a test message">
+    Type a test message into the chat box like "Hello, how are you?" and press enter.
+    
+    If everything is working correctly, you should see each of the nodes in your workflow go green to indicate successful execution, and a response from the model in the chat box.
 
-  <Step title="Monitor requests">
-    Monitor requests from your n8n workflow in the endpoint details page of the Runpod console.
+    <Tip>
+    Make sure to **Save** your workflow before closing it, as n8n may not save changes to your model node configuration automatically.
+    </Tip>
   </Step>
 </Steps>
 
-<Note>
-
-The n8n chat feature may have trouble parsing output from vLLM depending on your model. If you experience issues, try adjusting your model's output format or testing with a different model.
-
-</Note>
 
 ## Next steps
 
-Now that you've integrated Runpod with n8n, you can:
+Congratulations! You've successfully used Runpod to power an AI agent on n8n.
+
+Now that you've integrated with n8n, you can:
 
 * Build complex AI-powered workflows using your Runpod endpoints.
 * Explore other [integration options](/integrations/overview) with Runpod.
