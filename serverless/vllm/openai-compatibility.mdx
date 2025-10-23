@@ -1,23 +1,22 @@
 ---
 title: "OpenAI API compatibility guide"
-sidebarTitle: "OpenAI API compability"
+sidebarTitle: "OpenAI API compatibility"
+description: "Integrate vLLM workers with OpenAI client libraries and API-compatible tools."
 ---
 
-Runpod's [vLLM workers](/serverless/vllm/overview) implement OpenAI API compatibility, allowing you to use familiar [OpenAI client libraries](https://platform.openai.com/docs/libraries) with your deployed models. This guide will help you understand how to leverage this compatibility to integrate your models seamlessly with existing OpenAI-based applications.
+Runpod's vLLM workers implement OpenAI API compatibility, allowing you to use familiar [OpenAI client libraries](https://platform.openai.com/docs/libraries) with your deployed models. This guide explains how to leverage this compatibility to integrate your models with existing OpenAI-based applications.
 
 ## Endpoint structure
 
-When using the OpenAI-compatible API with Runpod, your requests will be directed to this base URL pattern:
+You can make OpenAI-compatible API requests to your vLLM workers by sending requests to this base URL pattern:
 
-```bash
-https://api.runpod.ai/v2/[ENDPOINT_ID]/openai/v1
 ```
-
-Replace `[ENDPOINT_ID]` with your Serverless endpoint ID.
+https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1
+```
 
 ## Supported APIs
 
-The vLLM worker implements these core OpenAI API endpoints:
+vLLM workers support these core OpenAI API endpoints:
 
 | Endpoint            | Description                     | Status          |
 | ------------------- | ------------------------------- | --------------- |
@@ -29,30 +28,31 @@ The vLLM worker implements these core OpenAI API endpoints:
 
 The `MODEL_NAME` environment variable is essential for all OpenAI-compatible API requests. This variable corresponds to either:
 
-1. The [Hugging Face model](https://huggingface.co/models) you've deployed (e.g., `mistralai/Mistral-7B-Instruct-v0.2`)
-2. A custom name if you've set `OPENAI_SERVED_MODEL_NAME_OVERRIDE` as an environment variable
+1. The [Hugging Face model](https://huggingface.co/models) you've deployed (e.g., `mistralai/Mistral-7B-Instruct-v0.2`).
+2. A custom name if you've set `OPENAI_SERVED_MODEL_NAME_OVERRIDE` as an environment variable.
 
-This model name is used in chat/text completion API requests to identify which model should process your request.
+This model name is used in chat and text completion API requests to identify which model should process your request.
 
-## Initilization
 
-Before you can send API requests, start by setting up an OpenAI client with your Runpod API key and endpoint URL:
+## Initialize the OpenAI client
+
+Before you can send API requests, set up an OpenAI client with your Runpod API key and endpoint URL:
 
 ```python
 from openai import OpenAI
-import os
 
-MODEL_NAME = "mistralai/Mistral-7B-Instruct-v0.2" # Use your deployed model
+MODEL_NAME = "mistralai/Mistral-7B-Instruct-v0.2"  # Use your deployed model
 
+# Replace ENDPOINT_ID and RUNPOD_API_KEY with your actual values
 client = OpenAI(
-    api_key=[RUNPOD_API_KEY],
-    base_url=f"https://api.runpod.ai/v2/[RUNPOD_ENDPOINT_ID]/openai/v1",
+    api_key="RUNPOD_API_KEY",
+    base_url="https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1",
 )
 ```
 
-## Send a request
+## Send requests
 
-You can use Runpod's OpenAI compatible API to send requests to your Runpod endpoint, enabling you to use the same client libraries and code that you use with OpenAI's services. You only need to change the base URL to point to your Runpod endpoint.
+You can use Runpod's OpenAI-compatible API to send requests to your Runpod endpoint, enabling you to use the same client libraries and code that you use with OpenAI's services. You only need to change the base URL to point to your Runpod endpoint.
 
 <Tip>
 
@@ -64,20 +64,18 @@ You can also send requests using [Runpod's native API](/serverless/vllm/vllm-req
 
 The `/chat/completions` endpoint is designed for instruction-tuned LLMs that follow a chat format.
 
-#### Non-streaming request example
+#### Non-streaming request
 
 Here's how you can make a basic chat completion request:
 
 ```python
 from openai import OpenAI
-import os
+MODEL_NAME = "YOUR_MODEL_NAME"  # Replace with your actual model
 
-MODEL_NAME = "mistralai/Mistral-7B-Instruct-v0.2"  # Use your deployed model
-
-# Initialize the OpenAI client
+# Replace ENDPOINT_ID and RUNPOD_API_KEY with your actual values
 client = OpenAI(
-    api_key=[RUNPOD_API_KEY],
-    base_url=f"https://api.runpod.ai/v2/[RUNPOD_ENDPOINT_ID]/openai/v1",
+    api_key="RUNPOD_API_KEY",
+    base_url="https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1",
 )
 
 # Chat completion request (for instruction-tuned models)
@@ -123,13 +121,11 @@ The API returns responses in this JSON format:
 }
 ```
 
-#### Streaming request example
+#### Streaming request
 
 Streaming allows you to receive the model's output incrementally as it's generated, rather than waiting for the complete response. This real-time delivery enhances responsiveness, making it ideal for interactive applications like chatbots or for monitoring the progress of lengthy generation tasks.
 
 ```python
-# ... Imports and initialization ...
-
 # Create a streaming chat completion request
 stream = client.chat.completions.create(
     model=MODEL_NAME,
@@ -154,16 +150,14 @@ print()
 
 The `/completions` endpoint is designed for base LLMs and text completion tasks.
 
-#### Non-streaming request example
+#### Non-streaming request
 
 Here's how you can make a text completion request:
 
 ```python
-# ... Imports and initialization ...
-
 # Text completion request
 response = client.completions.create(
-    model="mistralai/Mistral-7B-Instruct-v0.2",
+    model=MODEL_NAME,
     prompt="Write a poem about artificial intelligence:",
     temperature=0.7,
     max_tokens=150
@@ -199,11 +193,9 @@ The API returns responses in this JSON format:
 }
 ```
 
-#### Streaming request example
+#### Streaming request
 
 ```python
-# ... Imports and initialization ...
-
 # Create a completion stream
 response_stream = client.completions.create(
     model=MODEL_NAME,
@@ -212,6 +204,7 @@ response_stream = client.completions.create(
     max_tokens=100,
     stream=True,
 )
+
 # Stream the response
 for response in response_stream:
     print(response.choices[0].text or "", end="", flush=True)
@@ -222,8 +215,6 @@ for response in response_stream:
 The `/models` endpoint allows you to get a list of available models on your endpoint:
 
 ```python
-# ... Imports and initialization ...
-
 models_response = client.models.list()
 list_of_models = [model.id for model in models_response]
 print(list_of_models)
@@ -245,9 +236,67 @@ print(list_of_models)
 }
 ```
 
-## Request input parameters
+## Chat completion parameters
 
-vLLM workers support various parameters to control generation behavior. You can find a complete list of OpenAI request input parameters on the [GitHub README](https://github.com/runpod-workers/worker-vllm?tab=readme-ov-file#openai-request-input-parameters).
+Here are all available parameters for the `/chat/completions` endpoint:
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `messages` | `list[dict[str, str]]` | Required | List of messages with `role` and `content` keys. The model's chat template will be applied automatically. |
+| `model` | `string` | Required | The model repo that you've deployed on your Runpod Serverless endpoint. |
+| `temperature` | `float` | `0.7` | Controls the randomness of sampling. Lower values make it more deterministic, higher values make it more random. Zero means greedy sampling. |
+| `top_p` | `float` | `1.0` | Controls the cumulative probability of top tokens to consider. Must be in (0, 1]. Set to 1 to consider all tokens. |
+| `n` | `int` | `1` | Number of output sequences to return for the given prompt. |
+| `max_tokens` | `int` | None | Maximum number of tokens to generate per output sequence. |
+| `seed` | `int` | None | Random seed to use for the generation. |
+| `stop` | `string` or `list[str]` | `list` | String(s) that stop generation when produced. The returned output will not contain the stop strings. |
+| `stream` | `bool` | `false` | Whether to stream the response. |
+| `presence_penalty` | `float` | `0.0` | Penalizes new tokens based on whether they appear in the generated text so far. Values > 0 encourage new tokens, values < 0 encourage repetition. |
+| `frequency_penalty` | `float` | `0.0` | Penalizes new tokens based on their frequency in the generated text so far. Values > 0 encourage new tokens, values < 0 encourage repetition. |
+| `logit_bias` | `dict[str, float]` | None | Unsupported by vLLM. |
+| `user` | `string` | None | Unsupported by vLLM. |
+
+### Additional vLLM parameters
+
+vLLM supports additional parameters beyond the standard OpenAI API:
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `best_of` | `int` | None | Number of output sequences generated from the prompt. From these `best_of` sequences, the top `n` sequences are returned. Must be ≥ `n`. Treated as beam width when `use_beam_search` is `true`. |
+| `top_k` | `int` | `-1` | Controls the number of top tokens to consider. Set to -1 to consider all tokens. |
+| `ignore_eos` | `bool` | `false` | Whether to ignore the EOS token and continue generating tokens after EOS is generated. |
+| `use_beam_search` | `bool` | `false` | Whether to use beam search instead of sampling. |
+| `stop_token_ids` | `list[int]` | `list` | List of token IDs that stop generation when produced. The returned output will contain the stop tokens unless they are special tokens. |
+| `skip_special_tokens` | `bool` | `true` | Whether to skip special tokens in the output. |
+| `spaces_between_special_tokens` | `bool` | `true` | Whether to add spaces between special tokens in the output. |
+| `add_generation_prompt` | `bool` | `true` | Whether to add generation prompt. Read more [here](https://huggingface.co/docs/transformers/main/en/chat_templating#what-are-generation-prompts). |
+| `echo` | `bool` | `false` | Echo back the prompt in addition to the completion. |
+| `repetition_penalty` | `float` | `1.0` | Penalizes new tokens based on whether they appear in the prompt and generated text so far. Values > 1 encourage new tokens, values < 1 encourage repetition. |
+| `min_p` | `float` | `0.0` | Minimum probability for a token to be considered. |
+| `length_penalty` | `float` | `1.0` | Penalizes sequences based on their length. Used in beam search. |
+| `include_stop_str_in_output` | `bool` | `false` | Whether to include the stop strings in output text. |
+
+## Text completion parameters
+
+Here are all available parameters for the `/completions` endpoint:
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `prompt` | `string` or `list[str]` | Required | The prompt(s) to generate completions for. |
+| `model` | `string` | Required | The model repo that you've deployed on your Runpod Serverless endpoint. |
+| `temperature` | `float` | `0.7` | Controls the randomness of sampling. Lower values make it more deterministic, higher values make it more random. Zero means greedy sampling. |
+| `top_p` | `float` | `1.0` | Controls the cumulative probability of top tokens to consider. Must be in (0, 1]. Set to 1 to consider all tokens. |
+| `n` | `int` | `1` | Number of output sequences to return for the given prompt. |
+| `max_tokens` | `int` | `16` | Maximum number of tokens to generate per output sequence. |
+| `seed` | `int` | None | Random seed to use for the generation. |
+| `stop` | `string` or `list[str]` | `list` | String(s) that stop generation when produced. The returned output will not contain the stop strings. |
+| `stream` | `bool` | `false` | Whether to stream the response. |
+| `presence_penalty` | `float` | `0.0` | Penalizes new tokens based on whether they appear in the generated text so far. Values > 0 encourage new tokens, values < 0 encourage repetition. |
+| `frequency_penalty` | `float` | `0.0` | Penalizes new tokens based on their frequency in the generated text so far. Values > 0 encourage new tokens, values < 0 encourage repetition. |
+| `logit_bias` | `dict[str, float]` | None | Unsupported by vLLM. |
+| `user` | `string` | None | Unsupported by vLLM. |
+
+Text completions support the same additional vLLM parameters as chat completions (see the Additional vLLM parameters section above).
 
 ## Environment variables
 
@@ -255,9 +304,9 @@ Use these environment variables to customize the OpenAI compatibility:
 
 | Variable                            | Default     | Description                                 |
 | ----------------------------------- | ----------- | ------------------------------------------- |
-| `RAW_OPENAI_OUTPUT`                 | `1` (true)  | Enables raw OpenAI SSE format for streaming |
-| `OPENAI_SERVED_MODEL_NAME_OVERRIDE` | None        | Override the model name in responses        |
-| `OPENAI_RESPONSE_ROLE`              | `assistant` | Role for responses in chat completions      |
+| `RAW_OPENAI_OUTPUT`                 | `1` (true)  | Enables raw OpenAI SSE format for streaming. |
+| `OPENAI_SERVED_MODEL_NAME_OVERRIDE` | None        | Override the model name in responses.        |
+| `OPENAI_RESPONSE_ROLE`              | `assistant` | Role for responses in chat completions.      |
 
 For a complete list of all vLLM environment variables, see the [vLLM environment variables reference](/serverless/vllm/environment-variables).
 
@@ -267,16 +316,18 @@ The OpenAI-compatible API works with standard [OpenAI client libraries](https://
 
 ### Python
 
-```py
+```python
 from openai import OpenAI
+MODEL_NAME = "YOUR_MODEL_NAME"  # Replace with your actual model name
 
+# Replace ENDPOINT_ID and RUNPOD_API_KEY with your actual values
 client = OpenAI(
-    api_key="[RUNPOD_API_KEY]",
-    base_url=f"https://api.runpod.ai/v2/your_endpoint_id/openai/v1"
+    api_key="RUNPOD_API_KEY",
+    base_url="https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1"
 )
 
 response = client.chat.completions.create(
-    model="[MODEL_NAME]",
+    model=MODEL_NAME,
     messages=[
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "Hello!"}
@@ -286,16 +337,18 @@ response = client.chat.completions.create(
 
 ### JavaScript
 
-```js
+```javascript
 import { OpenAI } from "openai";
 
+// Replace ENDPOINT_ID and RUNPOD_API_KEY with your actual values
 const openai = new OpenAI({
-  apiKey: "[RUNPOD_API_KEY]",
-  baseURL: "https://api.runpod.ai/v2/your_endpoint_id/openai/v1"
+  apiKey: "RUNPOD_API_KEY", 
+  baseURL: "https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1"
 });
 
+// Replace MODEL_NAME with your actual model name
 const response = await openai.chat.completions.create({
-  model: "[MODEL_NAME]",
+  model: "MODEL_NAME",
   messages: [
     { role: "system", content: "You are a helpful assistant." },
     { role: "user", content: "Hello!" }
@@ -307,16 +360,21 @@ const response = await openai.chat.completions.create({
 
 While the vLLM worker aims for high compatibility, there are some differences from OpenAI's implementation:
 
-1. **Token counting**: Token counts may differ slightly from OpenAI models.
-2. **Streaming format**: The exact chunking of streaming responses may vary.
-3. **Error format**: Error responses follow a similar but not identical format.
-4. **Rate limits**: Rate limits follow Runpod's endpoint policies rather than OpenAI's.
+**Token counting** may differ slightly from OpenAI models due to different tokenizers.
 
-The vLLM worker also currently has a few limitations:
+**Streaming format** follows OpenAI's Server-Sent Events (SSE) format, but the exact chunking of streaming responses may vary.
 
-* The function and tool APIs are not currently supported.
+**Error responses** follow a similar but not identical format to OpenAI's error responses.
+
+**Rate limits** follow Runpod's endpoint policies rather than OpenAI's rate limiting structure.
+
+### Current limitations
+
+The vLLM worker has a few limitations:
+
+* Function and tool calling APIs are not currently supported.
 * Some OpenAI-specific features like moderation endpoints are not available.
-* Vision models and multimodal capabilities depend on the underlying model support.
+* Vision models and multimodal capabilities depend on the underlying model support in vLLM.
 
 ## Troubleshooting
 
@@ -324,14 +382,15 @@ Common issues and their solutions:
 
 | Issue                     | Solution                                                              |
 | ------------------------- | --------------------------------------------------------------------- |
-| "Invalid model" error     | Verify your model name matches what you deployed                      |
-| Authentication error      | Check that you're using your Runpod API key, not an OpenAI key        |
-| Timeout errors            | Increase client timeout settings for large models                     |
-| Incompatible responses    | Set `RAW_OPENAI_OUTPUT=1` in your environment variables               |
-| Different response format | Some models may have different output formatting; use a chat template |
+| "Invalid model" error     | Verify your model name matches what you deployed.                      |
+| Authentication error      | Check that you're using your Runpod API key, not an OpenAI key.        |
+| Timeout errors            | Increase client timeout settings for large models.                     |
+| Incompatible responses    | Set `RAW_OPENAI_OUTPUT=1` in your environment variables.               |
+| Different response format | Some models may have different output formatting; use a chat template. |
 
 ## Next steps
 
-* [Learn how to send vLLM requests.](/serverless/vllm/vllm-requests)
-* [Explore Runpod endpoint operations.](/serverless/endpoints/operations)
-* [Explore the OpenAI API documentation.](https://platform.openai.com/docs/api-reference)
+* [Learn how to send vLLM requests using Runpod's native API](/serverless/vllm/vllm-requests).
+* [Explore environment variables for customization](/serverless/vllm/environment-variables).
+* [Review all Serverless endpoint operations](/serverless/endpoints/send-requests).
+* [Explore the OpenAI API documentation](https://platform.openai.com/docs/api-reference).

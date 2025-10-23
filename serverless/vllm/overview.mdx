@@ -1,81 +1,130 @@
 ---
-title: "vLLM worker overview"
+title: "Overview"
 sidebarTitle: "Overview"
+description: "Deploy and serve scalable LLM inference endpoints on Runpod Serverless."
 ---
 
-vLLM workers are specialized containers designed to efficiently deploy and serve large language models (LLMs) on Runpod's [Serverless infrastructure](/serverless/overview). By leveraging Runpod's vLLM workers, you can quickly deploy state-of-the-art language models with optimized performance, flexible scaling, and cost-effective operation.
+vLLM workers make it easy to deploy and serve large language models on Runpod Serverless, delivering fast and efficient inference with automatic scaling.
 
-For detailed information on model compatibility and configuration options, check out the [vLLM worker GitHub repository](https://github.com/runpod-workers/worker-vllm).
+The vLLM worker image can be deployed directly from the [Runpod Hub](https://console.runpod.io/hub/runpod-workers/worker-vllm) or customized and built from the [GitHub repository](https://github.com/runpod-workers/worker-vllm).
 
-## Key features
+## What is vLLM?
 
-vLLM workers offer several advantages that make them ideal for LLM deployment:
+vLLM is an open-source inference engine designed to serve large language models efficiently. It maximizes throughput and minimizes latency when running LLM inference workloads.
 
-* **Pre-built optimization**: The workers come with the vLLM inference engine pre-configured, which includes PagedAttention technology for optimized memory usage and faster inference.
+The vLLM worker image includes the vLLM engine with GPU optimizations and support for both OpenAI's API and Runpod's native API. You can deploy any supported model from Hugging Face with minimal configuration and start serving requests immediately. The workers run on Runpod Serverless, which automatically scales based on demand.
+
+* **Pre-built optimization**: vLLM workers come with the vLLM inference engine pre-configured, which includes [PagedAttention](https://docs.vllm.ai/en/latest/design/paged_attention.html) technology for optimized memory usage and faster inference.
 * **OpenAI API compatibility**: They provide a drop-in replacement for OpenAI's API, allowing you to use existing OpenAI client code by simply changing the endpoint URL and API key.
 * **Hugging Face integration**: vLLM workers support most models available on Hugging Face, including popular options like Llama 2, Mistral, Gemma, and many others.
 * **Configurable environments**: Extensive customization options through [environment variables](/serverless/vllm/environment-variables) allow you to adjust model parameters, performance settings, and other behaviors.
 * **Auto-scaling architecture**: Serverless automatically scales your endpoint from zero to many workers based on demand, billing on a per-second basis.
 
+vLLM uses several advanced techniques to achieve high performance when serving LLMs. Understanding these can help you optimize your deployments and troubleshoot issues.
+
+### PagedAttention for memory efficiency
+
+PagedAttention is the key innovation in vLLM. It dramatically improves how GPU memory is used during inference. Traditional LLM serving wastes memory by pre-allocating large contiguous blocks for key-value (KV) caches. PagedAttention breaks the KV cache into smaller pages, similar to how operating systems manage memory.
+
+This reduces memory waste and allows vLLM to serve more requests concurrently on the same GPU. You can handle higher throughput or serve larger models on smaller GPUs.
+
+### Continuous batching
+
+vLLM uses continuous batching (also called dynamic batching) to process multiple requests simultaneously. Unlike traditional batching, which waits for a batch to fill up before processing, continuous batching processes requests as they arrive and adds new requests to the batch as soon as previous ones complete.
+
+This keeps your GPU busy and reduces latency for individual requests, especially during periods of variable traffic.
+
+### Request lifecycle
+
+When you send a request to a vLLM worker endpoint:
+
+1. The request arrives at Runpod Serverless infrastructure.
+2. If no worker is available, the request is queued and a worker starts automatically.
+3. The worker loads your model from Hugging Face (or from the pre-baked Docker image).
+4. vLLM processes the request using PagedAttention and continuous batching.
+5. The response is returned to your application.
+6. If there are no more requests, the worker scales down to zero after a configured timeout.
+
+vLLM endpoints use the same `/run` and `/runsync` operations as other Runpod Serverless endpoints. The only difference is the input format and the specialized LLM processing inside the worker.
+
+## Why use vLLM workers?
+
+vLLM workers offer several advantages over other LLM deployment options.
+
+### Performance and efficiency
+
+vLLM's PagedAttention and continuous batching deliver significantly better throughput than traditional serving methods. You can serve 2-3x more requests per GPU compared to naive implementations, which directly translates to lower costs and better user experiences.
+
+### OpenAI API compatibility
+
+vLLM workers provide a drop-in replacement for OpenAI's API. If you're already using the OpenAI Python client or any other OpenAI-compatible library, you can switch to your Runpod endpoint by changing just two lines of code: the API key and the base URL. Your existing prompts, parameters, and response handling code continue to work without modification.
+
+### Model flexibility
+
+You can deploy virtually any model available on Hugging Face, including popular options like Llama, Mistral, Qwen, Gemma, and thousands of others. vLLM supports a wide range of model architectures out of the box, and new architectures are added regularly.
+
+### Auto-scaling and cost efficiency
+
+Runpod Serverless automatically scales your vLLM workers from zero to many based on demand. You only pay for the seconds when workers are actively processing requests. This makes vLLM workers ideal for workloads with variable traffic patterns or when you're getting started and don't want to pay for idle capacity.
+
+### Production-ready features
+
+vLLM workers come with features that make them suitable for production deployments, including streaming responses, configurable context lengths, quantization support (AWQ, GPTQ), multi-GPU tensor parallelism, and comprehensive error handling.
+
 ## Deployment options
 
-There are two ways to deploy a vLLM worker:
+There are two ways to deploy vLLM workers on Runpod.
 
-### Option 1: Quick deploy a vLLM endpoint
+### Using pre-built Docker images
 
-This is the simplest approach. Use Runpod's UI to deploy a model directly from Hugging Face with minimal configuration. For step-by-step instructions, see [Deploy a vLLM worker](/serverless/vllm/get-started).
+This is the fastest and most common approach. Runpod provides pre-built vLLM worker images that you can deploy directly from the console. You specify your model name as an environment variable, and the worker downloads it from Hugging Face during initialization.
 
-<Warning>
+This method is ideal for getting started quickly, testing different models, or deploying models that change frequently. However, model download time adds to your cold start latency.
 
-Quick-deployed workers will download models during initialization, which can take some time depending on the model selected. If you plan to run a vLLM endpoint in production, it’s best to package your model into a Docker image ahead of time (using the Docker image method below), as this can significantly reduce cold start times.
+### Building custom Docker images with models baked in
 
-</Warning>
+For production deployments where cold start time matters, you can build a custom Docker image that includes your model weights. This eliminates download time and can reduce cold starts from minutes to seconds.
 
-### Option 2: Deploy using a Docker image
-
-Deploy a packaged vLLM worker image from [GitHub](https://github.com/runpod-workers/worker-vllm) or [Docker Hub](https://hub.docker.com/r/runpod/worker-v1-vllm/tags), configuring your endpoint using [environment variables](/serverless/vllm/environment-variables).
-
-Follow the instructions in the [vLLM worker README](https://github.com/runpod-workers/worker-vllm?tab=readme-ov-file#option-2-build-docker-image-with-model-inside) to build a model into your worker image.
-
-You can add new functionality your vLLM worker deployment by customizing its [handler function](/serverless/workers/handler-functions).
+This approach requires more upfront work but provides the best performance for production workloads with consistent traffic.
 
 ## Compatible models
 
-You can deploy almost any model on [Hugging Face](https://huggingface.co/models?other=LLM) as a vLLM worker. You can find a full list of supported models architectures on the [GitHub README](https://github.com/runpod-workers/worker-vllm/blob/main/README.md#compatible-model-architectures).
+vLLM supports most model architectures available on Hugging Face. You can deploy models from families including Llama (1, 2, 3, 3.1, 3.2), Mistral and Mixtral, Qwen2 and Qwen2.5, Gemma and Gemma 2, Phi (2, 3, 3.5, 4), DeepSeek (V2, V3, R1), GPT-2, GPT-J, OPT, BLOOM, Falcon, MPT, StableLM, Yi, and many others.
 
-## How vLLM works
-
-When deployed to a [Serverless endpoint](/serverless/endpoints/overview), vLLM workers:
-
-1. Download and load the specified LLM from Hugging Face or other compatible sources.
-2. Optimize the model for inference using vLLM's techniques like continuous batching and PagedAttention.
-3. Expose API endpoints for both [OpenAI-compatible requests](/serverless/vllm/openai-compatibility) and Runpod's native [endpoint request](/serverless/endpoints/send-requests) format.
-4. Process incoming requests by dynamically allocating GPU resources.
-5. Scale workers up or down based on traffic patterns.
-
-## Use cases
-
-vLLM workers are an effective choice for:
-
-* High-performance inference for text generation.
-* Cost-effective scaling for LLM workloads.
-* Integration with existing OpenAI-based applications.
-* Deploying open-source models with commercial licenses.
-* AI systems requiring both synchronous and streaming responses.
+For a complete and up-to-date list of supported model architectures, see the [vLLM supported models documentation](https://docs.vllm.ai/en/latest/models/supported_models.html).
 
 ## Performance considerations
 
-The performance of vLLM workers depends on several factors:
+Several factors affect vLLM worker performance.
 
-* **GPU selection**: Larger models require more VRAM (A10G or better recommended for 7B+ parameter models). For a list of available GPUs, see [GPU types](/references/gpu-types)
-* **Model size**: Affects both loading time and inference speed.
-* **Quantization**: Options like AWQ or GPTQ can reduce memory requirements at a small quality cost.
-* **Batch size settings**: Impact throughput and latency tradeoffs.
-* **Context length**: Longer contexts require more memory and processing time.
+**GPU selection** is the most important factor. Larger models require more VRAM, and inference speed scales with GPU memory bandwidth. For 7B parameter models, an A10G or better is recommended. For 70B+ models, you'll need an A100 or H100. See [GPU types](/references/gpu-types) for details on available GPUs.
+
+**Model size** directly impacts both loading time and inference speed. Smaller models (7B parameters) load quickly and generate tokens fast. Larger models (70B+ parameters) provide better quality but require more powerful GPUs and have higher latency.
+
+**Quantization** reduces model size and memory requirements by using lower-precision weights. Methods like AWQ and GPTQ can reduce memory usage by 2-4x with minimal quality loss. This lets you run larger models on smaller GPUs or increase throughput on a given GPU.
+
+**Context length** affects memory requirements and processing time. Longer contexts require more memory for the KV cache and take longer to process. Set `MAX_MODEL_LEN` to the minimum value that meets your needs.
+
+**Concurrent requests** benefit from vLLM's continuous batching, but too many concurrent requests can exceed GPU memory and cause failures. The `MAX_NUM_SEQS` environment variable controls the maximum number of concurrent sequences.
+
+## Use cases
+
+vLLM workers are ideal for several types of applications.
+
+**Production LLM APIs** benefit from vLLM's high throughput and OpenAI compatibility. You can build scalable APIs for chatbots, content generation, code completion, or any other LLM-powered feature.
+
+**Cost-effective scaling** is enabled by Serverless auto-scaling. If your traffic varies significantly throughout the day or week, vLLM workers automatically scale down to zero during quiet periods, saving costs compared to always-on servers.
+
+**OpenAI migration** is straightforward because vLLM provides API compatibility. You can migrate existing OpenAI-based applications to open-source models by changing only your endpoint URL and API key.
+
+**Custom model hosting** lets you deploy fine-tuned or specialized models. If you've trained a custom model or fine-tuned an existing one, vLLM workers make it easy to serve it at scale.
+
+**Development and experimentation** is cheaper with pay-per-second billing. You can test multiple models and configurations without worrying about idle costs.
 
 ## Next steps
 
-* [Deploy a vLLM worker as a Serverless endpoint.](/serverless/vllm/get-started)
-* [Send requests to a vLLM endpoint.](/serverless/vllm/vllm-requests)
-* [Learn about Runpod's OpenAI API compatibility.](/serverless/vllm/openai-compatibility)
-* [Deploy Google's Gemma model using a vLLM Worker.](/tutorials/serverless/run-gemma-7b)
+Ready to deploy your first vLLM worker? Start with the [get started guide](/serverless/vllm/get-started) to deploy a model in minutes.
+
+Once your endpoint is running, learn how to send requests using [Runpod's native API](/serverless/vllm/vllm-requests) or the [OpenAI-compatible API](/serverless/vllm/openai-compatibility).
+
+For advanced configuration options, see the [environment variables documentation](/serverless/vllm/environment-variables).
