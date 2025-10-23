@@ -3,7 +3,7 @@ name: Bug report
 about: Create a report to help us improve
 title: "[Bug]"
 labels: ''
-assignees: AllysonRosenthal, rachfop
+assignees: muhsinking
 
 ---
 
@@ -24,7 +24,7 @@ A clear and concise description of what you expected to find.
 **Screenshots**
 If applicable, add screenshots to help explain your problem.
 
-## If describing a mismatch with a RunPod product, please include the following information about your environment:
+## If describing a mismatch with a Runpod product, please include the following information about your environment:
 
 **Desktop:**
 

@@ -1,19 +1,34 @@
 ---
-title: "Endpoint configuration and optimization"
-sidebarTitle: "Endpoint configuration"
+title: "Endpoint settings and optimization guide"
+sidebarTitle: "Endpoint settings"
 ---
+
+import GPUTable from '/snippets/serverless-gpu-pricing-table.mdx';
 
 This guide explains all available settings and best practices for configuring Runpod Serverless endpoints, helping you optimize for performance, cost, and reliability.
 
-## Basic configuration
 
-### Endpoint name
+## Endpoint name
 
 The name you assign to your endpoint for easy identification in your dashboard. This name is only visible to you and doesn't affect the endpoint ID used for API calls.
 
-### GPU selection
+## Endpoint type
 
-Choose one or more GPU types for your endpoint in order of preference. Runpod prioritizes allocating the first GPU type in your list and falls back to subsequent GPU types if your first choice is unavailable.
+Choose between two endpoint types based on your workload requirements:
+
+**Queue based endpoints** are well-suited for long-running requests, batch processing, or asynchronous tasks. They process requests through a queueing system that guarantees execution and provides built-in retry mechanisms. These endpoints are easy to implement using [handler functions](/serverless/workers/handler-functions), and are ideal for workloads that can be processed asynchronously.
+
+**Load balancing endpoints** are best for high-throughput or low-latency workloads, or non-standard request/response patterns. They route requests directly to worker HTTP servers, bypassing the queue for faster response times. These endpoints support custom REST API paths and are ideal for real-time applications requiring immediate processing.
+
+For detailed information about load balancing endpoints, see [Load balancing endpoints](/serverless/load-balancing/overview).
+
+## GPU configuration
+
+Choose one or more GPU categories (organized by memory) for your endpoint in order of preference. Runpod prioritizes allocating the first category in your list and falls back to subsequent GPUs if your first choice is unavailable.
+
+The following GPU categories are available:
+
+<GPUTable/>
 
 <Tip>
 
@@ -21,9 +36,9 @@ Selecting multiple GPU types improves availability, especially for high-demand G
 
 </Tip>
 
-### Worker configuration
+## Worker configuration
 
-#### Active (min) workers
+### Active (min) workers
 
 Sets the minimum number of workers that remain running at all times. Setting this at one or higher eliminates cold start delays for faster response times. Active workers incur charges immediately, but receive up to 30% discount from regular pricing.
 
@@ -43,7 +58,7 @@ Even a small number of active workers can significantly improve performance for 
 
 </Tip>
 
-#### Max workers
+### Max workers
 
 The maximum number of concurrent workers your endpoint can scale to.
 
@@ -57,7 +72,7 @@ We recommend setting your max worker count approximately 20% higher than your ex
 
 </Warning>
 
-#### GPUs per worker
+### GPUs per worker
 
 The number of GPUs assigned to each worker instance.
 
@@ -73,9 +88,9 @@ When choosing between multiple lower-tier GPUs or fewer high-end GPUs, you shoul
 
 </Tip>
 
-### Timeout settings
+## Timeout settings
 
-#### Idle timeout
+### Idle timeout
 
 The amount of time that a worker continues running after completing a request. You're still charged for this time, even if the worker isn't actively processing any requests.
 
@@ -89,7 +104,7 @@ That idle timeout is only effective when using [queue delay scaling](#queue-dela
 
 </Warning>
 
-#### Execution timeout
+### Execution timeout
 
 The maximum time a job can run before automatic termination. This prevents runaway jobs from consuming excessive resources. You can turn off this setting, but we highly recommend keeping it on.
 
@@ -102,7 +117,7 @@ We strongly recommend enabling execution timeout for all endpoints. Set the time
 
 </Warning>
 
-#### Job TTL (time-to-live)
+### Job TTL (time-to-live)
 
 The maximum time a job remains in the queue before automatic termination.
 
@@ -117,7 +132,7 @@ You can use the `/status` operation to configure the time-to-live (TTL) for an i
 
 </Tip>
 
-### FlashBoot
+## FlashBoot
 
 FlashBoot is Runpod's solution for reducing the average cold-start times on your endpoint. It works by retaining worker resources for some time after they're no longer in use, so they can be rebooted quickly. When your endpoint has consistent traffic, your workers have a higher chance of benefiting from FlashBoot for faster spin-ups. However, if your endpoint isn't receiving frequent requests, FlashBoot has fewer opportunities to optimize performance. There is no additional cost associated with FlashBoot.
 
@@ -127,7 +142,11 @@ The effectiveness of FlashBoot increases exponentially with higher request volum
 
 </Tip>
 
-## Advanced endpoint configuration
+## Model (optional)
+
+You can select from a list of [cached models](/serverless/endpoints/model-caching) using the **Model (optional)** field. Selecting a model signals the system to place your workers on host machines that contain the selected model, resulting in faster cold starts and significant cost savings.
+
+## Advanced settings
 
 When configuring advanced settings, remember that each constraint (data center, storage, CUDA version, GPU type) may limit resource availability. For maximum availability and reliability, select all data centers and CUDA versions, and avoid network volumes unless your workload specifically requires them.
 
@@ -145,9 +164,7 @@ For the highest availability, allow all data centers (i.e., keep the default set
 
 ### Network volumes
 
-Attach persistent storage to your workers. Network volumes have higher latency than local storage, and restrict workers to the data center containing your volume. However, they can be very useful for sharing large models or data between workers on an endpoint.
-
-For more information, see [Network volumes](/serverless/storage/network-volumes).
+Attach persistent storage to your workers. [Network volumes](/storage/network-volumes) have higher latency than local storage, and restrict workers to the data center containing your volume. However, they can be very useful for sharing large models or data between workers on an endpoint.
 
 ### Auto-scaling type
 
@@ -213,7 +230,7 @@ Use these strategies to reduce worker startup times:
 
 1. **Embed models in Docker images:** Package your ML models directly within your worker container image instead of downloading them in your handler function. This strategy places models on the worker's high-speed local storage (SSD/NVMe), dramatically reducing the time needed to load models into GPU memory. This approach is optimal for production environments, though extremely large models (500GB+) may require network volume storage.
 
-2. **Store large models on network volumes:** For flexibility during development, save large models to a [network volume](/serverless/storage/network-volumes) using a Pod or one-time handler, then mount this volume to your Serverless workers. While network volumes offer slower model loading compared to embedding models directly, they can speed up your workflow by enabling rapid iteration and seamless switching between different models and configurations.
+2. **Store large models on network volumes:** For flexibility during development, save large models to a [network volume](/storage/network-volumes) using a Pod or one-time handler, then mount this volume to your Serverless workers. While network volumes offer slower model loading compared to embedding models directly, they can speed up your workflow by enabling rapid iteration and seamless switching between different models and configurations.
 
 3. **Maintain active workers:** Set active worker counts above zero to completely eliminate cold starts. These workers remain ready to process requests instantly and cost up to 30% less when idle compared to standard (flex) workers.
 

@@ -1,0 +1,203 @@
+---
+title: "Connect to a Pod with VSCode or Cursor"
+sidebarTitle: "Connect with VSCode/Cursor"
+description: "Set up remote development on your Pod using VSCode or Cursor."
+---
+
+This guide explains how to connect directly to your Pod through VSCode or Cursor using the Remote-SSH extension, allowing you to work within your Pod's volume directories as if the files were stored on your local machine.
+
+## Requirements
+
+Before you begin, you'll need:
+
+- A local development environment with VSCode or Cursor installed.
+  - [Download VSCode](https://code.visualstudio.com/download).
+  - [Download Cursor](https://cursor.sh/).
+- Familiarity with basic command-line operations and SSH.
+
+## Step 1: Install the Remote-SSH extension
+
+To connect to a Pod, you'll need to install the Remote-SSH extension for your IDE:
+
+   1. Open VSCode or Cursor and navigate to the **Extensions** view (Ctrl+Shift+X or Cmd+Shift+X).
+
+   2. Search for and install the Remote-SSH extension:
+      - VSCode: **Remote - SSH** by **ms-vscode-remote**.
+      - Cursor: **Remote-SSH** by **Anysphere**.
+
+## Step 2: Generate an SSH key
+
+Before you can connect to a Pod, you'll need an SSH key that is paired with your Runpod account. If you don't have one, follow these steps:
+1. Generate an SSH key using this command on your local terminal:
+
+   ```sh
+   ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -C "YOUR_EMAIL@DOMAIN.COM"
+   ```
+
+2. To retrieve your public SSH key, run this command:
+
+    ```sh
+    cat ~/.ssh/id_ed25519.pub
+    ```
+    This will output something similar to this:
+
+    ```sh
+    ssh-ed25519 AAAAC4NzaC1lZDI1JTE5AAAAIGP+L8hnjIcBqUb8NRrDiC32FuJBvRA0m8jLShzgq6BQ YOUR_EMAIL@DOMAIN.COM
+    ```
+
+3.  Copy and paste the output into the **SSH Public Keys** field in your [Runpod user account settings](https://www.runpod.io/console/user/settings).
+
+<Warning>
+To enable SSH access, your public key must be present in the `~/.ssh/authorized_keys` file on your Pod. If you upload your public key to the settings page before your Pod starts, the system will automatically inject it into that file at startup.
+
+If your Pod is already running when you upload the key, the system will not perform this injection. To enable SSH access, you'll need to either terminate/redeploy the Pod, or open a [web terminal](/pods/connect-to-a-pod#web-terminal-connection) on the running Pod and run the following commands:
+
+```sh
+export PUBLIC_KEY="<the value you cat out locally>"
+echo "$PUBLIC_KEY" >> ~/.ssh/authorized_keys
+```
+</Warning>
+
+## Step 3: Deploy a Pod
+
+Next, deploy the Pod you want to connect to. For detailed deployment instructions, see [Manage Pods -> Create a Pod](/pods/manage-pods#create-a-pod).
+
+To connect with VSCode/Cursor, your Pod template must support SSH over exposed TCP. To determine whether your Pod template supports this, during deployment, after selecting a template, look for a checkbox under **Instance Pricing** labeled **SSH Terminal Access** and make sure it's checked.
+
+<Tip>
+All official Runpod Pytorch templates support SSH over exposed TCP.
+</Tip>
+
+
+## Step 4: Configure SSH for your IDE
+
+Next, you'll configure SSH access to your Pod using the Remote-SSH extension. The instructions are different for VSCode and Cursor:
+
+<Tabs>
+
+  <Tab title="VSCode">
+   1. From the [Pods](https://www.runpod.io/console/pods) page, select the Pod you deployed.
+   2. Select **Connect**, then select the **SSH** tab.
+   3. Copy the second command, under **SSH over exposed TCP**. It will look similar to this:
+   
+      ```bash
+      ssh root@123.456.789.80 -p 12345 -i ~/.ssh/id_ed25519
+      ```
+
+      <Warning>
+      If you only see one command under SSH, then SSH over exposed TCP is not supported by your selected Pod template. This means you won't be able to connect to your Pod directly through VSCode/Cursor, but you can still connect using [basic SSH](/pods/connect-to-a-pod#basic-ssh-connection) via the terminal.
+      </Warning>
+
+   4. In VSCode, open the **Command Palette** (Ctrl+Shift+P or Cmd+Shift+P) and choose **Remote-SSH: Connect to Host**, then select **Add New SSH Host**.
+   5. Enter the copied SSH command from step 3 (`ssh root@***.***.***.** -p ***** -i ~/.ssh/id_ed25519`) and press **Enter**. This will add a new entry to your SSH config file.
+
+  </Tab>
+
+  <Tab title="Cursor">
+
+1. From the [Pods](https://www.runpod.io/console/pods) page, select the Pod you deployed.
+
+2. Select **Connect**.
+3. Under **Direct TCP Ports**, look for a line similar to:
+
+   ```
+   TCP port ->  69.48.159.6:25634 -> :22
+   ```
+
+   <Warning>
+   If you don't see a **Direct TCP Ports** section, then SSH over exposed TCP is not supported by your selected Pod template. This means you won't be able to connect to your Pod directly through VSCode/Cursor, but you can still connect using [basic SSH](/pods/configuration/use-ssh#basic-ssh-connection) via the terminal.
+   </Warning>
+
+   Here's what these values mean:
+   - `69.48.159.6` is the IP address of your Pod.
+   - `25634` is the port number for the Pod's SSH service.
+
+   Make a note of these values (they will likely be different for your Pod), as you'll need them for the following steps.
+
+4. In Cursor, open the **Command Palette** (Ctrl+Shift+P or Cmd+Shift+P) and choose **Remote-SSH: Connect to Host**, then select **Add New SSH Host**. This opens the SSH config file in Cursor.
+
+5. Add the following to the SSH config file:
+
+   ```
+   Host POD_NAME
+       HostName POD_IP
+       User root
+       Port POD_PORT
+       IdentityFile ~/.ssh/id_ed25519
+   ```
+
+   Replace:
+   - `POD_NAME` with a descriptive name for your Pod. This will be used to identify your Pod in the SSH config file, and does not need to match the name you gave your Pod in the Runpod console.
+   - `POD_IP` with the IP address of your Pod from step 3.
+   - `POD_PORT` with the port number of your Pod from step 3.
+
+   So, for the example Pod, the SSH config file will look like:
+
+   ```
+   Host my-pod
+       HostName 69.48.159.6
+       User root
+       Port 25634
+       IdentityFile ~/.ssh/id_ed25519
+   ```
+
+   <Note>
+   If you are using a custom SSH key, replace `~/.ssh/id_ed25519` with the path to your SSH key.
+   </Note>
+
+6. Save and close the file.
+
+  </Tab>
+
+</Tabs>
+
+## Step 5: Connect to your Pod
+
+Now you can connect to your Pod with the Remote-SSH extension.
+
+1. Open the Command Palette (Ctrl+Shift+P or Cmd+Shift+P).
+2. Select **Remote-SSH: Connect to Host**.
+3. Choose your Pod from the list (either by IP or custom name if you configured one).
+4. VSCode/Cursor will open a new window and connect to your Pod.
+5. When prompted, select the platform (Linux).
+6. Once connected, click **Open Folder** and navigate to your workspace directory (typically `/workspace`).
+
+You should now be connected to your Pod instance, where you can edit files in your volume directories as if they were local.
+
+<Warning >
+If you stop and then resume your Pod, the port numbers may change. If so, you'll need to go back to the previous step and update your SSH config file using the new port numbers before reconnecting.
+</Warning>
+
+## Working with your Pod
+
+Once connected through Remote-SSH, you can:
+
+- Edit files with full IntelliSense and language support.
+- Run and debug applications with access to GPU resources.
+- Use integrated terminal for command execution.
+- Install extensions that run on the remote host.
+- Forward ports to access services locally.
+- Commit and push code using integrated Git support.
+
+Here are some important directories to be aware of:
+
+- `/workspace`: Default [persistent storage](/pods/storage/types) directory.
+- `/tmp`: Temporary files (cleared when Pod stops).
+- `/root`: Home directory for the root user.
+
+## Troubleshooting
+
+If you can't connect to your Pod:
+
+1. Verify your Pod is running and fully initialized.
+2. Check that your SSH key is properly configured in Runpod settings.
+3. Ensure the Pod has SSH enabled in its template.
+
+If the VSCode/Cursor server fails to install:
+
+1. Check that your Pod has sufficient disk space.
+2. Ensure your Pod has internet connectivity.
+3. Try manually removing the `.vscode-server` or `.cursor-server` directory and reconnecting:
+   ```sh
+   rm -rf ~/.vscode-server
+   ```
