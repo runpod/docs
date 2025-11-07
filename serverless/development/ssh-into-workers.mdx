@@ -4,14 +4,49 @@ sidebarTitle: "SSH into workers"
 description: "Connect to your Serverless workers via SSH for debugging and troubleshooting."
 ---
 
-SSH into running workers to debug endpoints in production. You can inspect logs, file systems, and environment variables in real-time.
+SSH into running workers to debug endpoints in development and production. By connecting to a worker, you can inspect logs, file systems, and environment variables in real-time.
 
-## Requirements
+## Generate an SSH key and add it to your Runpod account
 
-Before you can SSH into a worker, you'll need:
+Before you can SSH into a worker, you'll need to generate an SSH key and add it to your Runpod account.
 
-- An SSH key pair added to your Runpod account. See [Connect to a Pod with SSH](/pods/configuration/use-ssh) for instructions.
-- At least one running worker. Set active workers to 1 or more in your [endpoint configurations](/serverless/endpoints/endpoint-configurations).
+<Steps>
+  <Step title="Generate an SSH key">
+    Run this command on your local terminal to generate an SSH key, replacing `YOUR_EMAIL@DOMAIN.COM` with your actual email:
+
+  ```sh
+  ssh-keygen -t ed25519 -C "YOUR_EMAIL@DOMAIN.COM"
+  ```
+
+  This saves a public/private key pair on your local machine to `~/.ssh/id_ed25519.pub` and `~/.ssh/id_ed25519` respectively.
+
+  <Warning>
+    If you are using Command Prompt on Windows instead of the Linux terminal or WSL, your public and private key pair will be saved to `C:\Users\YOUR_USER_ACCOUNT\.ssh\id_ed25519.pub` and `C:\Users\YOUR_USER_ACCOUNT\.ssh\id_ed25519`, respectively.
+    </Warning>
+  </Step>
+
+  <Step title="Retrieve your public SSH key">
+    Run this command on your local terminal to retrieve the public SSH key you just generated:
+
+    ```sh
+    cat ~/.ssh/id_ed25519.pub
+    ```
+    
+    This will output something similar to this:
+
+    ```sh
+    ssh-ed25519 AAAAC4NzaC1lZDI1JTE5AAAAIGP+L8hnjIcBqUb8NRrDiC32FuJBvRA0m8jLShzgq6BQ YOUR_EMAIL@DOMAIN.COM
+    ```
+  </Step>
+
+  <Step title="Add the key to your Runpod account">
+    Copy and paste your public key from the previous step into the **SSH Public Keys** field in your [Runpod user account settings](https://www.console.runpod.io/user/settings).
+
+  <Warning>
+  If you need to add multiple SSH keys to your Runpod account, make sure that each key pair is on its own line in the **SSH Public Keys** field.
+  </Warning>
+  </Step>
+</Steps>
 
 ## SSH into a worker
 
@@ -69,13 +104,15 @@ Before you can SSH into a worker, you'll need:
   </Step>
 </Steps>
 
-## Troubleshooting
+## Troubleshooting SSH key authentication
 
-If you encounter issues connecting via SSH:
+If you're asked for a password when connecting to your worker via SSH, this means something is not set up correctly. Runpod does not require a password for SSH connections, as authentication is handled entirely through your SSH key pair.
 
-- **No running workers**: Verify that you have at least one active worker by checking the Workers tab. If no workers are running, increase your active workers setting.
-- **SSH key authentication fails**: Make sure your SSH public key is properly added to your [Runpod account settings](https://www.console.runpod.io/user/settings). Each key should be on its own line.
-- **Connection timeout**: Check your network connection and ensure you're using the correct SSH command from the Connect tab.
-- **Permission denied**: Verify that the path to your private key (`-i` flag) is correct and that the key file has appropriate permissions (typically `chmod 600 ~/.ssh/id_ed25519`).
+Here are some common reasons why this might happen:
 
-For more detailed SSH troubleshooting, refer to the [Connect to a Pod with SSH](/pods/configuration/use-ssh#troubleshooting-ssh-key-authentication) guide.
+- If you copy and paste the key *fingerprint* (which starts with `SHA256:`) into your Runpod user settings instead of the actual public key (the contents of your `id_ed25519.pub` file), authentication will fail.
+- If you omit the encryption type at the beginning of your public key when pasting it into your Runpod user settings (for example, leaving out `ssh-ed25519`), the key will not be recognized.
+- If you add multiple public keys to your Runpod user settings but do not separate them with a newline, only the first key will work. Each key must be on its own line.
+- If you specify the wrong file path to your private key when connecting, SSH will not be able to find the correct key (`No such file or directory` error).
+- If your private key file is accessible by other users on your machine, SSH may refuse to use it for security reasons (`bad permissions` error).
+- If your SSH configuration file (`~/.ssh/config`) points to the wrong private key, you will also be prompted for a password. Make sure the `IdentityFile` entry in your config file matches the private key that corresponds to the public key you added to your Runpod account.
