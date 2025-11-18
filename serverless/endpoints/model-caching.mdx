@@ -61,18 +61,20 @@ flowchart TD
 
 ## Where models are stored
 
-Cached models are stored in a Runpod-managed Docker volume and mounted at `/runpod-volume/huggingface-cache/hub/`. This creates a "blended view" where you can see both your network volume contents and cached models under the same `/runpod-volume/` path.
+Cached models are stored in a Runpod-managed Docker volume mounted at `/runpod-volume/huggingface-cache/hub/`. The model cache is automatically managed and persists across requests on the same worker.
 
-The model cache loads significantly faster than network volumes, reducing cold start times. The cache is automatically managed and persists across requests on the same worker. You'll see cached models overlaid onto your network volume mount point.
+<Note>
+While cached models use the same mount path as network volumes (`/runpod-volume/`), the model loaded from the cache will load significantly faster than the same model loaded from a network volume.
+</Note>
 
 ## Accessing cached models in your application
 
-Runpod caches models at `/runpod-volume/huggingface-cache/hub/` following Hugging Face cache conventions. The directory structure replaces forward slashes (`/`) from the original model name with double dashes (`--`), and includes a version hash subdirectory.
+Models are cached on your workers at `/runpod-volume/huggingface-cache/hub/` following Hugging Face cache conventions. The directory structure replaces forward slashes (`/`) from the original model name with double dashes (`--`), and includes a version hash subdirectory.
 
 The path structure follows this pattern:
 
 ```
-/runpod-volume/huggingface-cache/hub/models--{organization}--{model-name}/snapshots/{version-hash}/
+/runpod-volume/huggingface-cache/hub/models--HF_ORGANIZATION--MODEL_NAME/snapshots/VERSION_HASH/
 ```
 
 For example, the model `gensyn/qwen2.5-0.5b-instruct` would be stored at:
@@ -80,10 +82,6 @@ For example, the model `gensyn/qwen2.5-0.5b-instruct` would be stored at:
 ```
 /runpod-volume/huggingface-cache/hub/models--gensyn--qwen2.5-0.5b-instruct/snapshots/317b7eb96312eda0c431d1dab1af958a308cb35e/
 ```
-
-### Current limitations
-
-The version hash in the path currently prevents direct integration with some applications (like ComfyUI worker) that expect to predict paths based solely on model name. We're working on removing the version hash requirement.
 
 If your application requires specific paths, configure it to scan `/runpod-volume/huggingface-cache/hub/` for models.
 
