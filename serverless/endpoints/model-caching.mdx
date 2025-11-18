@@ -61,41 +61,31 @@ flowchart TD
 
 ## Where models are stored
 
-Cached models are stored on the worker container's local disk, separate from any attached network volumes. Runpod automatically manages this internal storage to optimize loading speed.
+Cached models are stored in a Runpod-managed Docker volume and mounted at `/runpod-volume/huggingface-cache/hub/`. This creates a "blended view" where you can see both your network volume contents and cached models under the same `/runpod-volume/` path.
 
-The cache persists across requests on the same worker, so once a worker initializes, you'll see consistent performance. Since the models live on local disk rather than network volumes, they won't appear on your attached network volumes.
+The model cache loads significantly faster than network volumes, reducing cold start times. The cache is automatically managed and persists across requests on the same worker. You'll see cached models overlaid onto your network volume mount point.
 
-## Accessing cached models
+## Accessing cached models in your application
 
-Cached models are stored at `/runpod-volume/huggingface-cache/hub/`. The directory structure follows Hugging Face cache conventions, where forward slashes (`/`) in the model name are replaced with double dashes (`--`).
+Runpod caches models at `/runpod-volume/huggingface-cache/hub/` following Hugging Face cache conventions. The directory structure replaces forward slashes (`/`) from the original model name with double dashes (`--`), and includes a version hash subdirectory.
 
 The path structure follows this pattern:
 
 ```
-/runpod-volume/huggingface-cache/hub/models--{organization}--{model-name}/
+/runpod-volume/huggingface-cache/hub/models--{organization}--{model-name}/snapshots/{version-hash}/
 ```
 
-For example, `meta-llama/Llama-3.2-1B-Instruct` would be stored at:
+For example, the model `gensyn/qwen2.5-0.5b-instruct` would be stored at:
 
 ```
-/runpod-volume/huggingface-cache/hub/models--meta-llama--Llama-3.2-1B-Instruct/
+/runpod-volume/huggingface-cache/hub/models--gensyn--qwen2.5-0.5b-instruct/snapshots/317b7eb96312eda0c431d1dab1af958a308cb35e/
 ```
 
-## Using cached models in applications
+### Current limitations
 
-You can access cached models in your application two ways:
+The version hash in the path currently prevents direct integration with some applications (like ComfyUI worker) that expect to predict paths based solely on model name. We're working on removing the version hash requirement.
 
-**Direct configuration**: Configure your application to load models directly from `/runpod-volume/huggingface-cache/hub/`. Many frameworks and tools let you specify a custom cache directory for Hugging Face models.
-
-**Symbolic links**: Create symbolic links from your application's expected model directory to the cache location. This is particularly useful for applications like ComfyUI that expect models in specific directories.
-
-For example, create a symbolic link like this:
-
-```bash
-ln -s /runpod-volume/huggingface-cache/hub/models--meta-llama--Llama-3.2-1B-Instruct/ /workspace/models/llama-3.2
-```
-
-This lets your application access cached models without modifying its configuration.
+If your application requires specific paths, configure it to scan `/runpod-volume/huggingface-cache/hub/` for models.
 
 ## Enabling cached models
 
