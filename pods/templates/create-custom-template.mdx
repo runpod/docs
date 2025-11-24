@@ -155,12 +155,13 @@ This option starts Jupyter/SSH in the background, then runs your application. Yo
 
 This runs only your application with minimal overhead, which is ideal for production deployments where you don't need interactive access.
 
-### Option 1: Keep base image services (no changes needed)
+### Option 1: Keep all base image services (no changes needed)
 If you want the default behavior with Jupyter and SSH services, you don't need to modify the Dockerfile. The base image's `/start.sh` script handles everything automatically.
 
 This is already configured in the Dockerfile from Step 2.
 
-### Option 2: Configure custom application with services
+### Option 2: Automatically run the application after services start
+
 If you want to run your application alongside Jupyter/SSH services, add these lines to the end of your Dockerfile:
 
 ```dockerfile Dockerfile
@@ -208,9 +209,54 @@ This overrides the base image entrypoint and runs only your Python application.
 
 ---
 
-For this tutorial, we'll use Option 1 (keeping the base image services) for ease of testing and development.
+For this tutorial, we'll use option 1 (default behavior for the base image services) so we can test out the various connection options.
 
-## Step 5: Create your application
+## Step 5: Pre-load a model into your template
+
+Pre-loading models into your Docker image means that you won't need to re-download a model every time you start up a new Pod, enabling you to create easily reusable and shareable environments for ML inference.
+
+There are two ways to pre-load models:
+
+- **Option 1: Automatic download from Hugging Face (recommended)**: This is the simplest approach. During the Docker build, Python downloads and caches the model using the transformers library.
+
+- **Option 2: Manual download with wget**: This gives you explicit control and works with custom or hosted models.
+
+For this tutorial, we'll use Option 1 (automatic download from Hugging Face) for ease of setup and testing, but you can use Option 2 if you need more control.
+
+### Option 1: Pre-load models from Hugging Face
+Add these lines to your Dockerfile before the `COPY . /app` line:
+
+```dockerfile Dockerfile
+# Set Hugging Face cache directory
+ENV HF_HOME=/app/models
+ENV HF_HUB_ENABLE_HF_TRANSFER=0
+
+# Pre-download model during build
+RUN python -c "from transformers import pipeline; pipeline('sentiment-analysis', model='distilbert-base-uncased-finetuned-sst-2-english')"
+```
+
+During the build, Python will download the model and cache it in `/app/models`. When you deploy Pods with this template, the model loads instantly from the cache.
+
+### Option 2: Pre-load models with wget
+For more control or to use models from custom sources, you can manually download model files during the build.
+
+Add these lines to your Dockerfile before the `COPY . /app` line:
+
+```dockerfile Dockerfile
+# Create model directory and download files
+RUN mkdir -p /app/models/distilbert-model && \
+    cd /app/models/distilbert-model && \
+    wget -q https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english/resolve/main/config.json && \
+    wget -q https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english/resolve/main/model.safetensors && \
+    wget -q https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english/resolve/main/tokenizer_config.json && \
+    wget -q https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english/resolve/main/vocab.txt
+```
+
+---
+
+For this tutorial, we'll use option 1 (automatic download from Hugging Face).
+
+## Step 6: Create your application
 
 Next we'll create the Python application that will run in your Pod. Open `main.py` and add your application code.
 
@@ -241,11 +287,25 @@ def main():
     print("\nLoading sentiment analysis model...")
     device = 0 if torch.cuda.is_available() else -1
     
+    # MODEL LOADING OPTIONS:
+    
+    # OPTION 1: From Hugging Face Hub cache (default)
+    # Bakes the model into the container image using transformers pipeline
+    # Behavior: Loads model from the cache, requires local_files_only=True
     classifier = pipeline(
         "sentiment-analysis",
         model="distilbert-base-uncased-finetuned-sst-2-english",
-        device=device
+        device=device,
+        model_kwargs={"local_files_only": True},
     )
+
+    # OPTION 2: From a local directory
+    # Download the model files using wget, loads them from the local directory
+    # Behavior: Loads directly from /app/models/distilbert-model
+    # To use: Uncomment the pipeline object below, comment OPTION 1 above
+    # classifier = pipeline('sentiment-analysis',
+    #                       model='/app/models/distilbert-model',
+    #                       device=device)
     
     print("Model loaded successfully!")
     
@@ -282,67 +342,9 @@ if __name__ == "__main__":
     main()
 ```
 
-## Step 6: Pre-load a model into your template
-
-Pre-loading models into your Docker image means that you won't need to re-download a model every time you start up a new Pod, enabling you to create easily reusable and shareable environments for ML inference.
-
-There are two ways to pre-load models:
-
-- **Option 1: Automatic download from Hugging Face (recommended)**: This is the simplest approach. During the Docker build, Python downloads and caches the model using the transformers library.
-
-- **Option 2: Manual download with wget**: This gives you explicit control and works with custom or hosted models.
-
-For this tutorial, we'll use Option 1 (automatic download from Hugging Face) for ease of setup and testing, but you can use Option 2 if you need more control.
-
-### Option 1: Pre-load models from Hugging Face
-Add these lines to your Dockerfile before the `COPY . /app` line:
-
-```dockerfile Dockerfile
-# Set Hugging Face cache directory
-ENV HF_HOME=/app/models
-ENV HF_HUB_ENABLE_HF_TRANSFER=0
-
-# Pre-download model during build
-RUN python -c "from transformers import pipeline; pipeline('sentiment-analysis', model='distilbert-base-uncased-finetuned-sst-2-english')"
-```
-
-During the build, Python will download the model and cache it in `/app/models`. When you deploy Pods with this template, the model loads instantly from the cache.
-
-To use the cached model in your application, add `local_files_only=True` when loading:
-
-```python
-classifier = pipeline(
-    "sentiment-analysis",
-    model="distilbert-base-uncased-finetuned-sst-2-english",
-    device=device,
-    model_kwargs={"local_files_only": True}
-)
-```
-
-### Option 2: Pre-load models with wget
-For more control or to use models from custom sources, you can manually download model files during the build.
-
-Add these lines to your Dockerfile before the `COPY . /app` line:
-
-```dockerfile Dockerfile
-# Create model directory and download files
-RUN mkdir -p /app/models/distilbert-model && \
-    cd /app/models/distilbert-model && \
-    wget -q https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english/resolve/main/config.json && \
-    wget -q https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english/resolve/main/model.safetensors && \
-    wget -q https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english/resolve/main/tokenizer_config.json && \
-    wget -q https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english/resolve/main/vocab.txt
-```
-
-Then load the model from the local directory in your application:
-
-```python
-classifier = pipeline(
-    'sentiment-analysis',
-    model='/app/models/distilbert-model',
-    device=device
-)
-```
+<Warning>
+If you're pre-load a model with `wget` (option 2 from step 5), you need to uncomment the `classifier = pipeline()` object in `main.py` and comment out the `classifier = pipeline()` object for option 1.
+</Warning>
 
 ## Step 7: Build and test your Docker image
 
