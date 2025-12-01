@@ -1,0 +1,531 @@
+---
+title: "Build a custom Pod template"
+sidebarTitle: "Build a custom template"
+description: "A step-by-step guide to extending Runpod's official templates."
+tag: "NEW"
+---
+
+<Tip>
+You can find the complete code for this tutorial, including automated build options with GitHub Actions, in the [runpod-workers/pod-template](https://github.com/runpod-workers/pod-template) repository.
+</Tip>
+
+This tutorial shows how to build a custom Pod template from the ground up. You'll extend an official Runpod template, add your own dependencies, configure how your container starts, and pre-load machine learning models. This approach saves time during Pod initialization and ensures consistent environments across deployments.
+
+By creating custom templates, you can package everything your project needs into a reusable Docker image. Once built, you can deploy your workload in seconds instead of reinstalling dependencies every time you start a new Pod. You can also share your template with members of your team and the wider Runpod community.
+
+## What you'll learn
+
+In this tutorial, you'll learn how to:
+
+- Create a Dockerfile that extends a Runpod base image.
+- Configure container startup options (JupyterLab/SSH, application + services, or application only).
+- Add Python dependencies and system packages.
+- Pre-load machine learning models from Hugging Face, local files, or custom sources.
+- Build and test your image, then push it to Docker Hub.
+- Create a custom Pod template in the Runpod console
+- Deploy a Pod using your custom template.
+
+## Requirements
+
+Before you begin, you'll need:
+
+- A [Runpod account](/get-started/manage-accounts).
+- Docker installed on your local machine or a remote server.
+- A Docker Hub account (or access to another container registry).
+- Basic familiarity with Docker and Python.
+
+## Step 1: Set up your project structure
+
+First, create a directory for your custom template and the necessary files.
+
+<Steps>
+<Step title="Create project directory">
+Create a new directory for your template project:
+
+```bash
+mkdir my-custom-pod-template
+cd my-custom-pod-template
+```
+</Step>
+
+<Step title="Create required files">
+Create the following files in your project directory:
+
+```bash
+touch Dockerfile requirements.txt main.py
+```
+
+Your project structure should now look like this:
+
+```
+my-custom-pod-template/
+├── Dockerfile
+├── requirements.txt
+└── main.py
+```
+</Step>
+</Steps>
+
+## Step 2: Choose a base image and create your Dockerfile
+
+Runpod offers base images with PyTorch, CUDA, and common dependencies pre-installed. You'll extend one of these images to build your custom template.
+
+<Steps>
+<Step title="Select a base image">
+Runpod offers several base images. You can explore available base images on [Docker Hub](https://hub.docker.com/u/runpod).
+
+For this tutorial, we'll use the PyTorch image, `runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404` which includes PyTorch 2.8.0, CUDA 12.8.1, and Ubuntu 24.04.
+</Step>
+
+<Step title="Create your Dockerfile">
+Open `Dockerfile` and add the following content:
+
+```dockerfile Dockerfile
+# Use Runpod PyTorch base image
+FROM runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404
+
+# Set environment variables
+# This ensures Python output is immediately visible in logs
+ENV PYTHONUNBUFFERED=1
+
+# Set the working directory
+WORKDIR /app
+
+# Install system dependencies if needed
+RUN apt-get update --yes && \
+    DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
+        wget \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements file
+COPY requirements.txt /app/
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy application files
+COPY . /app
+```
+
+This basic Dockerfile:
+- Extends the Runpod PyTorch base image.
+- Installs system packages (`wget`, `curl`).
+- Installs Python dependencies from `requirements.txt`.
+- Copies your application code to `/app`.
+</Step>
+</Steps>
+
+## Step 3: Add Python dependencies
+
+Now define the Python packages your application needs.
+
+<Steps>
+<Step title="Edit requirements.txt">
+Open `requirements.txt` and add your Python dependencies:
+
+```txt requirements.txt
+# Python dependencies
+# Add your packages here
+numpy>=1.24.0
+requests>=2.31.0
+transformers>=4.40.0
+```
+
+These packages will be installed when you build your Docker image. Add any additional libraries your application requires.
+</Step>
+</Steps>
+
+## Step 4: Configure container startup behavior
+
+Runpod base images come with built-in services like Jupyter and SSH. You can choose how your container starts: whether to keep all the base image services running, run your application alongside those services, or run only your application.
+
+There are three ways to configure how your container starts:
+
+**Option 1: Keep all base image services (default)**
+
+The base image automatically starts Jupyter and SSH based on your template settings. This is the default behavior and is ideal for interactive development and remote access.
+
+**Option 2: Run your application after services start**
+
+This option starts Jupyter/SSH in the background, then runs your application. You'll use a startup script for this.
+
+**Option 3: Application only (no Jupyter or SSH)**
+
+This runs only your application with minimal overhead, which is ideal for production deployments where you don't need interactive access.
+
+### Option 1: Keep all base image services (no changes needed)
+If you want the default behavior with Jupyter and SSH services, you don't need to modify the Dockerfile. The base image's `/start.sh` script handles everything automatically.
+
+This is already configured in the Dockerfile from Step 2.
+
+### Option 2: Automatically run the application after services start
+
+If you want to run your application alongside Jupyter/SSH services, add these lines to the end of your Dockerfile:
+
+```dockerfile Dockerfile
+# Run application after services start
+COPY run.sh /app/run.sh
+RUN chmod +x /app/run.sh
+CMD ["/app/run.sh"]
+```
+
+Create a new file named `run.sh` in the same directory as your `Dockerfile`:
+
+```bash
+touch run.sh
+```
+
+Then add the following content to it:
+
+```bash run.sh
+#!/bin/bash
+# Start base image services (Jupyter/SSH) in background
+/start.sh &
+
+# Wait for services to start
+sleep 2
+
+# Run your application
+python /app/main.py
+
+# Wait for background processes
+wait
+```
+
+This script starts the base services in the background, then runs your application.
+
+### Option 3: Configure application-only mode
+For production deployments where you don't need Jupyter or SSH, add these lines to the end of your Dockerfile:
+
+```dockerfile Dockerfile
+# Clear entrypoint and run application only
+ENTRYPOINT []
+CMD ["python", "/app/main.py"]
+```
+
+This overrides the base image entrypoint and runs only your Python application.
+
+---
+
+For this tutorial, we'll use option 1 (default behavior for the base image services) so we can test out the various connection options.
+
+## Step 5: Pre-load a model into your template
+
+Pre-loading models into your Docker image means that you won't need to re-download a model every time you start up a new Pod, enabling you to create easily reusable and shareable environments for ML inference.
+
+There are two ways to pre-load models:
+
+- **Option 1: Automatic download from Hugging Face (recommended)**: This is the simplest approach. During the Docker build, Python downloads and caches the model using the transformers library.
+
+- **Option 2: Manual download with wget**: This gives you explicit control and works with custom or hosted models.
+
+For this tutorial, we'll use Option 1 (automatic download from Hugging Face) for ease of setup and testing, but you can use Option 2 if you need more control.
+
+### Option 1: Pre-load models from Hugging Face
+Add these lines to your Dockerfile before the `COPY . /app` line:
+
+```dockerfile Dockerfile
+# Set Hugging Face cache directory
+ENV HF_HOME=/app/models
+ENV HF_HUB_ENABLE_HF_TRANSFER=0
+
+# Pre-download model during build
+RUN python -c "from transformers import pipeline; pipeline('sentiment-analysis', model='distilbert-base-uncased-finetuned-sst-2-english')"
+```
+
+During the build, Python will download the model and cache it in `/app/models`. When you deploy Pods with this template, the model loads instantly from the cache.
+
+### Option 2: Pre-load models with wget
+For more control or to use models from custom sources, you can manually download model files during the build.
+
+Add these lines to your Dockerfile before the `COPY . /app` line:
+
+```dockerfile Dockerfile
+# Create model directory and download files
+RUN mkdir -p /app/models/distilbert-model && \
+    cd /app/models/distilbert-model && \
+    wget -q https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english/resolve/main/config.json && \
+    wget -q https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english/resolve/main/model.safetensors && \
+    wget -q https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english/resolve/main/tokenizer_config.json && \
+    wget -q https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english/resolve/main/vocab.txt
+```
+
+---
+
+For this tutorial, we'll use option 1 (automatic download from Hugging Face).
+
+## Step 6: Create your application
+
+Next we'll create the Python application that will run in your Pod. Open `main.py` and add your application code.
+
+Here's an example app that loads a machine learning model and performs inference on sample texts. (You can also replace this with your own application logic.)
+
+```python main.py
+"""
+Example Pod template application with sentiment analysis.
+"""
+
+import sys
+import torch
+import time
+import signal
+from transformers import pipeline
+
+def main():
+    print("Hello from your custom Runpod template!")
+    print(f"Python version: {sys.version.split()[0]}")
+    print(f"PyTorch version: {torch.__version__}")
+    print(f"CUDA available: {torch.cuda.is_available()}")
+    
+    if torch.cuda.is_available():
+        print(f"CUDA version: {torch.version.cuda}")
+        print(f"GPU device: {torch.cuda.get_device_name(0)}")
+    
+    # Initialize model
+    print("\nLoading sentiment analysis model...")
+    device = 0 if torch.cuda.is_available() else -1
+    
+    # MODEL LOADING OPTIONS:
+    
+    # OPTION 1: From Hugging Face Hub cache (default)
+    # Bakes the model into the container image using transformers pipeline
+    # Behavior: Loads model from the cache, requires local_files_only=True
+    classifier = pipeline(
+        "sentiment-analysis",
+        model="distilbert-base-uncased-finetuned-sst-2-english",
+        device=device,
+        model_kwargs={"local_files_only": True},
+    )
+
+    # OPTION 2: From a local directory
+    # Download the model files using wget, loads them from the local directory
+    # Behavior: Loads directly from /app/models/distilbert-model
+    # To use: Uncomment the pipeline object below, comment OPTION 1 above
+    # classifier = pipeline('sentiment-analysis',
+    #                       model='/app/models/distilbert-model',
+    #                       device=device)
+    
+    print("Model loaded successfully!")
+    
+    # Example inference
+    test_texts = [
+        "This is a wonderful experience!",
+        "I really don't like this at all.",
+        "The weather is nice today.",
+    ]
+    
+    print("\n--- Running sentiment analysis ---")
+    for text in test_texts:
+        result = classifier(text)
+        print(f"Text: {text}")
+        print(f"Result: {result[0]['label']} (confidence: {result[0]['score']:.4f})\n")
+    
+    print("Container is running. Press Ctrl+C to stop.")
+    
+    # Keep container running
+    def signal_handler(sig, frame):
+        print("\nShutting down...")
+        sys.exit(0)
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    try:
+        while True:
+            time.sleep(60)
+    except KeyboardInterrupt:
+        signal_handler(None, None)
+
+if __name__ == "__main__":
+    main()
+```
+
+<Warning>
+If you're pre-loading a model with `wget` (option 2 from step 5), make sure to uncomment the `classifier = pipeline()` object in `main.py` and comment out the `classifier = pipeline()` object for option 1.
+</Warning>
+
+## Step 7: Build and test your Docker image
+
+Now that your template is configured, you can build and test your Docker image locally to make sure it works correctly:
+
+<Steps>
+<Step title="Build the image">
+Run the Docker build command from your project directory:
+
+```bash
+docker build --platform linux/amd64 -t my-custom-template:latest .
+```
+
+The `--platform linux/amd64` flag ensures compatibility with Runpod's infrastructure, and is required if you're building on a Mac or ARM system.
+
+The build process will:
+- Download the base image.
+- Install system dependencies.
+- Install Python packages.
+- Download and cache models (if configured).
+- Copy your application files.
+
+This may take 5-15 minutes depending on your dependencies and model sizes.
+</Step>
+
+<Step title="Verify the build">
+Check that your image was created successfully:
+
+```bash
+docker images | grep my-custom-template
+```
+
+You should see your image listed with the `latest` tag, similar to this:
+
+```bash
+my-custom-template                latest    54c3d1f97912   10 seconds ago   10.9GB
+```
+</Step>
+
+<Step title="Test the container locally">
+To test the container locally, run the following command:
+
+```bash
+docker run --rm -it --platform linux/amd64 my-custom-template:latest /bin/bash
+```
+
+This starts the container and connects you to a shell inside it, exactly like the Runpod web terminal but running locally on your machine. 
+
+You can use this shell to test your application and verify that your dependencies are installed correctly. (Press `Ctrl+D` when you want to return to your local terminal.)
+
+When you connect to the container shell, you'll be taken directly to the `/app` directory, which contains your application code (`main.py`) and `requirements.txt`. Your models can be found in `/app/models`.
+
+</Step>
+<Step title="Test the application">
+
+Try running the sample application (or any custom code you added):
+
+```bash
+python main.py
+```
+
+You should see output from the application in your terminal, including the model loading and inference results.
+
+Press `Ctrl+C` to stop the application and `Ctrl+D` when you're ready to exit the container.
+</Step>
+</Steps>
+
+## Step 8: Push to Docker Hub
+
+To use your template with Runpod, push to Docker Hub (or another container registry).
+
+<Steps>
+<Step title="Tag your image">
+Tag your image with your Docker Hub username:
+
+```bash
+docker tag my-custom-template:latest YOUR_DOCKER_USERNAME/my-custom-template:latest
+```
+
+Replace `YOUR_DOCKER_USERNAME` with your actual Docker Hub username.
+</Step>
+
+<Step title="Log in to Docker Hub">
+Authenticate with Docker Hub:
+
+```bash
+docker login
+```
+
+If you aren't already logged in to Docker Hub, you'll be prompted to enter your Docker Hub username and password.
+</Step>
+
+<Step title="Push the image">
+Push your image to Docker Hub:
+
+```bash
+docker push YOUR_DOCKER_USERNAME/my-custom-template:latest
+```
+
+This uploads your image to Docker Hub, making it accessible to Runpod. Large images may take several minutes to upload.
+</Step>
+</Steps>
+
+## Step 9: Create a Pod template in the Runpod console
+
+Next, create a Pod template using your custom Docker image:
+
+<Steps>
+<Step title="Create a Pod template">
+Navigate to the [Templates page](https://console.runpod.io/user/templates) in the Runpod console and click **New Template**.
+</Step>
+
+<Step title="Configure your template">
+Configure your template with these settings:
+   - **Name**: Give your template a descriptive name (e.g., "my-custom-template").
+   - **Container Image**: Enter the Docker Hub image name and tag: `YOUR_DOCKER_USERNAME/my-custom-template:latest`.
+   - **Container Disk**: Set to at least 15 GB.
+   - **HTTP Ports**: Expand the section, click **Add port**, then enter **JupyterLab** as the port label and **8888** as the port number.
+   - **TCP Ports**: Expand the section, click **Add port**, then enter **SSH** as the port label and **22** as the port number.
+
+Leave all other settings on their defaults and click **Save Template**.
+</Step>
+</Steps>
+
+## Step 10: Deploy and test your template
+
+Now you can deploy and test your template on a Pod:
+
+<Steps>
+<Step title="Navigate to Pods page">
+Go to the [Pods page](https://console.runpod.io/pods) in the Runpod console and click **Deploy**.
+</Step>
+
+<Step title="Configure your Pod">
+Configure your Pod with these settings:
+
+   - **GPU**: The Distilbert model used in this tutorial is very small, so you can **select any available GPU**. If you're using a different model, you'll need to [select a GPU](/pods/choose-a-pod) that matches its requirements.
+   - **Pod Template**: Click **Change Template**. You should see your custom template ("my-custom-template") in the list. Click it to select it.
+
+Leave all other settings on their defaults and click **Deploy On-Demand**.
+
+Your Pod will start with all your pre-installed dependencies and models. The first deployment may take a few minutes as Runpod downloads your image.
+</Step>
+
+<Step title="Connect and test">
+Once your Pod is running, click on your Pod to open the connection options panel.
+
+Try one or more connection options:
+
+- **Web Terminal**: Click **Enable Web Terminal** and then **Open Web Terminal** to access it.
+- **JupyterLab**: It may take a few minutes for JupyterLab to start. Once it's labeled as **Ready**, click the **JupyterLab** link to access it.
+- **SSH**: Copy the SSH command and run it in your local terminal to access it. (See [Connect to a Pod with SSH](/pods/configuration/use-ssh) for details on how to use SSH.)
+</Step>
+
+<Step title="Test the application">
+After you've connected, try running the sample application (or any custom code you added):
+
+```bash
+python main.py
+```
+
+You should see output from the application in your terminal, including the model loading and inference results.
+</Step>
+<Step title="Clean up">
+To avoid incurring unnecessary charges, make sure to stop and then terminate your Pod when you're finished. (See [Manage Pods](/pods/manage-pods) for detailed instructions.)
+</Step>
+</Steps>
+
+## Next steps
+
+Congratulations! You've built a custom Pod template and deployed it to Runpod.
+
+You can use this as a jumping off point to build your own custom templates with your own applications, dependencies, and models.
+
+For example, you can try:
+
+- Adding more dependencies and models to your template.
+- Creating different template versions for different use cases.
+- Automating builds using GitHub Actions or other CI/CD tools.
+- Using [Runpod secrets](/pods/templates/secrets) to manage sensitive information.
+
+For more information on working with templates, see the [Manage Pod templates](/pods/templates/manage-templates) guide.
+
+For more advanced template management, you can use the [Runpod REST API](/api-reference/templates/POST/templates) to programmatically create and update templates.
