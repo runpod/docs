@@ -1,0 +1,35 @@
+---
+title: "Pod migration"
+description: "Understand Pod migration and how to handle situations when your Pod's GPU is unavailable."
+tag: "BETA"
+---
+
+When you start a Pod, it's assigned to a specific physical machine with 4-8 GPUs. This creates a link between your Pod and that particular machine. As long as your Pod is running, that GPU is exclusively reserved for you, which ensures stable pricing and prevents your work from being interrupted.
+
+When you stop a Pod, you release that specific GPU, allowing other users to rent it. If another user rents the GPU while your Pod is stopped, the GPU will be occupied when you try to restart. Because your Pod is still tied to that original machine, you'll see message asking you to migrate your Pod (or tell you there are [zero gpus](references/troubleshooting/zero-gpus)). This doesn't mean there are no GPUs of that type available on Runpod, just that none are available on the specific physical machine where your Pod's data is stored.
+
+## Your options when GPUs are unavailable
+
+When prompted to migrate your Pod, you have three options:
+
+1. **Do nothing**: If you don't want to migrate your data, you can wait and try again later. The GPU will become available once another user stops their Pod on that machine.
+
+2. **Start Pod with CPUs**: If you don't need GPU access immediately, you can start your Pod with CPUs only. This lets you access your data and manually migrate files if needed, but the Pod will have limited CPU resources and is not suitable for compute-intensive tasks.
+
+3. **Automatically migrate Pod data**: This option spins up a new Pod with the same specifications as your current one and automatically migrates your data to a machine with available GPUs. The migration process finds a new machine with your requested GPU type, provisions the instance, and transfers your network volume data from the old Pod to the new one.
+
+## Important considerations for migration
+
+When you trigger an automatic Pod migration, you'll receive a new Pod with a new ID and IP address. This is because Pod IDs are architecturally tied to specific physical machines.
+
+This may impact your workload if you have:
+
+- A Pod ID hardcoded in an API call.
+- A proxy URL hardcoded (e.g., `http://b63b243b47bd340becc72fbe9b3e642c.proxy.runpod.net`).
+- A firewall or VPN configured with a specific Pod ID.
+- A firewall or VPN configured with a specific Pod IP address.
+- A specific URL for your server (when you start a new Pod, you'll get a new URL for any UI or server you've set up).
+
+## Preventing Pod migration scenarios
+
+The most effective way to avoid the need for Pod migrations is to use [network volumes](/storage/network-volumes). Network volumes decouple your data from specific physical machines, storing your `/workspace` data on a separate, persistent volume that can be attached to any Pod. If you need to terminate a Pod, you can deploy a new one and attach the same network volume, giving you immediate access to your data on any machine with an available GPU.
