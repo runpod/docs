@@ -27,7 +27,7 @@ project_directory
 
 Your `requirements.txt` file should list all Python packages your handler needs:
 
-```
+```txt title="requirements.txt"
 # Example requirements.txt
 runpod~=1.7.6
 torch==2.0.1
@@ -39,7 +39,7 @@ transformers==4.30.2
 
 The Dockerfile tells Docker how to build your worker image. Create a file named `Dockerfile` (no extension) in your project's root directory:
 
-```dockerfile
+```dockerfile title="Dockerfile"
 FROM python:3.11.1-slim
 
 WORKDIR /
@@ -59,9 +59,15 @@ This Dockerfile starts with a Python base image, installs your dependencies, cop
 
 ## Including models and external files
 
-If your handler uses machine learning models or other external files, include them in the Docker image:
+<Tip>
 
-```dockerfile
+If your model is available on Hugging Face, we strongly recommend enabling [cached models](/serverless/endpoints/model-caching) instead of baking the model into your Docker image.
+
+</Tip>
+
+If your handler uses machine learning models or other external files, you can include them in the Docker image using `COPY` or `ADD`:
+
+```dockerfile title="Dockerfile" highlight={9-11}
 FROM python:3.11.1-slim
 
 WORKDIR /
@@ -81,17 +87,24 @@ ENV MODEL_PATH=/models/my_model.pt
 CMD ["python", "-u", "/handler.py"]
 ```
 
-Always include your model files directly in the Docker image rather than downloading them at runtime to ensure faster startup times and more reliable execution.
+For non-local models, you can use `RUN wget` to manually download them during the build process:
+
+```dockerfile title="Dockerfile"
+# Download model files and copy them to the container
+RUN -q wget URL_TO_YOUR_MODEL -O /models/my_model.pt
+COPY models/ /models/
+```
 
 ## Building the Docker image
 
 From your terminal, navigate to your project directory and build the Docker image:
 
 ```sh
-docker build --platform linux/amd64 -t [DOCKER_USERNAME]/[WORKER_NAME]:v1.0.0 .
+docker build --platform linux/amd64 \
+    -t DOCKER_USERNAME/WORKER_NAME:VERSION .
 ```
 
-Replace `[DOCKER_USERNAME]` with your Docker Hub username, `[WORKER_NAME]` with a descriptive name for your worker, and `v1.0.0` with an appropriate version tag.
+Replace `DOCKER_USERNAME` with your Docker Hub username, `WORKER_NAME` with a descriptive name for your worker, and `VERSION` with an appropriate version tag.
 
 <Info>
 
@@ -104,7 +117,7 @@ The `--platform linux/amd64` flag is required to ensure compatibility with Runpo
 Before pushing it to the registry, you should test your Docker image locally:
 
 ```sh
-docker run -it [DOCKER_USERNAME]/[WORKER_NAME]:v1.0.0
+docker run -it DOCKER_USERNAME/WORKER_NAME:VERSION
 ```
 
 If your handler is properly configured with a [test input](/serverless/workers/handler-functions#local-testing), you should see it process the test input and provide output.
@@ -118,7 +131,7 @@ Make your image available to Runpod by pushing it to Docker Hub:
 docker login
 
 # Push the image
-docker push [DOCKER_USERNAME]/[WORKER_NAME]:v1.0.0
+docker push DOCKER_USERNAME/WORKER_NAME:VERSION
 ```
 
 Once your image is in the Docker container registry, you can [create a Serverless endpoint](/serverless/endpoints/manage-endpoints#create-an-endpoint) through the Runpod console.
@@ -129,10 +142,10 @@ For production workloads, use SHA tags for absolute reproducibility:
 
 ```sh
 # Get the SHA after pushing
-docker inspect --format='{{index .RepoDigests 0}}' [DOCKER_USERNAME]/[WORKER_NAME]:v1.0.0
+docker inspect --format='{{index .RepoDigests 0}}' DOCKER_USERNAME/WORKER_NAME:VERSION
 
 # Use the SHA when deploying
-# [DOCKER_USERNAME]/[WORKER_NAME]:v1.0.0@sha256:4d3d4b3c5a5c2b3a5a5c3b2a5a4d2b3a2b3c5a3b2a5d2b3a3b4c3d3b5c3d4a3
+# DOCKER_USERNAME/WORKER_NAME:VERSION@sha256:4d3d4b3c5a5c2b3a5a5c3b2a5a4d2b3a2b3c5a3b2a5d2b3a3b4c3d3b5c3d4a3
 ```
 
 Versioning best practices:
@@ -143,6 +156,12 @@ Versioning best practices:
 * Keep images as small as possible for faster startup times.
 
 ## Deploy an endpoint
+
+<Tip>
+
+If your files are hosted on GitHub, you can [deploy your worker directly from a GitHub repository](/serverless/workers/github-integration) through the Runpod console.
+
+</Tip>
 
 You can deploy your worker image directly from a Docker registry through the Runpod console:
 
