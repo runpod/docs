@@ -21,9 +21,9 @@ Runpod's GitHub integration simplifies your workflow by pulling your code and Do
 
 To deploy a worker from GitHub, you need:
 
-* A working [handler function](/serverless/workers/handler-functions) in a GitHub repository.
-* A Dockerfile in your repository. See [Creating a Dockerfile](/serverless/workers/deploy#creating-a-dockerfile) for details.
-* A GitHub account.
+- A working [handler function](/serverless/workers/handler-functions) in a GitHub repository.
+- A Dockerfile in your repository. See [Creating a Dockerfile](/serverless/workers/deploy#creating-a-dockerfile) for details.
+- A GitHub account.
 
 <Tip>
 
@@ -38,14 +38,10 @@ Before deploying from GitHub, you need to authorize Runpod to access your reposi
 1. Open the [settings page](http://console.runpod.io/user/settings) in the Runpod console.
 
 2. Find the **GitHub** card under **Connections** and click **Connect**.
-
 3. Sign in using the GitHub authorization flow. This will open your GitHub account settings page.
-
 4. Choose which repositories Runpod can access:
-
    * **All repositories:** Access to all current and future repositories.
    * **Only select repositories:** Choose specific repositories.
-
 5. Click **Save**.
 
 You can manage this connection using Runpod settings or GitHub account settings, in the **Applications** tab.
@@ -74,6 +70,56 @@ To deploy a worker from a GitHub repository:
 6. Click **Deploy Endpoint** to deploy your worker.
 
 Runpod will build your Docker image and deploy it to your endpoint automatically. You'll be redirected to the endpoint details page when complete.
+
+## GitHub build arguments
+
+When deploying a worker from a GitHub repo, you can use specify build arguments for your Dockerfile using `ARG`, allowing you to parameterize values in your Dockerfile instructions. Unlike environment variables, these variables do not persist into the final container, so they won't affect your handler function code.
+
+You can specify build arguments either in your Dockerfile, or by modifying your endpoints settings in the Runpod console.
+
+<Note>
+
+For comprehensive information about using `ARG`, see the [official Docker documention](https://docs.docker.com/build/building/variables/).
+
+</Note>
+
+### Using build arguments in your Dockerfile
+
+To use build arguments in your Dockerfile, declare variables using the `ARG` keyword, then reference them using `$` syntax.
+
+For example:
+
+```dockerfile
+# Base image from Runpod's container registry
+ARG CUDA_VERSION=11.8.0
+ARG BASE_VERSION=0.6.3
+
+# Use build arguments to specify the base image version
+FROM runpod/base:${BASE_VERSION}-cuda${CUDA_VERSION}
+```
+
+You must declare an ARG in your Dockerfile before you can reference it, even if you're defining/assigning it in the Runpod console.
+
+### Setting build arguments in the Runpod console
+
+To customize your build arguments without modifying your Dockerfile, you can specify them using the Runpod console.
+
+When [deploying a worker](#deploying-from-github) from GitHub:
+
+1. During the endpoint configuration process, find the **Build Args** section (below **Public Environment Variables**).
+2. Enter key-value pairs for your build arguments.
+3. These will be passed to your Docker build process.
+
+You must declare an `ARG` in your Dockerfile before you can reference it, even if you've defined it in the Runpod UI:
+
+```dockerfile
+# Build arguments defined in the UI must still be declared in your Dockerfile
+ARG CUDA_VERSION
+ARG BASE_VERSION
+
+# Use build arguments to specify the base image version
+FROM runpod/base:${BASE_VERSION}-cuda${CUDA_VERSION}
+```
 
 ## Monitoring build status
 
@@ -149,8 +195,8 @@ When you roll back an endpoint:
 
 GitHub integration enables streamlined development workflows by supporting multiple environments:
 
-* Production endpoint tracking the `main` branch.
-* Staging endpoint tracking the `dev` branch.
+- Production endpoint tracking the `main` branch.
+- Staging endpoint tracking the `dev` branch.
 
 To set up multiple environments:
 
@@ -168,66 +214,67 @@ You can enhance your workflow with GitHub Actions for testing before deployment:
 
 1. Create a workflow file at `.github/workflows/test-and-deploy.yml`:
 
-   ```yml
-   name: Test and Deploy
+      ```yaml
+      name: Test and Deploy
 
-   on:
-   push:
-      branches: [ main ]
-   pull_request:
-      branches: [ main ]
+      on:
+      push:
+         branches: [ main ]
+      pull_request:
+         branches: [ main ]
 
-   jobs:
-   test-and-deploy:
-      runs-on: ubuntu-latest
-      steps:
-      - uses: actions/checkout@v3
-      
-      - name: Build and push Docker image
-         uses: docker/build-push-action@v4
-         with:
-         context: .
-         push: true
-         tags: [DOCKER_USERNAME]/[WORKER_NAME]:${{ github.sha }}
+      jobs:
+      test-and-deploy:
+         runs-on: ubuntu-latest
+         steps:
+         - uses: actions/checkout@v3
          
-      - name: Run Tests
-         uses: runpod/runpod-test-runner@v1
-         with:
-         image-tag: [DOCKER_USERNAME]/[WORKER_NAME]:${{ github.sha }}
-         runpod-api-key: ${{ secrets.RUNPOD_API_KEY }} # Add your API key to a GitHub secret
-         test-filename: .github/tests.json
-         request-timeout: 300
-   ```
+         - name: Build and push Docker image
+            uses: docker/build-push-action@v4
+            with:
+            context: .
+            push: true
+            tags: [DOCKER_USERNAME]/[WORKER_NAME]:${{ github.sha }}
+            
+         - name: Run Tests
+            uses: runpod/runpod-test-runner@v1
+            with:
+            image-tag: [DOCKER_USERNAME]/[WORKER_NAME]:${{ github.sha }}
+            runpod-api-key: ${{ secrets.RUNPOD_API_KEY }} # Add your API key to a GitHub secret
+            test-filename: .github/tests.json
+            request-timeout: 300
+      ```
 
-   <Tip>
+      <Tip>
 
-   To add your Runpod API key to a GitHub secret, see [Using secrets in GitHub Actions](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions).
+      To add your Runpod API key to a GitHub secret, see [Using secrets in GitHub Actions](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions).
 
-   </Tip>
+      </Tip>
+
 
 2. Create test cases for your repository at `.github/tests.json`:
 
-   ```json
-   [
-   {
-      "input": {
-         "prompt": "Test input 1"
+      ```json
+      [
+      {
+         "input": {
+            "prompt": "Test input 1"
+         },
+         "expected_output": {
+            "status": "COMPLETED"
+         }
       },
-      "expected_output": {
-         "status": "COMPLETED"
+      {
+         "input": {
+            "prompt": "Test input 2",
+            "parameter": "value"
+         },
+         "expected_output": {
+            "status": "COMPLETED"
+         }
       }
-   },
-   {
-      "input": {
-         "prompt": "Test input 2",
-         "parameter": "value"
-      },
-      "expected_output": {
-         "status": "COMPLETED"
-      }
-   }
-   ]
-   ```
+      ]
+     ```
 
 ## Limitations
 
@@ -268,7 +315,7 @@ If your worker fails to deploy or process requests:
 
 After deploying your worker from GitHub, you can:
 
-* [Send API requests to your endpoint.](/serverless/endpoints/send-requests)
-* [Create more advanced handler functions.](/serverless/workers/handler-functions)
-* [Optimize your endpoint configurations.](/serverless/endpoints/endpoint-configurations)
-* [Learn how to deploy workers from Docker Hub.](/serverless/workers/deploy)
+- [Send API requests to your endpoint.](/serverless/endpoints/send-requests)
+- [Create more advanced handler functions.](/serverless/workers/handler-functions)
+- [Optimize your endpoint configurations.](/serverless/endpoints/endpoint-configurations)
+- [Learn how to deploy workers from Docker Hub.](/serverless/workers/deploy)
