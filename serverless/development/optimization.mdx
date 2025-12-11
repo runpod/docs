@@ -1,0 +1,297 @@
+---
+title: "Benchmarking and optimization"
+sidebarTitle: "Optimization"
+description: "Optimize your Serverless workers for performance and cost."
+---
+
+Optimizing your Serverless workers improves performance, reduces costs, and creates a better experience for your users. This guide covers benchmarking, error handling, and CI/CD integration.
+
+## Benchmarking response times
+
+Understanding your worker's performance helps you choose the right GPU and optimize your code. You can measure two key metrics:
+
+- **Delay time**: Time spent waiting for a worker to become available (cold start time).
+- **Execution time**: Time the GPU takes to actually process the request.
+
+### Send a test request
+
+Use `curl` to send a request to your endpoint:
+
+```sh
+curl -X POST https://api.runpod.ai/v2/YOUR_ENDPOINT_ID/run \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{"input": {"prompt": "Hello, world!"}}'
+```
+
+This returns a request ID:
+
+```json
+{
+  "id": "abc123-def456-ghi789",
+  "status": "IN_QUEUE"
+}
+```
+
+### Check the status
+
+Use the request ID to check the status:
+
+```sh
+curl -X GET https://api.runpod.ai/v2/YOUR_ENDPOINT_ID/status/abc123-def456-ghi789 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+The response includes timing metrics:
+
+```json
+{
+  "delayTime": 2341,
+  "executionTime": 1563,
+  "id": "abc123-def456-ghi789",
+  "output": {
+    "result": "Hello, world!"
+  },
+  "status": "COMPLETED"
+}
+```
+
+- `delayTime`: Milliseconds spent waiting for a worker (includes cold start if applicable).
+- `executionTime`: Milliseconds the GPU took to process the request.
+
+### Automate benchmarking
+
+Create a Python script to automate benchmarking:
+
+```python benchmark.py
+import requests
+import time
+import statistics
+
+ENDPOINT_ID = "YOUR_ENDPOINT_ID"
+API_KEY = "YOUR_API_KEY"
+BASE_URL = f"https://api.runpod.ai/v2/{ENDPOINT_ID}"
+HEADERS = {
+    "Content-Type": "application/json",
+    "Authorization": f"Bearer {API_KEY}"
+}
+
+def run_benchmark(num_requests=5):
+    delay_times = []
+    execution_times = []
+    
+    for i in range(num_requests):
+        # Send request
+        response = requests.post(
+            f"{BASE_URL}/run",
+            headers=HEADERS,
+            json={"input": {"prompt": f"Test request {i+1}"}}
+        )
+        request_id = response.json()["id"]
+        
+        # Poll for completion
+        while True:
+            status_response = requests.get(
+                f"{BASE_URL}/status/{request_id}",
+                headers=HEADERS
+            )
+            status_data = status_response.json()
+            
+            if status_data["status"] == "COMPLETED":
+                delay_times.append(status_data["delayTime"])
+                execution_times.append(status_data["executionTime"])
+                break
+            elif status_data["status"] == "FAILED":
+                print(f"Request {i+1} failed")
+                break
+            
+            time.sleep(1)
+    
+    # Calculate statistics
+    print(f"Delay Time - Min: {min(delay_times)}ms, Max: {max(delay_times)}ms, Avg: {statistics.mean(delay_times):.0f}ms")
+    print(f"Execution Time - Min: {min(execution_times)}ms, Max: {max(execution_times)}ms, Avg: {statistics.mean(execution_times):.0f}ms")
+
+if __name__ == "__main__":
+    run_benchmark(num_requests=5)
+```
+
+Run the script:
+
+```sh
+python benchmark.py
+```
+
+### Optimize based on results
+
+- **High delay time**: Increase active workers or use FlashBoot to reduce cold starts.
+- **High execution time**: Optimize your code, use a faster GPU, or reduce batch sizes.
+- **Inconsistent times**: Check for resource contention or inefficient code paths.
+
+## Error handling
+
+Robust error handling prevents your worker from crashing and provides helpful error messages to users.
+
+### Basic error handling
+
+Wrap your handler logic in a try-except block:
+
+```python
+import runpod
+
+def handler(job):
+    try:
+        input = job["input"]
+
+        # Replace process_input() with your own handler logic
+        result = process_input(input)
+
+        return {"output": result}
+    except KeyError as e:
+        return {"error": f"Missing required input: {str(e)}"}
+    except Exception as e:
+        return {"error": f"An error occurred: {str(e)}"}
+
+runpod.serverless.start({"handler": handler})
+```
+
+### Structured error responses
+
+Return consistent error objects with useful information:
+
+```python
+import runpod
+import traceback
+
+def handler(job):
+    try:
+        # Validate input
+        if "prompt" not in job.get("input", {}):
+            return {
+                "error": {
+                    "type": "ValidationError",
+                    "message": "Missing required field: prompt",
+                    "details": "The 'prompt' field is required in the input object"
+                }
+            }
+        
+        prompt = job["input"]["prompt"]
+        result = process_prompt(prompt)
+        return {"output": result}
+        
+    except ValueError as e:
+        return {
+            "error": {
+                "type": "ValueError",
+                "message": str(e),
+                "details": "Invalid input value provided"
+            }
+        }
+    except Exception as e:
+        # Log the full traceback for debugging
+        print(f"Unexpected error: {traceback.format_exc()}")
+        return {
+            "error": {
+                "type": "UnexpectedError",
+                "message": "An unexpected error occurred",
+                "details": str(e)
+            }
+        }
+
+runpod.serverless.start({"handler": handler})
+```
+
+### Timeout handling
+
+For long-running operations, implement timeout logic:
+
+```python
+import runpod
+import signal
+
+class TimeoutError(Exception):
+    pass
+
+def timeout_handler(signum, frame):
+    raise TimeoutError("Operation timed out")
+
+def handler(job):
+    try:
+        # Set a timeout (e.g., 60 seconds)
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(60)
+        
+        # Your processing code here
+        result = long_running_operation(job["input"])
+        
+        # Cancel the timeout
+        signal.alarm(0)
+        
+        return {"output": result}
+        
+    except TimeoutError:
+        return {"error": "Request timed out after 60 seconds"}
+    except Exception as e:
+        return {"error": str(e)}
+
+runpod.serverless.start({"handler": handler})
+```
+
+## CI/CD integration
+
+Automate your deployment workflow with GitHub integration.
+
+### Manual CI/CD with GitHub Actions
+
+For more control, you can use GitHub Actions to build and deploy your worker:
+
+```yaml .github/workflows/deploy.yml
+name: Deploy to Runpod Serverless
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      
+      - name: Build and push
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: your-username/your-worker:latest
+      
+      - name: Update Runpod endpoint
+        run: |
+          curl -X POST https://api.runpod.ai/v2/${{ secrets.RUNPOD_ENDPOINT_ID }}/update \
+            -H "Authorization: Bearer ${{ secrets.RUNPOD_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"imageName": "your-username/your-worker:latest"}'
+```
+
+Add these secrets to your GitHub repository:
+
+- `DOCKER_USERNAME`: Your Docker Hub username.
+- `DOCKER_PASSWORD`: Your Docker Hub password or access token.
+- `RUNPOD_ENDPOINT_ID`: Your Runpod endpoint ID.
+- `RUNPOD_API_KEY`: Your Runpod API key.
+
+## Next steps
+
+- [Local testing](/serverless/development/local-testing) - Test your optimizations locally.
+- [Logs](/serverless/development/logs) - Monitor your worker's performance in production.
+- [Environment variables](/serverless/development/environment-variables) - Configure your workers for different environments.
