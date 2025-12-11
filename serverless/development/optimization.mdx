@@ -1,21 +1,21 @@
 ---
 title: "Benchmarking and optimization"
-sidebarTitle: "Optimization"
-description: "Optimize your Serverless workers for performance and cost."
+sidebarTitle: "Benchmarking"
+description: "Benchmark your Serverless workers to optimize for performance and cost."
 ---
 
-Optimizing your Serverless workers improves performance, reduces costs, and creates a better experience for your users. This guide covers benchmarking, error handling, and CI/CD integration.
+Benchmarking your Serverless workers can help you improve performance, reduce costs, and create a better experience for your users. This guide covers how to measure performance metrics and automate benchmarking to identify bottlenecks.
 
 ## Benchmarking response times
 
 Understanding your worker's performance helps you choose the right GPU and optimize your code. You can measure two key metrics:
 
-- **Delay time**: Time spent waiting for a worker to become available (cold start time).
-- **Execution time**: Time the GPU takes to actually process the request.
+  - **Delay time**: The time spent waiting for a worker to become available. This includes the cold start time if a new worker needs to be spun up.
+  - **Execution time**: The time the GPU takes to actually process the request once the worker has received the job.
 
 ### Send a test request
 
-Use `curl` to send a request to your endpoint:
+To gather initial metrics, use `curl` to send a request to your endpoint. This will initiate the job and return a request ID that you can use to poll for status.
 
 ```sh
 curl -X POST https://api.runpod.ai/v2/YOUR_ENDPOINT_ID/run \
@@ -24,7 +24,7 @@ curl -X POST https://api.runpod.ai/v2/YOUR_ENDPOINT_ID/run \
   -d '{"input": {"prompt": "Hello, world!"}}'
 ```
 
-This returns a request ID:
+This returns a JSON object containing the request ID:
 
 ```json
 {
@@ -35,14 +35,14 @@ This returns a request ID:
 
 ### Check the status
 
-Use the request ID to check the status:
+Once you have the request ID, query the status endpoint to retrieve the performance metrics.
 
 ```sh
 curl -X GET https://api.runpod.ai/v2/YOUR_ENDPOINT_ID/status/abc123-def456-ghi789 \
   -H "Authorization: Bearer YOUR_API_KEY"
 ```
 
-The response includes timing metrics:
+The response includes the `delayTime` and `executionTime` in milliseconds:
 
 ```json
 {
@@ -56,12 +56,9 @@ The response includes timing metrics:
 }
 ```
 
-- `delayTime`: Milliseconds spent waiting for a worker (includes cold start if applicable).
-- `executionTime`: Milliseconds the GPU took to process the request.
-
 ### Automate benchmarking
 
-Create a Python script to automate benchmarking:
+To get a statistically significant view of your worker's performance, you should automate the process. The following Python script sends multiple requests and calculates the minimum, maximum, and average times for both delay and execution.
 
 ```python benchmark.py
 import requests
@@ -115,183 +112,14 @@ if __name__ == "__main__":
     run_benchmark(num_requests=5)
 ```
 
-Run the script:
-
-```sh
-python benchmark.py
-```
-
 ### Optimize based on results
 
-- **High delay time**: Increase active workers or use FlashBoot to reduce cold starts.
-- **High execution time**: Optimize your code, use a faster GPU, or reduce batch sizes.
-- **Inconsistent times**: Check for resource contention or inefficient code paths.
+Once you have your benchmark data, you can take specific actions to improve performance:
 
-## Error handling
+If you observe **high delay times**, consider increasing your minimum active workers. Alternatively, enable [FlashBoot](/serverless/endpoints/endpoint-configurations#flashboot) to significantly reduce the cold start time required to boot new workers.
 
-Robust error handling prevents your worker from crashing and provides helpful error messages to users.
+If you observe **high execution times**, focus on optimizing your code logic. You might also consider upgrading to a more powerful GPU or reducing the batch size of your inputs to speed up processing.
 
-### Basic error handling
+If you observe **inconsistent times**, investigate your code for resource contention or inefficient paths that might be causing sporadic slowdowns.
 
-Wrap your handler logic in a try-except block:
-
-```python
-import runpod
-
-def handler(job):
-    try:
-        input = job["input"]
-
-        # Replace process_input() with your own handler logic
-        result = process_input(input)
-
-        return {"output": result}
-    except KeyError as e:
-        return {"error": f"Missing required input: {str(e)}"}
-    except Exception as e:
-        return {"error": f"An error occurred: {str(e)}"}
-
-runpod.serverless.start({"handler": handler})
-```
-
-### Structured error responses
-
-Return consistent error objects with useful information:
-
-```python
-import runpod
-import traceback
-
-def handler(job):
-    try:
-        # Validate input
-        if "prompt" not in job.get("input", {}):
-            return {
-                "error": {
-                    "type": "ValidationError",
-                    "message": "Missing required field: prompt",
-                    "details": "The 'prompt' field is required in the input object"
-                }
-            }
-        
-        prompt = job["input"]["prompt"]
-        result = process_prompt(prompt)
-        return {"output": result}
-        
-    except ValueError as e:
-        return {
-            "error": {
-                "type": "ValueError",
-                "message": str(e),
-                "details": "Invalid input value provided"
-            }
-        }
-    except Exception as e:
-        # Log the full traceback for debugging
-        print(f"Unexpected error: {traceback.format_exc()}")
-        return {
-            "error": {
-                "type": "UnexpectedError",
-                "message": "An unexpected error occurred",
-                "details": str(e)
-            }
-        }
-
-runpod.serverless.start({"handler": handler})
-```
-
-### Timeout handling
-
-For long-running operations, implement timeout logic:
-
-```python
-import runpod
-import signal
-
-class TimeoutError(Exception):
-    pass
-
-def timeout_handler(signum, frame):
-    raise TimeoutError("Operation timed out")
-
-def handler(job):
-    try:
-        # Set a timeout (e.g., 60 seconds)
-        signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(60)
-        
-        # Your processing code here
-        result = long_running_operation(job["input"])
-        
-        # Cancel the timeout
-        signal.alarm(0)
-        
-        return {"output": result}
-        
-    except TimeoutError:
-        return {"error": "Request timed out after 60 seconds"}
-    except Exception as e:
-        return {"error": str(e)}
-
-runpod.serverless.start({"handler": handler})
-```
-
-## CI/CD integration
-
-Automate your deployment workflow with GitHub integration.
-
-### Manual CI/CD with GitHub Actions
-
-For more control, you can use GitHub Actions to build and deploy your worker:
-
-```yaml .github/workflows/deploy.yml
-name: Deploy to Runpod Serverless
-
-on:
-  push:
-    branches:
-      - main
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-      
-      - name: Login to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-      
-      - name: Build and push
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          push: true
-          tags: your-username/your-worker:latest
-      
-      - name: Update Runpod endpoint
-        run: |
-          curl -X POST https://api.runpod.ai/v2/${{ secrets.RUNPOD_ENDPOINT_ID }}/update \
-            -H "Authorization: Bearer ${{ secrets.RUNPOD_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d '{"imageName": "your-username/your-worker:latest"}'
-```
-
-Add these secrets to your GitHub repository:
-
-- `DOCKER_USERNAME`: Your Docker Hub username.
-- `DOCKER_PASSWORD`: Your Docker Hub password or access token.
-- `RUNPOD_ENDPOINT_ID`: Your Runpod endpoint ID.
-- `RUNPOD_API_KEY`: Your Runpod API key.
-
-## Next steps
-
-- [Local testing](/serverless/development/local-testing) - Test your optimizations locally.
-- [Logs](/serverless/development/logs) - Monitor your worker's performance in production.
-- [Environment variables](/serverless/development/environment-variables) - Configure your workers for different environments.
+For a complete list of endpoint settings and best practices, see [Endpoint settings and optimization](/serverless/endpoints/endpoint-configurations).

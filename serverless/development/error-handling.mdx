@@ -1,0 +1,112 @@
+---
+title: "Error handling"
+sidebarTitle: "Error handling"
+description: "Implement robust error handling for your Serverless workers."
+---
+
+Robust error handling is essential for production Serverless workers. It prevents your worker from crashing silently and ensures that useful error messages are returned to the user, making debugging significantly easier.
+
+## Basic error handling
+
+The simplest way to handle errors is to wrap your handler logic in a try-except block. This ensures that even if your logic fails, the worker remains stable and returns a readable error message.
+
+```python
+import runpod
+
+def handler(job):
+    try:
+        input = job["input"]
+
+        # Replace process_input() with your own handler logic
+        result = process_input(input)
+
+        return {"output": result}
+    except KeyError as e:
+        return {"error": f"Missing required input: {str(e)}"}
+    except Exception as e:
+        return {"error": f"An error occurred: {str(e)}"}
+
+runpod.serverless.start({"handler": handler})
+```
+
+## Structured error responses
+
+For more complex applications, you should return consistent error objects. This allows the client consuming your API to programmatically handle different types of errors, such as validation failures versus unexpected server errors.
+
+```python
+import runpod
+import traceback
+
+def handler(job):
+    try:
+        # Validate input
+        if "prompt" not in job.get("input", {}):
+            return {
+                "error": {
+                    "type": "ValidationError",
+                    "message": "Missing required field: prompt",
+                    "details": "The 'prompt' field is required in the input object"
+                }
+            }
+        
+        prompt = job["input"]["prompt"]
+        result = process_prompt(prompt)
+        return {"output": result}
+        
+    except ValueError as e:
+        return {
+            "error": {
+                "type": "ValueError",
+                "message": str(e),
+                "details": "Invalid input value provided"
+            }
+        }
+    except Exception as e:
+        # Log the full traceback for debugging
+        print(f"Unexpected error: {traceback.format_exc()}")
+        return {
+            "error": {
+                "type": "UnexpectedError",
+                "message": "An unexpected error occurred",
+                "details": str(e)
+            }
+        }
+
+runpod.serverless.start({"handler": handler})
+```
+
+## Timeout handling
+
+For long-running operations, it is best practice to implement timeout logic within your handler. This prevents a job from hanging indefinitely and consuming credits without producing a result.
+
+```python
+import runpod
+import signal
+
+class TimeoutError(Exception):
+    pass
+
+def timeout_handler(signum, frame):
+    raise TimeoutError("Operation timed out")
+
+def handler(job):
+    try:
+        # Set a timeout (e.g., 60 seconds)
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(60)
+        
+        # Your processing code here
+        result = long_running_operation(job["input"])
+        
+        # Cancel the timeout
+        signal.alarm(0)
+        
+        return {"output": result}
+        
+    except TimeoutError:
+        return {"error": "Request timed out after 60 seconds"}
+    except Exception as e:
+        return {"error": str(e)}
+
+runpod.serverless.start({"handler": handler})
+```

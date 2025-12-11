@@ -6,51 +6,47 @@ description: "Configure your endpoints to optimize for performance, cost, and re
 
 import GPUTable from '/snippets/serverless-gpu-pricing-table.mdx';
 
-This guide explains all available settings and best practices for configuring your Serverless endpoints.
+This guide details the configuration options available for Runpod Serverless endpoints. These settings control how your endpoint scales, how it utilizes hardware, and how it manages request lifecycles.
 
 <Frame alt="Endpoint configurations">
-  <img src="/images/endpoint-settings.png" />
+<img src="/images/endpoint-settings.png" />
 </Frame>
 
-## Endpoint name
+## General configuration
 
-The name you assign to your endpoint for easy identification in your dashboard. This name is only visible to you and doesn't affect the endpoint ID used for API calls.
+### Endpoint name
 
-## Endpoint type
+The name assigned to your endpoint helps you identify it within the Runpod console. This is a local display name and does not impact the endpoint ID used for API requests.
 
-Choose between two endpoint types based on your workload requirements:
+### Endpoint type
 
-**Queue based endpoints** are well-suited for long-running requests, batch processing, or asynchronous tasks. They process requests through a queueing system that guarantees execution and provides built-in retry mechanisms. These endpoints are easy to implement using [handler functions](/serverless/workers/handler-functions), and are ideal for workloads that can be processed asynchronously.
+Select the architecture that best fits your application's traffic pattern:
 
-**Load balancing endpoints** are best for high-throughput or low-latency workloads, or non-standard request/response patterns. They route requests directly to worker HTTP servers, bypassing the queue for faster response times. These endpoints support custom REST API paths and are ideal for real-time applications requiring immediate processing.
+**Queue based endpoints** utilize a built-in queueing system to manage requests. They are ideal for asynchronous tasks, batch processing, and long-running jobs where immediate synchronous responses are not required. These endpoints provide guaranteed execution and automatic retries for failed requests.
 
-For detailed information about load balancing endpoints, see [Load balancing endpoints](/serverless/load-balancing/overview).
+Queue based endpoints are implemented using [handler functions](/serverless/workers/handler-functions).
 
-## GPU configuration
+**Load balancing endpoints** route traffic directly to available workers, bypassing the internal queue. They are designed for high-throughput, low-latency applications that require synchronous request/response cycles, such as real-time inference or custom REST APIs. 
 
-Choose one or more GPU categories (organized by memory) for your endpoint in order of preference. Runpod prioritizes allocating the first category in your list and falls back to subsequent GPUs if your first choice is unavailable.
+For implementation details, see [Load balancing endpoints](https://www.google.com/search?q=/serverless/load-balancing/overview).
 
-The following GPU categories are available:
+### GPU configuration
 
-<GPUTable/>
+This setting determines the hardware tier your workers will utilize. You can select multiple GPU categories to create a prioritized list. Runpod attempts to allocate the first category in your list. If that hardware is unavailable, it automatically falls back to the subsequent options. 
 
-<Tip>
+Selecting multiple GPU types significantly improves endpoint availability during periods of high demand.
 
-Selecting multiple GPU types improves availability, especially for high-demand GPUs.
+<GPUTable />
 
-</Tip>
-
-## Worker configuration
+## Worker scaling
 
 ### Active workers
 
-Sets the minimum number of workers that remain running at all times. Setting this at one or higher eliminates cold start delays for faster response times. Active workers incur charges immediately, but receive up to 30% discount from regular pricing.
-
-Default: 0
+This setting defines the minimum number of workers that remain warm and ready to process requests at all times. Setting this to 1 or higher eliminates cold starts for the initial wave of requests. Active workers incur charges even when idle, but they receive a 20-30% discount compared to on-demand workers.
 
 <Tip>
 
-For workloads with long cold start times, consider using active workers to eliminate startup delays. You can estimate the optimal number by:
+For workloads with long cold start times, use active workers to eliminate startup delays. You can estimate the optimal number by:
 
 1. Measuring your requests per minute during typical usage.
 2. Calculating average request duration in seconds.
@@ -64,25 +60,17 @@ Even a small number of active workers can significantly improve performance for 
 
 ### Max workers
 
-The maximum number of concurrent workers your endpoint can scale to.
+This setting controls the maximum number of concurrent instances your endpoint can scale to. This acts as a safety limit for costs and a cap on concurrency.
 
-Default: 3
+<Tip> 
+We recommend setting your max worker count approximately 20% higher than your expected maximum concurrency. This buffer allows for smoother scaling during traffic spikes. 
 
-<Warning>
-
-Setting max workers to 1 restricts your deployment to a single machine, creating potential bottlenecks if that machine becomes unavailable.
-
-We recommend setting your max worker count approximately 20% higher than your expected maximum concurrency. This headroom allows for smoother scaling during traffic spikes and helps prevent request throttling.
-
-</Warning>
+Avoid setting this to 1, as this restricts your deployment to a single machine, creating potential bottlenecks if that machine becomes unavailable.
+</Tip>
 
 ### GPUs per worker
 
-The number of GPUs assigned to each worker instance.
-
-Default: 1
-
-<Tip>
+This defines how many GPUs are assigned to a single worker instance. The default is 1.
 
 When choosing between multiple lower-tier GPUs or fewer high-end GPUs, you should generally prioritize high-end GPUs with lower GPU count per worker when possible.
 
@@ -90,131 +78,61 @@ When choosing between multiple lower-tier GPUs or fewer high-end GPUs, you shoul
 - Multi-GPU configurations introduce parallel processing overhead that can offset performance gains.
 - Higher GPU-per-worker requirements can reduce availability, as finding machines with multiple free GPUs is more challenging than locating single available GPUs.
 
-</Tip>
+### Auto-scaling type
 
-## Timeout settings
+This setting determines the logic used to scale workers up and down.
+
+**Queue delay** scaling adds workers based on wait times. If requests sit in the queue for longer than a defined threshold (default 4 seconds), the system provisions new workers. This is best for workloads where slight delays are acceptable in exchange for higher utilization.
+
+**Request count** scaling is more aggressive. It adjusts worker numbers based on the total volume of pending and active work. The formula used is `Math.ceil((requestsInQueue + requestsInProgress) / scalerValue)`. Use a scaler value of 1 for maximum responsiveness, or increase it to scale more conservatively. This strategy is recommended for LLM workloads or applications with frequent, short requests.
+
+## Lifecycle and timeouts
 
 ### Idle timeout
 
-The amount of time that a worker continues running after completing a request. You're still charged for this time, even if the worker isn't actively processing any requests.
+The idle timeout determines how long a worker remains active after completing a request before shutting down. While a worker is idle, you are billed for the time, but the worker remains "warm," allowing it to process subsequent requests immediately. The default is 5 seconds.
 
-By default, the idle timeout is set to 5 seconds to help avoid frequent start/stop cycles and reduce the likelihood of cold starts. Setting a longer idle timeout can help minimize cold starts for intermittent traffic, but it may also increase your costs.
-
-When configuring idle timeout, start by matching it to your average cold start time to reduce startup delays. For workloads with extended cold starts, consider longer idle timeouts to minimize repeated initialization costs.
-
-<Warning>
-
-That idle timeout is only effective when using [queue delay scaling](#queue-delay). Be cautious with high timeout values, as workers with constant traffic may never reach the idle state necessary to scale down properly.
-
-</Warning>
+<Tip>
+If you observe frequent cold starts, consider increasing this value to match your average traffic gaps. However, be aware that if you use the [Queue delay](#auto-scaling-type) scaling strategy, setting this value too high may prevent workers from scaling down properly.
+</Tip>
 
 ### Execution timeout
 
-The maximum time a job can run before automatic termination. This prevents runaway jobs from consuming excessive resources. You can turn off this setting, but we highly recommend keeping it on.
+The execution timeout acts as a failsafe to prevent runaway jobs from consuming infinite resources. It specifies the maximum duration a single job is allowed to run before being forcibly terminated.
 
-Default: 600 seconds (10 minutes)
-Maximum: 24 hours (can be extended using job TTL)
-
-<Warning>
-
-We strongly recommend enabling execution timeout for all endpoints. Set the timeout value to your typical request duration plus a 10-20% buffer. This safeguard prevents unexpected or faulty requests from running indefinitely and consuming unnecessary resources.
-
-</Warning>
+We strongly recommend keeping this enabled. Set the value to your longest expected request duration plus a 20% buffer. The default is 600 seconds (10 minutes), and it can be extended up to 24 hours.
 
 ### Job TTL (time-to-live)
 
-The maximum time a job remains in the queue before automatic termination.
+This setting defines how long a job request remains valid in the queue before expiring. If a worker does not pick up the job within this window, the system discards it. The default is 24 hours.
 
-Default: 86,400,000 milliseconds (24 hours)
-Minimum: 10,000 milliseconds (10 seconds)
+## Performance features
 
-See [Execution policies](/serverless/endpoints/send-requests#execution-policies) for more information.
+### FlashBoot
 
-<Tip>
+FlashBoot reduces cold start times by retaining the state of worker resources shortly after they spin down. This allows the system to "revive" a worker much faster than a standard fresh boot. FlashBoot is most effective on endpoints with consistent traffic, where workers frequently cycle between active and idle states. There is no additional cost for enabling FlashBoot.
 
-You can use the `/status` operation to configure the time-to-live (TTL) for an individual job by appending a TTL parameter when checking the status of a job. For example, `https://api.runpod.ai/v2/{endpoint_id}/status/{job_id}?ttl=6000` sets the TTL for the job to 6 seconds. Use this when you want to tell the system to remove a job result sooner than the default retention time.
+### Model (optional)
 
-</Tip>
-
-## FlashBoot
-
-FlashBoot is Runpod's solution for reducing the average cold-start times on your endpoint. It works by retaining worker resources for some time after they're no longer in use, so they can be rebooted quickly. When your endpoint has consistent traffic, your workers have a higher chance of benefiting from FlashBoot for faster spin-ups. However, if your endpoint isn't receiving frequent requests, FlashBoot has fewer opportunities to optimize performance. There is no additional cost associated with FlashBoot.
-
-<Tip>
-
-The effectiveness of FlashBoot increases exponentially with higher request volumes and worker counts, making it ideal for busy production endpoints. For endpoints with fewer than 3 workers, FlashBoot's overhead may exceed its benefits.
-
-</Tip>
-
-## Model (optional)
-
-You can select from a list of [cached models](/serverless/endpoints/model-caching) using the **Model (optional)** field. Selecting a model signals the system to place your workers on host machines that contain the selected model, resulting in faster cold starts and significant cost savings.
+The Model field allows you to select from a list of [cached models](/serverless/endpoints/model-caching). When selected, Runpod schedules your workers on host machines that already have these large model files pre-loaded. This significantly reduces the network time required to download models during initialization.
 
 ## Advanced settings
 
-When configuring advanced settings, remember that each constraint (data center, storage, CUDA version, GPU type) may limit resource availability. For maximum availability and reliability, select all data centers and CUDA versions, and avoid network volumes unless your workload specifically requires them.
-
 ### Data centers
 
-Control which data centers can deploy and cache your workers. Allowing multiple data centers improves availability, while using a network volume restricts your endpoint to a single data center.
-
-Default: All data centers
-
-<Tip>
-
-For the highest availability, allow all data centers (i.e., keep the default setting in place) and avoid using network volumes unless necessary.
-
-</Tip>
+You can restrict your endpoint to specific geographical regions. For maximum reliability and availability, we recommend allowing all data centers. Restricting this list decreases the pool of available GPUs your endpoint can draw from.
 
 ### Network volumes
 
-Attach persistent storage to your workers. [Network volumes](/storage/network-volumes) have higher latency than local storage, and restrict workers to the data center containing your volume. However, they can be very useful for sharing large models or data between workers on an endpoint.
-
-### Auto-scaling type
-
-#### Queue delay
-
-Adds workers based on request wait times.
-
-The queue delay scaling strategy adjusts worker numbers based on request wait times. Workers are added if requests spend more than X seconds in the queue, where X is a threshold you define. By default, this threshold is set at 4 seconds.
-
-#### Request count
-
-The request count scaling strategy adjusts worker numbers according to total requests in the queue and in progress. It automatically adds workers as the number of requests increases, ensuring tasks are handled efficiently.
-
-Total workers formula: `Math.ceil((requestsInQueue + requestsInProgress) / 4)`
-
-<Tip>
-
-**Optimizing your auto-scaling strategy:**
-
-- For maximum responsiveness, use "request count" with a scaler value of 1 to provision workers immediately for each incoming request.
-- LLM workloads with frequent, short requests typically perform better with "request count" scaling.
-- For gradual scaling, increase the request count scaler value to provision workers more conservatively.
-- Use queue delay when you want workers to remain available briefly after request completion to handle follow-up requests.
-- With long cold start times, favor conservative scaling to minimize the performance and cost impacts of frequent worker initialization.
-
-</Tip>
-
-### Expose HTTP/TCP ports
-
-Enables direct communication with your worker via its public IP and port. This can be useful for real-time applications requiring minimal latency, such as [WebSocket applications](https://github.com/runpod-workers/worker-websocket).
-
-### Enabled GPU types
-
-Here you can specify which [GPU types](/references/gpu-types) to use within your selected GPU size categories. By default, all GPU types are enabled.
+[Network volumes](/storage/network-volumes) provide persistent storage that survives worker restarts. While they enable data sharing between workers, they introduce network latency and restrict your endpoint to the specific data center where the volume resides. Use network volumes only if your workload specifically requires shared persistence or datasets larger than the container limit.
 
 ### CUDA version selection
 
-Specify which CUDA versions can be used with your workload to ensures your code runs on compatible GPU hardware. Runpod will match your workload to GPU instances with the selected CUDA versions.
+This filter ensures your workers are scheduled on host machines with compatible drivers. While you should select the version your code requires, we recommend also selecting all newer versions. CUDA is generally backward compatible, and selecting a wider range of versions increases the pool of available hardware.
 
-<Tip>
+### Expose HTTP/TCP ports
 
-CUDA versions are generally backward compatible, so we recommend that you check for the version you need and any higher versions. For example, if your code requires CUDA 12.4, you should also try running it on 12.5, 12.6, and so on.
-
-Limiting your endpoint to just one or two CUDA versions can significantly reduce GPU availability. Runpod continuously updates GPU drivers to support the latest CUDA versions, so keeping more CUDA versions selected gives you access to more resources.
-
-</Tip>
+Enabling this option exposes the public IP and port of the worker, allowing for direct external communication. This is required for applications that need persistent connections, such as WebSockets.
 
 ## Reducing worker startup times
 
@@ -251,17 +169,17 @@ Use these strategies to reduce worker startup times:
 ## Best practices summary
 
 - **Understand optimization tradeoffs** and make conscious tradeoffs between cost, speed, and model size.
-- **Start conservative** with max workers and scale up as needed.
-- **Monitor throttling** and adjust max workers accordingly.
-- **Use active workers** for latency-sensitive applications.
-- **Select multiple GPU types** to improve availability.
-- **Choose appropriate timeouts** based on your workload characteristics.
+- **Start conservative** with [max workers](#max-workers) and scale up as needed.
+- **Monitor throttling** and adjust [max workers](#max-workers) accordingly.
+- **Use [active workers](#active-workers)** for latency-sensitive applications.
+- **Select multiple [GPU types](#gpu-configuration)** to improve availability.
+- **Choose appropriate [timeouts](#execution-timeout)** based on your workload characteristics.
 - **Consider data locality** when using network volumes.
-- **Avoid setting max workers to 1** to prevent bottlenecks.
-- **Plan for 20% headroom** in max workers to handle load spikes.
+- **Avoid setting [max workers](#max-workers) to 1** to prevent bottlenecks.
+- **Plan for 20% headroom** in [max workers](#max-workers) to handle load spikes.
 - **Prefer high-end GPUs with lower GPU count** for better performance.
-- **Set execution timeout** to prevent runaway processes.
-- **Match auto-scaling strategy** to your workload patterns.
+- **Set [execution timeout](#execution-timeout)** to prevent runaway processes.
+- **Match [auto-scaling strategy](#auto-scaling-type)** to your workload patterns.
 - **Embed models in Docker images** when possible for faster loading.
-- **Extend idle timeouts** to prevent frequent cold starts.
-- **Consider disabling FlashBoot** for endpoints with few workers or infrequent traffic.
+- **Extend [idle timeouts](#idle-timeout)** to prevent frequent cold starts.
+- **Consider disabling [FlashBoot](#flashboot)** for endpoints with few workers or infrequent traffic.
