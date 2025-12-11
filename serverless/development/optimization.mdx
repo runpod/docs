@@ -1,125 +1,63 @@
 ---
-title: "Benchmarking and optimization"
-sidebarTitle: "Benchmarking"
-description: "Benchmark your Serverless workers to optimize for performance and cost."
+title: "Optimize your workers"
+sidebarTitle: "Optimization guide"
+description: "Implement strategies to reduce latency and cost for your Serverless workers."
 ---
 
-Benchmarking your Serverless workers can help you improve performance, reduce costs, and create a better experience for your users. This guide covers how to measure performance metrics and automate benchmarking to identify bottlenecks.
+Optimizing your Serverless workers involves a cycle of measuring performance (e.g. with [benchmarking](/serverless/development/benchmarking)), identifying bottlenecks, and tuning your [endpoint configurations](/serverless/endpoints/endpoint-configurations). This guide covers specific strategies to reduce startup times and improve throughput.
 
-## Benchmarking response times
+## Optimization overview
 
-Understanding your worker's performance helps you choose the right GPU and optimize your code. You can measure two key metrics:
+Effective optimization requires making conscious tradeoffs between cost, speed, and model size.
+
+To ensure high availability during peak traffic, you should select multiple GPU types in your configuration rather than relying on a single hardware specification. When choosing hardware, a single high-end GPU is generally preferable to multiple lower-tier cards, as the superior memory bandwidth and newer architecture often yield better inference performance than parallelization across weaker cards. When choosing multiple [GPU types](/references/gpu-types), you should select the [GPU categories](/serverless/endpoints/endpoint-configurations#gpu-configuration) that are most likely to be available in your desired data centers.
+
+For latency-sensitive applications, utilizing active workers is the most effective way to eliminate cold starts. You should also configure your [max workers](/serverless/endpoints/endpoint-configurations#max-workers) setting with approximately 20% headroom above your expected concurrency. This buffer ensures that your endpoint can handle sudden load spikes without throttling requests or hitting capacity limits.
+
+Your architectural choices also significantly impact performance. Whenever possible, bake your models directly into the Docker image to leverage the high-speed local NVMe storage of the host machine. If you utilize [network volumes](/storage/network-volumes) for larger datasets, remember that this restricts your endpoint to specific data centers, which effectively shrinks your pool of available compute resources.
+
+
+## Reducing worker startup times
+
+
+There are two key metrics to consider when optimizing your workers:
 
   - **Delay time**: The time spent waiting for a worker to become available. This includes the cold start time if a new worker needs to be spun up.
   - **Execution time**: The time the GPU takes to actually process the request once the worker has received the job.
 
-### Send a test request
+<Tip>
+Try [benchmarking your workers](/serverless/development/benchmarking) to measure these metrics.
+</Tip>
 
-To gather initial metrics, use `curl` to send a request to your endpoint. This will initiate the job and return a request ID that you can use to poll for status.
+**Delay time** is comprised of:
 
-```sh
-curl -X POST https://api.runpod.ai/v2/YOUR_ENDPOINT_ID/run \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  -d '{"input": {"prompt": "Hello, world!"}}'
-```
+  - **Initialization time**: The time spent downloading the Docker image.
+  - **Cold start time**: The time spent loading the model into memory.
 
-This returns a JSON object containing the request ID:
+If your delay time is high, use these strategies to reduce it.
 
-```json
-{
-  "id": "abc123-def456-ghi789",
-  "status": "IN_QUEUE"
-}
-```
+<Note>
+If your worker's cold start time exceeds the default 7-minute limit, the system may mark it as unhealthy. You can extend this limit by setting the `RUNPOD_INIT_TIMEOUT` environment variable (e.g. `RUNPOD_INIT_TIMEOUT=800` for 800 seconds).
+</Note>
 
-### Check the status
+### Embed models in Docker images
 
-Once you have the request ID, query the status endpoint to retrieve the performance metrics.
+For production environments, package your ML models directly within your worker container image instead of downloading them in your handler function. This strategy places models on the worker's high-speed local storage (SSD/NVMe), dramatically reducing the time needed to load models into GPU memory. Note that extremely large models (500GB+) may still require network volume storage.
 
-```sh
-curl -X GET https://api.runpod.ai/v2/YOUR_ENDPOINT_ID/status/abc123-def456-ghi789 \
-  -H "Authorization: Bearer YOUR_API_KEY"
-```
+### Use network volumes during development
 
-The response includes the `delayTime` and `executionTime` in milliseconds:
+For flexibility during development, save large models to a [network volume](/storage/network-volumes) using a Pod or one-time handler, then mount this volume to your Serverless workers. While network volumes offer slower model loading compared to embedding models directly, they can speed up your workflow by enabling rapid iteration and seamless switching between different models and configurations.
 
-```json
-{
-  "delayTime": 2341,
-  "executionTime": 1563,
-  "id": "abc123-def456-ghi789",
-  "output": {
-    "result": "Hello, world!"
-  },
-  "status": "COMPLETED"
-}
-```
+### Maintain active workers
 
-### Automate benchmarking
+Set [active worker counts](/serverless/endpoints/endpoint-configurations#active-workers) above zero to completely eliminate cold starts. These workers remain ready to process requests instantly and cost up to 30% less when idle compared to standard (flex) workers.
 
-To get a statistically significant view of your worker's performance, you should automate the process. The following Python script sends multiple requests and calculates the minimum, maximum, and average times for both delay and execution.
+You can estimate the optimal number of active workers using the formula: `(Requests per Minute × Request Duration) / 60`. For example, with 6 requests per minute taking 30 seconds each, you would need 3 active workers to handle the load without queuing.
 
-```python benchmark.py
-import requests
-import time
-import statistics
+### Optimize scaling parameters
 
-ENDPOINT_ID = "YOUR_ENDPOINT_ID"
-API_KEY = "YOUR_API_KEY"
-BASE_URL = f"https://api.runpod.ai/v2/{ENDPOINT_ID}"
-HEADERS = {
-    "Content-Type": "application/json",
-    "Authorization": f"Bearer {API_KEY}"
-}
+Fine-tune your [auto-scaling configuration](/serverless/endpoints/endpoint-configurations#auto-scaling-type) for more responsive worker provisioning. Lowering the queue delay threshold to 2-3 seconds (default 4) or decreasing the request count threshold allows the system to respond more swiftly to traffic fluctuations.
 
-def run_benchmark(num_requests=5):
-    delay_times = []
-    execution_times = []
-    
-    for i in range(num_requests):
-        # Send request
-        response = requests.post(
-            f"{BASE_URL}/run",
-            headers=HEADERS,
-            json={"input": {"prompt": f"Test request {i+1}"}}
-        )
-        request_id = response.json()["id"]
-        
-        # Poll for completion
-        while True:
-            status_response = requests.get(
-                f"{BASE_URL}/status/{request_id}",
-                headers=HEADERS
-            )
-            status_data = status_response.json()
-            
-            if status_data["status"] == "COMPLETED":
-                delay_times.append(status_data["delayTime"])
-                execution_times.append(status_data["executionTime"])
-                break
-            elif status_data["status"] == "FAILED":
-                print(f"Request {i+1} failed")
-                break
-            
-            time.sleep(1)
-    
-    # Calculate statistics
-    print(f"Delay Time - Min: {min(delay_times)}ms, Max: {max(delay_times)}ms, Avg: {statistics.mean(delay_times):.0f}ms")
-    print(f"Execution Time - Min: {min(execution_times)}ms, Max: {max(execution_times)}ms, Avg: {statistics.mean(execution_times):.0f}ms")
+### Increase maximum worker limits
 
-if __name__ == "__main__":
-    run_benchmark(num_requests=5)
-```
-
-### Optimize based on results
-
-Once you have your benchmark data, you can take specific actions to improve performance:
-
-If you observe **high delay times**, consider increasing your minimum active workers. Alternatively, enable [FlashBoot](/serverless/endpoints/endpoint-configurations#flashboot) to significantly reduce the cold start time required to boot new workers.
-
-If you observe **high execution times**, focus on optimizing your code logic. You might also consider upgrading to a more powerful GPU or reducing the batch size of your inputs to speed up processing.
-
-If you observe **inconsistent times**, investigate your code for resource contention or inefficient paths that might be causing sporadic slowdowns.
-
-For a complete list of endpoint settings and best practices, see [Endpoint settings and optimization](/serverless/endpoints/endpoint-configurations).
+Set a higher [max worker](/serverless/endpoints/endpoint-configurations#max-workers) limit to ensure your Docker images are pre-cached across multiple compute nodes and data centers. This proactive approach eliminates image download delays during scaling events, significantly reducing startup times.
