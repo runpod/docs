@@ -1,74 +1,29 @@
 ---
-title: "Test locally"
+title: "Local testing"
+description: "Test your Serverless handlers locally before deploying to production."
 ---
 
-When developing your Handler Function for Runpod serverless, it's crucial to test it thoroughly in a local environment before deployment. The Runpod SDK provides multiple ways to facilitate this local testing, allowing you to simulate various scenarios and inputs without consuming cloud resources.
+Testing your handler locally before deploying saves time and helps you catch issues early. The Runpod SDK provides multiple ways to test your handler function without consuming cloud resources.
 
-## Custom Inputs
+## Basic testing
 
-The simplest way to test your Handler Function is by passing a custom input directly when running your Python file.
-
-This method is ideal for quick checks and iterative development.
+The simplest way to test your handler is by running it directly with test input.
 
 ### Inline JSON
 
-You can pass inline json to your function to test its response.
+Pass test input directly via the command line:
 
-Assuming your handler function is in a file named `your_handler.py`, you can test it like this:
-
-<Tabs>
-<Tab title="CLI">
 ```sh
-python your_handler.py \
-  --test_input '{"input": {"prompt": "The quick brown fox jumps"}}'
+python your_handler.py --test_input '{"input": {"prompt": "Hello, world!"}}'
 ```
 
-</Tab>
+This runs your handler with the specified input and displays the output in your terminal.
 
-<Tab title="Python">
-Add the following file to your project and run the command.
+### Test file
 
-```py
-import runpod
+For more complex or reusable test inputs, create a `test_input.json` file in the same directory as your handler:
 
-
-def handler(event):
-    """
-    This is a sample handler function that echoes the input
-    and adds a greeting.
-    """
-    try:
-        # Extract the prompt from the input
-        prompt = event["input"]["prompt"]
-
-        result = f"Hello! You said: {prompt}"
-
-        # Return the result
-        return {"output": result}
-    except Exception as e:
-        # If there's an error, return it
-        return {"error": str(e)}
-
-
-# Start the serverless function
-runpod.serverless.start({"handler": handler})
-```
-
-</Tab>
-
-</Tabs>
-
-This command runs your handler with the specified input, allowing you to verify the output and behavior quickly.
-
-### JSON file
-
-For more complex or reusable test inputs, you can use a `test_input.json` file.
-
-This approach allows you to easily manage and version control your test cases.
-
-Create a file named `test_input.json` in the same directory as your `your_handler.py` file. For example:
-
-```json
+```json test_input.json
 {
   "input": {
     "prompt": "This is a test input from JSON file"
@@ -76,102 +31,178 @@ Create a file named `test_input.json` in the same directory as your `your_handle
 }
 ```
 
-2. Run your handler using the following command:
+Run your handler without any arguments:
 
 ```sh
 python your_handler.py
 ```
 
-When you run this command, the script will automatically detect and use the `test_input.json` file if it exists.
+The SDK automatically detects and uses the `test_input.json` file.
 
-3. The output will indicate that it's using the input from the JSON file:
+<Note>
+If you provide both a `test_input.json` file and the `--test_input` flag, the command-line input takes precedence.
+</Note>
 
-```sh
---- Starting Serverless Worker |  Version 1.6.2 ---
-INFO   | Using test_input.json as job input.
-DEBUG  | Retrieved local job: {'input': {'prompt': 'This is a test from JSON file'}, 'id': 'local_test'}
-INFO   | local_test | Started.
-DEBUG  | local_test | Handler output: {'output': 'Hello! You said: This is a test from JSON file'}
-DEBUG  | local_test | run_job return: {'output': {'output': 'Hello! You said: This is a test from JSON file'}}
-INFO   | Job local_test completed successfully.
-INFO   | Job result: {'output': {'output': 'Hello! You said: This is a test from JSON file'}}
-INFO   | Local testing complete, exiting.
-```
+## Local API server
 
-Using `test_input.json` is particularly helpful when:
+For more comprehensive testing, start a local API server that simulates your Serverless endpoint. This lets you send HTTP requests to test your handler as if it were deployed.
 
-* You have complex input structures that are cumbersome to type in the command line.
-* You want to maintain a set of test cases that you can easily switch between.
-* You're collaborating with a team and want to share standardized test inputs.
-
-<Info>
-
-If you provide a test input via the command line (`--test_input` argument), it will override the `test_input.json` file. This allows for flexibility in your testing process.
-
-</Info>
-
-## Local Test Server
-
-For more comprehensive testing, especially when you want to simulate HTTP requests to your serverless function, you can launch a local test server. This server provides an endpoint that you can send requests to, mimicking the behavior of a deployed serverless function.
-
-To start the local test server, use the `--rp_serve_api` flag:
+Start the local server:
 
 ```sh
 python your_handler.py --rp_serve_api
 ```
 
-This command starts a FastAPI server on your local machine, accessible at `http://localhost:8000`.
+This starts a FastAPI server on `http://localhost:8000`.
 
-### Customizing the Local Server
+### Send requests to the server
 
-You can further customize the local server using additional flags:
-
-* `--rp_api_port`: Specify a custom port (default is 8000)
-* `--rp_api_host`: Set the host address (default is "localhost")
-* `--rp_api_concurrency`: Set the number of worker processes (default is 1)
-
-Example:
-
-```sh
-python main.py \
-  --rp_serve_api \
-  --rp_api_port 8080 \
-  --rp_api_concurrency 4
-```
-
-This starts the server on port `8080` with 4 worker processes.
-
-### Sending Requests to the Local Server
-
-Once your local server is running, you can send HTTP POST requests to test your function. Use tools like `curl` or Postman, or write scripts to automate your tests.
-
-Example using `curl`:
+Once your local server is running, send HTTP POST requests to test your function:
 
 ```sh
 curl -X POST http://localhost:8000/runsync \
      -H "Content-Type: application/json" \
-     -d '{"input": {"prompt": "The quick brown fox jumps"}}'
+     -d '{"input": {"prompt": "Hello, world!"}}'
 ```
 
 <Info>
-
-When testing locally, the /run endpoint only returns a fake requestId without executing your code, as async mode requires communication with our system. This is why you can’t check job status using /status. For local testing, use /runsync. To test async functionality, you’ll need to deploy your app on our platform.
-
+The `/run` endpoint only returns a fake request ID without executing your code, since async mode requires communication with Runpod's system. For local testing, use `/runsync` to execute your handler and get results immediately.
 </Info>
 
-## Advanced testing options
+## Testing concurrency
 
-The Runpod SDK offers additional flags for more advanced testing scenarios:
-
-* `--rp_log_level`: Control log verbosity (options: ERROR, WARN, INFO, DEBUG)
-* `--rp_debugger`: Enable the Runpod debugger for detailed troubleshooting
-
-Example:
+To test how your handler performs under parallel execution, use the `--rp_api_concurrency` flag to set the number of concurrent workers:
 
 ```sh
-python your_handler.py --rp_serve_api --rp_log_level DEBUG --rp_debugger
+python main.py --rp_serve_api --rp_api_concurrency 4
 ```
 
-Local testing is a crucial step in developing robust and reliable serverless functions for Runpod. By utilizing these local testing options, you can catch and fix issues early, optimize your function's performance, and ensure a smoother deployment process.
+This starts your local server with 4 concurrent workers.
 
-For more detailed information on local testing and advanced usage scenarios, refer to our [blog post](https://blog.runpod.io/workers-local-api-server-introduced-with-runpod-python-0-9-13/) and the other tutorials in this documentation.
+<Warning>
+When using `--rp_api_concurrency` with a value greater than 1, your main file must be named `main.py` for proper FastAPI integration. If your file has a different name, rename it to `main.py` before running with multiple workers.
+</Warning>
+
+### Testing concurrent requests
+
+Send multiple requests simultaneously to test concurrency:
+
+```bash
+for i in {1..10}; do
+    curl -X POST http://localhost:8000/runsync \
+         -H "Content-Type: application/json" \
+         -d '{"input": {}}' &
+done
+```
+
+### Handling concurrency in your code
+
+If your handler uses shared state (like global variables), use proper synchronization to avoid race conditions:
+
+```python
+import runpod
+from threading import Lock
+
+counter = 0
+counter_lock = Lock()
+
+
+def handler(event):
+    global counter
+    with counter_lock:
+        counter += 1
+        return {"counter": counter}
+
+
+runpod.serverless.start({"handler": handler})
+```
+
+## Debugging
+
+### Log levels
+
+Control the verbosity of console output with the `--rp_log_level` flag:
+
+```sh
+python your_handler.py --rp_serve_api --rp_log_level DEBUG
+```
+
+Available log levels:
+- `ERROR`: Only show error messages.
+- `WARN`: Show warnings and errors.
+- `INFO`: Show general information, warnings, and errors.
+- `DEBUG`: Show all messages, including detailed debug information.
+
+### Enable the debugger
+
+Use the `--rp_debugger` flag for detailed troubleshooting:
+
+```sh
+python your_handler.py --rp_serve_api --rp_debugger
+```
+
+This enables the Runpod debugger, which provides additional diagnostic information to help you troubleshoot issues.
+
+## Server configuration
+
+Customize the local API server with these flags:
+
+### Port
+
+Set a custom port (default is 8000):
+
+```sh
+python your_handler.py --rp_serve_api --rp_api_port 8080
+```
+
+### Host
+
+Set the hostname (default is "localhost"):
+
+```sh
+python your_handler.py --rp_serve_api --rp_api_host 0.0.0.0
+```
+
+<Warning>
+Setting `--rp_api_host` to `0.0.0.0` allows connections from other devices on the network. This can be useful for testing but may have security implications.
+</Warning>
+
+## Flag reference
+
+Here's a complete reference of all available flags for local testing:
+
+| Flag | Description | Default | Example |
+|------|-------------|---------|---------|
+| `--rp_serve_api` | Starts the local API server | N/A | `--rp_serve_api` |
+| `--rp_api_port` | Sets the server port | 8000 | `--rp_api_port 8080` |
+| `--rp_api_host` | Sets the server hostname | "localhost" | `--rp_api_host 0.0.0.0` |
+| `--rp_api_concurrency` | Sets concurrent workers | 1 | `--rp_api_concurrency 4` |
+| `--rp_log_level` | Controls log verbosity | INFO | `--rp_log_level DEBUG` |
+| `--rp_debugger` | Enables the debugger | Disabled | `--rp_debugger` |
+| `--test_input` | Provides test input as JSON | N/A | `--test_input '{"input": {}}'` |
+
+## Combined example
+
+You can combine multiple flags to create a customized local testing environment:
+
+```sh
+python main.py --rp_serve_api \
+    --rp_api_port 8080 \
+    --rp_api_concurrency 4 \
+    --rp_log_level DEBUG \
+    --rp_debugger
+```
+
+This command:
+- Starts the local API server on port 8080.
+- Uses 4 concurrent workers.
+- Sets the log level to DEBUG for maximum information.
+- Enables the debugger for troubleshooting.
+
+## Next steps
+
+Once you've tested your handler locally, learn about:
+
+- [SDK utilities](/serverless/development/sdk-utilities) - Helper functions for validation and cleanup.
+- [Pod-first development](/serverless/development/pod-first-development) - Develop on a Pod before deploying to Serverless.
+- [Logs](/serverless/development/logs) - Understand logging in production.
