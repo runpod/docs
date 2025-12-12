@@ -1,0 +1,88 @@
+---
+title: "Clean up temporary files"
+sidebarTitle: "Clean up files"
+description: "Manage disk space by automatically removing temporary files."
+---
+
+The Runpod SDK's `clean()` function helps maintain the health of your Serverless worker by removing temporary files and folders after processing completes. This is particularly important for workers that download large assets or generate temporary artifacts, as accumulated data can lead to `DiskQuotaExceeded` errors over time.
+
+## Import the `clean()` function
+
+To use the `clean()` function, import it from the `utils.rp_cleanup` module:
+
+```python
+from runpod.serverless.utils.rp_cleanup import clean
+```
+
+## Default behavior
+
+When called without arguments, `clean()` targets a specific set of default directories for removal:
+
+ - `input_objects/`
+ - `output_objects/`
+ - `job_files/`
+ - `output.zip`
+
+These are standard locations used by various SDK operations, and cleaning them ensures a fresh state for the next request.
+
+## Custom cleanup
+
+If your handler generates files in non-standard directories, you can override the default behavior by passing a list of folder names to the `folder_list` parameter.
+
+```python
+clean(folder_list=["temp_images", "cache", "downloads"])
+```
+
+## Use `clean()` in your handler
+
+You should integrate cleanup logic into your handler's lifecycle, typically within a `finally` block or right before returning the result.
+
+```python
+import runpod
+from runpod.serverless.utils.rp_cleanup import clean
+import requests
+import os
+
+
+def download_image(url, save_path):
+    response = requests.get(url)
+    if response.status_code == 200:
+        with open(save_path, "wb") as file:
+            file.write(response.content)
+        return True
+    return False
+
+
+def handler(event):
+    try:
+        image_url = event["input"]["image_url"]
+
+        # Create a temporary directory
+        os.makedirs("temp_images", exist_ok=True)
+        image_path = "temp_images/downloaded_image.jpg"
+
+        # Download the image
+        if not download_image(image_url, image_path):
+            raise Exception("Failed to download image")
+
+        # Process the image (your code here)
+        result = f"Processed image from: {image_url}"
+
+        # Cleanup specific folders after processing
+        clean(folder_list=["temp_images"])
+
+        return {"output": result}
+    except Exception as e:
+        # Attempt cleanup even if an error occurs
+        clean(folder_list=["temp_images"])
+        return {"error": str(e)}
+
+
+runpod.serverless.start({"handler": handler})
+```
+
+## Best practices
+
+To ensure reliability, always call `clean()` at the end of your handler execution. We recommend wrapping your cleanup calls in a `try...except` or `finally` block so that disk space is recovered even if your main processing logic fails.
+
+Be cautious when adding custom folders to the cleanup list to avoid accidentally deleting persistent data, and consider logging cleanup actions during development to verify that the correct paths are being targeted.
