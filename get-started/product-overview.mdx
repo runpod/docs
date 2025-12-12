@@ -1,0 +1,121 @@
+---
+title: "Choose the right compute service"
+sidebarTitle: "Choose a compute service"
+description: "Find the right compute solution for your AI/ML workload."
+---
+
+Runpod provides several compute options designed for different stages of the AI lifecycle, from exploration and development to production scaling. Choosing the right option depends on your specific requirements regarding scalability, persistence, and infrastructure management.
+
+## Product overview
+
+Use this decision matrix to identify the best Runpod solution for your workload:
+
+| If you want to... | Use... | Because it... |
+| :--- | :--- | :--- |
+| **Call a standard model API** (Llama 3, Flux) without managing infrastructure | [Public Endpoints](/hub/public-endpoints) | Provides instant APIs for using popular models with usage-based pricing. |
+| **Serve a custom model** that scales automatically with traffic | [Serverless](/serverless/overview) | Handles GPU/CPU auto-scaling and charges only for active compute time. |
+| **Develop code**, debug, or train models interactively | [Pods](/pods/overview) | Gives you a persistent GPU/CPU environment with full terminal/SSH access, similar to a cloud VPS. |
+| **Train massive models** across multiple GPU nodes | [Instant Clusters](/instant-clusters) | Provides pre-configured high-bandwidth interconnects for distributed training workloads. |
+
+## Detailed breakdown
+
+### [Serverless](/serverless/overview): Create custom AI/ML APIs
+
+Serverless is designed for deployment. It abstracts away the underlying infrastructure, allowing you to define a Worker (a Docker container) that spins up on demand to handle incoming API requests.
+
+**Key characteristics:**
+
+- **Auto-scaling:** Scales from zero to hundreds of workers based on request volume.
+- **Stateless:** Workers are ephemeral; they spin up, process a request, and spin down.
+- **Billing:** Pay-per-second of compute time. No cost when idle.
+- **Best for:** Production inference, sporadic workloads, and scalable microservices.
+
+### [Pods](/pods/overview): Train and fine-tune models using a persistent GPU environment
+
+Pods provide a persistent computing environment. When you deploy a Pod, you are renting a specific GPU instance that stays active until you stop or terminate it. This is equivalent to renting a virtual machine with a GPU attached.
+
+**Key characteristics:**
+
+  * **Persistent:** Your environment, installed packages, and running processes persist as long as the Pod is active.
+  * **Interactive:** Full access via SSH, JupyterLab, or VSCode Server.
+  * **Billing:** Pay-per-minute (or hourly) for the reserved time, regardless of usage.
+  * **Best for:** Model training, fine-tuning, debugging code, exploring datasets, and long-running background tasks that do not require auto-scaling.
+
+### [Public Endpoints](/hub/public-endpoints): Instant access to popular models
+
+Public Endpoints are Runpod-managed Serverless endpoints hosting popular community models. They require zero configuration and allow you to integrate AI capabilities into your application immediately.
+
+**Key characteristics:**
+
+  * **Zero setup:** No Dockerfiles or infrastructure configuration required.
+  * **Standard APIs:** OpenAI-compatible inputs for LLMs; standard JSON inputs for image generation.
+  * **Billing:** Pay-per-token (text) or pay-per-generation (image/video).
+  * **Best for:** Rapid prototyping, applications using standard open-source models, and users who do not need custom model weights.
+
+### [Instant Clusters](/instant-clusters): For distributed workloads
+
+Instant Clusters allow you to provision multiple GPU/CPU nodes networked together with high-speed interconnects (up to 3200 Gbps).
+
+**Key characteristics:**
+
+  * **Multi-node:** Orchestrated groups of 2 to 8+ nodes.
+  * **High performance:** Optimized for low-latency inter-node communication (NCCL).
+  * **Best for:** Distributed training (FSDP, DeepSpeed), fine-tuning large language models (70B+ parameters), and HPC simulations.
+
+## Workflow examples
+
+### Develop-to-deploy cycle
+
+**Goal:** Build a custom AI application from scratch and ship it to production.
+
+1.  **Interactive development:** You deploy a single [Pod](/pods/overview) with a GPU to act as your cloud workstation. You connect via VSCode or JupyterLab to write code, install dependencies, and debug your inference logic in real-time.
+2.  **Containerization:** Once your code is working, you use the Pod to build a Docker image containing your application and dependencies, pushing it to a container registry.
+3.  **Production deployment:** You deploy that Docker image as a [Serverless Endpoint](/serverless/overview). Your application is now ready to handle production traffic, automatically scaling workers up during spikes and down to zero when idle.
+
+### Distributed training pipeline
+
+**Goal:** Fine-tune a massive LLM (70B+) and serve it immediately without moving data.
+
+1.  **Multi-node training:** You spin up an [Instant Cluster](/instant-clusters) with 8x H100 GPUs to fine-tune a Llama-3-70B model using FSDP or DeepSpeed.
+2.  **Unified storage:** Throughout training, checkpoints and the final model weights are saved directly to a [network volume](/storage/network-volumes) attached to the cluster.
+3.  **Instant serving:** You deploy a [vLLM Serverless worker](/serverless/vllm/overview) and mount that *same* network volume. The endpoint reads the model weights directly from storage, allowing you to serve your newly trained model via API minutes after training finishes.
+
+### Startup MVP
+
+**Goal:** Launch a GenAI avatar app quickly with minimal DevOps overhead.
+
+1.  **Prototype with Public Endpoints:** You validate your product idea using the [Flux Public Endpoint](/hub/public-endpoints) to generate images. This requires zero infrastructure setup; you simply pay per image generated.
+2.  **Scale with Serverless:** As you grow, you need a unique art style. You fine-tune a model and deploy it as a [Serverless Endpoint](/serverless/overview). This allows your app to handle traffic spikes automatically while scaling down to zero costs during quiet hours.
+
+### Interactive research loop
+
+**Goal:** Experiment with new model architectures using large datasets.
+
+1.  **Explore on a Pod:** Spin up a single-GPU [Pod](/pods/overview) with JupyterLab enabled. Mount a [network volume](/storage/network-volumes) to hold your 2TB dataset.
+2.  **Iterate code:** Write and debug your training loop interactively in the Pod. If the process crashes, the Pod restarts quickly, and your data on the network volume remains safe.
+3.  **Scale up:** Once the code is stable, you don't need to move the data. You terminate the single Pod and spin up an [Instant Cluster](/instant-clusters) attached to that *same* network volume to run the full training job across multiple nodes.
+
+### Hybrid inference pipeline
+
+**Goal:** Run a complex pipeline involving both lightweight logic and heavy GPU inference.
+
+1.  **Orchestration:** Your main application runs on a cheap CPU Pod or external cloud function. It handles user authentication, request validation, and business logic.
+2.  **Heavy lifting:** When a valid request comes in, your app calls a [Serverless Endpoint](/serverless/overview) hosting a large LLM (e.g., Llama-3-70B) specifically for the inference step.
+3.  **Async handoff:** The Serverless worker processes the request and uploads the result directly to [s3-compatible storage](/serverless/storage/overview), returning a signed URL to your main app. This keeps your API response lightweight and fast.
+
+### Batch processing job
+
+**Goal:** Process 10,000 video files overnight for a media company.
+
+1.  **Queue requests:** Your backend pushes 10,000 job payloads to a [Serverless Endpoint](/serverless/overview) configured as an asynchronous queue.
+2.  **Auto-scale:** The endpoint detects the queue depth and automatically spins up 50 concurrent workers (e.g., L4 GPUs) to process the videos in parallel.
+3.  **Cost optimization:** As the queue drains, the workers scale down to zero automatically. You pay only for the exact GPU seconds used to process the videos, with no idle server costs.
+
+### Enterprise fine-tuning factory
+
+**Goal:** Regularly fine-tune models on new customer data automatically.
+
+1.  **Data ingestion:** Customer data is uploaded to a shared [network volume](/storage/network-volumes).
+2.  **Programmatic training:** A script uses the [Runpod API](/api-reference/pods/POST/pods) to spin up a fresh On-Demand Pod.
+3.  **Execution:** The Pod mounts the volume, runs the training script, saves the new model weights back to the volume, and then [terminates itself](/pods/manage-pods#terminate-a-pod) via API call to stop billing immediately.
+4.  **Hot reload:** A separate Serverless endpoint is triggered to reload the new weights from the volume (or [update the cached model](/serverless/endpoints/model-caching)), making the new model available for inference immediately.
