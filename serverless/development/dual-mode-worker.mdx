@@ -1,53 +1,35 @@
 ---
-title: "Build a dual-mode Serverless worker"
-sidebarTitle: "Build a dual-mode worker"
-description: "Create a flexible Serverless worker that supports a Pod-first development workflow."
+title: "Pod-first development"
+description: "Develop on a Pod before deploying to Serverless for faster iteration."
 ---
 
-Developing machine learning and AI applications often requires powerful GPUs, making local development of API endpoints challenging. A typical development workflow for [Serverless](/serverless/overview) would be to write your handler code, deploy it directly to a Serverless endpoint, send endpoint requests to test, debug using worker logs, and repeat.
+Developing machine learning applications often requires powerful GPUs, making local development challenging. Instead of repeatedly deploying to Serverless for testing, you can develop on a Pod first and then deploy the same Docker image to Serverless when ready.
 
-This can have signifcant drawbacks, such as:
-
-*   **Slow iteration**: Each deployment requires a new build and test cycle, which can be time-consuming.
-*   **Limited visibility**: Logs and errors are not always easy to debug, especially when running in a remote environment.
-*   **Resource constraints**: Your local machine may not have the necessary resources to test your application.
-
-This tutorial shows how to build a "Pod-first" development environment: creating a flexible, dual-mode Docker image that can be deployed as either a Pod or a Serverless worker.
-
-Using this method, you'll leverage a [Pod](/pods/overview)—a GPU instance ideal for interactive development, with tools like Jupyter Notebooks and direct IDE integration—as your cloud-based development machine. The Pod will be deployed with a flexible Docker base, allowing the same container image to be seamlessly deployed to a Serverless endpoint.
-
-This workflow lets you develop and thoroughly test your application using a containerized Pod environment, ensuring it works correctly. Then, when you're ready to deploy to production, you can deploy it instantly to Serverless.
-
-Follow the steps below to create a worker image that leverages this flexibility, allowing for faster iteration and more robust deployments.
+This "Pod-first" workflow lets you develop and test interactively in a GPU environment, then seamlessly transition to Serverless for production. You'll use a Pod as your cloud-based development machine with tools like Jupyter Notebooks and SSH, catching issues early before deploying to Serverless.
 
 <Tip>
-
-To get a basic dual-mode worker up and running immediately, you can [clone this repository](https://github.com/justinwlin/Runpod-GPU-And-Serverless-Base) and use it as a base.
-
+To get started quickly, you can [clone this repository](https://github.com/justinwlin/Runpod-GPU-And-Serverless-Base) for a ready-to-use dual-mode worker base.
 </Tip>
 
 ## What you'll learn
 
-In this tutorial you'll learn how to:
+In this guide you'll learn how to:
 
-*   Set up a project for a dual-mode Serverless worker.
-*   Create a handler file (`handler.py`) that adapts its behavior based on a user-specified environment variable.
-*   Write a startup script (`start.sh`) to manage different operational modes.
-*   Build a Docker image designed for flexibility.
-*   Understand and utilize the "Pod-first" development workflow.
-*   Deploy and test your worker in both Pod and Serverless environments.
+- Set up a project for a dual-mode Serverless worker.
+- Create a handler that adapts based on an environment variable.
+- Write a startup script to manage different operational modes.
+- Build a Docker image that works in both Pod and Serverless environments.
+- Deploy and test your worker in both environments.
 
 ## Requirements
 
-*   You've [created a Runpod account](/get-started/manage-accounts).
-*   You've installed [Python 3.x](https://www.python.org/downloads/) and [Docker](https://docs.docker.com/get-started/get-docker/) on your local machine and configured them for your command line.
-*   Basic understanding of Docker concepts and shell scripting.
+- You've [created a Runpod account](/get-started/manage-accounts).
+- You've installed [Python 3.x](https://www.python.org/downloads/) and [Docker](https://docs.docker.com/get-started/get-docker/) and configured them for your command line.
+- Basic understanding of Docker concepts and shell scripting.
 
 ## Step 1: Set up your project structure
 
-First, create a directory for your project and the necessary files.
-
-    Open your terminal and run the following commands:
+Create a directory for your project and the necessary files:
 
 ```sh
 mkdir dual-mode-worker
@@ -62,13 +44,13 @@ This creates:
 - `Dockerfile`: Instructions to build your Docker image.
 - `requirements.txt`: A file to list Python dependencies.
 
-## Step 2: Create the `handler.py` file
+## Step 2: Create the handler
 
-This Python script will contain your core logic. It will check for a user-specified environment variable `MODE_TO_RUN` to determine whether to run in Pod or Serverless mode.
+This Python script will check for a `MODE_TO_RUN` environment variable to determine whether to run in Pod or Serverless mode.
 
 Add the following code to `handler.py`:
 
-```python
+```python handler.py
 import os
 import asyncio
 import runpod
@@ -111,7 +93,7 @@ Key features:
 
 ## Step 3: Create the `start.sh` script
 
-This script will be the entrypoint for your Docker container. It reads the `MODE_TO_RUN` environment variable and configures the container accordingly.
+The `start.sh` script serves as the entrypoint for your Docker container and manages different operational modes. It reads the `MODE_TO_RUN` environment variable and configures the container accordingly.
 
 Add the following code to `start.sh`:
 
@@ -210,18 +192,17 @@ export_env_vars
 echo "Start script(s) finished"
 
 sleep infinity
-
 ```
-Key features:
+
+Here are some key features of this script:
+
 *   `case $MODE_TO_RUN in ... esac`: This structure directs the startup based on the mode.
 *   `serverless` mode: Executes `handler.py`, which then starts the Runpod Serverless worker. `exec` replaces the shell process with the Python process.
 *   `pod` mode: Starts up the JupyterLab server for Pod development, then runs `sleep infinity` to keep the container alive so you can connect to it (e.g., via SSH or `docker exec`). You would then manually run `python /app/handler.py` inside the Pod to test your handler logic.
 
 ## Step 4: Create the `Dockerfile`
 
-This file defines how to build your Docker image.
-
-Add the following content to `Dockerfile`:
+Create a `Dockerfile` that includes your handler and startup script:
 
 ```dockerfile
 # Use an official Runpod base image
@@ -283,7 +264,9 @@ RUN ls -la $WORKSPACE_DIR/start.sh
 # depot build -t justinrunpod/pod-server-base:1.0 . --push --platform linux/amd64
 CMD $WORKSPACE_DIR/start.sh
 ```
-Key features:
+
+Key features of this `Dockerfile`:
+
 *   `FROM runpod/pytorch:2.0.1-py3.10-cuda11.8.0-devel-ubuntu22.04`: Starts with a Runpod base image that comes with nginx, runpodctl, and other helpful base packages.
 *   `ARG WORKSPACE_DIR=/workspace` and `ENV WORKSPACE_DIR=${WORKSPACE_DIR}`: Allows the workspace directory to be set at build time.
 *   `WORKDIR $WORKSPACE_DIR`: Sets the working directory to the value of `WORKSPACE_DIR`.
@@ -300,21 +283,21 @@ Instead of building and pushing your image via Docker Hub, you can also [deploy 
 
 </Tip>
 
-Now, build your Docker image and push it to a container registry like Docker Hub.
+Now you're ready to build your Docker image and push it to Docker Hub:
 
 <Steps>
   <Step title="Build your Docker image">
-    Build your Docker image, replacing `[YOUR_USERNAME]` with your Docker Hub username and choosing a suitable image name:
+    Build your Docker image, replacing `YOUR_USERNAME` with your Docker Hub username and choosing a suitable image name:
     
     ```sh
-    docker build --platform linux/amd64 --tag [YOUR_USERNAME]/dual-mode-worker .
+    docker build --platform linux/amd64 --tag YOUR_USERNAME/dual-mode-worker .
     ```
     The `--platform linux/amd64` flag is important for compatibility with Runpod's infrastructure.
   </Step>
   
   <Step title="Push the image to your container registry">
     ```sh
-    docker push [YOUR_USERNAME]/dual-mode-worker:latest
+    docker push YOUR_USERNAME/dual-mode-worker:latest
     ```
     <Note>
 
@@ -330,38 +313,40 @@ Now that you've finished building our Docker image, let's explore how you would 
 
 Deploy the image to a Pod by following these steps:
 
-1. Go to the [Pods page](https://www.runpod.io/console/pods) in the Runpod console and click **Create Pod**.
-2. Select an appropriate GPU for your workload (see [Choose a Pod](/pods/choose-a-pod) for guidance).
-3. Under **Pod Template**, select **Edit Template**.
-4. Under **Container Image**, enter `[YOUR_USERNAME]/dual-mode-worker:latest`.
-5. Under **Public Environment Variables**, select **Add environment variable**. Set variable key to **`MODE_TO_RUN`** and the value to **`pod`**.
-6. Click **Set Overrides**, then deploy your Pod.
+1. Navigate to the [Pods page](https://www.runpod.io/console/pods) in the Runpod console.
+2. Click **Deploy**.
+3. Select your preferred GPU.
+4. Under **Container Image**, enter `YOUR_USERNAME/dual-mode-worker:latest`.
+5. Under **Public Environment Variables**, select **Add environment variable** and add:
+   - Key: `MODE_TO_RUN`
+   - Value: `pod`
+6. Click **Deploy**.
 
-After [connecting to the Pod](/pods/connect-to-a-pod), navigate to `/app` and run your handler directly:
-
-```sh
-python handler.py
-```
-
-This will execute the Pod-specific test harness in your `handler.py`, giving you immediate feedback. You can edit `handler.py` within the Pod and re-run it for rapid iteration.
+Once your Pod is running, you can:
+- [Connect via the web terminal, JupyterLab, or SSH](/pods/connect-to-a-pod) to test your handler interactively.
+- Debug and iterate on your code.
+- Test GPU-specific operations.
+- Edit `handler.py` within the Pod and re-run it for rapid iteration.
 
 ## Step 7: Deploy to a Serverless endpoint
 
 Once you're confident with your `handler.py` logic tested in Pod mode, you're ready to deploy your dual-mode worker to a Serverless endpoint.
 
-1. Go to the [Serverless section](https://www.runpod.io/console/serverless) of the Runpod console.
+1. Navigate to the [Serverless page](https://www.runpod.io/console/serverless) in the Runpod console.
 2. Click **New Endpoint**.
 3. Click **Import from Docker Registry**.
-4. In the **Container Image** field, enter your Docker image URL: `docker.io/[YOUR_USERNAME]/dual-mode-worker:latest`, then click *Next****.
-5. Under **Environment Variables**, set `MODE_TO_RUN` to `serverless`.
-6. Configure GPU, workers, and other settings as needed.
-7. Select **Create Endpoint**.
+4. In the **Container Image** field, enter your Docker image URL: `docker.io/YOUR_USERNAME/dual-mode-worker:latest`, then click *Next****.
+5. Under **Environment Variables**, add:
+   - Key: `MODE_TO_RUN`
+   - Value: `serverless`
+6. Configure your endpoint settings (GPU type, workers, etc.).
+7. Click **Create Endpoint**.
 
-The *same* image is used, but `start.sh` will now direct it to run in Serverless mode, starting the `runpod.serverless.start` worker.
+The *same* image will be used for your workers, but `start.sh` will now direct them to run in Serverless mode, using the `runpod.serverless.start` function to process requests.
 
 ## Step 8: Test your endpoint
 
-After deploying your endpoint in to Serverless mode, you can test it with the following steps:
+After deploying your endpoint in to Serverless mode, you can test it by sending API requests to your endpoint.
 
 1.  Navigate to your endpoint's detail page in the Runpod console.
 2.  Click the **Requests** tab.
@@ -398,14 +383,14 @@ Congratulations! You've successfully built, deployed, and tested a dual-mode Ser
     1. Deploy your initial Docker image to a Runpod Pod, ensuring `MODE_TO_RUN` is set to `pod` (or rely on the Dockerfile default).
     2. [Connect to your Pod](/pods/connect-to-a-pod) (via SSH or web terminal).
     3. Navigate to the `/app` directory.
-    4. As you develop, install any necessary Python packages (`pip install [PACKAGE_NAME]`) or system dependencies (`apt-get install [PACKAGE_NAME]`).
+    4. As you develop, install any necessary Python packages (`pip install PACKAGE_NAME`) or system dependencies (`apt-get install PACKAGE_NAME`).
     5. Iterate on your `handler.py` script. Test your changes frequently by running `python handler.py` directly in the Pod's terminal. This will execute the test harness you defined in the `elif MODE_TO_RUN == "pod":` block, giving you immediate feedback.
   </Step>
 
   <Step title="Update your Docker image">
     Once you're satisfied with a set of changes and have new dependencies:
     1. Add new Python packages to your `requirements.txt` file.
-    2. Add system installation commands (e.g., `RUN apt-get update && apt-get install -y [PACKAGE_NAME]`) to your `Dockerfile`.
+    2. Add system installation commands (e.g., `RUN apt-get update && apt-get install -y PACKAGE_NAME`) to your `Dockerfile`.
     3. Ensure your updated `handler.py` is saved.
    
   </Step>
@@ -425,13 +410,4 @@ Congratulations! You've successfully built, deployed, and tested a dual-mode Ser
   </Step>
 </Steps>
 
-This iterative loop—write your handler, update the Docker image, test in Pod mode, then deploy to Serverless—allows for rapid development and debugging of your Serverless workers.
-
-## Next steps
-
-Now that you've mastered the dual-mode development workflow, you can:
-
-*   [Explore advanced handler functions.](/serverless/workers/handler-functions)
-*   [Learn about sending requests programmatically via API or SDKs.](/serverless/endpoints/send-requests)
-*   [Understand endpoint configurations for performance and cost optimization.](/serverless/endpoints/endpoint-configurations) 
-*   [Deep dive into local testing and development.](/serverless/development/local-testing)
+This iterative loop (write your handler, update the Docker image, test in Pod mode, then deploy to Serverless) enables you to rapidly develop and debug your Serverless workers.

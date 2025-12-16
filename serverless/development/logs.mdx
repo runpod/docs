@@ -1,6 +1,6 @@
 ---
-title: "Logs"
-sidebarTitle: "Logs"
+title: "Logs and monitoring"
+sidebarTitle: "Logs and monitoring"
 description: "Access and manage logs for Serverless endpoints and workers."
 ---
 
@@ -8,7 +8,7 @@ description: "Access and manage logs for Serverless endpoints and workers."
   <img src="/images/serverless-logs.png" />
 </Frame>
 
-Runpod provides comprehensive logging capabilities for Serverless endpoints and workers to help you monitor, debug, and troubleshoot your applications. Understanding the different types of logs and their persistence characteristics is crucial for effective application management.
+Runpod provides comprehensive logging capabilities for Serverless endpoints and workers to help you monitor, debug, and troubleshoot your applications.
 
 ## Endpoint logs
 
@@ -255,6 +255,78 @@ def handler(job):
 if __name__ == "__main__":
     runpod.serverless.start({"handler": handler})
 ```
+
+## Structured logging
+
+Outputting structured logs in a machine-readable format (typically JSON) makes it easier to parse, search, and analyze logs programmatically. This is especially useful when exporting logs to external services or analyzing large volumes of logs.
+
+### JSON logging example
+
+```python
+import logging
+import json
+import runpod
+
+def setup_structured_logger():
+    """
+    Configure a logger that outputs JSON-formatted logs.
+    """
+    logger = logging.getLogger("runpod_worker")
+    logger.setLevel(logging.DEBUG)
+    
+    # Create a handler that outputs to stdout
+    handler = logging.StreamHandler()
+    
+    # Don't use a formatter—we'll format manually as JSON
+    logger.addHandler(handler)
+    
+    return logger
+
+logger = setup_structured_logger()
+
+def log_json(level, message, **kwargs):
+    """
+    Log a structured JSON message.
+    """
+    log_entry = {
+        "level": level,
+        "message": message,
+        **kwargs
+    }
+    print(json.dumps(log_entry))
+
+def handler(event):
+    request_id = event.get("id", "unknown")
+    
+    try:
+        log_json("INFO", "Processing request", request_id=request_id, input_keys=list(event.get("input", {}).keys()))
+        
+        # Replace process_input() with your own processing logic
+        result = process_input(event["input"])
+        
+        log_json("INFO", "Request completed", request_id=request_id, execution_time_ms=123)
+        
+        return {"output": result}
+    except Exception as e:
+        log_json("ERROR", "Request failed", request_id=request_id, error=str(e), error_type=type(e).__name__)
+        return {"error": str(e)}
+
+runpod.serverless.start({"handler": handler})
+```
+
+This produces logs like:
+
+```json
+{"level": "INFO", "message": "Processing request", "request_id": "abc123", "input_keys": ["prompt", "max_length"]}
+{"level": "INFO", "message": "Request completed", "request_id": "abc123", "execution_time_ms": 123}
+```
+
+### Benefits of structured logging
+
+- **Easier parsing**: JSON logs can be easily parsed by log aggregation tools.
+- **Better search**: Search for specific fields like `request_id` or `error_type`.
+- **Analytics**: Analyze trends, patterns, and metrics from log data.
+- **Integration**: Export to external services like Datadog, Splunk, or Elasticsearch.
 
 ### Accessing stored logs
 
