@@ -1,137 +1,116 @@
 ---
-title: "Local server flags"
+title: "Serverless development"
+sidebarTitle: "Overview"
+description: "Test, debug, and optimize your Serverless applications."
 ---
 
-When developing Runpod Serverless functions, it's crucial to test them thoroughly before deployment. The Runpod SDK provides a powerful local testing environment that allows you to simulate your Serverless endpoints right on your development machine. This local server eliminates the need for constant Docker container rebuilds, uploads, and endpoint updates during the development and testing phase.
+When developing for Runpod Serverless, you'll typically start by writing handler functions, test them locally, and then deploy to production. This guide introduces the development workflow and tools that help you test, debug, and optimize your Serverless applications effectively.
 
-To facilitate this local testing environment, the Runpod SDK offers a variety of flags that allow you to customize your setup. These flags enable you to:
+## Development lifecycle
 
-* Configure the server settings (port, host, concurrency)
-* Control logging verbosity
-* Enable debugging features
-* Provide test inputs
+The typical workflow starts with writing your handler function. Your handler receives an event object with input data and returns a response. Once you have a handler function, test it locally using the Runpod SDK's testing environment. You can test with inline JSON inputs, use a local API server, or simulate concurrency, all without actually deploying your code and incurring charges.
 
-By using these flags, you can create a local environment that closely mimics the behavior of your functions in the Runpod cloud, allowing for more accurate testing and smoother deployments.
+When your handler is working correctly, package it into a Docker image and deploy it to a Serverless endpoint. Your worker will auto-scale based on demand. Once deployed, use logs, metrics, and SSH access to troubleshoot issues and optimize performance in production.
 
-This guide provides a comprehensive overview of all available flags, their purposes, and how to use them effectively in your local testing workflow.
+<div style={{ marginLeft: '4rem'}}>
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#5D29F0','primaryTextColor':'#fff','primaryBorderColor':'#874BFF','lineColor':'#AE6DFF','secondaryColor':'#AE6DFF','tertiaryColor':'#FCB1FF','edgeLabelBackground':'#AE6DFF', 'fontSize':'15px','fontFamily':'font-inter'}}}%%
 
-## Basic usage
+flowchart TD
+    Start([Write handler function]) --> Test[Test handler locally with the Runpod SDK]
+    
+    Test --> Check{Tests pass?}
+    
+    Check -->|"&nbsp;&nbsp;No&nbsp;&nbsp;"| Fix[Fix code & debug]
+    
+    Fix --> Test
+    
+    Check -->|"&nbsp;&nbsp;Yes&nbsp;&nbsp;"| Package[Package worker as a Docker image]
+    
+    Package --> Deploy[Deploy worker image to Runpod Serverless]
+    
+    subgraph Production [Production]
+        Deploy --> Running[Workers auto-scale based on demand]
+        Running --> Monitor[Monitor logs and metrics, SSH into workers for live debugging]
+    end
+    
+    Monitor -.-> Start
 
-To start your local server with additional flags, use the following format:
-
-```sh
-python your_function.py [flags]
+    style Start fill:#5D29F0,stroke:#874BFF,color:#FFFFFF,stroke-width:2px
+    style Test fill:#874BFF,stroke:#AE6DFF,color:#FFFFFF,stroke-width:2px
+    style Check fill:#1B0656,stroke:#874BFF,color:#FFFFFF,stroke-width:2px
+    style Fix fill:#FFC01F,stroke:#FF6214,color:#000000,stroke-width:2px
+    style Package fill:#5D29F0,stroke:#874BFF,color:#FFFFFF,stroke-width:2px
+    style Deploy fill:#5D29F0,stroke:#874BFF,color:#FFFFFF,stroke-width:2px
+    style Running fill:#5D29F0,stroke:#874BFF,color:#FFFFFF,stroke-width:2px
+    style Monitor fill:#FCB1FF,stroke:#AE6DFF,color:#000000,stroke-width:2px
+    style Production fill:#100433,stroke:#874BFF,color:#FFFFFF,stroke-width:2px
+    
+    linkStyle default stroke-width:2px
 ```
+</div>
 
-Replace `your_function.py` with the name of your Python file containing the Runpod handler.
+<Tip>
+For faster iteration and debugging of GPU-intensive applications, you can develop on a Pod first before deploying to Serverless. This "Pod-first" workflow gives you direct access to the GPU environment with tools like Jupyter Notebooks and SSH, letting you iterate faster than deploying repeatedly to Serverless. Learn more in [Pod-first development](/serverless/development/dual-mode-worker).
+</Tip>
 
-## Available flags
+## Local testing
 
-### --rp\_serve\_api
+The Runpod SDK provides a comprehensive local testing environment:
 
-Starts the API server for local testing.
+- **Basic testing**: Run your handler with inline JSON or test files.
+- **Local API server**: Simulate HTTP requests to your Serverless endpoint.
+- **Concurrency testing**: Test how your handler performs under parallel execution.
+- **Debug mode**: Enable detailed logging and troubleshooting output.
 
-**Usage**:
+Learn more in [Local testing](/serverless/development/local-testing).
 
-```sh
-python your_function.py --rp_serve_api
-```
+## Error handling
 
-### --rp\_api\_port
+Implement robust error handling to ensure your workers remain stable and return useful error messages.
 
-Sets the port number for the FastAPI server.
+Learn more in [Error handling](/serverless/development/error-handling).
 
-**Default**: 8000
+## SDK utilities
 
-**Usage**:
+The Runpod SDK includes helper functions to make your handlers more robust:
 
-```sh
-python your_function.py --rp_serve_api --rp_api_port 8080
-```
+- **Input validation**: Validate request data against a schema.
+- **Cleanup utilities**: Automatically remove temporary files after processing.
 
-Setting `--rp_api_host` to `0.0.0.0` allows connections from other devices on the network, which can be useful for testing but may have security implications.
+Learn more in [Validate inputs](/serverless/development/validation) and [Clean up files](/serverless/development/cleanup).
 
-### --rp\_api\_concurrency
+## Benchmarking and optimization
 
-Sets the number of concurrent workers for the FastAPI server.
+Optimize your workers for performance and cost:
 
-**Default**: 1
+- **Benchmark response times**: Measure cold start and execution time.
+- **Optimize your workers**: Reduce startup and execution times.
 
-**Usage**:
+Learn more in the [Benchmarking](/serverless/development/benchmarking) and [Optimization](/serverless/development/optimization) guides.
 
-```sh
-python your_function.py --rp_serve_api --rp_api_concurrency 4
-```
+## Pod-first development
 
-<Info>
+For faster iteration and debugging of GPU-intensive applications, develop on a Pod first, then deploy the same Docker image to Serverless. This workflow provides:
 
-When using `--rp_api_concurrency` with a value greater than 1, ensure your main file is named `main.py` for proper FastAPI integration.
+- Interactive development with Jupyter Notebooks.
+- Direct SSH access to the GPU environment.
+- Faster iteration compared to deploying repeatedly to Serverless.
 
-</Info>
+Learn more in [Pod-first development](/serverless/development/dual-mode-worker).
 
-### --rp\_api\_host
+## Debugging and observability
 
-Sets the hostname for the FastAPI server.
+Runpod provides several tools for debugging and monitoring:
 
-**Default**: "localhost"
+- **Logs**: View real-time and historical logs from your workers.
+- **Metrics**: Monitor execution time, delay time, and resource usage.
+- **SSH access**: Connect directly to running workers for live debugging.
 
-**Usage**:
+Learn more in [Logs and monitoring](/serverless/development/logs) and [Connect to workers with SSH](/serverless/development/ssh-into-workers).
 
-```sh
-python your_function.py --rp_serve_api --rp_api_host 0.0.0.0
-```
+## Environment variables
 
-### --rp\_log\_level
+Use environment variables to configure your workers without hardcoding credentials or settings in your code. Environment variables are set in the Runpod console and are available to your handler at runtime.
 
-Controls the verbosity of console output.
-
-**Options**: `ERROR` | `WARN` | `INFO` | `DEBUG`
-
-**Usage**:
-
-```sh
-python your_function.py --rp_serve_api --rp_log_level DEBUG
-```
-
-### --rp\_debugger
-
-Enables the Runpod debugger for troubleshooting. The `--rp_debugger` flag is particularly useful when you need to step through your code for troubleshooting.
-
-**Usage**:
-
-```sh
-python your_function.py --rp_serve_api --rp_debugger
-```
-
-### --test\_input
-
-Provides test input data for your function, formatted as JSON.
-
-**Usage**:
-
-```sh
-python your_function.py --rp_serve_api \
-    --test_input '{"input": {"key": "value"}}'
-```
-
-The `--test_input` flag is an alternative to using a `test_input.json` file. If both are present, the command-line input takes precedence.
-
-## Combined flags
-
-You can combine multiple flags to customize your local testing environment.
-
-For example:
-
-```sh
-python main.py --rp_serve_api \
-    --rp_api_port 8080 \
-    --rp_api_concurrency 4 \
-    --rp_log_level DEBUG \
-    --test_input '{"input": {"key": "value"}}'
-```
-
-This command starts the local server on port `8080` with 4 concurrent workers, sets the log level to `DEBUG`, and provides test input data.
-
-These flags provide powerful tools for customizing your local testing environment. By using them effectively, you can simulate various scenarios, debug issues, and ensure your Serverless functions are robust and ready for deployment to the Runpod cloud.
-
-For more detailed information on each flag and advanced usage scenarios, refer to the individual tutorials in this documentation.
+Learn more in [Environment variables](/serverless/development/environment-variables).
