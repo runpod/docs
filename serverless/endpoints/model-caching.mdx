@@ -96,6 +96,48 @@ For example, the model `gensyn/qwen2.5-0.5b-instruct` would be stored at:
 
 If your application requires specific paths, configure it to scan `/runpod-volume/huggingface-cache/hub/` for models.
 
+## Programmatically find cached models
+
+To dynamically locate cached models without hardcoding paths, use this helper function to scan the cache directory:
+
+```python find_model_path.py
+import os
+
+CACHE_DIR = "/runpod-volume/huggingface-cache/hub"
+
+def find_model_path(model_name):
+    """
+    Find the path to a cached model.
+    
+    Args:
+        model_name: The model name from Hugging Face (e.g., 'Qwen/Qwen2.5-0.5B-Instruct')
+    
+    Returns:
+        The full path to the cached model, or None if not found
+    """
+    # Convert model name format: "Org/Model" -> "models--Org--Model"
+    cache_name = model_name.replace("/", "--")
+    snapshots_dir = os.path.join(CACHE_DIR, f"models--{cache_name}", "snapshots")
+    
+    # Check if the model exists in cache
+    if os.path.exists(snapshots_dir):
+        snapshots = os.listdir(snapshots_dir)
+        if snapshots:
+            # Return the path to the first (usually only) snapshot
+            return os.path.join(snapshots_dir, snapshots[0])
+    
+    return None
+
+# Example usage
+model_path = find_model_path("Qwen/Qwen2.5-0.5B-Instruct")
+if model_path:
+    print(f"Model found at: {model_path}")
+else:
+    print("Model not found in cache")
+```
+
+This function is useful when you're working with multiple models, need to verify that a model is available before loading it, or are building tools that discover available cached models.
+
 ## Enable cached models
 
 <Frame alt="Cached model setting">
