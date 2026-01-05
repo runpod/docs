@@ -1,5 +1,5 @@
 // Runpod Docs Chat Widget
-const WIDGET_BASE_URL = "http://localhost:8787";
+const WIDGET_BASE_URL = "https://runpod-assistant-doc-backend.vercel.app";
 
 const script = document.createElement("script");
 script.src = `${WIDGET_BASE_URL}/chat-widget.js`;
