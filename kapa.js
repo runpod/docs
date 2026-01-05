@@ -19,12 +19,12 @@ script.setAttribute("data-modal-title-font-weight", "600");
 
 // v2 (purple/white)
 script.setAttribute("data-project-logo", "https://raw.githubusercontent.com/runpod/docs/c29473974f2eb4162345d634a5b443db34781660/logo/icon_square_white.svg",);
-script.setAttribute("data-button-bg-color", "#5D29F0");
-script.setAttribute("data-button-hover-bg-color", "#AE6DFF");
+script.setAttribute("data-button-bg-color", "#5F4CFE");
+script.setAttribute("data-button-hover-bg-color", "#4D38F5");
 script.setAttribute("data-button-text-color", "#FFFFFF");
 script.setAttribute("data-button-text-shadow", "0px 0px 0px 0px");
 script.setAttribute("data-button-border", "0px solid #E1E1E5");
-script.setAttribute("data-modal-header-bg-color", "#5D29F0");
+script.setAttribute("data-modal-header-bg-color", "#5F4CFE");
 script.setAttribute("data-modal-title-color", "#FFFFFF");
 
 document.head.appendChild(script);
