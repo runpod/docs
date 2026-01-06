@@ -1,99 +1,16 @@
 ---
-title: "Deploy workers from a Docker registry"
-sidebarTitle: "Deploy from Docker"
-description: "Package a handler function into a Docker image and deploy it to an endpoint."
+title: "Deploy from Docker Hub"
+sidebarTitle: "Deploy from Docker Hub"
+description: "Build, test, and deploy your worker image from Docker Hub."
 ---
+
+After [creating a Dockerfile](/serverless/workers/create-dockerfile) for your worker, you can build the image, test it locally, and deploy it to Runpod Serverless.
 
 ## Requirements
 
-To deploy a worker image, you need:
-
-* A working [handler function](/serverless/workers/handler-functions).
+* A [Dockerfile](/serverless/workers/create-dockerfile) that packages your handler function.
 * [Docker](https://docs.docker.com/get-started/get-docker/) installed on your development machine.
 * A [Docker Hub](https://hub.docker.com/) account.
-
-## Project organization
-
-Organize your project files in a directory structure like this:
-
-```
-project_directory
-├── Dockerfile              # Instructions for building the Docker image
-├── src
-│   └── handler.py          # Your handler function
-└── builder
-    └── requirements.txt    # Dependencies required by your handler
-```
-
-Your `requirements.txt` file should list all Python packages your handler needs:
-
-```txt title="requirements.txt"
-# Example requirements.txt
-runpod~=1.7.6
-torch==2.0.1
-pillow==9.5.0
-transformers==4.30.2
-```
-
-## Creating a Dockerfile
-
-The Dockerfile tells Docker how to build your worker image. Create a file named `Dockerfile` (no extension) in your project's root directory:
-
-```dockerfile title="Dockerfile"
-FROM python:3.11.1-slim
-
-WORKDIR /
-
-# Copy and install requirements
-COPY builder/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy your handler code
-COPY src/handler.py .
-
-# Command to run when the container starts
-CMD ["python", "-u", "/handler.py"]
-```
-
-This Dockerfile starts with a Python base image, installs your dependencies, copies your handler code, and specifies the command to run when the container starts.
-
-## Including models and external files
-
-<Tip>
-
-If your model is available on Hugging Face, we strongly recommend enabling [cached models](/serverless/endpoints/model-caching) instead of baking the model into your Docker image.
-
-</Tip>
-
-If your handler uses machine learning models or other external files, you can include them in the Docker image using `COPY` or `ADD`:
-
-```dockerfile title="Dockerfile" highlight={9-11}
-FROM python:3.11.1-slim
-
-WORKDIR /
-
-# Copy and install requirements
-COPY builder/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy your code and model files
-COPY src/handler.py .
-COPY models/ /models/
-
-# Set environment variables if needed
-ENV MODEL_PATH=/models/my_model.pt
-
-# Command to run when the container starts
-CMD ["python", "-u", "/handler.py"]
-```
-
-For non-local models, you can use `RUN wget` to manually download them during the build process:
-
-```dockerfile title="Dockerfile"
-# Download model files and copy them to the container
-RUN -q wget URL_TO_YOUR_MODEL -O /models/my_model.pt
-COPY models/ /models/
-```
 
 ## Building the Docker image
 
