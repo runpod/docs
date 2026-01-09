@@ -1,34 +1,42 @@
 ---
-title: "Cleanup"
+title: "Clean up temporary files"
+sidebarTitle: "Clean up files"
+description: "Manage disk space by automatically removing temporary files."
 ---
 
-When developing for Runpod serverless, it's crucial to manage resources efficiently. The Runpod SDK provides a `clean()` function to help you remove temporary files and folders after processing. This guide will show you how to use this cleanup utility effectively.
+The Runpod SDK's `clean()` function helps maintain the health of your Serverless worker by removing temporary files and folders after processing completes. This is particularly important for workers that download large assets or generate temporary artifacts, as accumulated data can lead to `DiskQuotaExceeded` errors over time.
 
-## The clean() Function
+## Import the `clean()` function
 
-The `clean()` function is part of Runpod's serverless utilities. It helps maintain a clean environment by removing specified folders and files after a job is completed.
-
-To use it, import the function from the Runpod serverless utilities:
+To use the `clean()` function, import it from the `utils.rp_cleanup` module:
 
 ```python
 from runpod.serverless.utils.rp_cleanup import clean
 ```
 
-## Default Behavior
+## Default behavior
 
-By default, `clean()` removes the following:
+When called without arguments, `clean()` targets a specific set of default directories for removal:
 
-* `input_objects` folder
-* `output_objects` folder
-* `job_files` folder
-* `output.zip` file
+ - `input_objects/`
+ - `output_objects/`
+ - `job_files/`
+ - `output.zip`
 
-## Using clean() in Your Handler
+These are standard locations used by various SDK operations, and cleaning them ensures a fresh state for the next request.
 
-Here's an example of how to incorporate the `clean()` function in your AI model handler:
+## Custom cleanup
 
-<Tabs>
-<Tab title="Python">
+If your handler generates files in non-standard directories, you can override the default behavior by passing a list of folder names to the `folder_list` parameter.
+
+```python
+clean(folder_list=["temp_images", "cache", "downloads"])
+```
+
+## Use `clean()` in your handler
+
+You should integrate cleanup logic into your handler's lifecycle, typically within a `finally` block or right before returning the result.
+
 ```python
 import runpod
 from runpod.serverless.utils.rp_cleanup import clean
@@ -46,15 +54,10 @@ def download_image(url, save_path):
 
 
 def handler(event):
-    """
-    This is a sample AI model handler function that downloads an image,
-    processes it, and then cleans up.
-    """
     try:
-        # Extract the image URL from the input
         image_url = event["input"]["image_url"]
 
-        # Create a temporary directory for the image
+        # Create a temporary directory
         os.makedirs("temp_images", exist_ok=True)
         image_path = "temp_images/downloaded_image.jpg"
 
@@ -62,82 +65,24 @@ def handler(event):
         if not download_image(image_url, image_path):
             raise Exception("Failed to download image")
 
-        # Your AI model processing code here
-        # For this example, we're just simulating processing
+        # Process the image (your code here)
         result = f"Processed image from: {image_url}"
 
-        # Cleanup after processing
+        # Cleanup specific folders after processing
         clean(folder_list=["temp_images"])
 
-        # Return the result
         return {"output": result}
     except Exception as e:
-        # If there's an error, attempt cleanup and return the error
+        # Attempt cleanup even if an error occurs
         clean(folder_list=["temp_images"])
         return {"error": str(e)}
 
 
-# Start the serverless function
 runpod.serverless.start({"handler": handler})
 ```
 
-</Tab>
+## Best practices
 
-</Tabs>
+To ensure reliability, always call `clean()` at the end of your handler execution. We recommend wrapping your cleanup calls in a `try...except` or `finally` block so that disk space is recovered even if your main processing logic fails.
 
-In this example, `clean()` is called after the model processing is complete, ensuring that temporary files and folders are removed.
-
-## Custom Cleanup
-
-You can also specify additional folders to be removed by passing a list to the `clean()` function:
-
-```python
-clean(["custom_folder1", "custom_folder2"])
-```
-
-## Testing your Handler with Cleanup
-
-To test your handler with the cleanup function:
-
-<Tabs>
-<Tab title="CLI">
-```sh
-python ai_model_handler.py \
-  --test_input '{
-    "input": {
-        "image_url": "https://avatars.githubusercontent.com/u/95939477?s=200&v=4"
-    }
-}'
-```
-
-</Tab>
-
-<Tab title="JSON">
-Create a `test_input.json` file:
-
-```json
-{
-  "input": {
-    "image_url": "https://avatars.githubusercontent.com/u/95939477?s=200&v=4"
-  }
-}
-```
-
-Then run:
-
-```sh
-python ai_model_handler.py
-```
-
-</Tab>
-
-</Tabs>
-
-## Best Practices
-
-1. Call `clean()` at the end of your handler to ensure proper cleanup.
-2. Use try-except blocks to handle any errors during cleanup.
-3. Be cautious when adding custom folders to the cleanup list.
-4. Consider logging cleanup actions for debugging purposes.
-
-By implementing the `clean()` function in your handlers, you ensure that each job starts with a clean slate, preventing potential issues caused by leftover files from previous runs.
+Be cautious when adding custom folders to the cleanup list to avoid accidentally deleting persistent data, and consider logging cleanup actions during development to verify that the correct paths are being targeted.

@@ -1,15 +1,11 @@
 ---
 title: "Cached models"
 sidebarTitle: "Cached models"
-description: "Accelerate cold starts and reduce costs by using cached models."
-tag: "BETA"
+description: "Accelerate worker cold starts and reduce costs by using cached models."
+tag: "NEW"
 ---
 
-<Note>
-Cached models are currently in beta. [Join our Discord](https://discord.gg/runpod) if you'd like to provide feedback.
-</Note>
-
-Enabling cached models on your Serverless endpoint can reduce [cold start times](/serverless/overview#cold-starts) to just a few seconds and dramatically reduce the cost for loading large models.
+Enabling cached models for your workers can reduce [cold start times](/serverless/overview#cold-starts) to just a few seconds and dramatically reduce the cost for loading large models.
 
 ## Why use cached models?
 
@@ -41,7 +37,7 @@ If no cached host machines are available, the system delays starting your worker
 
 <div style={{ marginLeft: '4rem'}}>
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#5D29F0','primaryTextColor':'#fff','primaryBorderColor':'#874BFF','lineColor':'#AE6DFF','secondaryColor':'#AE6DFF','tertiaryColor':'#FCB1FF','edgeLabelBackground':'#AE6DFF', 'fontSize':'15px','fontFamily':'font-inter'}}}%%
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#9289FE','primaryTextColor':'#fff','primaryBorderColor':'#9289FE','lineColor':'#5F4CFE','secondaryColor':'#AE6DFF','tertiaryColor':'#FCB1FF','edgeLabelBackground':'#5F4CFE', 'fontSize':'15px','fontFamily':'font-inter'}}}%%
 
 flowchart TD
     Start([Request received]) --> CheckWorkers{Worker<br/>ready?}
@@ -60,23 +56,63 @@ flowchart TD
     
     Process --> Response([Return response])
 
-    style Start fill:#5D29F0,stroke:#874BFF,color:#FFFFFF
-    style Response fill:#5D29F0,stroke:#874BFF,color:#FFFFFF
-    style FastStart fill:#41F420,stroke:#A7FF43,color:#000000
-    style Ready1 fill:#874BFF,stroke:#AE6DFF,color:#FFFFFF
-    style WaitForCache fill:#FFC01F,stroke:#FFC01F,color:#000000
-    style Ready2 fill:#874BFF,stroke:#AE6DFF,color:#FFFFFF
-    style CheckWorkers fill:#1B0656,stroke:#874BFF,color:#FFFFFF
-    style CheckCache fill:#1B0656,stroke:#874BFF,color:#FFFFFF
-    style Process fill:#FCB1FF,stroke:#AE6DFF,color:#000000
+    style Start fill:#5F4CFE,stroke:#5F4CFE,color:#FFFFFF,stroke-width:2px
+    style Response fill:#5F4CFE,stroke:#5F4CFE,color:#FFFFFF,stroke-width:2px
+    
+    style CheckWorkers fill:#f87171,stroke:#f87171,color:#000000,stroke-width:2px
+    style CheckCache fill:#fb923c,stroke:#fb923c,color:#000000,stroke-width:2px
+    
+    style Process fill:#22C55E,stroke:#22C55E,color:#000000,stroke-width:2px
+    
+    style FastStart fill:#22C55E,stroke:#22C55E,color:#000000,stroke-width:2px
+    style Ready1 fill:#22C55E,stroke:#22C55E,color:#000000,stroke-width:2px
+    
+    style WaitForCache fill:#ecc94b,stroke:#ecc94b,color:#000000,stroke-width:2px
+    style Ready2 fill:#ecc94b,stroke:#ecc94b,color:#000000,stroke-width:2px
 
-    linkStyle default stroke-width:2px
+    linkStyle default stroke-width:2px,stroke:#5F4CFE
 ```
 </div>
 
-## Access cached models in your application
+## Enable cached models
 
-Cached models are stored at `/runpod-volume/huggingface-cache/hub/` following Hugging Face cache conventions. The directory structure replaces forward slashes (`/`) from the original model name with double dashes (`--`), and includes a version hash subdirectory.
+Follow these steps to select and add a cached model to your endpoint:
+
+<Steps>
+  <Step title="Create a new endpoint">
+    Navigate to the [Serverless section](https://www.console.runpod.io/serverless) of the console and click **New Endpoint**.
+  </Step>
+  <Step title="Configure the model">
+    In the **Endpoint Configuration** step, scroll down to **Model** and add the link or path for the model you want to use.
+    
+    For example, `Qwen/qwen3-32b-awq`.
+
+    <Frame alt="Cached model setting">
+      <img src="/images/model-cache-setting.png" />
+    </Frame>
+
+  </Step>
+  <Step title="Add an access token (if needed)">
+    If you're using a gated model, you'll need to enter a [Hugging Face access token](https://huggingface.co/docs/hub/en/security-tokens).
+  </Step>
+  <Step title="Deploy the endpoint">
+    Complete your endpoint configuration and click **Deploy Endpoint** .
+  </Step>
+</Steps>
+
+You can add a cached model to an existing endpoint by selecting **Manage → Edit Endpoint** in the endpoint details page and updating the **Model** field.
+
+Once it's deployed, your workers will all have access to the cached model for inference.
+
+## Using cached models in your workers
+
+When using [vLLM workers](/serverless/vllm/overview) or other official Runpod worker images, you can usually just set the **Model** field as shown above (or use the `MODEL_NAME` environment variable), and your workers will automatically use the cached model for inference.
+
+To use cached models with [custom workers](/serverless/workers/custom-worker), you'll need to manually locate the cached model path and integrate it into your worker code.
+
+### Where cached models are stored
+
+Cached models are available to your workers at `/runpod-volume/huggingface-cache/hub/` following Hugging Face cache conventions. The directory structure replaces forward slashes (`/`) from the original model name with double dashes (`--`), and includes a version hash subdirectory.
 
 <Note>
 While cached models use the same mount path as network volumes (`/runpod-volume/`), the model loaded from the cache will load significantly faster than the same model loaded from a network volume.
@@ -94,36 +130,55 @@ For example, the model `gensyn/qwen2.5-0.5b-instruct` would be stored at:
 /runpod-volume/huggingface-cache/hub/models--gensyn--qwen2.5-0.5b-instruct/snapshots/317b7eb96312eda0c431d1dab1af958a308cb35e/
 ```
 
-If your application requires specific paths, configure it to scan `/runpod-volume/huggingface-cache/hub/` for models.
+### Programmatically locate cached models
 
-## Enable cached models
+To dynamically locate cached models without hardcoding paths, you can add this helper function to your [handler file](/serverless/workers/handler-functions) to scan the cache directory for the model you want to use:
 
-<Frame alt="Cached model setting">
-  <img src="/images/model-cache-setting.png" />
-</Frame>
+```python handler.py
+import os
 
-Follow these steps to select and add a cached model to your Serverless endpoint:
+CACHE_DIR = "/runpod-volume/huggingface-cache/hub"
 
-<Steps>
-  <Step title="Create a new endpoint">
-    Navigate to the [Serverless section](https://www.console.runpod.io/serverless) of the console and click **New Endpoint**.
-  </Step>
-  <Step title="Configure the model">
-    In the **Endpoint Configuration** step, scroll down to **Model (optional)** and add the link for the model you want to use.
+def find_model_path(model_name):
+    """
+    Find the path to a cached model.
     
-    For example, `https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Instruct`.
+    Args:
+        model_name: The model name from Hugging Face
+        (e.g., 'Qwen/Qwen2.5-0.5B-Instruct')
+    
+    Returns:
+        The full path to the cached model, or None if not found
+    """
+    # Convert model name format: "Org/Model" -> "models--Org--Model"
+    cache_name = model_name.replace("/", "--")
+    snapshots_dir = os.path.join(CACHE_DIR, f"models--{cache_name}", "snapshots")
+    
+    # Check if the model exists in cache
+    if os.path.exists(snapshots_dir):
+        snapshots = os.listdir(snapshots_dir)
+        if snapshots:
+            # Return the path to the first (usually only) snapshot
+            return os.path.join(snapshots_dir, snapshots[0])
+    
+    return None
 
-  </Step>
-  <Step title="Add an access token (if needed)">
-    If you're using a gated model, you'll need to enter a [Hugging Face access token](https://huggingface.co/docs/hub/en/security-tokens).
-  </Step>
-  <Step title="Deploy the endpoint">
-    Complete your endpoint configuration and click **Deploy Endpoint** .
-  </Step>
-</Steps>
+# Example usage
+model_path = find_model_path("Qwen/Qwen2.5-0.5B-Instruct")
+if model_path:
+    print(f"Model found at: {model_path}")
+else:
+    print("Model not found in cache")
+```
 
-You can add a cached model to an existing endpoint by selecting **Manage → Edit Endpoint** in the endpoint details page and updating the **Model (optional)** field.
+### Custom worker examples
+
+The following sample applications demonstrate how you can integrate cached models into your custom workers:
+
+- [Cached models + LLMs](https://github.com/stuffbyt/model-store-worker): A custom worker that uses cached models to serve LLMs.
+- [Cached models + Stable diffusion](https://github.com/stuffbyt/Stable-diffusion-cached-worker): A custom worker that uses cached models to generate images with Stable diffusion.
 
 ## Current limitations
 
-If a Hugging Face repository contains multiple quantization versions of a model (for example, 4-bit AWQ and 8-bit GPTQ versions), the system currently downloads all quantization versions. The ability to select specific quantizations will be available in a future update.
+- Each endpoint is currently limited to one cached model at a time.
+- If a Hugging Face repository contains multiple quantization versions of a model (for example, 4-bit AWQ and 8-bit GPTQ versions), the system currently downloads all quantization versions. The ability to select specific quantizations will be available in a future update.

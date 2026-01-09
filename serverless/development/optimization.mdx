@@ -1,0 +1,65 @@
+---
+title: "Optimize your endpoints"
+sidebarTitle: "Optimization guide"
+description: "Implement strategies to reduce latency and cost for your Serverless endpoints."
+---
+
+Optimizing your Serverless endpoints involves a cycle of measuring performance with [benchmarking](/serverless/development/benchmarking), identifying bottlenecks, and tuning your [endpoint configurations](/serverless/endpoints/endpoint-configurations). This guide covers specific strategies to reduce startup times and improve throughput.
+
+## Optimization overview
+
+Effective optimization requires making conscious tradeoffs between cost, speed, and model size.
+
+To ensure high availability during peak traffic, you should select multiple GPU types in your configuration rather than relying on a single hardware specification. When choosing hardware, a single high-end GPU is generally preferable to multiple lower-tier cards, as the superior memory bandwidth and newer architecture often yield better inference performance than parallelization across weaker cards. When choosing multiple [GPU types](/references/gpu-types), you should select the [GPU categories](/serverless/endpoints/endpoint-configurations#gpu-configuration) that are most likely to be available in your desired data centers.
+
+For latency-sensitive applications, utilizing active workers is the most effective way to eliminate cold starts. You should also configure your [max workers](/serverless/endpoints/endpoint-configurations#max-workers) setting with approximately 20% headroom above your expected concurrency. This buffer ensures that your endpoint can handle sudden load spikes without throttling requests or hitting capacity limits.
+
+Your architectural choices also significantly impact performance. Whenever possible, bake your models directly into the Docker image to leverage the high-speed local NVMe storage of the host machine. If you utilize [network volumes](/storage/network-volumes) for larger datasets, remember that this restricts your endpoint to specific data centers, which effectively shrinks your pool of available compute resources.
+
+## Reducing worker startup times
+
+There are two key metrics to consider when optimizing your workers to reduce request response times:
+
+  - **Delay time**: The time spent waiting for a worker to become available. This includes the cold start time if a new worker needs to be spun up.
+  - **Execution time**: The time the GPU takes to actually process the request once the worker has received the job.
+
+<Tip>
+Try [benchmarking your workers](/serverless/development/benchmarking) to measure these metrics.
+</Tip>
+
+**Delay time** is comprised of:
+
+  - **Initialization time**: The time spent downloading the Docker image.
+  - **Cold start time**: The time spent loading the model into memory.
+
+If your delay time is high, use these strategies to reduce it.
+
+<Note>
+If your worker's cold start time exceeds the default 7-minute limit, the system may mark it as unhealthy. You can extend this limit by setting the `RUNPOD_INIT_TIMEOUT` environment variable (e.g. `RUNPOD_INIT_TIMEOUT=800` for 800 seconds).
+</Note>
+
+### Use cached models
+
+If your model is available on Hugging Face, we strongly recommend enabling [cached models](/serverless/endpoints/model-caching). This provides the fastest cold starts and lowest cost for any Serverless deployment option.
+
+### Bake models into Docker images
+
+If your model is not available on Hugging Face, you can package your ML models [directly into your worker container image](/serverless/workers/create-dockerfile#including-models-and-files) instead of downloading them in your handler function. This strategy places models on the worker's high-speed local storage (SSD/NVMe), dramatically reducing the time needed to load models into GPU memory. Note that extremely large models (500GB+) may still require network volume storage.
+
+### Use network volumes during development
+
+For flexibility during development, save large models to a [network volume](/storage/network-volumes) using a Pod or one-time handler, then mount this volume to your Serverless workers. While network volumes offer slower model loading compared to embedding models directly or using cached models, they can speed up your workflow by enabling rapid iteration and seamless switching between different models and configurations.
+
+### Maintain active workers
+
+Set [active worker counts](/serverless/endpoints/endpoint-configurations#active-workers) above zero to completely eliminate cold starts. These workers remain ready to process requests instantly and cost up to 30% less when idle compared to standard (flex) workers.
+
+You can estimate the optimal number of active workers using the formula: `(Requests per Minute × Request Duration) / 60`. For example, with 6 requests per minute taking 30 seconds each, you would need 3 active workers to handle the load without queuing.
+
+### Optimize scaling parameters
+
+Fine-tune your [auto-scaling configuration](/serverless/endpoints/endpoint-configurations#auto-scaling-type) for more responsive worker provisioning. Lowering the queue delay threshold to 2-3 seconds (default 4) or decreasing the request count threshold allows the system to respond more swiftly to traffic fluctuations.
+
+### Increase maximum worker limits
+
+Set a higher [max worker](/serverless/endpoints/endpoint-configurations#max-workers) limit to ensure your Docker images are pre-cached across multiple compute nodes and data centers. This proactive approach eliminates image download delays during scaling events, significantly reducing startup times.
