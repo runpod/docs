@@ -1,0 +1,213 @@
+---
+title: "Create a Dockerfile"
+description: "Package your handler function for deployment."
+---
+
+A Dockerfile defines the build process for a Docker image containing your handler function and all its dependencies. This page explains how to organize your project files and create a Dockerfile for your Serverless worker.
+
+## Project organization
+
+Organize your project files in a clear directory structure:
+
+```
+project_directory
+├── Dockerfile              # Instructions for building the Docker image
+├── src
+│   └── handler.py          # Your handler function
+└── builder
+    └── requirements.txt    # Dependencies required by your handler
+```
+
+Your `requirements.txt` file should list all Python packages your handler needs:
+
+```txt title="requirements.txt"
+# Example requirements.txt
+runpod~=1.7.6
+torch==2.0.1
+pillow==9.5.0
+transformers==4.30.2
+```
+
+## Basic Dockerfile structure
+
+A basic Dockerfile for a Runpod Serverless worker follows this structure:
+
+```dockerfile title="Dockerfile"
+FROM python:3.11.1-slim
+
+WORKDIR /
+
+# Copy and install requirements
+COPY builder/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy your handler code
+COPY src/handler.py .
+
+# Command to run when the container starts
+CMD ["python", "-u", "/handler.py"]
+```
+
+This Dockerfile:
+
+1. Starts with a Python base image.
+2. Sets the working directory to the root.
+3. Copies and installs Python dependencies.
+4. Copies your handler code.
+5. Specifies the command to run when the container starts.
+
+## Choosing a base image
+
+The base image you choose affects your image size, startup time, and available system dependencies. Common options include:
+
+### Python slim images
+
+Recommended for most use cases. These images are smaller and faster to download:
+
+```dockerfile
+FROM python:3.11.1-slim
+```
+
+### Python full images
+
+Include more system tools and libraries but are larger:
+
+```dockerfile
+FROM python:3.11.1
+```
+
+### CUDA images
+
+Required if you need CUDA libraries for GPU-accelerated workloads:
+
+```dockerfile
+FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04
+
+# Install Python
+RUN apt-get update && apt-get install -y python3.11 python3-pip
+```
+
+### Custom base images
+
+You can build on top of specialized images for specific frameworks:
+
+```dockerfile
+FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime
+```
+
+## Including models and files
+
+<Tip>
+If your model is available on Hugging Face, we strongly recommend enabling [cached models](/serverless/endpoints/model-caching) instead of baking/downloading the model into your Docker image. Cached models provide faster startup times, lower costs, and uses less storage.
+</Tip>
+
+### Baking models into the image
+
+If you need to include model files or other assets in your image, use the `COPY` instruction:
+
+```dockerfile title="Dockerfile"
+FROM python:3.11.1-slim
+
+WORKDIR /
+
+# Copy and install requirements
+COPY builder/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy your code and model files
+COPY src/handler.py .
+COPY models/ /models/
+
+# Set environment variables if needed
+ENV MODEL_PATH=/models/my_model.pt
+
+# Command to run when the container starts
+CMD ["python", "-u", "/handler.py"]
+```
+
+### Downloading models during build
+
+You can download models during the Docker build process:
+
+```dockerfile title="Dockerfile"
+# Download model files
+RUN wget -q URL_TO_YOUR_MODEL -O /models/my_model.pt
+
+# Or use a script to download from Hugging Face
+RUN python -c "from transformers import AutoModel; AutoModel.from_pretrained('model-name')"
+```
+
+## Environment variables
+
+Set environment variables to configure your application without hardcoding values:
+
+```dockerfile title="Dockerfile"
+ENV MODEL_PATH=/models/my_model.pt
+ENV LOG_LEVEL=INFO
+ENV MAX_BATCH_SIZE=4
+```
+
+You can override these at runtime through the Runpod console when configuring your endpoint.
+
+For details on how to access environment variables in your handler functions, see [Environment variables](/serverless/development/environment-variables).
+
+## Optimizing image size
+
+Smaller images download and start faster, reducing cold start times. Use these techniques to minimize image size:
+
+### Use multi-stage builds
+
+Multi-stage builds let you compile dependencies in one stage and copy only the necessary files to the final image:
+
+```dockerfile title="Dockerfile"
+# Build stage
+FROM python:3.11.1 AS builder
+
+WORKDIR /build
+COPY builder/requirements.txt .
+RUN pip install --no-cache-dir --target=/build/packages -r requirements.txt
+
+# Runtime stage
+FROM python:3.11.1-slim
+
+WORKDIR /
+COPY --from=builder /build/packages /usr/local/lib/python3.11/site-packages
+COPY src/handler.py .
+
+CMD ["python", "-u", "/handler.py"]
+```
+
+### Clean up build artifacts
+
+Remove unnecessary files after installation:
+
+```dockerfile title="Dockerfile"
+RUN apt-get update && apt-get install -y build-essential \
+    && pip install --no-cache-dir -r requirements.txt \
+    && apt-get remove -y build-essential \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+```
+
+### Use .dockerignore
+
+Create a `.dockerignore` file to exclude unnecessary files from the build context:
+
+```txt title=".dockerignore"
+.git
+.gitignore
+README.md
+tests/
+*.pyc
+__pycache__/
+.venv/
+venv/
+```
+
+## Next steps
+
+After creating your Dockerfile, you can:
+
+- [Build and deploy your image from Docker Hub](/serverless/workers/deploy).
+- [Deploy directly from GitHub](/serverless/workers/github-integration).
+- [Test your handler locally](/serverless/development/local-testing) before building the image.

@@ -5,6 +5,29 @@ description: "Pay-as-you-go compute for AI models and compute-intensive workload
 
 Runpod Serverless is a cloud computing platform that lets you run AI models and compute-intensive workloads without managing servers. You only pay for the actual compute time you use, with no idle costs when your application isn't processing requests.
 
+## Why use Serverless?
+
+* Focus on your code, not infrastructure: Deploy your applications without worrying about server management, scaling, or maintenance.
+* GPU-powered computing: Access powerful GPUs for AI inference, training, and other compute-intensive tasks.
+* Automatic scaling: Your application scales automatically based on demand, from zero to hundreds of workers.
+* Cost efficiency: Pay only for what you use, with per-second billing and no costs when idle.
+* Fast deployment: Get your code running in the cloud in minutes with minimal configuration.
+
+## Get started
+
+To get started with Serverless, follow one of the following guides to deploy your first endpoint.
+
+<CardGroup>
+    <Card title="Quickstart" href="/serverless/workers/custom-worker" icon="bolt" iconType="solid">
+        Write a handler function, build a worker image, create an endpoint, and send your first request.
+    </Card>
+    <Card title="Deploy a pre-configured endpoint" href="/tutorials/serverless/run-your-first" icon="image" iconType="solid">
+        Deploy a Stable Diffusion endpoint to generate images at scale.
+    </Card>
+</CardGroup>
+
+You can also watch the following video for a quick overview of the endpoint deployment process:
+
 <iframe
   className="w-full aspect-video rounded-xl"
   src="https://www.youtube.com/embed/5jHMLDZ4_O4"
@@ -14,15 +37,9 @@ Runpod Serverless is a cloud computing platform that lets you run AI models and 
   allowFullScreen
 ></iframe>
 
-## Why use Serverless?
-
-* Focus on your code, not infrastructure: Deploy your applications without worrying about server management, scaling, or maintenance.
-* GPU-powered computing: Access powerful GPUs for AI inference, training, and other compute-intensive tasks.
-* Automatic scaling: Your application scales automatically based on demand, from zero to hundreds of workers.
-* Cost efficiency: Pay only for what you use, with per-second billing and no costs when idle.
-* Fast deployment: Get your code running in the cloud in minutes with minimal configuration.
-
 ## Concepts
+
+
 
 ### [Endpoints](/serverless/endpoints/overview)
 
@@ -51,6 +68,10 @@ def handler(event):
 
 runpod.serverless.start({"handler": handler})  # Required
 ```
+
+<Note>
+Handler functions are only used for queue-based (i.e. traditional) endpoints. If you're using a [load balancing endpoint](#load-balancing-endpoints), the request structure and endpoints will depend on how you define your HTTP servers.
+</Note>
 
 ### [Requests](/serverless/endpoints/send-requests)
 
@@ -84,18 +105,19 @@ flowchart TD
     
     Process --> End(["Result is stored (/run) or returned immediately (/runsync)"])
     
-    style CheckActive fill:#f87171,stroke:#f87171,color:#000000,stroke-width:2px
     style Start fill:#5F4CFE,stroke:#5F4CFE,color:#FFFFFF,stroke-width:2px
-    style End fill:#5F4CFE,stroke:#5F4CFE,color:#FFFFFF,stroke-width:2px
-    style ColdStart fill:#fb923c,stroke:#fb923c,color:#000000,stroke-width:2px
     style Queue fill:#4D38F5,stroke:#4D38F5,color:#FFFFFF,stroke-width:2px
+    
+    style CheckActive fill:#f87171,stroke:#f87171,color:#000000,stroke-width:2px
+    style ColdStart fill:#fb923c,stroke:#fb923c,color:#000000,stroke-width:2px
     style WaitWorker fill:#ecc94b,stroke:#ecc94b,color:#000000,stroke-width:2px
+
     style Process fill:#22C55E,stroke:#22C55E,color:#000000,stroke-width:2px
+    style End fill:#5F4CFE,stroke:#5F4CFE,color:#FFFFFF,stroke-width:2px
+
     linkStyle default stroke-width:2px
 ```
 </div>
-
-
 
 
 ### Cold starts
@@ -110,36 +132,70 @@ These endpoints route incoming traffic directly to available workers, distributi
 
 When using load balancing endpoints, you can define your own custom API endpoints without a handler function, using any HTTP framework of your choice (like FastAPI or Flask).
 
-## Deployment options
+## Development workflow
 
-Runpod Serverless offers several ways to deploy your workloads, each designed for different use cases.
+Here's a typical Serverless development workflow: 
 
-### Runpod Hub
+1. [Write a handler function](/serverless/workers/handler-functions) to process API requests.
+2. [Test it locally](/serverless/development/local-testing) using the Runpod SDK.
+3. [Create a Dockerfile](/serverless/workers/create-dockerfile) to package the handler function and all its dependencies.
+4. [Build and push](/serverless/workers/deploy) the worker image to Docker Hub (or another container registry).
+    - ... or [deploy directly from a GitHub repository](/serverless/workers/github-integration).
+5. Deploy the worker image to a [Serverless endpoint](/serverless/endpoints/overview).
+6. [Monitor logs](/serverless/development/logs), debug running workers [with SSH](/serverless/development/ssh-into-workers).
+7. Adjust your [endpoint settings](/serverless/endpoints/endpoint-configurations) to [optimize performance and cost](/serverless/development/optimization).
+8. To update your endpoint logic, go back to step 1 and repeat the process.
 
-**Best for**: Instantly deploying preconfigured AI models.
+<div style={{ marginLeft: '4rem'}}>
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#9289FE','primaryTextColor':'#fff','primaryBorderColor':'#9289FE','lineColor':'#5F4CFE','secondaryColor':'#AE6DFF','tertiaryColor':'#FCB1FF','edgeLabelBackground':'#5F4CFE', 'fontSize':'15px','fontFamily':'font-inter'}}}%%
 
-You can deploy a Serverless endpoint from a repo in the [Runpod Hub](/hub/overview) in seconds:
+flowchart TD
+    Start([Write handler function]) --> Test[Test handler locally with the Runpod SDK]
+    
+    Test --> Check{Tests pass?}
+    
+    Check -->|"&nbsp;&nbsp;No&nbsp;&nbsp;"| Fix[Fix code & debug]
+    
+    Fix --> Test
+    
+    Check -->|"&nbsp;&nbsp;Yes&nbsp;&nbsp;"| Package[Package worker as a Docker image]
+    
+    Package --> Deploy[Deploy worker image to Runpod Serverless]
+    
+    subgraph Production [Production Environment]
+        Deploy --> Running[Workers auto-scale based on demand]
+        Running --> Monitor[Monitor logs and metrics]
+    end
+    
+    Monitor -.-> Start
 
-1. Navigate to the [Hub page](https://www.console.runpod.io/hub) in the Runpod console.
-2. Browse the collection and select a repo that matches your needs.
-3. Review the repo details, including hardware requirements and available configuration options to ensure compatibility with your use case.
-4. Click the **Deploy** button in the top-right of the repo page. You can also use the dropdown menu to deploy an older version.
-5. Click **Create Endpoint**
+    %% Applied Color Logic from Diagram 2
+    style Start fill:#5F4CFE,stroke:#5F4CFE,color:#FFFFFF,stroke-width:2px
+    style Test fill:#4D38F5,stroke:#4D38F5,color:#FFFFFF,stroke-width:2px
+    
+    style Check fill:#f87171,stroke:#f87171,color:#000000,stroke-width:2px
+    style Fix fill:#ecc94b,stroke:#ecc94b,color:#000000,stroke-width:2px
+    
+    style Package fill:#5F4CFE,stroke:#5F4CFE,color:#FFFFFF,stroke-width:2px
+    style Deploy fill:#5F4CFE,stroke:#5F4CFE,color:#FFFFFF,stroke-width:2px
+    style Running fill:#5F4CFE,stroke:#5F4CFE,color:#FFFFFF,stroke-width:2px
+    style Monitor fill:#ecc94b,stroke:#ecc94b,color:#000000,stroke-width:2px
+    
+    %% Subgraph Styling
+    style Production fill:#1B0656,stroke:#5F4CFE,color:#FFFFFF,stroke-dasharray: 5 5
 
-[Deploy a repo from the Runpod Hub →](https://www.console.runpod.io/hub)
+    linkStyle default stroke-width:2px,stroke:#5F4CFE
+```
+</div>
 
-### Deploy a vLLM worker
+<Tip>
+For faster iteration and debugging of GPU-intensive applications, you can develop on a Pod first before deploying to Serverless. This "Pod-first" workflow gives you direct access to the GPU environment with tools like Jupyter Notebooks and SSH, letting you iterate faster than deploying repeatedly to Serverless. Learn more in [Pod-first development](/serverless/development/dual-mode-worker).
+</Tip>
 
-**Best for**: Deploying and serving large language models (LLMs) with minimal configuration.
+## Rapid deployment options
 
-vLLM workers are specifically optimized for running LLMs:
-
-* Support for any [Hugging Face model](https://huggingface.co/models).
-* Optimized for LLM inference.
-* Simple configuration via environment variables.
-* High-performance serving with vLLM.
-
-[Deploy a vLLM worker →](/serverless/vllm/get-started)
+If you don't want to start from scratch and [build a custom worker](/serverless/workers/custom-worker), Runpod offers several ways to rapidly deploy and test pre-configured AI models, without writing your own handler function:
 
 ### Fork a worker template
 
@@ -153,38 +209,51 @@ Runpod maintains a collection of [worker templates](https://github.com/runpod-wo
 
 After you fork a worker you can learn how to:
 
-1. [Test your worker](/serverless/development/local-testing) locally.
-2. Customize it with your own [handler function](/serverless/workers/handler-functions).
-3. Deploy it to an endpoint using [Docker](/serverless/workers/deploy) or [GitHub](/serverless/workers/github-integration).
+1. Customize the [handler function](/serverless/workers/handler-functions) to add your own logic.
+2. [Test the handler function](/serverless/development/local-testing) locally.
+3. Deploy it to an endpoint using [Docker Hub](/serverless/workers/deploy) or [GitHub](/serverless/workers/github-integration).
 
 [Browse worker templates →](https://github.com/runpod-workers)
 
-### Build a custom worker
+### Deploy a vLLM worker
 
-**Best for**: Running custom code or specialized AI workloads.
+**Best for**: Deploying and serving large language models (LLMs) efficiently.
 
-Creating a custom workers give you complete control over your application:
+vLLM workers are specifically optimized for running LLMs:
 
-* Write your own Python code.
-* Package it in a Docker container.
-* Allows full flexibility for any use case.
-* Create custom processing logic.
+* Support for any [Hugging Face model](https://huggingface.co/models).
+* Optimized for LLM inference.
+* Simple configuration via [environment variables](/serverless/vllm/environment-variables).
+* High-performance inference with vLLM's PagedAttention and continuous batching.
 
-[Build your first custom worker →](/serverless/workers/custom-worker)
+[Deploy a vLLM worker →](/serverless/vllm/get-started)
 
-## Best practices for model deployment
+<Warning>
+vLLM workers may require significant configuration (using environment variables) depending on the model you are deploying. Consult the README for your model on Hugging Face and the [vLLM documentation](https://docs.vllm.ai/en/latest/usage/) for more details.
+</Warning>
 
-When deploying models on Serverless endpoints, follow this order of preference:
 
-1. [Use cached models](/serverless/endpoints/model-caching): If your model is available on Hugging Face (public or gated), this is the recommended approach. Cached models provide the fastest cold starts, eliminate download costs, and persist across worker restarts.
+### Deploy a repo from the Runpod Hub
 
-2. [Bake the model into your Docker image](/serverless/workers/deploy#including-models-and-external-files): If your model is private and not available on Hugging Face, embed it directly in you workers' container image using `COPY` or `RUN wget`. This ensures the model is always available, but it increases image size and build time.
+**Best for**: Instantly deploying preconfigured AI models.
 
-3. [Use network volumes](/serverless/storage/network-volumes): You can use network volumes to store models and other files that need to persist between workers. Models loaded from network storage are slower than cached or baked models, so you should only use this option when the preceeding approaches don't fit your needs.
+You can deploy a Serverless endpoint from a repo in the [Runpod Hub](/hub/overview) in seconds:
 
-## Development lifecycle
+1. Navigate to the [Hub page](https://www.console.runpod.io/hub) in the Runpod console.
+2. Browse the collection and select a repo that matches your needs.
+3. Review the repo details, including hardware requirements and available configuration options to ensure compatibility with your use case.
+4. Click the **Deploy** button in the top-right of the repo page. You can also use the dropdown menu to deploy an older version.
+5. Click **Create Endpoint**
 
-When developing for Serverless applications, you'll typically start by writing a handler function, testing it locally, and then deploying it to production. To learn more about testing, error handling, monitoring, and optimizing your Serverless applications, see [Serverless development](/serverless/development/overview).
+[Deploy a repo from the Runpod Hub →](https://www.console.runpod.io/hub)
+
+### Use Public Endpoints
+
+**Best for**: Deploying and serving pre-configured AI models quickly.
+
+Runpod maintains a collection of [Public Endpoints](/hub/public-endpoints) that you can use to integrate pre-configured AI models into your applications quickly, without writing your own handler function or deploying workers.
+
+[Browse Public Endpoints →](https://console.runpod.io/hub?tabSelected=public_endpoints)
 
 ## Next steps
 
