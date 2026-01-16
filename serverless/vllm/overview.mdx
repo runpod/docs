@@ -8,10 +8,6 @@ You can use vLLM workers to deploy and serve large language models on Runpod Ser
 
 The vLLM worker image can be deployed directly from the [Runpod Hub](https://console.runpod.io/hub/runpod-workers/worker-vllm) or customized and built from the [GitHub repository](https://github.com/runpod-workers/worker-vllm).
 
-<Warning>
-vLLM workers may require significant configuration (using environment variables) depending on the model you are deploying. Consult the README for your model on Hugging Face and the [vLLM documentation](https://docs.vllm.ai/en/latest/usage/) for more details.
-</Warning>
-
 ## What is vLLM?
 
 vLLM is an open-source inference engine designed to serve large language models efficiently. It maximizes throughput and minimizes latency when running LLM inference workloads.
@@ -79,15 +75,13 @@ vLLM workers come with features that make them suitable for production deploymen
 
 There are two ways to deploy vLLM workers on Runpod.
 
-### Using pre-built Docker images
+### Using cached models
 
-This is the fastest and most common approach. Runpod provides pre-built vLLM worker images that you can deploy directly from the console. You specify your model name as an environment variable, and the worker downloads it from Hugging Face during initialization.
-
-This method is ideal for getting started quickly, testing different models, or deploying models that change frequently. However, model download time adds to your cold start latency.
+If your model is available on Hugging Face, we strongly recommend enabling [cached models](/serverless/endpoints/model-caching) instead of baking/downloading the model into your Docker image. Cached models provide faster startup times, lower costs, and uses less storage.
 
 ### Building custom Docker images with models baked in
 
-For production deployments where cold start time matters, you can build a custom Docker image that includes your model weights. This eliminates download time and can reduce cold starts from minutes to seconds.
+For production deployments where cold start time matters, you can build a [custom Docker image](/serverless/workers/create-dockerfile#including-models-and-files) that includes your model weights. This eliminates download time and can reduce cold starts from minutes to seconds.
 
 This approach requires more upfront work but provides the best performance for production workloads with consistent traffic.
 
@@ -97,19 +91,9 @@ vLLM supports most model architectures available on Hugging Face. You can deploy
 
 For a complete and up-to-date list of supported model architectures, see the [vLLM supported models documentation](https://docs.vllm.ai/en/latest/models/supported_models.html).
 
-## Performance considerations
+## Configuration
 
-Several factors affect vLLM worker performance.
-
-**GPU selection** is the most important factor. Larger models require more VRAM, and inference speed scales with GPU memory bandwidth. For 7B parameter models, an A10G or better is recommended. For 70B+ models, you'll need an A100 or H100. See [GPU types](/references/gpu-types) for details on available GPUs.
-
-**Model size** directly impacts both loading time and inference speed. Smaller models (7B parameters) load quickly and generate tokens fast. Larger models (70B+ parameters) provide better quality but require more powerful GPUs and have higher latency.
-
-**Quantization** reduces model size and memory requirements by using lower-precision weights. Methods like AWQ and GPTQ can reduce memory usage by 2-4x with minimal quality loss. This lets you run larger models on smaller GPUs or increase throughput on a given GPU.
-
-**Context length** affects memory requirements and processing time. Longer contexts require more memory for the KV cache and take longer to process. Set `MAX_MODEL_LEN` to the minimum value that meets your needs.
-
-**Concurrent requests** benefit from vLLM's continuous batching, but too many concurrent requests can exceed GPU memory and cause failures. The `MAX_NUM_SEQS` environment variable controls the maximum number of concurrent sequences.
+vLLM supports hundreds of models, but default settings only work out of the box for a subset of them. Depending on the model you're deploying, you may need to [configure your endpoint](/serverless/vllm/configuration) with additional [environment variables](/serverless/vllm/environment-variables) (which map directly to `vllm serve` command line flags) to get it working properly. You will likely need to consult the README for your model on Hugging Face and the [vLLM documentation](https://docs.vllm.ai/en/latest/usage/) for more details.
 
 ## Use cases
 

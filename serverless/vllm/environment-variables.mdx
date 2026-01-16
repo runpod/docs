@@ -14,7 +14,7 @@ These variables control the core language model configuration.
 
 | Variable | Default | Type(s) | Description |
 | --- | --- | --- | --- |
-| `MODEL_NAME` | `facebook/opt-125m` | `str` | The name or path of the Hugging Face model to use. |
+| `MODEL_NAME` | `facebook/opt-125m` | `str` | Hugging Face repo ID or local filesystem path for the model weights. Change this to deploy a different model. |
 | `MODEL_REVISION` | `main` | `str` | The model revision to load. |
 | `TOKENIZER` | None | `str` | The name or path of the Hugging Face tokenizer to use. |
 | `SKIP_TOKENIZER_INIT` | `False` | `bool` | If `True`, skips the initialization of the tokenizer and detokenizer. |
@@ -22,17 +22,17 @@ These variables control the core language model configuration.
 | `TRUST_REMOTE_CODE` | `False` | `bool` | If `True`, trusts remote code from Hugging Face. |
 | `DOWNLOAD_DIR` | None | `str` | The directory to download and load the model weights from. |
 | `LOAD_FORMAT` | `auto` | `str` | The format of the model weights to load. |
-| `HF_TOKEN` | - | `str` | Your Hugging Face token, used for private and gated models. |
+| `HF_TOKEN` | - | `str` | Hugging Face token required to download gated/private models. Not needed for public models. Provide it via secrets. |
 | `DTYPE` | `auto` | `auto`, `half`, `float16`, `bfloat16`, `float`, `float32` | The data type for model weights and activations. |
 | `KV_CACHE_DTYPE` | `auto` | `auto`, `fp8` | The data type for KV cache storage. |
 | `QUANTIZATION_PARAM_PATH` | None | `str` | The path to the JSON file containing the KV cache scaling factors. |
-| `MAX_MODEL_LEN` | None | `int` | The maximum model context length. |
+| `MAX_MODEL_LEN` | None | `int` | Maximum context length (tokens) the engine will allocate KV cache for. Lower it to reduce VRAM usage; raise it for long-context models if supported and you have VRAM. |
 | `GUIDED_DECODING_BACKEND` | `outlines` | `outlines`, `lm-format-enforcer` | The default engine for guided decoding. |
 | `DISTRIBUTED_EXECUTOR_BACKEND` | None | `ray`, `mp` | The backend to use for distributed serving. |
 | `WORKER_USE_RAY` | `False` | `bool` | Deprecated. Use `DISTRIBUTED_EXECUTOR_BACKEND=ray` instead. |
 | `PIPELINE_PARALLEL_SIZE` | `1` | `int` | The number of pipeline stages. |
-| `TENSOR_PARALLEL_SIZE` | `1` | `int` | The number of tensor parallel replicas. |
-| `MAX_PARALLEL_LOADING_WORKERS` | None | `int` | The number of workers to use for parallel model loading. |
+| `TENSOR_PARALLEL_SIZE` | `1` | `int` | Tensor parallel degree (number of GPUs to shard across). On multi-GPU machines, this worker auto-sets it to the number of visible GPUs. |
+| `MAX_PARALLEL_LOADING_WORKERS` | None | `int` | Load model sequentially in multiple batches to avoid RAM OOM when using tensor parallelism and large models. |
 | `RAY_WORKERS_USE_NSIGHT` | `False` | `bool` | If `True`, uses nsight to profile Ray workers. |
 | `ENABLE_PREFIX_CACHING` | `False` | `bool` | If `True`, enables automatic prefix caching. |
 | `DISABLE_SLIDING_WINDOW` | `False` | `bool` | If `True`, disables the sliding window, capping to the sliding window size. |
@@ -41,10 +41,10 @@ These variables control the core language model configuration.
 | `SEED` | `0` | `int` | The random seed for operations. |
 | `NUM_GPU_BLOCKS_OVERRIDE` | None | `int` | If specified, this value overrides the GPU profiling result for the number of GPU blocks. |
 | `MAX_NUM_BATCHED_TOKENS` | None | `int` | The maximum number of batched tokens per iteration. |
-| `MAX_NUM_SEQS` | `256` | `int` | The maximum number of sequences per iteration. |
+| `MAX_NUM_SEQS` | `256` | `int` | Upper bound on sequences batched per iteration (affects throughput, VRAM, and tail latency). Higher can improve throughput for many concurrent short requests; lower reduces VRAM usage. |
 | `MAX_LOGPROBS` | `20` | `int` | The maximum number of log probabilities to return when `logprobs` is specified in `SamplingParams`. |
 | `DISABLE_LOG_STATS` | `False` | `bool` | If `True`, disables logging statistics. |
-| `QUANTIZATION` | None | `awq`, `squeezellm`, `gptq`, `bitsandbytes` | The method used to quantize the model weights. |
+| `QUANTIZATION` | None | `awq`, `squeezellm`, `gptq`, `bitsandbytes` | Quantization backend for loading quantized checkpoints (AWQ/GPTQ/...) or BitsAndBytes. Must match the checkpoint format. |
 | `ROPE_SCALING` | None | `dict` | The RoPE scaling configuration in JSON format. |
 | `ROPE_THETA` | None | `float` | The RoPE theta value. Use with `ROPE_SCALING`. |
 | `TOKENIZER_POOL_SIZE` | `0` | `int` | The size of the tokenizer pool for asynchronous tokenization. |
@@ -92,13 +92,14 @@ Configure GPU memory and system resource utilization.
 
 | Variable | Default | Type(s) | Description |
 | --- | --- | --- | --- |
-| `GPU_MEMORY_UTILIZATION` | `0.95` | `float` | The GPU VRAM utilization. |
+| `GPU_MEMORY_UTILIZATION` | `0.95` | `float` | Fraction of GPU VRAM vLLM is allowed to use for KV cache and runtime allocations. Lower if you hit CUDA OOM; raise if you have VRAM headroom. |
 | `MAX_PARALLEL_LOADING_WORKERS` | None | `int` | Loads the model sequentially in multiple batches to avoid RAM OOM when using tensor parallelism and large models. |
 | `BLOCK_SIZE` | `16` | `8`, `16`, `32` | The token block size for contiguous chunks of tokens. |
 | `SWAP_SPACE` | `4` | `int` | The CPU swap space size (in GiB) per GPU. |
 | `ENFORCE_EAGER` | `False` | `bool` | If `True`, always uses eager-mode PyTorch. If `False`, uses a hybrid of eager mode and CUDA graphs for maximal performance and flexibility. |
-| `MAX_SEQ_LEN_TO_CAPTURE` | `8192` | `int` | The maximum context length covered by CUDA graphs. When a sequence has a context length larger than this, the system falls back to eager mode. |
+| `MAX_SEQ_LEN_TO_CAPTURE` | `8192` | `int` | Maximum context length covered by CUDA graphs. When a sequence has context length larger than this, we fall back to eager mode. |
 | `DISABLE_CUSTOM_ALL_REDUCE` | `0` | `int` | If `0`, enables custom all-reduce. If `1`, disables it. |
+| `ENABLE_EXPERT_PARALLEL` | `False` | `bool` | Enable expert parallelism for Mixture of Experts (MoE) models. |
 
 ## Tokenizer settings
 
@@ -108,7 +109,7 @@ Customize tokenizer behavior and chat templates.
 | --- | --- | --- | --- |
 | `TOKENIZER_NAME` | None | `str` | The tokenizer repository to use a different tokenizer than the model's default. |
 | `TOKENIZER_REVISION` | None | `str` | The tokenizer revision to load. |
-| `CUSTOM_CHAT_TEMPLATE` | None | `str` of single-line jinja template | A custom chat Jinja template. See the [Hugging Face documentation](https://huggingface.co/docs/transformers/chat_templating) for more information. |
+| `CUSTOM_CHAT_TEMPLATE` | None | `str` of single-line jinja template | Override the model chat template (single-line Jinja2). Useful when sending `messages` to a base model without a built-in chat template. See the [Hugging Face documentation](https://huggingface.co/docs/transformers/chat_templating) for more information. |
 
 ## Streaming and batch settings
 
@@ -131,11 +132,17 @@ Configure OpenAI API compatibility features.
 | Variable | Default | Type(s) | Description |
 | --- | --- | --- | --- |
 | `RAW_OPENAI_OUTPUT` | `1` | boolean as `int` | If `1`, enables raw OpenAI SSE format string output when streaming. This is required for OpenAI compatibility. |
-| `OPENAI_SERVED_MODEL_NAME_OVERRIDE` | None | `str` | Overrides the served model name. This allows you to use a custom name in the `model` parameter of your OpenAI requests. |
+| `OPENAI_SERVED_MODEL_NAME_OVERRIDE` | None | `str` | Exposes a custom model ID via `/v1/models` and accepts it as the `model` field in OpenAI requests (alias for the served model). |
 | `OPENAI_RESPONSE_ROLE` | `assistant` | `str` | The role of the LLM's response in OpenAI chat completions. |
-| `ENABLE_AUTO_TOOL_CHOICE` | `false` | `bool` | If `true`, enables automatic tool selection for supported models. |
-| `TOOL_CALL_PARSER` | None | `str` | The parser for tool calls. |
-| `REASONING_PARSER` | None | `str` | The parser for reasoning-capable models. Setting this enables reasoning mode. |
+| `ENABLE_AUTO_TOOL_CHOICE` | `false` | `bool` | Enables vLLM automatic tool selection for OpenAI Chat Completions. Only enable for tool-capable models. |
+| `TOOL_CALL_PARSER` | None | `str` | Tool-call parser that matches your model's tool-call format (required for most tool-calling models). Supported values: `mistral`, `hermes`, `llama3_json`, `llama4_json`, `llama4_pythonic`, `granite`, `granite-20b-fc`, `deepseek_v3`, `internlm`, `jamba`, `phi4_mini_json`, `pythonic`. |
+| `REASONING_PARSER` | None | `str` | Parser for reasoning-capable models (enables reasoning mode). Examples: `deepseek_r1`, `qwen3`, `granite`, `hunyuan_a13b`. Leave unset to disable. |
+
+<Note>
+
+`TOOL_CALL_PARSER` tells vLLM how to interpret a model's tool-call output. If the parser doesn't match the model's format, tool calls may not be detected (or may error during parsing).
+
+</Note>
 
 ## Serverless and concurrency settings
 
@@ -143,7 +150,7 @@ Configure concurrency and logging for Serverless deployments.
 
 | Variable | Default | Type(s) | Description |
 | --- | --- | --- | --- |
-| `MAX_CONCURRENCY` | `300` | `int` | The maximum number of concurrent requests per worker. vLLM's internal queue handles VRAM limitations, so this setting is primarily for scaling and load balancing efficiency. |
+| `MAX_CONCURRENCY` | `30` | `int` | Max concurrent requests per worker instance (Runpod-side). Not a vLLM engine arg; it controls Runpod worker concurrency and affects how requests are fed into vLLM (queueing/throughput/latency). |
 | `DISABLE_LOG_STATS` | `False` | `bool` | If `False`, enables vLLM stats logging. |
 | `DISABLE_LOG_REQUESTS` | `False` | `bool` | If `False`, enables vLLM request logging. |
 
@@ -168,3 +175,16 @@ These variables are used when building custom Docker images with models baked in
 | --- | --- | --- | --- |
 | `BASE_PATH` | `/runpod-volume` | `str` | The storage directory for the Hugging Face cache and model. |
 | `WORKER_CUDA_VERSION` | `12.1.0` | `str` | The CUDA version for the worker image. |
+
+## Deprecated variables
+
+<Warning>
+
+The following variables are deprecated and will be removed in future versions.
+
+</Warning>
+
+| Old Variable | New Variable | Note |
+| --- | --- | --- |
+| `MAX_CONTEXT_LEN_TO_CAPTURE` | `MAX_SEQ_LEN_TO_CAPTURE` | Use the new variable name. |
+| `kv_cache_dtype=fp8_e5m2` | `kv_cache_dtype=fp8` | Simplified fp8 format. |
