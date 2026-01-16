@@ -1,0 +1,122 @@
+---
+title: "Configure vLLM to work with your model"
+sidebarTitle: "Configure vLLM"
+description: "Learn how to configure vLLM to work with your chosen model using environment variables."
+---
+
+Most LLMs need specific configuration to run properly on vLLM. You need to understand what settings your model expects for loading, tokenization, and generation.
+
+This guide covers how to configure your vLLM endpoints for different model families, how environment variables map to vLLM command-line flags, and recommended configurations for popular models like Llama, Mistral, Qwen, and others.
+
+## Why is vLLM so hard to configure?
+
+Without the right settings, your vLLM workers may fail to load, produce incorrect outputs, or miss key features. vLLM supports hundreds of models, but default settings only work out of the box for a subset of them.
+
+Different model architectures have different requirements for tokenization, attention mechanisms, and features like tool calling or reasoning. For example, Mistral models need their own tokenizer mode and config format, while reasoning models like DeepSeek-R1 need a reasoning parser enabled. 
+
+When deploying a model, check its Hugging Face README and the [vLLM documentation](https://docs.vllm.ai/en/latest/usage/) for required or recommended settings.
+
+## Mapping environment variables to vLLM CLI flags
+
+When running vLLM with `vllm serve`, you configure the engine with command-line flags. On Runpod, you set these options with [environment variables](/serverless/vllm/environment-variables) instead.
+
+Each vLLM command-line argument has a corresponding environment variable. Convert the flag name to uppercase with underscores: `--tokenizer_mode` becomes `TOKENIZER_MODE`, `--enable-auto-tool-choice` becomes `ENABLE_AUTO_TOOL_CHOICE`, and so on. For all available vLLM engine arguments, see the [vLLM engine arguments documentation](https://docs.vllm.ai/en/latest/configuration/engine_args/).
+
+## Example: Deploying Mistral
+
+To launch a Mistral model using the vLLM CLI, you could run the following command:
+
+```bash
+vllm serve mistralai/Ministral-8B-Instruct-2410 \
+  --tokenizer_mode mistral \
+  --config_format mistral \
+  --load_format mistral \
+  --enable-auto-tool-choice \
+  --tool-call-parser mistral
+```
+
+On Runpod, set these options as environment variables when configuring your endpoint:
+
+| Environment variable | Value |
+| --- | --- |
+| `MODEL_NAME` | `mistralai/Ministral-8B-Instruct-2410` |
+| `TOKENIZER_MODE` | `mistral` |
+| `CONFIG_FORMAT` | `mistral` |
+| `LOAD_FORMAT` | `mistral` |
+| `ENABLE_AUTO_TOOL_CHOICE` | `true` |
+| `TOOL_CALL_PARSER` | `mistral` |
+
+This pattern applies to any vLLM command-line flag. Find the corresponding environment variable name and add it to your endpoint configuration.
+
+## Model-specific configurations
+
+The table below lists recommended environment variables for popular model families. These settings handle common requirements like tokenization modes, tool calling support, and reasoning capabilities.
+
+Not all models in a family require all settings. Check your model's documentation for exact requirements.
+
+| Model family | Example model | Key environment variables | Notes |
+| --- | --- | --- | --- |
+| Qwen3 | `Qwen/Qwen3-8B` |  `ENABLE_AUTO_TOOL_CHOICE=true` `TOOL_CALL_PARSER=hermes` | Qwen models often ship in various quantization formats. If you are deploying an AWQ or GPTQ version, ensure `QUANTIZATION` is set correctly (e.g., `awq`). |
+| OpenChat | `openchat/openchat-3.5-0106` | None required | OpenChat relies heavily on specific chat templates. If the default templates produce poor results, use `CUSTOM_CHAT_TEMPLATE` to inject the precise Jinja2 template required for the OpenChat correction format. |
+| Gemma | `google/gemma-3-1b-it` | None required | Gemma models require an active Hugging Face token. Ensure your `HF_TOKEN` is set as a secret. Gemma also performs best when `DTYPE` is explicitly set to `bfloat16` to match its native training precision. |
+| DeepSeek-R1 | `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B` | `REASONING_PARSER=deepseek_r1` | Enables reasoning mode for chain-of-thought outputs. |
+| Phi-4 | `microsoft/Phi-4-mini-instruct` | None required | Phi models are compact but have specific architectural quirks. Setting `ENFORCE_EAGER=true` can sometimes resolve initialization issues with Phi models on older CUDA versions, though it may slightly reduce performance compared to CUDA graphs. |
+| Llama 3 | `meta-llama/Llama-3.2-3B-Instruct` | `TOOL_CALL_PARSER=llama3_json` `ENABLE_AUTO_TOOL_CHOICE=true` | Llama 3 models often require strict attention to context window limits. Use `MAX_MODEL_LEN` to prevent the KV cache from exceeding your GPU VRAM. If you are using a 24 GB GPU like a 4090, setting `MAX_MODEL_LEN` to `8192` or `16384` is a safe starting point. |
+| Mistral | `mistralai/Ministral-8B-Instruct-2410` | `TOKENIZER_MODE=mistral`, `CONFIG_FORMAT=mistral`, `LOAD_FORMAT=mistral`, `TOOL_CALL_PARSER=mistral` `ENABLE_AUTO_TOOL_CHOICE=true` | Mistral models use specialized tokenizers to work properly. |
+
+## Selecting GPU size based on the model
+
+Selecting the right GPU for vLLM is a balance between **model size**, **quantization**, and your required **context length**. Because vLLM pre-allocates memory for its KV (Key-Value) cache to enable high-throughput serving, you generally need more VRAM than the bare minimum required just to load the model.
+
+### VRAM estimation formula
+
+A reliable rule of thumb for estimating the required VRAM for a model in vLLM is:
+
+* **FP16/BF16 (unquantized):** 2 bytes per parameter.
+* **INT8 quantized:** 1 byte per parameter.
+* **INT4 (AWQ/GPTQ):** 0.5 bytes per parameter.
+* **KV cache buffer:** vLLM typically reserves 10-30% of remaining VRAM for the KV cache to handle concurrent requests.
+
+Use the table below as a starting point to select a hardware configuration for your model.
+
+| Model size (parameters) | Recommended GPUs | VRAM |
+| --- | --- | --- |
+| **Small (\<10B)** | RTX 4090, A6000, L4 | 16–24 GB |
+| **Medium (10B–30B)** | A6000, L40S | 32–48 GB |
+| **Large (30B–70B)** | A100, H100, B200 | 80–180 GB |
+
+---
+
+### Key factors
+
+Here are some key factors to consider when selecting the right GPU for your model:
+
+#### Context window vs. VRAM
+
+The more context you need (e.g., 32k or 128k tokens), the more VRAM the KV cache consumes. If you encounter Out-of-Memory (OOM) errors, use the `MAX_MODEL_LEN` environment variable to cap the context. For example, a 7B model that OOMs at 32k context on a 24 GB card will often run perfectly at 16k.
+
+#### GPU memory utilization
+
+By default, vLLM attempts to use 90% of the available VRAM (`GPU_MEMORY_UTILIZATION=0.90`).
+
+* **If you OOM during initialization:** Lower this to `0.85`.
+* **If you have extra headroom:** Increase it to `0.95` to allow for more concurrent requests.
+
+#### Quantization (AWQ/GPTQ)
+
+If you are limited by a single GPU, use a quantized version of the model (e.g., `Meta-Llama-3-8B-Instruct-AWQ`). This reduces the weight memory by 50-75% compared to `FP16`, allowing you to fit larger models on cards like the RTX 4090 (24 GB) or A4000 (16 GB).
+
+<Tip>
+For production workloads where high availability is key, always select **multiple GPU types** in your [Serverless endpoint configuration](/serverless/endpoints/endpoint-configurations). This allows the system to fall back to a different hardware tier if your primary choice is out of stock in a specific data center.
+</Tip>
+
+## vLLM recipes
+
+vLLM provides step-by-step recipes for common deployment scenarios, including deploying specific models, optimizing performance, and integrating with frameworks.
+
+Find the recipes at [docs.vllm.ai/projects/recipes](https://docs.vllm.ai/projects/recipes/en/latest/index.html). They are community-maintained and updated regularly as vLLM evolves.
+
+You can often find further information in the documentation for the specific model you are deploying. For example:
+
+- [Mistral + vLLM deployment guide](https://docs.mistral.ai/deployment/self-deployment/vllm).
+- [Qwen + vLLM deployment guide](https://qwen.readthedocs.io/en/latest/deployment/vllm.html#).
