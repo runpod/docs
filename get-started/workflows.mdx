@@ -1,4 +1,96 @@
 ---
+title: "Workflow patterns"
+sidebarTitle: "Workflow patterns"
+description: "Architectural patterns and strategies for building AI/ML applications on Runpod."
+---
+
+Runpod's products are designed to work together, enabling you to build complete AI/ML pipelines that span from initial development through production deployment. Understanding the underlying patterns helps you architect solutions that balance development speed, operational simplicity, and cost efficiency.
+
+This guide explores the key architectural patterns that emerge when combining Runpod's compute products, showing you how to think about infrastructure decisions rather than just what buttons to click.
+
+## Core architectural patterns
+
+### The development-to-production progression
+
+Most AI/ML projects follow a natural progression from interactive experimentation to automated production serving. The most effective architectures recognize these distinct phases and use appropriate compute models for each.
+
+During the initial **interactive development** phase, you'll want to prioritize iteration speed while maintaining full control over your environment, installing packages, debugging code, and testing model behavior in real-time. [Pods](/pods/overview) are ideal for this use case because they provide a persistent workspace that you can connect to via [VSCode](/pods/configuration/connect-to-ide) or [JupyterLab](/pods/connect-to-a-pod#jupyterlab-connection) to make changes and immediately see results.
+
+When you're ready to move to **production serving**, you'll want to prioritize cost efficiency and reliability. Once you've verified that your code works, the operational requirements shift: you need automatic scaling, pay-per-use billing, and guaranteed uptime. [Serverless](/serverless/overview) endpoints handle this by packaging your working code into a [Docker container](/serverless/workers/create-dockerfile) that spins up only when needed and scales automatically with traffic.
+
+The transition between these phases is intentional. You develop interactively on a Pod until your inference logic stabilizes, then containerize it and deploy it as a Serverless endpoint. This pattern appears repeatedly across use cases—from custom model serving to image generation pipelines—because it separates the concerns of "making it work" from "making it scale."
+
+**For example:** A team building a custom vision model would start by deploying a single-GPU [Pod](/pods/overview) to experiment with different architectures and training approaches. Once they have a working model, they move the inference code into a [handler function](/serverless/workers/handler-functions), build a [Docker image](/serverless/workers/create-dockerfile), and deploy it as a [Serverless endpoint](/serverless/overview). Their client applications can now [send requests](/serverless/endpoints/send-requests) to the endpoint, which automatically scales from zero to hundreds of concurrent workers based on traffic.
+
+### Storage as architectural center
+
+In traditional cloud architectures, you move data to compute. In AI/ML workflows, moving multi-gigabyte models and datasets becomes the bottleneck. The most efficient architectures invert this relationship: store data once in a [network volume](/storage/network-volumes), then attach different compute resources to the same storage.
+
+Network volumes persist independently of your compute resources. You can attach them to Pods for interactive work, mount them on [Instant Clusters](/instant-clusters) for distributed training, and connect them to Serverless endpoints for inference, all while accessing the same underlying data. This eliminates expensive data transfer operations and enables instant transitions between workflow phases.
+
+**Training-to-serving pipeline:** Consider fine-tuning a 70B parameter LLM. You provision an Instant Cluster with 16x H100 GPUs and attach a network volume. Throughout training, checkpoints and final model weights save directly to the volume. When training completes, you deploy a [vLLM Serverless worker](/serverless/vllm/overview) that mounts that *same* network volume. The endpoint reads model weights directly from storage—no data transfer required. You're serving inference requests minutes after training finishes.
+
+**Research iteration pattern:** A researcher working with a 2TB dataset creates a network volume to hold the data, then attaches it to a single-GPU Pod for exploratory work. Once their training code stabilizes, they don't move the data. Instead, they terminate the Pod and spin up an Instant Cluster attached to the *same* volume to run the full training job across multiple nodes. The data never moves; only the compute resources change.
+
+This storage-centric approach reduces both costs (no data egress fees) and complexity (no transfer scripts to maintain). Your architecture becomes a set of compute resources orbiting a central data store, each accessing what they need when they need it.
+
+### Progressive commitment and cost optimization
+
+AI/ML infrastructure costs can escalate quickly if you provision resources for peak capacity. The most cost-effective architectures follow a principle of progressive commitment: start with the minimum viable infrastructure and scale up only as requirements become clear.
+
+[Public Endpoints](/hub/public-endpoints) have zero commitment, allowing you to use Runpod-managed infrastructure with pay-per-generation pricing. If you're building a prototype or validating product-market fit, Public Endpoints let you integrate AI capabilities immediately without Dockerfiles or infrastructure configuration. You're paying only for what you generate.
+
+As your needs grow more specific (custom model weights, unique preprocessing logic, lower latency requirements), you can graduate to Serverless endpoints. Now you're managing your own container, but Serverless still provides automatic scaling and zero-cost idle time. You pay per second of compute, so sporadic workloads cost proportionally less than dedicated infrastructure.
+
+Dedicated Pods make sense when utilization is consistently high. If you're running training jobs 24/7 or serving steady traffic, paying per-minute for a dedicated instance becomes cheaper than per-second serverless costs. But you've now committed to paying whether you're using the resource or not.
+
+**Progressive scaling example:** A startup launches a GenAI avatar app. They begin by prototyping with the Flux Public Endpoint to validate their product concept—zero infrastructure overhead, pay per image generated. As they acquire users and need a unique art style, they fine-tune a model and deploy it as a Serverless endpoint. The endpoint scales automatically with traffic spikes while costing nothing during quiet hours. Only when they reach consistent high-volume usage do they consider dedicated infrastructure.
+
+### Batch processing and queueing patterns
+
+When you have large volumes of independent tasks to process, the architectural question isn't "what hardware to use" but "how to orchestrate concurrent execution." [Serverless endpoints](/serverless/overview) with asynchronous job queues provide a powerful pattern for this.
+
+Instead of provisioning a fixed pool of workers, you push all job payloads to a Serverless endpoint. The endpoint automatically detects queue depth and spins up workers in parallel—potentially dozens or hundreds of concurrent GPUs processing your jobs simultaneously. As the queue drains, workers scale back down to zero. You pay only for the exact GPU seconds used across all jobs.
+
+This pattern is particularly powerful for video processing, batch inference, and ETL pipelines where work can be parallelized but arrives sporadically. You don't size infrastructure for peak load; the infrastructure automatically adapts to whatever load you throw at it.
+
+**Video processing example:** A media company needs to process 10,000 video files. Rather than estimating how many workers to provision, they push all 10,000 jobs to a Serverless endpoint as async requests. The endpoint spins up 50 concurrent L4 GPU workers to process videos in parallel. As jobs complete, the queue drains and workers scale down automatically. Total infrastructure cost equals the sum of per-job processing time—no idle capacity, no manual scaling decisions.
+
+### Ephemeral compute with API orchestration
+
+The most automated architectures treat compute resources as ephemeral—creating them programmatically when needed, running a specific workload, and immediately terminating them. This pattern leverages the [Runpod API](/api-reference/pods/POST/pods) to turn infrastructure into code.
+
+Instead of keeping a Pod running continuously for occasional training jobs, you spin up a Pod via API when new data arrives, run the training script, save outputs to a network volume, and [terminate the Pod](/pods/manage-pods#terminate-a-pod) via API. Billing stops immediately. This transforms compute from an ongoing expense into a per-job cost.
+
+You can take this further by combining ephemeral training Pods with network volumes and Serverless endpoints. The complete pipeline becomes: data arrives → API spins up training Pod → Pod mounts network volume → training runs → new weights save to volume → Pod terminates → Serverless endpoint detects new weights → endpoint hot-reloads model. Everything happens automatically; no infrastructure sits idle.
+
+**Enterprise fine-tuning factory:** A SaaS company regularly fine-tunes models on new customer data. Customer data uploads to a network volume. A scheduled script detects new data and uses the Runpod API to create a fresh on-demand Pod. The Pod mounts the volume, runs the training script, saves new model weights back to the volume, then terminates itself via API call. A separate Serverless endpoint monitors the volume and [reloads cached models](/serverless/endpoints/model-caching) when new weights appear. The entire pipeline is automated; infrastructure only runs when actively training or serving.
+
+## Choosing the right pattern
+
+Your choice of architectural pattern depends on three primary factors:
+
+**Workload predictability:** Steady, predictable workloads benefit from dedicated Pods (lower per-minute costs). Sporadic or highly variable workloads benefit from Serverless (pay only when running). If you can't predict usage patterns, start with Serverless and migrate to Pods if utilization stays consistently high.
+
+**Development stage:** Early-stage projects benefit from maximum flexibility. Use Pods for development, Public Endpoints for quick prototyping, and delay infrastructure decisions until requirements stabilize. Production projects benefit from the operational simplicity and infinite scalability of Serverless endpoints.
+
+**Scale requirements:** Single-GPU workloads run efficiently on Pods. Multi-GPU training within a single machine can also use Pods with multiple GPU allocations. For multi-node distributed training (70B+ parameter models, large-scale simulations), use [Instant Clusters](/instant-clusters) with high-speed interconnects. Scale horizontally with Serverless for parallel inference; scale vertically with Instant Clusters for model training.
+
+The most effective architectures often combine multiple patterns. You might prototype with Public Endpoints, develop custom logic on a Pod, train large models on an Instant Cluster with network volumes, and serve production traffic via Serverless—all within the same project lifecycle.
+
+## Next steps
+
+Now that you understand the architectural patterns, explore the product-specific documentation:
+
+- [Serverless overview](/serverless/overview): Autoscaling inference endpoints.
+- [Pods overview](/pods/overview): Persistent GPU/CPU instances.
+- [Instant Clusters overview](/instant-clusters): Multi-node distributed training.
+- [Public Endpoints](/hub/public-endpoints): Runpod-managed model APIs.
+- [Network volumes](/storage/network-volumes): Shared persistent storage.
+
+
+
+---
 title: "Workflow examples"
 sidebarTitle: "Workflow examples"
 description: "Examples of how you can use Runpod's compute services to build your AI/ML application."
