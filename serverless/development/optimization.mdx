@@ -1,10 +1,10 @@
 ---
-title: "Optimize your workers"
-sidebarTitle: "Optimization"
-description: "Implement strategies to reduce latency and cost for your Serverless workers."
+title: "Optimize your endpoints"
+sidebarTitle: "Optimization guide"
+description: "Implement strategies to reduce latency and cost for your Serverless endpoints."
 ---
 
-Optimizing your Serverless workers involves a cycle of measuring performance with [benchmarking](/serverless/development/benchmarking), identifying bottlenecks, and tuning your [endpoint configurations](/serverless/endpoints/endpoint-configurations). This guide covers specific strategies to reduce startup times and improve throughput.
+Optimizing your Serverless endpoints involves a cycle of measuring performance with [benchmarking](/serverless/development/benchmarking), identifying bottlenecks, and tuning your [endpoint configurations](/serverless/endpoints/endpoint-configurations). This guide covers specific strategies to reduce startup times and improve throughput.
 
 ## Optimization overview
 
@@ -16,11 +16,9 @@ For latency-sensitive applications, utilizing active workers is the most effecti
 
 Your architectural choices also significantly impact performance. Whenever possible, bake your models directly into the Docker image to leverage the high-speed local NVMe storage of the host machine. If you utilize [network volumes](/storage/network-volumes) for larger datasets, remember that this restricts your endpoint to specific data centers, which effectively shrinks your pool of available compute resources.
 
-
 ## Reducing worker startup times
 
-
-There are two key metrics to consider when optimizing your workers:
+There are two key metrics to consider when optimizing your workers to reduce request response times:
 
   - **Delay time**: The time spent waiting for a worker to become available. This includes the cold start time if a new worker needs to be spun up.
   - **Execution time**: The time the GPU takes to actually process the request once the worker has received the job.
@@ -40,13 +38,17 @@ If your delay time is high, use these strategies to reduce it.
 If your worker's cold start time exceeds the default 7-minute limit, the system may mark it as unhealthy. You can extend this limit by setting the `RUNPOD_INIT_TIMEOUT` environment variable (e.g. `RUNPOD_INIT_TIMEOUT=800` for 800 seconds).
 </Note>
 
-### Embed models in Docker images
+### Use cached models
 
-For production environments, package your ML models directly within your worker container image instead of downloading them in your handler function. This strategy places models on the worker's high-speed local storage (SSD/NVMe), dramatically reducing the time needed to load models into GPU memory. Note that extremely large models (500GB+) may still require network volume storage.
+If your model is available on Hugging Face, we strongly recommend enabling [cached models](/serverless/endpoints/model-caching). This provides the fastest cold starts and lowest cost for any Serverless deployment option.
+
+### Bake models into Docker images
+
+If your model is not available on Hugging Face, you can package your ML models [directly into your worker container image](/serverless/workers/create-dockerfile#including-models-and-files) instead of downloading them in your handler function. This strategy places models on the worker's high-speed local storage (SSD/NVMe), dramatically reducing the time needed to load models into GPU memory. Note that extremely large models (500GB+) may still require network volume storage.
 
 ### Use network volumes during development
 
-For flexibility during development, save large models to a [network volume](/storage/network-volumes) using a Pod or one-time handler, then mount this volume to your Serverless workers. While network volumes offer slower model loading compared to embedding models directly, they can speed up your workflow by enabling rapid iteration and seamless switching between different models and configurations.
+For flexibility during development, save large models to a [network volume](/storage/network-volumes) using a Pod or one-time handler, then mount this volume to your Serverless workers. While network volumes offer slower model loading compared to embedding models directly or using cached models, they can speed up your workflow by enabling rapid iteration and seamless switching between different models and configurations.
 
 ### Maintain active workers
 

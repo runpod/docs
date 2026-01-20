@@ -1,0 +1,260 @@
+---
+title: "Write logs"
+description: "Write application logs from your handler functions to the console or persistent storage."
+---
+
+Writing logs from your handler functions helps you debug, monitor, and troubleshoot your Serverless applications. You can write logs to the Runpod console for real-time monitoring or to persistent storage for long-term retention.
+
+## Logging levels
+
+Runpod supports standard logging levels to help you control the verbosity and importance of log messages. Using appropriate logging levels makes it easier to filter and analyze logs.
+
+The logging levels available are:
+
+- **DEBUG**: Detailed information, typically of interest only when diagnosing problems.
+- **INFO**: Confirmation that things are working as expected.
+- **WARNING**: Used for unexpected events or warnings of problems in the near future (e.g., `disk space low`).
+- **ERROR**: Used for more serious problems, where the application has not been able to perform some function.
+- **FATAL**: Used for very serious errors, indicating that the program itself may be unable to continue running.
+
+## Writing logs to the console
+
+The easiest way to write logs is using Python's `logging` library. Logs written to stdout or stderr are automatically captured by Runpod and displayed in the console.
+
+```python
+import logging
+import os
+import runpod
+import logging.handlers
+
+def setup_logger(log_level=logging.DEBUG):
+    """
+    Configures and returns a logger that writes to the console.
+
+    This function should be called once when the worker initializes.
+    """
+    # Define the format for log messages. We include a placeholder for 'request_id'
+    # which will be added contextually for each job.
+    log_format = logging.Formatter(
+        '%(asctime)s - %(levelname)s - [Request: %(request_id)s] - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    # Get the root logger
+    logger = logging.getLogger("runpod_worker")
+    logger.setLevel(log_level)
+    
+    # --- Console Handler ---
+    # This handler sends logs to standard output, which Runpod captures as worker logs.
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(log_format)
+    
+    # Add the console handler to the logger
+    # Check if handlers are already added to avoid duplication on hot reloads
+    if not logger.handlers:
+        logger.addHandler(console_handler)
+    
+    return logger
+
+# --- Global Logger Initialization ---
+# Set up the logger when the script is first loaded by the worker.
+logger = setup_logger(log_level=logging.DEBUG)
+logger = logging.LoggerAdapter(logger, {"request_id": "N/A"})
+
+logger.info("Logger initialized. Ready to process jobs.")
+
+def handler(job):
+    """
+    Main handler function for the Serverless worker.
+    """
+    # Extract the request ID from the job payload for traceability.
+    request_id = job.get('id', 'unknown')
+    
+    # Create a new logger adapter for this specific job.
+    job_logger = logging.LoggerAdapter(logging.getLogger("runpod_worker"), {"request_id": request_id})
+    
+    job_logger.info(f"Received job. Now demonstrating all log levels.")
+    
+    try:
+        # Demonstrate all log levels
+        job_logger.debug("Debug message for detailed diagnostics.")
+        job_logger.info("Info message for general execution flow.")
+        job_logger.warning("Warning message for unexpected events.")
+        job_logger.error("Error message for serious issues.")
+        job_logger.critical("Critical message for unrecoverable issues.")
+
+        result = "Successfully demonstrated all log levels."
+        job_logger.info(f"Job completed successfully.")
+        
+        return {"output": result}
+
+    except Exception as e:
+        job_logger.error(f"Job failed with an unexpected exception.", exc_info=True)
+        return {"error": f"An unexpected error occurred: {str(e)}"}
+
+
+# Start the Serverless worker
+if __name__ == "__main__":
+    runpod.serverless.start({"handler": handler})
+```
+
+## Persistent log storage
+
+Endpoint logs are retained for 90 days, after which they are automatically removed. Worker logs are removed when a worker terminates. If you need to retain logs beyond these periods, you can write logs to a [network volume](/storage/network-volumes) or an external service like Elasticsearch or Datadog.
+
+### Writing logs to a network volume
+
+Write logs to a network volume attached to your endpoint for long-term retention.
+
+```python
+import logging
+import os
+import runpod
+import logging.handlers
+
+def setup_logger(log_dir="/runpod-volume/logs", log_level=logging.DEBUG):
+    """
+    Configures a logger that writes to both console and a network volume.
+    """
+    # Ensure the log directory exists on the network volume
+    os.makedirs(log_dir, exist_ok=True)
+
+    log_format = logging.Formatter(
+        '%(asctime)s - %(levelname)s - [Request: %(request_id)s] - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    logger = logging.getLogger("runpod_worker")
+    logger.setLevel(log_level)
+    
+    # Console Handler
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(log_format)
+    
+    # File Handler - writes to network volume
+    log_file_path = os.path.join(log_dir, "worker.log")
+    file_handler = logging.FileHandler(log_file_path)
+    file_handler.setFormatter(log_format)
+
+    # Add both handlers
+    if not logger.handlers:
+        logger.addHandler(console_handler)
+        logger.addHandler(file_handler)
+    
+    return logger
+
+logger = setup_logger(log_level=logging.DEBUG)
+logger = logging.LoggerAdapter(logger, {"request_id": "N/A"})
+
+logger.info("Logger initialized with persistent storage.")
+
+def handler(job):
+    """
+    Main handler function with persistent logging.
+    """
+    request_id = job.get('id', 'unknown')
+    job_logger = logging.LoggerAdapter(logging.getLogger("runpod_worker"), {"request_id": request_id})
+    
+    job_logger.info(f"Received job.")
+    
+    try:
+        job_logger.debug("Processing request with persistent logs.")
+        
+        result = "Job completed with logs saved to network volume."
+        job_logger.info(f"Job completed successfully.")
+        
+        return {"output": result}
+
+    except Exception as e:
+        job_logger.error(f"Job failed.", exc_info=True)
+        return {"error": f"An error occurred: {str(e)}"}
+
+if __name__ == "__main__":
+    runpod.serverless.start({"handler": handler})
+```
+
+### Accessing stored logs
+
+To access logs stored in network volumes:
+
+- Use the [S3-compatible API](/storage/s3-api) to programmatically access log files.
+- Connect to a Pod with the same network volume attached using [SSH](/pods/configuration/use-ssh).
+
+## Structured logging
+
+Structured logging outputs logs in a machine-readable format (typically JSON) that makes it easier to parse, search, and analyze logs programmatically. This is especially useful when exporting logs to external services or analyzing large volumes of logs.
+
+```python
+import logging
+import json
+import runpod
+
+def setup_structured_logger():
+    """
+    Configure a logger that outputs JSON-formatted logs.
+    """
+    logger = logging.getLogger("runpod_worker")
+    logger.setLevel(logging.DEBUG)
+    
+    handler = logging.StreamHandler()
+    logger.addHandler(handler)
+    
+    return logger
+
+logger = setup_structured_logger()
+
+def log_json(level, message, **kwargs):
+    """
+    Log a structured JSON message.
+    """
+    log_entry = {
+        "level": level,
+        "message": message,
+        **kwargs
+    }
+    print(json.dumps(log_entry))
+
+def handler(event):
+    request_id = event.get("id", "unknown")
+    
+    try:
+        log_json("INFO", "Processing request", request_id=request_id, input_keys=list(event.get("input", {}).keys()))
+        
+        # Replace with your processing logic
+        result = process_input(event["input"])
+        
+        log_json("INFO", "Request completed", request_id=request_id, execution_time_ms=123)
+        
+        return {"output": result}
+    except Exception as e:
+        log_json("ERROR", "Request failed", request_id=request_id, error=str(e), error_type=type(e).__name__)
+        return {"error": str(e)}
+
+runpod.serverless.start({"handler": handler})
+```
+
+This produces logs in this format:
+
+```json
+{"level": "INFO", "message": "Processing request", "request_id": "abc123", "input_keys": ["prompt", "max_length"]}
+{"level": "INFO", "message": "Request completed", "request_id": "abc123", "execution_time_ms": 123}
+```
+
+### Benefits of structured logging
+
+Structured logging provides several advantages:
+
+- **Easier parsing**: JSON logs can be easily parsed by log aggregation tools.
+- **Better search**: Search for specific fields like `request_id` or `error_type`.
+- **Analytics**: Analyze trends, patterns, and metrics from log data.
+- **Integration**: Export to external services like Datadog, Splunk, or Elasticsearch.
+
+## Best practices
+
+Follow these best practices when writing logs:
+
+1. **Use request IDs**: Include the job ID or request ID in log entries for traceability.
+2. **Choose appropriate levels**: Use DEBUG for diagnostics, INFO for normal operations, WARNING for potential issues, and ERROR for failures.
+3. **Structure your logs**: Use JSON format for easier parsing and analysis.
+4. **Implement log rotation**: Rotate log files to prevent disk space issues when using persistent storage.
+5. **Avoid excessive logging**: Excessive console logging may trigger throttling. Use persistent storage for detailed logs.

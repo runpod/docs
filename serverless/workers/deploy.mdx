@@ -1,101 +1,18 @@
 ---
-title: "Deploy workers from a Docker registry"
-sidebarTitle: "Deploy from Docker"
-description: "Package a handler function into a Docker image and deploy it to an endpoint."
+title: "Deploy workers from Docker Hub"
+sidebarTitle: "Deploy from Docker Hub"
+description: "Build, test, and deploy your worker image from Docker Hub."
 ---
+
+After [creating a Dockerfile](/serverless/workers/create-dockerfile) for your worker, you can build the image, test it locally, and deploy it to a Serverless endpoint.
 
 ## Requirements
 
-To deploy a worker image, you need:
-
-* A working [handler function](/serverless/workers/handler-functions).
+* A [Dockerfile](/serverless/workers/create-dockerfile) that packages your handler function.
 * [Docker](https://docs.docker.com/get-started/get-docker/) installed on your development machine.
 * A [Docker Hub](https://hub.docker.com/) account.
 
-## Project organization
-
-Organize your project files in a directory structure like this:
-
-```
-project_directory
-├── Dockerfile              # Instructions for building the Docker image
-├── src
-│   └── handler.py          # Your handler function
-└── builder
-    └── requirements.txt    # Dependencies required by your handler
-```
-
-Your `requirements.txt` file should list all Python packages your handler needs:
-
-```txt title="requirements.txt"
-# Example requirements.txt
-runpod~=1.7.6
-torch==2.0.1
-pillow==9.5.0
-transformers==4.30.2
-```
-
-## Creating a Dockerfile
-
-The Dockerfile tells Docker how to build your worker image. Create a file named `Dockerfile` (no extension) in your project's root directory:
-
-```dockerfile title="Dockerfile"
-FROM python:3.11.1-slim
-
-WORKDIR /
-
-# Copy and install requirements
-COPY builder/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy your handler code
-COPY src/handler.py .
-
-# Command to run when the container starts
-CMD ["python", "-u", "/handler.py"]
-```
-
-This Dockerfile starts with a Python base image, installs your dependencies, copies your handler code, and specifies the command to run when the container starts.
-
-## Including models and external files
-
-<Tip>
-
-If your model is available on Hugging Face, we strongly recommend enabling [cached models](/serverless/endpoints/model-caching) instead of baking the model into your Docker image.
-
-</Tip>
-
-If your handler uses machine learning models or other external files, you can include them in the Docker image using `COPY` or `ADD`:
-
-```dockerfile title="Dockerfile" highlight={9-11}
-FROM python:3.11.1-slim
-
-WORKDIR /
-
-# Copy and install requirements
-COPY builder/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy your code and model files
-COPY src/handler.py .
-COPY models/ /models/
-
-# Set environment variables if needed
-ENV MODEL_PATH=/models/my_model.pt
-
-# Command to run when the container starts
-CMD ["python", "-u", "/handler.py"]
-```
-
-For non-local models, you can use `RUN wget` to manually download them during the build process:
-
-```dockerfile title="Dockerfile"
-# Download model files and copy them to the container
-RUN -q wget URL_TO_YOUR_MODEL -O /models/my_model.pt
-COPY models/ /models/
-```
-
-## Building the Docker image
+## Build the Docker image
 
 From your terminal, navigate to your project directory and build the Docker image:
 
@@ -106,13 +23,13 @@ docker build --platform linux/amd64 \
 
 Replace `DOCKER_USERNAME` with your Docker Hub username, `WORKER_NAME` with a descriptive name for your worker, and `VERSION` with an appropriate version tag.
 
-<Info>
+<Warning>
 
-The `--platform linux/amd64` flag is required to ensure compatibility with Runpod's infrastructure.
+The `--platform linux/amd64` flag is required to ensure compatibility with Runpod's infrastructure. This is especially important if you're building on an ARM-based system (like Apple Silicon Macs), as the default platform would be incompatible with Runpod's infrastructure.
 
-</Info>
+</Warning>
 
-## Testing an image locally
+## Test the image locally
 
 Before pushing it to the registry, you should test your Docker image locally:
 
@@ -122,7 +39,7 @@ docker run -it DOCKER_USERNAME/WORKER_NAME:VERSION
 
 If your handler is properly configured with a [test input](/serverless/workers/handler-functions#local-testing), you should see it process the test input and provide output.
 
-## Pushing the image to Docker Hub
+## Push the image to Docker Hub
 
 Make your image available to Runpod by pushing it to Docker Hub:
 
@@ -134,7 +51,7 @@ docker login
 docker push DOCKER_USERNAME/WORKER_NAME:VERSION
 ```
 
-Once your image is in the Docker container registry, you can [create a Serverless endpoint](/serverless/endpoints/manage-endpoints#create-an-endpoint) through the Runpod console.
+Once your image is in the Docker container registry, you can [create a Serverless endpoint](/serverless/endpoints/overview#create-an-endpoint) through the Runpod console.
 
 ## Image versioning
 
@@ -173,25 +90,16 @@ You can deploy your worker image directly from a Docker registry through the Run
    * Enter an **Endpoint Name**.
    * Choose your **Endpoint Type**: select **Queue** for traditional queue-based processing or **Load Balancer** for direct HTTP access (see [Load balancing endpoints](/serverless/load-balancing/overview) for details).
    * Under **GPU Configuration**, select the appropriate GPU types for your workload.
-   * Configure other settings as needed (workers, timeouts, environment variables).
+   * Configure [other settings](/serverless/endpoints/endpoint-configurations) as needed (active/max workers, timeouts, environment variables).
 6. Click **Deploy Endpoint** to deploy your worker.
 
 
-## Troubleshooting deployment issues
+## Troubleshoot deployment issues
 
 If your worker fails to start or process requests:
 
-1. Check the logs in the Runpod console for error messages.
-2. Verify your handler function works correctly in local testing.
-3. Ensure all dependencies are properly installed in the Docker image.
+1. Check the [logs](/serverless/development/logs) in the Runpod console for error messages.
+2. Verify your handler function works correctly in [local testing](/serverless/development/local-testing).
+3. Ensure all dependencies are properly installed in the [Docker image](/serverless/workers/create-dockerfile).
 4. Check that your Docker image is compatible with the selected GPU type.
-5. Verify your input format matches what your handler expects.
-
-## Next steps
-
-After successfully deploying your worker, you can:
-
-* [Send API requests to your endpoint.](/serverless/endpoints/send-requests)
-* [Create more advanced handler functions](/serverless/workers/handler-functions)
-* [Optimize your endpoint configurations](/serverless/endpoints/endpoint-configurations)
-* [Learn how to deploy workers directly from GitHub](/serverless/workers/github-integration)
+5. Verify your [input format](/serverless/endpoints/send-requests) matches what your handler expects.
