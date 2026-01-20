@@ -1,0 +1,235 @@
+---
+title: "Create Flash API endpoints"
+sidebarTitle: "Create API endpoints"
+description: "Build and serve HTTP APIs using FastAPI with Flash."
+---
+
+Flash API endpoints let you build HTTP APIs with FastAPI that run on Runpod Serverless workers. Use them to deploy production APIs that need GPU or CPU acceleration.
+
+Unlike standalone scripts that run once and return results, API endpoints create a persistent server that handles incoming HTTP requests. Each request is processed by a Serverless worker using the same remote functions you'd use in a standalone script.
+
+<Note>
+
+Flash API endpoints are currently available for local testing only. Run `flash run` to start the API server on your local machine. Production deployment support is coming in future updates.
+
+</Note>
+
+## Step 1: Initialize a new project
+
+Use the `flash init` command to generate a structured project template with a preconfigured FastAPI application entry point.
+
+Run this command to initialize a new project directory:
+
+```bash
+flash init my_project
+```
+
+You can also initialize your current directory:
+
+```bash
+flash init
+```
+
+## Step 2: Explore the project template
+
+This is the structure of the project template created by `flash init`:
+
+```text
+my_project/
+├── main.py                    # FastAPI application entry point
+├── workers/
+│   ├── gpu/                   # GPU worker example
+│   │   ├── __init__.py        # FastAPI router
+│   │   └── endpoint.py        # GPU script with @remote decorated function
+│   └── cpu/                   # CPU worker example
+│       ├── __init__.py        # FastAPI router
+│       └── endpoint.py        # CPU script with @remote decorated function
+├── .env                       # Environment variable template
+├── .gitignore                 # Git ignore patterns
+├── .flashignore               # Flash deployment ignore patterns
+├── requirements.txt           # Python dependencies
+└── README.md                  # Project documentation
+```
+
+This template includes:
+
+- A FastAPI application entry point and routers.
+- Templates for Python dependencies, `.env`, `.gitignore`, etc.
+- Flash scripts (`endpoint.py`) for both GPU and CPU workers, which include:
+  - Pre-configured worker scaling limits using the `LiveServerless()` object.
+  - A `@remote` decorated function that returns a response from a worker.
+
+When you start the FastAPI server, it creates API endpoints at `/gpu/hello` and `/cpu/hello`, which call the remote function described in their respective `endpoint.py` files.
+
+## Step 3: Install Python dependencies
+
+After initializing the project, navigate into the project directory:
+
+```bash
+cd my_project
+```
+
+Install required dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+## Step 4: Configure your API key
+
+Open the `.env` template file in a text editor and add your [Runpod API key](/get-started/api-keys):
+
+```bash
+# Use your text editor of choice, e.g.
+cursor .env
+```
+
+Remove the `#` symbol from the beginning of the `RUNPOD_API_KEY` line and replace `your_api_key_here` with your actual Runpod API key:
+
+```text
+RUNPOD_API_KEY=your_api_key_here
+# FLASH_HOST=localhost
+# FLASH_PORT=8888
+# LOG_LEVEL=INFO
+```
+
+Save the file and close it.
+
+## Step 5: Start the local API server
+
+Use `flash run` to start the API server:
+
+```bash
+flash run
+```
+
+Open a new terminal tab or window and test your GPU API using cURL:
+
+```bash
+curl -X POST http://localhost:8888/gpu/hello \
+    -H "Content-Type: application/json" \
+    -d '{"message": "Hello from the GPU!"}'
+```
+
+If you switch back to the terminal tab where you used `flash run`, you'll see the details of the job's progress.
+
+### Faster testing with auto-provisioning
+
+For development with multiple endpoints, use `--auto-provision` to deploy all resources before testing:
+
+```bash
+flash run --auto-provision
+```
+
+This eliminates cold-start delays by provisioning all serverless endpoints upfront. Endpoints are cached and reused across server restarts, making subsequent runs faster. Resources are identified by name, so the same endpoint won't be re-deployed if the configuration hasn't changed.
+
+## Step 6: Open the API explorer
+
+Besides starting the API server, `flash run` also starts an interactive API explorer. Point your web browser at [http://localhost:8888/docs](http://localhost:8888/docs) to explore the API.
+
+To run remote functions in the explorer:
+
+1. Expand one of the functions under **GPU Workers** or **CPU Workers**.
+2. Click **Try it out** and then **Execute**.
+
+You'll get a response from your workers right in the explorer.
+
+## Step 7: Customize your API
+
+To customize your API endpoint and functionality:
+
+1. Add or edit remote functions in your `endpoint.py` files.
+2. Test the scripts individually by running `python endpoint.py`.
+3. Configure your FastAPI routers by editing the `__init__.py` files.
+4. Add any new endpoints to your `main.py` file.
+
+### Example: Adding a custom endpoint
+
+To add a new GPU endpoint for image generation:
+
+1. Create a new file at `workers/gpu/image_gen.py`:
+
+```python
+from tetra_rp import remote, LiveServerless, GpuGroup
+
+config = LiveServerless(
+    name="image-generator",
+    gpus=[GpuGroup.AMPERE_24],
+    workersMax=2
+)
+
+@remote(
+    resource_config=config,
+    dependencies=["diffusers", "torch", "transformers"]
+)
+def generate_image(prompt: str, width: int = 512, height: int = 512):
+    import torch
+    from diffusers import StableDiffusionPipeline
+    import base64
+    import io
+
+    pipeline = StableDiffusionPipeline.from_pretrained(
+        "runwayml/stable-diffusion-v1-5",
+        torch_dtype=torch.float16
+    ).to("cuda")
+
+    image = pipeline(prompt=prompt, width=width, height=height).images[0]
+
+    buffered = io.BytesIO()
+    image.save(buffered, format="PNG")
+    img_str = base64.b64encode(buffered.getvalue()).decode()
+
+    return {"image": img_str, "prompt": prompt}
+```
+
+2. Add a route in `workers/gpu/__init__.py`:
+
+```python
+from fastapi import APIRouter
+from .image_gen import generate_image
+
+router = APIRouter()
+
+@router.post("/generate")
+async def generate(prompt: str, width: int = 512, height: int = 512):
+    result = await generate_image(prompt, width, height)
+    return result
+```
+
+3. Include the router in `main.py` if not already included.
+
+## Load-balanced endpoints
+
+For API endpoints requiring low-latency HTTP access with direct routing, use load-balanced endpoints:
+
+```python
+from tetra_rp import LiveLoadBalancer, remote
+
+api = LiveLoadBalancer(name="api-service")
+
+@remote(api, method="POST", path="/api/process")
+async def process_data(x: int, y: int):
+    return {"result": x + y}
+
+@remote(api, method="GET", path="/api/health")
+def health_check():
+    return {"status": "ok"}
+
+# Call functions directly
+result = await process_data(5, 3)  # → {"result": 8}
+```
+
+Key differences from queue-based endpoints:
+
+- **Direct HTTP routing**: Requests routed directly to workers, no queue.
+- **Lower latency**: No queuing overhead.
+- **Custom HTTP methods**: GET, POST, PUT, DELETE, PATCH support.
+- **No automatic retries**: Users handle errors directly.
+
+Load-balanced endpoints are ideal for REST APIs, webhooks, and real-time services. Queue-based endpoints are better for batch processing and fault-tolerant workflows.
+
+## Next steps
+
+- [Deploy Flash applications](/flash/deploy-apps) for production use.
+- [Configure resources](/flash/resource-configuration) for your endpoints.
+- [Monitor and debug](/flash/monitoring) your endpoints.

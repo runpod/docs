@@ -1,0 +1,204 @@
+---
+title: "Monitoring and debugging"
+sidebarTitle: "Monitoring and debugging"
+description: "Monitor, debug, and troubleshoot Flash deployments."
+---
+
+This page covers how to monitor and debug your Flash deployments, including viewing logs, troubleshooting common issues, and optimizing performance.
+
+## Viewing logs
+
+When running Flash functions, logs are displayed in your terminal. The output includes:
+
+- Endpoint creation and reuse status.
+- Job submission and queue status.
+- Execution progress.
+- Worker information (delay time, execution time).
+
+Example output:
+
+```text
+2025-11-19 12:35:15,109 | INFO  | Created endpoint: rb50waqznmn2kg - flash-quickstart-fb
+2025-11-19 12:35:15,112 | INFO  | URL: https://console.runpod.io/serverless/user/endpoint/rb50waqznmn2kg
+2025-11-19 12:35:15,114 | INFO  | LiveServerless:rb50waqznmn2kg | API /run
+2025-11-19 12:35:15,655 | INFO  | LiveServerless:rb50waqznmn2kg | Started Job:b0b341e7-e460-4305-9acd-fc2dfd1bd65c-u2
+2025-11-19 12:35:15,762 | INFO  | Job:b0b341e7-e460-4305-9acd-fc2dfd1bd65c-u2 | Status: IN_QUEUE
+2025-11-19 12:36:09,983 | INFO  | Job:b0b341e7-e460-4305-9acd-fc2dfd1bd65c-u2 | Status: COMPLETED
+2025-11-19 12:36:10,068 | INFO  | Worker:icmkdgnrmdf8gz | Delay Time: 51842 ms
+2025-11-19 12:36:10,068 | INFO  | Worker:icmkdgnrmdf8gz | Execution Time: 1533 ms
+```
+
+### Log levels
+
+You can control log verbosity using the `LOG_LEVEL` environment variable:
+
+```bash
+LOG_LEVEL=DEBUG python your_script.py
+```
+
+Available log levels: `DEBUG`, `INFO`, `WARNING`, `ERROR`.
+
+## Monitoring in the Runpod console
+
+View detailed metrics and logs in the [Runpod console](https://www.runpod.io/console/serverless):
+
+1. Navigate to the **Serverless** section.
+2. Click on your endpoint to view:
+   - Active workers and queue depth.
+   - Request history and job status.
+   - Worker logs and execution details.
+   - Metrics (requests, latency, errors).
+
+### Endpoint metrics
+
+The console provides metrics including:
+
+- **Request rate**: Number of requests per minute.
+- **Queue depth**: Number of pending requests.
+- **Latency**: Average response time.
+- **Worker count**: Active and idle workers.
+- **Error rate**: Failed requests percentage.
+
+## Debugging common issues
+
+### Cold start delays
+
+If you're experiencing slow initial responses:
+
+- **Cause**: Workers need time to start, load dependencies, and initialize models.
+- **Solutions**:
+  - Set `workersMin=1` to keep at least one worker warm.
+  - Use smaller models or optimize model loading.
+  - Use `--auto-provision` with `flash run` for development.
+
+```python
+config = LiveServerless(
+    name="always-warm",
+    workersMin=1,  # Keep one worker always running
+    idleTimeout=30  # Longer idle timeout
+)
+```
+
+### Timeout errors
+
+If requests are timing out:
+
+- **Cause**: Execution taking longer than the timeout limit.
+- **Solutions**:
+  - Increase `executionTimeoutMs` in your configuration.
+  - Optimize your function to run faster.
+  - Break long operations into smaller chunks.
+
+```python
+config = LiveServerless(
+    name="long-running",
+    executionTimeoutMs=600000  # 10 minutes
+)
+```
+
+### Memory errors
+
+If you're seeing out-of-memory errors:
+
+- **Cause**: Model or data too large for available GPU/CPU memory.
+- **Solutions**:
+  - Use a larger GPU type (e.g., `GpuGroup.AMPERE_80` for 80GB VRAM).
+  - Use model quantization or smaller batch sizes.
+  - Clear GPU memory between operations.
+
+```python
+config = LiveServerless(
+    name="large-model",
+    gpus=[GpuGroup.AMPERE_80],  # A100 80GB
+    template=PodTemplate(containerDiskInGb=100)  # More disk space
+)
+```
+
+### Dependency errors
+
+If packages aren't being installed correctly:
+
+- **Cause**: Missing or incompatible dependencies.
+- **Solutions**:
+  - Verify package names and versions in the `dependencies` list.
+  - Check that packages have Linux `x86_64` wheels available.
+  - Import packages inside the function, not at the top of the file.
+
+```python
+@remote(
+    resource_config=config,
+    dependencies=["torch==2.0.0", "transformers==4.36.0"]  # Pin versions
+)
+def my_function(data):
+    import torch  # Import inside the function
+    import transformers
+    # ...
+```
+
+### Authentication errors
+
+If you're seeing API key errors:
+
+- **Cause**: Missing or invalid Runpod API key.
+- **Solutions**:
+  - Verify your API key is set in the environment.
+  - Check that the `.env` file is in the correct directory.
+  - Ensure the API key has the required permissions.
+
+```bash
+# Check if API key is set
+echo $RUNPOD_API_KEY
+
+# Set API key directly
+export RUNPOD_API_KEY=your_api_key_here
+```
+
+## Performance optimization
+
+### Reducing cold starts
+
+- Set `workersMin=1` for endpoints that need fast responses.
+- Use `idleTimeout` to balance cost and warm worker availability.
+- Cache models on network volumes to reduce loading time.
+
+### Optimizing execution time
+
+- Profile your functions to identify bottlenecks.
+- Use appropriate GPU types for your workload.
+- Batch multiple inputs into a single request when possible.
+- Use async operations to parallelize independent tasks.
+
+### Managing costs
+
+- Set appropriate `workersMax` limits to control scaling.
+- Use CPU workers for non-GPU tasks.
+- Monitor usage in the console to identify optimization opportunities.
+- Use shorter `idleTimeout` for sporadic workloads.
+
+## Endpoint management
+
+As you work with Flash, endpoints accumulate in your Runpod account. To manage them:
+
+1. Go to the [Serverless section](https://www.runpod.io/console/serverless) in the Runpod console.
+2. Review your endpoints and delete unused ones.
+3. Note that a `flash undeploy` command is in development for easier cleanup.
+
+<Warning>
+
+Endpoints persist until manually deleted through the Runpod console. Regularly clean up unused endpoints to avoid unnecessary charges.
+
+</Warning>
+
+## Getting help
+
+If you're encountering issues not covered here:
+
+- Check the [Flash examples repository](https://github.com/runpod/flash-examples) for working examples.
+- Review the [tetra-rp GitHub repository](https://github.com/runpod/tetra-rp) for the latest documentation.
+- Contact [Runpod support](https://www.runpod.io/contact) for additional assistance.
+
+## Next steps
+
+- [View the resource configuration reference](/flash/resource-configuration) for all available options.
+- [Learn about pricing](/flash/pricing) to optimize costs.
+- [Deploy Flash applications](/flash/deploy-apps) for production.

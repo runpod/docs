@@ -1,0 +1,324 @@
+---
+title: "Get started with Flash"
+sidebarTitle: "Quickstart"
+description: "Set up your development environment and run your first GPU workload with Flash."
+---
+
+This tutorial shows you how to set up Flash and run a GPU workload on Runpod Serverless. You'll create a remote function that performs matrix operations on a GPU and returns the results to your local machine.
+
+## What you'll learn
+
+In this tutorial you'll learn how to:
+
+- Set up your development environment for Flash.
+- Configure a Serverless endpoint using a `LiveServerless` object.
+- Create and define remote functions with the `@remote` decorator.
+- Deploy a GPU-based workload using Runpod resources.
+- Pass data between your local environment and remote workers.
+- Run multiple operations in parallel.
+
+## Requirements
+
+- You've [created a Runpod account](/get-started/manage-accounts).
+- You've [created a Runpod API key](/get-started/api-keys).
+- You've installed [Python 3.9 or greater](https://www.python.org/downloads/).
+
+## Step 1: Install Flash
+
+Use `pip` to install Flash:
+
+```bash
+pip install tetra_rp
+```
+
+## Step 2: Add your API key to the environment
+
+Add your Runpod API key to your development environment before using Flash to run workloads.
+
+Run this command to create a `.env` file, replacing `YOUR_API_KEY` with your Runpod API key:
+
+```bash
+touch .env && echo "RUNPOD_API_KEY=YOUR_API_KEY" > .env
+```
+
+<Note>
+
+You can create this in your project's root directory or in the `/examples` folder. Make sure your `.env` file is in the same folder as the Python file you create in the next step.
+
+</Note>
+
+## Step 3: Create your project file
+
+Create a new file called `matrix_operations.py` in the same directory as your `.env` file:
+
+```bash
+touch matrix_operations.py
+```
+
+Open this file in your code editor. The following steps walk through building a matrix multiplication example that demonstrates Flash's remote execution and parallel processing capabilities.
+
+## Step 4: Add imports and load the .env file
+
+Add the necessary import statements:
+
+```python
+import asyncio
+from dotenv import load_dotenv
+from tetra_rp import remote, LiveServerless, GpuGroup
+
+# Load environment variables from .env file
+load_dotenv()
+```
+
+This imports:
+
+- `asyncio`: Python's asynchronous programming library, which Flash uses for non-blocking execution.
+- `dotenv`: Loads environment variables from your `.env` file, including your Runpod API key.
+- `remote` and `LiveServerless`: The core Flash components for defining remote functions and their resource requirements.
+
+`load_dotenv()` reads your API key from the `.env` file and makes it available to Flash.
+
+## Step 5: Add Serverless endpoint configuration
+
+Define the Serverless endpoint configuration for your Flash workload:
+
+```python
+# Configuration for a Serverless endpoint using GPU workers
+gpu_config = LiveServerless(
+    gpus=[GpuGroup.AMPERE_24, GpuGroup.ADA_24],  # Use any 24GB GPU
+    workersMax=3,
+    name="tetra_gpu",
+)
+```
+
+This `LiveServerless` object defines:
+
+- `gpus=[GpuGroup.AMPERE_24, GpuGroup.ADA_24]`: The GPUs that can be used by workers on this endpoint. This restricts workers to using any 24 GB GPU (L4, A5000, 3090, or 4090). See [GPU pools](/references/gpu-types#gpu-pools) for available GPU pool IDs. Removing this parameter allows the endpoint to use any available GPUs.
+- `workersMax=3`: The maximum number of worker instances.
+- `name="tetra_gpu"`: The name of the endpoint that will be created/used in the Runpod console.
+
+If you run a Flash function that uses an identical `LiveServerless` configuration to a prior run, Runpod reuses your existing endpoint rather than creating a new one. However, if any configuration values have changed (not just the `name` parameter), a new endpoint will be created.
+
+## Step 6: Define your remote function
+
+Define the function that will run on the GPU worker:
+
+```python
+@remote(
+    resource_config=gpu_config,
+    dependencies=["numpy", "torch"]
+)
+def tetra_matrix_operations(size):
+    """Perform large matrix operations using NumPy and check GPU availability."""
+    import numpy as np
+    import torch
+
+    # Get GPU count and name
+    device_count = torch.cuda.device_count()
+    device_name = torch.cuda.get_device_name(0)
+
+    # Create large random matrices
+    A = np.random.rand(size, size)
+    B = np.random.rand(size, size)
+
+    # Perform matrix multiplication
+    C = np.dot(A, B)
+
+    return {
+        "matrix_size": size,
+        "result_shape": C.shape,
+        "result_mean": float(np.mean(C)),
+        "result_std": float(np.std(C)),
+        "device_count": device_count,
+        "device_name": device_name
+    }
+```
+
+This code demonstrates several key concepts:
+
+- `@remote`: The decorator that marks the function for remote execution on Runpod's infrastructure.
+- `resource_config=gpu_config`: The function runs using the GPU configuration defined earlier.
+- `dependencies=["numpy", "torch"]`: Python packages that must be installed on the remote worker.
+
+The `tetra_matrix_operations` function:
+
+- Gets GPU details using PyTorch's CUDA utilities.
+- Creates two large random matrices using NumPy.
+- Performs matrix multiplication.
+- Returns statistics about the result and information about the GPU.
+
+Notice that `numpy` and `torch` are imported inside the function, not at the top of the file. These imports need to happen on the remote worker, not in your local environment.
+
+## Step 7: Add the main function
+
+Add a `main` function to execute your GPU workload:
+
+```python
+async def main():
+    # Run the GPU matrix operations
+    print("Starting large matrix operations on GPU...")
+    result = await tetra_matrix_operations(1000)
+
+    # Print the results
+    print("\nMatrix operations results:")
+    print(f"Matrix size: {result['matrix_size']}x{result['matrix_size']}")
+    print(f"Result shape: {result['result_shape']}")
+    print(f"Result mean: {result['result_mean']:.4f}")
+    print(f"Result standard deviation: {result['result_std']:.4f}")
+
+    # Print GPU information
+    print("\nGPU Information:")
+    print(f"GPU device count: {result['device_count']}")
+    print(f"GPU device name: {result['device_name']}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+The `main` function:
+
+- Calls the remote function with `await`, which runs it asynchronously on Runpod's infrastructure.
+- Prints the results of the matrix operations.
+- Displays information about the GPU that was used.
+
+`asyncio.run(main())` is Python's standard way to execute an asynchronous `main` function from synchronous code.
+
+All code outside of the `@remote` decorated function runs on your local machine. The `main` function acts as a bridge between your local environment and Runpod's cloud infrastructure, allowing you to send input data to remote functions, wait for remote execution to complete without blocking your local process, and process returned results locally.
+
+The `await` keyword pauses execution of the `main` function until the remote operation completes, but doesn't block the entire Python process.
+
+## Step 8: Run your GPU example
+
+Run the example:
+
+```bash
+python matrix_operations.py
+```
+
+You should see output similar to this:
+
+```text
+Starting large matrix operations on GPU...
+Resource LiveServerless_33e1fa59c64b611c66c5a778e120c522 already exists, reusing.
+Registering RunPod endpoint: server_LiveServerless_33e1fa59c64b611c66c5a778e120c522 at https://api.runpod.ai/xvf32dan8rcilp
+Initialized RunPod stub for endpoint: https://api.runpod.ai/xvf32dan8rcilp (ID: xvf32dan8rcilp)
+Executing function on RunPod endpoint ID: xvf32dan8rcilp
+Initial job status: IN_QUEUE
+Job completed, output received
+
+Matrix operations results:
+Matrix size: 1000x1000
+Result shape: (1000, 1000)
+Result mean: 249.8286
+Result standard deviation: 6.8704
+
+GPU Information:
+GPU device count: 1
+GPU device name: NVIDIA GeForce RTX 4090
+```
+
+<Accordion title="Troubleshooting authentication issues">
+If you're having trouble running your code due to authentication issues:
+
+1. Verify your `.env` file is in the same directory as your `matrix_operations.py` file.
+2. Check that the API key in your `.env` file is correct and properly formatted.
+
+Alternatively, you can set the API key directly in your terminal:
+
+<Tabs>
+<Tab title="macOS/Linux">
+```bash
+export RUNPOD_API_KEY=[YOUR_API_KEY]
+```
+</Tab>
+<Tab title="Windows">
+```bash
+set RUNPOD_API_KEY=[YOUR_API_KEY]
+```
+</Tab>
+</Tabs>
+</Accordion>
+
+## Step 9: Understand what's happening
+
+When you run this script:
+
+1. Flash reads your GPU resource configuration and provisions a worker on Runpod.
+2. It installs the required dependencies (NumPy and PyTorch) on the worker.
+3. Your `tetra_matrix_operations` function runs on the remote worker.
+4. The function creates and multiplies large matrices, then calculates statistics.
+5. Your local `main` function receives these results and displays them in your terminal.
+
+## Step 10: Run multiple operations in parallel
+
+Flash makes it easy to run multiple remote operations in parallel.
+
+Replace your `main` function with this code:
+
+```python
+async def main():
+    # Run multiple matrix operations in parallel
+    print("Starting large matrix operations on GPU...")
+
+    # Run all matrix operations in parallel
+    results = await asyncio.gather(
+        tetra_matrix_operations(500),
+        tetra_matrix_operations(1000),
+        tetra_matrix_operations(2000)
+    )
+
+    print("\nMatrix operations results:")
+
+    # Print the results for each matrix size
+    for result in results:
+        print(f"\nMatrix size: {result['matrix_size']}x{result['matrix_size']}")
+        print(f"Result shape: {result['result_shape']}")
+        print(f"Result mean: {result['result_mean']:.4f}")
+        print(f"Result standard deviation: {result['result_std']:.4f}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+This updated `main` function demonstrates Flash's ability to run multiple operations in parallel using `asyncio.gather()`. Instead of running one matrix operation at a time, you're launching three operations with different matrix sizes (500, 1000, and 2000) simultaneously. This parallel execution significantly improves efficiency when you have multiple independent tasks.
+
+Run the example again:
+
+```bash
+python matrix_operations.py
+```
+
+You should see results for all three matrix sizes after the operations complete:
+
+```text
+Initial job status: IN_QUEUE
+Initial job status: IN_QUEUE
+Initial job status: IN_QUEUE
+Job completed, output received
+Job completed, output received
+Job completed, output received
+
+Matrix size: 500x500
+Result shape: (500, 500)
+Result mean: 125.3097
+Result standard deviation: 5.0425
+
+Matrix size: 1000x1000
+Result shape: (1000, 1000)
+Result mean: 249.9442
+Result standard deviation: 7.1072
+
+Matrix size: 2000x2000
+Result shape: (2000, 2000)
+Result mean: 500.1321
+Result standard deviation: 9.8879
+```
+
+## Next steps
+
+You've successfully used Flash to run a GPU workload on Runpod. Now you can:
+
+- [Create more complex remote functions](/flash/remote-functions) with custom dependencies and resource configurations.
+- [Build API endpoints](/flash/api-endpoints) using FastAPI.
+- [Deploy Flash applications](/flash/deploy-apps) for production use.
+- Explore more examples on the [runpod/flash-examples](https://github.com/runpod/flash-examples) GitHub repository.

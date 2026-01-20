@@ -1,0 +1,261 @@
+---
+title: "Create remote functions"
+sidebarTitle: "Create remote functions"
+description: "Learn how to create and configure remote functions with Flash."
+---
+
+Remote functions are the core building blocks of Flash. The `@remote` decorator marks Python functions for execution on Runpod's Serverless infrastructure, handling resource provisioning, dependency installation, and data transfer automatically.
+
+## Resource configuration
+
+Every remote function requires a resource configuration that specifies the compute resources to use. Flash provides several configuration classes for different use cases.
+
+### LiveServerless
+
+`LiveServerless` is the primary configuration class for Flash. It supports full remote code execution, allowing you to run arbitrary Python functions on Runpod's infrastructure.
+
+```python
+from tetra_rp import LiveServerless, GpuGroup
+
+gpu_config = LiveServerless(
+    name="ml-inference",
+    gpus=[GpuGroup.AMPERE_80],  # A100 80GB
+    workersMax=5,
+    idleTimeout=10
+)
+
+@remote(resource_config=gpu_config, dependencies=["torch"])
+def run_inference(data):
+    import torch
+    # Your inference code here
+    return result
+```
+
+Common configuration options:
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `name` | Name for your endpoint (required) | - |
+| `gpus` | GPU pool IDs that can be used | `[GpuGroup.ANY]` |
+| `workersMax` | Maximum number of workers | 3 |
+| `workersMin` | Minimum number of workers | 0 |
+| `idleTimeout` | Minutes before scaling down | 5 |
+
+See the [resource configuration reference](/flash/resource-configuration) for all available options.
+
+### CPU configuration
+
+For CPU-only workloads, specify `instanceIds` instead of `gpus`:
+
+```python
+from tetra_rp import LiveServerless, CpuInstanceType
+
+cpu_config = LiveServerless(
+    name="data-processor",
+    instanceIds=[CpuInstanceType.CPU5C_4_8],  # 4 vCPU, 8GB RAM
+    workersMax=3
+)
+
+@remote(resource_config=cpu_config, dependencies=["pandas"])
+def process_data(data):
+    import pandas as pd
+    df = pd.DataFrame(data)
+    return df.describe().to_dict()
+```
+
+## Dependency management
+
+Specify Python packages in the `dependencies` parameter of the `@remote` decorator. Flash installs these packages on the remote worker before executing your function.
+
+```python
+@remote(
+    resource_config=config,
+    dependencies=["transformers==4.36.0", "torch", "pillow"]
+)
+def generate_image(prompt):
+    from transformers import pipeline
+    import torch
+    from PIL import Image
+    # Your code here
+```
+
+### Important notes about dependencies
+
+**Import inside the function**: Always import packages inside the decorated function body, not at the top of your file. These imports need to happen on the remote worker, not in your local environment.
+
+```python
+# Correct - imports inside the function
+@remote(resource_config=config, dependencies=["numpy"])
+def compute(data):
+    import numpy as np  # Import here
+    return np.sum(data)
+
+# Incorrect - imports at top of file won't work
+import numpy as np  # This import happens locally, not on the worker
+
+@remote(resource_config=config, dependencies=["numpy"])
+def compute(data):
+    return np.sum(data)  # numpy not available on worker
+```
+
+**Version pinning**: You can pin specific versions using standard pip syntax:
+
+```python
+dependencies=["transformers==4.36.0", "torch>=2.0.0"]
+```
+
+**Pre-installed packages**: Some packages (like PyTorch) are pre-installed on GPU workers. Including them in dependencies ensures the correct version is available.
+
+## Parallel execution
+
+Flash functions are asynchronous by default. Use Python's `asyncio` to run multiple functions in parallel:
+
+```python
+import asyncio
+
+async def main():
+    # Run three functions in parallel
+    results = await asyncio.gather(
+        process_item(item1),
+        process_item(item2),
+        process_item(item3)
+    )
+    return results
+```
+
+This is particularly useful for:
+
+- Batch processing multiple inputs.
+- Running different models on the same data.
+- Parallelizing independent pipeline stages.
+
+### Example: Parallel batch processing
+
+```python
+import asyncio
+from tetra_rp import remote, LiveServerless, GpuGroup
+
+config = LiveServerless(
+    name="batch-processor",
+    gpus=[GpuGroup.ADA_24],
+    workersMax=5  # Allow up to 5 parallel workers
+)
+
+@remote(resource_config=config, dependencies=["torch"])
+def process_batch(batch_id, data):
+    import torch
+    # Process batch
+    return {"batch_id": batch_id, "result": len(data)}
+
+async def main():
+    batches = [
+        (1, [1, 2, 3]),
+        (2, [4, 5, 6]),
+        (3, [7, 8, 9])
+    ]
+    
+    # Process all batches in parallel
+    results = await asyncio.gather(*[
+        process_batch(batch_id, data) 
+        for batch_id, data in batches
+    ])
+    
+    print(results)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Custom Docker images
+
+For specialized environments that require a custom Docker image, use `ServerlessEndpoint` or `CpuServerlessEndpoint` instead of `LiveServerless`:
+
+```python
+from tetra_rp import ServerlessEndpoint, GpuGroup
+
+custom_gpu = ServerlessEndpoint(
+    name="custom-ml-env",
+    imageName="pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime",
+    gpus=[GpuGroup.AMPERE_80]
+)
+```
+
+<Warning>
+
+Unlike `LiveServerless`, `ServerlessEndpoint` and `CpuServerlessEndpoint` only support dictionary payloads in the form of `{"input": {...}}` (similar to a traditional [Serverless endpoint request](/serverless/endpoints/send-requests)). They cannot execute arbitrary Python functions remotely.
+
+</Warning>
+
+Use custom Docker images when you need:
+
+- Pre-installed system-level dependencies.
+- Specific CUDA or cuDNN versions.
+- Custom base images with large models baked in.
+
+## Using persistent storage
+
+Attach [network volumes](/storage/network-volumes) for persistent storage across workers and endpoints. This is useful for sharing large models or datasets between workers without downloading them each time.
+
+```python
+config = LiveServerless(
+    name="model-server",
+    networkVolumeId="vol_abc123",  # Your network volume ID
+    template=PodTemplate(containerDiskInGb=100)
+)
+```
+
+To find your network volume ID:
+
+1. Go to the [Storage page](https://www.runpod.io/console/storage) in the Runpod console.
+2. Click on your network volume.
+3. Copy the volume ID from the URL or volume details.
+
+### Example: Using a network volume for model storage
+
+```python
+from tetra_rp import LiveServerless, GpuGroup, PodTemplate
+
+config = LiveServerless(
+    name="model-inference",
+    gpus=[GpuGroup.AMPERE_80],
+    networkVolumeId="vol_abc123",
+    template=PodTemplate(containerDiskInGb=100)
+)
+
+@remote(resource_config=config, dependencies=["torch", "transformers"])
+def run_inference(prompt):
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    
+    # Load model from network volume
+    model_path = "/runpod-volume/models/llama-7b"
+    model = AutoModelForCausalLM.from_pretrained(model_path)
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    
+    # Run inference
+    inputs = tokenizer(prompt, return_tensors="pt")
+    outputs = model.generate(**inputs)
+    return tokenizer.decode(outputs[0])
+```
+
+## Environment variables
+
+Pass environment variables to remote functions using the `env` parameter:
+
+```python
+config = LiveServerless(
+    name="api-worker",
+    env={"HF_TOKEN": "your_token", "MODEL_ID": "gpt2"}
+)
+```
+
+<Note>
+
+Environment variables are excluded from configuration hashing. Changing environment values won't trigger endpoint recreation, which allows different processes to load environment variables from `.env` files without causing false drift detection.
+
+</Note>
+
+## Next steps
+
+- [Create API endpoints](/flash/api-endpoints) using FastAPI.
+- [Deploy Flash applications](/flash/deploy-apps) for production.
+- [View the resource configuration reference](/flash/resource-configuration) for all available options.

@@ -1,0 +1,108 @@
+---
+title: "Pricing"
+sidebarTitle: "Pricing"
+description: "Understand Flash pricing and optimize your costs."
+---
+
+Flash follows the same pricing model as [Runpod Serverless](/serverless/pricing). You pay per second of compute time, with no charges when your code isn't running. Pricing depends on the GPU or CPU type you configure for your endpoints.
+
+## How pricing works
+
+You're billed from when a worker starts until it completes your request, plus any idle time before scaling down. If a worker is already warm, you skip the cold start and only pay for execution time.
+
+### Compute cost breakdown
+
+Flash workers incur charges during these periods:
+
+1. **Start time**: The time required to initialize a worker and load models into GPU memory. This includes starting the container, installing dependencies, and preparing the runtime environment.
+2. **Execution time**: The time spent processing your request (running your `@remote` decorated function).
+3. **Idle time**: The period a worker remains active after completing a request, waiting for additional requests before scaling down.
+
+### Pricing by resource type
+
+Flash supports both GPU and CPU workers. Pricing varies based on the hardware type:
+
+- **GPU workers**: Use `LiveServerless` or `ServerlessEndpoint` with GPU configurations. Pricing depends on the GPU type (e.g., RTX 4090, A100 80GB).
+- **CPU workers**: Use `LiveServerless` or `CpuServerlessEndpoint` with CPU configurations. Pricing depends on the CPU instance type.
+
+See the [Serverless pricing page](/serverless/pricing) for current rates by GPU and CPU type.
+
+## How to estimate and optimize costs
+
+To estimate costs for your Flash workloads, consider:
+
+- How long each function takes to execute.
+- How many concurrent workers you need (`workersMax` setting).
+- Which GPU or CPU types you'll use.
+- Your idle timeout configuration (`idleTimeout` setting).
+
+### Cost optimization strategies
+
+#### Choose appropriate hardware
+
+Select the smallest GPU or CPU that meets your performance requirements. For example, if your workload fits in 24GB of VRAM, use `GpuGroup.ADA_24` or `GpuGroup.AMPERE_24` instead of larger GPUs.
+
+```python
+# Cost-effective configuration for workloads that fit in 24GB VRAM
+config = LiveServerless(
+    name="cost-optimized",
+    gpus=[GpuGroup.ADA_24, GpuGroup.AMPERE_24],  # RTX 4090, L4, A5000, 3090
+)
+```
+
+#### Configure idle timeouts
+
+Balance responsiveness and cost by adjusting the `idleTimeout` parameter. Shorter timeouts reduce idle costs but increase cold starts for sporadic traffic.
+
+```python
+# Lower idle timeout for cost savings (more cold starts)
+config = LiveServerless(
+    name="low-idle",
+    idleTimeout=5,  # 5 seconds (default)
+)
+
+# Higher idle timeout for responsiveness (higher idle costs)
+config = LiveServerless(
+    name="responsive",
+    idleTimeout=30,  # 30 seconds
+)
+```
+
+#### Use CPU workers for non-GPU tasks
+
+For data preprocessing, postprocessing, or other tasks that don't require GPU acceleration, use CPU workers instead of GPU workers.
+
+```python
+from tetra_rp import LiveServerless, CpuInstanceType
+
+# CPU configuration for non-GPU tasks
+cpu_config = LiveServerless(
+    name="data-processor",
+    instanceIds=[CpuInstanceType.CPU5C_2_4],  # 2 vCPU, 4GB RAM
+)
+```
+
+#### Limit maximum workers
+
+Set `workersMax` to prevent runaway scaling and unexpected costs:
+
+```python
+config = LiveServerless(
+    name="controlled-scaling",
+    workersMax=3,  # Limit to 3 concurrent workers
+)
+```
+
+### Monitoring costs
+
+Monitor your usage in the [Runpod console](https://www.runpod.io/console/serverless) to track:
+
+- Total compute time across endpoints.
+- Worker utilization and idle time.
+- Cost breakdown by endpoint.
+
+## Next steps
+
+- [Create remote functions](/flash/remote-functions) with optimized resource configurations.
+- [View Serverless pricing details](/serverless/pricing) for current rates.
+- [Configure resources](/flash/resource-configuration) for your workloads.

@@ -1,0 +1,170 @@
+---
+title: "Deploy Flash apps"
+sidebarTitle: "Deploy apps"
+description: "Build and deploy Flash applications for production."
+---
+
+Flash uses a build process to package your application for deployment. This page covers how the build process works, including handler generation, cross-platform builds, and troubleshooting common issues.
+
+## Build process and handler generation
+
+When you run `flash build`, the following happens:
+
+1. **Discovery**: Flash scans your code for `@remote` decorated functions.
+2. **Grouping**: Functions are grouped by their `resource_config`.
+3. **Handler generation**: For each resource config, Flash generates a lightweight handler file.
+4. **Manifest creation**: A `flash_manifest.json` file maps functions to their endpoints.
+5. **Dependency installation**: Python packages are installed with Linux `x86_64` compatibility.
+6. **Packaging**: Everything is bundled into `archive.tar.gz` for deployment.
+
+### Handler architecture
+
+Flash uses a factory pattern for handlers to eliminate code duplication:
+
+```python
+# Generated handler (handler_gpu_config.py)
+from tetra_rp.runtime.generic_handler import create_handler
+from workers.gpu import process_data
+
+FUNCTION_REGISTRY = {
+    "process_data": process_data,
+}
+
+handler = create_handler(FUNCTION_REGISTRY)
+```
+
+This approach provides:
+
+- **Single source of truth**: All handler logic in one place.
+- **Easier maintenance**: Bug fixes don't require rebuilding projects.
+
+## Cross-platform builds
+
+Flash automatically handles cross-platform builds, ensuring your deployments work correctly regardless of your development platform:
+
+- **Automatic platform targeting**: Dependencies are installed for Linux `x86_64` (Runpod's serverless platform), even when building on macOS or Windows.
+- **Python version matching**: The build uses your current Python version to ensure package compatibility.
+- **Binary wheel enforcement**: Only pre-built binary wheels are used, preventing platform-specific compilation issues.
+
+This means you can build on macOS ARM64, Windows, or any other platform, and the resulting package will run correctly on Runpod Serverless.
+
+## Cross-endpoint function calls
+
+Flash enables functions on different endpoints to call each other. The runtime automatically discovers endpoints using the manifest and routes calls appropriately:
+
+```python
+# CPU endpoint function
+@remote(resource_config=cpu_config)
+def preprocess(data):
+    # Preprocessing logic
+    return clean_data
+
+# GPU endpoint function
+@remote(resource_config=gpu_config)
+async def inference(data):
+    # Can call CPU endpoint function
+    clean = await preprocess(data)
+    # Run inference on clean data
+    return result
+```
+
+The runtime wrapper handles service discovery and routing automatically. This allows you to build pipelines that use CPU workers for preprocessing and GPU workers for inference, optimizing costs by using appropriate hardware for each task.
+
+## Build artifacts
+
+After `flash build` completes, you'll find these artifacts:
+
+| Artifact | Description |
+|----------|-------------|
+| `.flash/.build/` | Temporary build directory (removed unless `--keep-build`) |
+| `.flash/archive.tar.gz` | Deployment package |
+| `.flash/flash_manifest.json` | Service discovery configuration |
+
+### Managing bundle size
+
+Runpod Serverless has a **500MB deployment limit**. Exceeding this limit will cause deployment failures.
+
+Use `--exclude` to skip packages already in your worker-tetra Docker image:
+
+```bash
+# For GPU deployments (PyTorch pre-installed)
+flash build --exclude torch,torchvision,torchaudio
+```
+
+Which packages to exclude depends on your resource config:
+
+- **GPU resources**: PyTorch images have `torch`, `torchvision`, and `torchaudio` pre-installed.
+- **CPU resources**: Python slim images have no ML frameworks pre-installed.
+- **Load-balanced**: Same as above, depends on GPU vs CPU variant.
+
+## Troubleshooting
+
+### No @remote functions found
+
+If the build process can't find your remote functions:
+
+- Ensure your functions are decorated with `@remote(resource_config)`.
+- Check that Python files are not excluded by `.gitignore` or `.flashignore`.
+- Verify function decorators have valid syntax.
+
+### Handler generation failed
+
+If handler generation fails:
+
+- Check for syntax errors in your Python files (these will be logged).
+- Verify all imports in your worker modules are available.
+- Ensure resource config variables (e.g., `gpu_config`) are defined before functions reference them.
+- Use `--keep-build` to inspect generated handler files in `.flash/.build/`.
+
+### Build succeeded but deployment failed
+
+If the build succeeds but deployment fails:
+
+- Verify all function imports work in the deployment environment.
+- Check that environment variables required by your functions are available.
+- Review the generated `flash_manifest.json` for correct function mappings.
+
+### Dependency installation failed
+
+If dependency installation fails during the build:
+
+- If a package doesn't have pre-built Linux `x86_64`` wheels, the build will fail with an error.
+- For newer Python versions (3.13+), some packages may require `manylinux_2_27`` or higher.
+- Ensure you have standard pip installed (`python -m ensurepip --upgrade`) for best compatibility.
+- Check PyPI to verify the package supports your Python version on Linux.
+
+### Authentication errors
+
+If you're seeing authentication errors:
+
+Verify your API key is set correctly:
+
+```bash
+echo $RUNPOD_API_KEY  # Should show your key
+```
+
+### Import errors in remote functions
+
+Remember to import packages inside remote functions:
+
+```python
+@remote(dependencies=["requests"])
+def fetch_data(url):
+    import requests  # Import here, not at top of file
+    return requests.get(url).json()
+```
+
+## Performance optimization
+
+To optimize performance:
+
+- Set `workersMin=1` to keep workers warm and avoid cold starts.
+- Use `idleTimeout` to balance cost and responsiveness.
+- Choose appropriate GPU types for your workload.
+- Use `--auto-provision` with `flash run` to eliminate cold-start delays during development.
+
+## Next steps
+
+- [View the resource configuration reference](/flash/resource-configuration) for all available options.
+- [Monitor and debug](/flash/monitoring) your deployments.
+- [Learn about pricing](/flash/pricing) to optimize costs.
