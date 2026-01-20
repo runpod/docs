@@ -1,30 +1,30 @@
 ---
 title: "Configure vLLM to work with your model"
 sidebarTitle: "Configure vLLM"
-description: "Learn how to configure vLLM endpoints to work with your chosen model."
+description: "Learn how to set up vLLM endpoints to work with your chosen model."
 ---
 
 Most LLMs need specific configuration to run properly on vLLM. You need to understand what settings your model expects for loading, tokenization, and generation.
 
 This guide covers how to configure your vLLM endpoints for different model families, how environment variables map to vLLM command-line flags, and recommended configurations for popular models, and how to select the right GPU for your model.
 
-## Why is vLLM so hard to configure?
+## Why is vLLM sometimes hard to configure?
 
-Without the right settings, your vLLM workers may fail to load, produce incorrect outputs, or miss key features. vLLM supports hundreds of models, but default settings only work out of the box for a subset of them.
+vLLM supports hundreds of models, but default settings only work out of the box for a subset of them. Without the right settings, your vLLM workers may fail to load, produce incorrect outputs, or miss key features. 
 
-Different model architectures have different requirements for tokenization, attention mechanisms, and features like tool calling or reasoning. For example, Mistral models need their own tokenizer mode and config format, while reasoning models like DeepSeek-R1 need a reasoning parser enabled. 
+Different model architectures have different requirements for tokenization, attention mechanisms, and features like tool calling or reasoning. For example, Mistral models use a specialized tokenizer mode and config format, while reasoning models like DeepSeek-R1 require you to specify a reasoning parser. 
 
 When deploying a model, check its Hugging Face README and the [vLLM documentation](https://docs.vllm.ai/en/latest/usage/) for required or recommended settings.
 
 ## Mapping environment variables to vLLM CLI flags
 
-When running vLLM with `vllm serve`, you configure the engine with command-line flags. On Runpod, you set these options with [environment variables](/serverless/vllm/environment-variables) instead.
+When running vLLM with `vllm serve`, the engine is configured using [command-line flags](https://docs.vllm.ai/en/latest/configuration/engine_args/). On Runpod, you set these options with [environment variables](/serverless/vllm/environment-variables) instead.
 
-Each vLLM command-line argument has a corresponding environment variable. Convert the flag name to uppercase with underscores: `--tokenizer_mode` becomes `TOKENIZER_MODE`, `--enable-auto-tool-choice` becomes `ENABLE_AUTO_TOOL_CHOICE`, and so on. For all available vLLM engine arguments, see the [vLLM engine arguments documentation](https://docs.vllm.ai/en/latest/configuration/engine_args/).
+Each vLLM command-line argument has a corresponding environment variable. Convert the flag name to uppercase with underscores: `--tokenizer_mode` becomes `TOKENIZER_MODE`, `--enable-auto-tool-choice` becomes `ENABLE_AUTO_TOOL_CHOICE`, and so on.
 
-## Example: Deploying Mistral
+### Example: Deploying Mistral
 
-To launch a Mistral model using the vLLM CLI, you could run the following command:
+To launch a Mistral model using the vLLM CLI, you would run a command similar to this:
 
 ```bash
 vllm serve mistralai/Ministral-8B-Instruct-2410 \
@@ -87,22 +87,19 @@ Use the table below as a starting point to select a hardware configuration for y
 
 ---
 
-### Key factors
 
-Here are some key factors to consider when selecting the right GPU for your model:
-
-#### Context window vs. VRAM
+### Context window vs. VRAM
 
 The more context you need (e.g., 32k or 128k tokens), the more VRAM the KV cache consumes. If you encounter Out-of-Memory (OOM) errors, use the `MAX_MODEL_LEN` environment variable to cap the context. For example, a 7B model that OOMs at 32k context on a 24 GB card will often run perfectly at 16k.
 
-#### GPU memory utilization
+### GPU memory utilization
 
 By default, vLLM attempts to use 90% of the available VRAM (`GPU_MEMORY_UTILIZATION=0.90`).
 
 * **If you OOM during initialization:** Lower this to `0.85`.
 * **If you have extra headroom:** Increase it to `0.95` to allow for more concurrent requests.
 
-#### Quantization (AWQ/GPTQ)
+### Quantization (AWQ/GPTQ)
 
 If you are limited by a single GPU, use a quantized version of the model (e.g., `Meta-Llama-3-8B-Instruct-AWQ`). This reduces the weight memory by 50-75% compared to `FP16`, allowing you to fit larger models on cards like the RTX 4090 (24 GB) or A4000 (16 GB).
 
