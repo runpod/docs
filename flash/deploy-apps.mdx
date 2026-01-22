@@ -1,7 +1,8 @@
 ---
-title: "Deploy Flash apps"
-sidebarTitle: "Deploy apps"
-description: "Build and deploy Flash applications for production."
+title: "Build and deploy Flash apps"
+sidebarTitle: "Deploy Flash apps"
+description: "Package and deploy Flash applications for production with `flash build`."
+tag: "BETA"
 ---
 
 Flash uses a build process to package your application for deployment. This page covers how the build process works, including handler generation, cross-platform builds, and troubleshooting common issues.
@@ -42,15 +43,15 @@ This approach provides:
 
 Flash automatically handles cross-platform builds, ensuring your deployments work correctly regardless of your development platform:
 
-- **Automatic platform targeting**: Dependencies are installed for Linux `x86_64` (Runpod's serverless platform), even when building on macOS or Windows.
+- **Automatic platform targeting**: Dependencies are installed for Linux `x86_64` (required for [Runpod Serverless](/serverless/overview)), even when building on macOS or Windows.
 - **Python version matching**: The build uses your current Python version to ensure package compatibility.
 - **Binary wheel enforcement**: Only pre-built binary wheels are used, preventing platform-specific compilation issues.
 
-This means you can build on macOS ARM64, Windows, or any other platform, and the resulting package will run correctly on Runpod Serverless.
+This means you can build on macOS ARM64, Windows, or any other platform, and the resulting package will run correctly on [Runpod Serverless](/serverless/overview).
 
 ## Cross-endpoint function calls
 
-Flash enables functions on different endpoints to call each other. The runtime automatically discovers endpoints using the manifest and routes calls appropriately:
+Flash enables functions on different endpoints to call each other:
 
 ```python
 # CPU endpoint function
@@ -68,11 +69,11 @@ async def inference(data):
     return result
 ```
 
-The runtime wrapper handles service discovery and routing automatically. This allows you to build pipelines that use CPU workers for preprocessing and GPU workers for inference, optimizing costs by using appropriate hardware for each task.
+The runtime automatically discovers endpoints and routes calls appropriately using the [`flash_manifest.json`](#build-artifacts) file generated during the build process. This lets you build pipelines that use CPU workers for preprocessing and GPU workers for inference, optimizing costs by using the appropriate hardware for each task.
 
 ## Build artifacts
 
-After `flash build` completes, you'll find these artifacts:
+After running `flash build`, you'll find these artifacts in the `.flash/` directory:
 
 | Artifact | Description |
 |----------|-------------|
@@ -82,20 +83,24 @@ After `flash build` completes, you'll find these artifacts:
 
 ### Managing bundle size
 
-Runpod Serverless has a **500MB deployment limit**. Exceeding this limit will cause deployment failures.
+Runpod Serverless has a **500MB deployment limit**. Exceeding this limit will cause your build to fail.
 
-Use `--exclude` to skip packages already in your worker-tetra Docker image:
+Use `--exclude` to skip packages that are already included in your base worker image:
 
 ```bash
 # For GPU deployments (PyTorch pre-installed)
 flash build --exclude torch,torchvision,torchaudio
 ```
 
-Which packages to exclude depends on your resource config:
+Which packages to exclude depends on your [resource config](/flash/resource-configuration):
 
-- **GPU resources**: PyTorch images have `torch`, `torchvision`, and `torchaudio` pre-installed.
-- **CPU resources**: Python slim images have no ML frameworks pre-installed.
-- **Load-balanced**: Same as above, depends on GPU vs CPU variant.
+- **GPU resources** use PyTorch as the base image, which has `torch`, `torchvision`, and `torchaudio` pre-installed.
+- **CPU resources** use Python slim images, which have no ML frameworks pre-installed.
+- **Load-balancer** resources use the same base image as their GPU/CPU counterparts.
+
+<Tip>
+    You can find details about the Flash worker image in the [runpod-workers/worker-tetra](https://github.com/runpod/worker-tetra) repository. Find the `Dockerfile` for your endpoint type: `Dockerfile` (for GPU workers), `Dockerfile-cpu` (for CPU workers), or `Dockerfile-lb` (for load balancing workers).
+</Tip>
 
 ## Troubleshooting
 
@@ -111,9 +116,9 @@ If the build process can't find your remote functions:
 
 If handler generation fails:
 
-- Check for syntax errors in your Python files (these will be logged).
+- Check for syntax errors in your Python files (they should be logged in the terminal).
 - Verify all imports in your worker modules are available.
-- Ensure resource config variables (e.g., `gpu_config`) are defined before functions reference them.
+- Ensure resource config variables (e.g., `gpu_config`) are defined before a function references them.
 - Use `--keep-build` to inspect generated handler files in `.flash/.build/`.
 
 ### Build succeeded but deployment failed
