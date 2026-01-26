@@ -1,7 +1,8 @@
 ---
 title: "Integrate Serverless with a web application"
-sidebarTitle: "Web app integration"
+sidebarTitle: "Integrate with a web application"
 description: "Deploy an image generation endpoint from the Hub and integrate it into a web application."
+tag: "NEW"
 ---
 
 In this tutorial, you'll deploy a pre-built SDXL Turbo worker from the Runpod Hub and integrate it into a web application. You'll build a simple frontend that sends prompts to your endpoint and displays the generated images.
@@ -25,8 +26,8 @@ In this tutorial, you'll learn how to:
 The Runpod Hub provides pre-built workers you can deploy with a few clicks. For this tutorial, you'll deploy the SDXL Turbo worker, which generates images from text prompts.
 
 1. Navigate to the [Runpod Hub](https://www.console.runpod.io/hub) in the console.
-2. Search for "SDXL Turbo" or browse the image generation category.
-3. Select the SDXL Turbo worker to view its details and hardware requirements.
+2. Search for "SDXL-turbo" or browse the image generation category.
+3. Select the SDXL-turbo worker to view its details and hardware requirements.
 4. Click **Deploy** in the top-right corner of the page.
 5. Click **Create Endpoint**.
 
@@ -57,7 +58,7 @@ Store your API key securely. Never commit it to version control or expose it in 
 
 ## Step 3: Send a test request
 
-Test your endpoint with a simple API request before integrating it into an application. The endpoint accepts a JSON payload with an `input` object containing your image generation parameters.
+Test your endpoint with a simple API request before integrating it into an application. The endpoint accepts a JSON payload with an `input` object containing your prompt.
 
 <Tabs>
 <Tab title="cURL">
@@ -68,13 +69,7 @@ curl -X POST "https://api.runpod.ai/v2/${YOUR_ENDPOINT_ID}/runsync" \
      -H "authorization: Bearer ${YOUR_API_KEY}" \
      -d '{
         "input": {
-            "prompt": "A futuristic city skyline at sunset",
-            "num_inference_steps": 25,
-            "width": 1024,
-            "height": 1024,
-            "guidance_scale": 7.5,
-            "seed": null,
-            "num_images": 1
+            "prompt": "A futuristic city skyline at sunset"
         }
      }'
 ```
@@ -97,12 +92,6 @@ response = requests.post(
     json={
         "input": {
             "prompt": "A futuristic city skyline at sunset",
-            "num_inference_steps": 25,
-            "width": 1024,
-            "height": 1024,
-            "guidance_scale": 7.5,
-            "seed": None,
-            "num_images": 1,
         }
     },
 )
@@ -115,9 +104,16 @@ print(response.json())
 ```json
 {
   "delayTime": 168,
-  "executionTime": 251,
+  "executionTime": 2126,
   "id": "sync-fa542d19-92b2-47d0-8e58-c01878f0365d-u1",
-  "output": "BASE_64_ENCODED_IMAGE",
+  "output": {
+    "generation_time": 0.72,
+    "images": [
+      {
+        "image": "BASE_64_ENCODED_IMAGE"
+      }
+    ]
+  },
   "status": "COMPLETED"
 }
 ```
@@ -131,11 +127,21 @@ Replace the following placeholders:
 | `YOUR_ENDPOINT_ID` | Your endpoint ID from step 2. |
 | `YOUR_API_KEY` | Your Runpod API key. |
 
-The `output` field contains the generated image as a base64-encoded string. For more information about request parameters and response formats, see [Send requests](/serverless/endpoints/send-requests).
+The generated image is returned as a base64-encoded PNG string in `output.images[0].image`. For more information about request parameters and response formats, see [Send requests](/serverless/endpoints/send-requests).
+
+SDXL Turbo uses adversarial diffusion distillation to generate images in just a few steps. The worker is pre-configured with optimal settings, so you only need to provide the `prompt` parameter, but you can also provide other parameters to control the generation process.
+
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `prompt` | string | Yes | - | The prompt to generate an image from. |
+| `negative_prompt` | string | No | - | The negative prompt to exclude from the image. |
+| `width` | integer | No | 1024 | The width of the image in pixels. |
+| `height` | integer | No | 1024 | The height of the image in pixels. |
+| `num_inference_steps` | integer | No | 25 | The number of denoising steps. |
 
 ## Step 4: Integrate with a web application
 
-Now that you've confirmed your endpoint is working, you can integrate it into a web application. This example creates a simple image generator with an input field for prompts and a button to generate images. While these steps use JavaScript, you can make requests to your endpoint using any programming language or framework.
+Now that you've confirmed your endpoint is working, you can integrate it into a web application. This example creates a simple image generator with an input field for prompts and a button to generate images. While this tutorial uses JavaScript, you can make requests to your endpoint using any programming language or framework.
 
 Create two files in the same directory:
 
@@ -201,7 +207,8 @@ The HTML file sets up a user interface with an input field for prompts and a but
 </Tab>
 
 <Tab title="script.js">
-The JavaScript file handles API communication. The `generateImage` function reads the user's prompt, sends a POST request to your Runpod endpoint, and displays the generated image. The endpoint returns a base64-encoded image, which is then converted to a displayable format.
+
+The JavaScript file handles API communication. The `generateImage` function reads the user's prompt, sends a POST request to your Runpod endpoint, and displays the generated image. The endpoint returns a base64-encoded PNG image in the `output.images` array, which is then converted to a displayable format.
 
 ```javascript script.js
 // Replace these with your actual values
@@ -210,7 +217,7 @@ const API_KEY = "YOUR_API_KEY";
 
 async function generateImage() {
     const prompt = document.getElementById("promptInput").value;
-    
+
     if (!prompt) {
         alert("Please enter a prompt!");
         return;
@@ -230,12 +237,6 @@ async function generateImage() {
         body: JSON.stringify({
             input: {
                 prompt: prompt,
-                num_inference_steps: 25,
-                width: 1024,
-                height: 1024,
-                guidance_scale: 7.5,
-                seed: null,
-                num_images: 1,
             },
         }),
     };
@@ -250,10 +251,10 @@ async function generateImage() {
         // Hide loading indicator
         document.getElementById("loading").style.display = "none";
 
-        if (data && data.output) {
-            const imageBase64 = data.output;
-            const imageUrl = `data:image/jpeg;base64,${imageBase64}`;
-            document.getElementById("imageResult").innerHTML = 
+        if (data && data.output && data.output.images && data.output.images.length > 0) {
+            const imageBase64 = data.output.images[0].image;
+            const imageUrl = `data:image/png;base64,${imageBase64}`;
+            document.getElementById("imageResult").innerHTML =
                 `<img src="${imageUrl}" alt="Generated Image" />`;
         } else if (data && data.error) {
             alert(`Error: ${data.error}`);
@@ -302,6 +303,10 @@ Then open `http://localhost:8000` in your browser.
 </Tabs>
 
 Enter a prompt and click **Generate Image** to see your AI-generated image.
+
+<Tip>
+The first request may take longer (30-60 seconds) due to cold start as the endpoint loads the model into GPU memory. Subsequent requests complete in just a few seconds.
+</Tip>
 
 ## Next steps
 
