@@ -1,0 +1,124 @@
+---
+title: "Integrate your applications with Runpod"
+sidebarTitle: "Overview"
+description: "Integrate Runpod compute resources with your applications, external tools, and agentic frameworks."
+tag: "NEW"
+---
+
+You can integrate Runpod compute resources with any system that supports custom endpoint configuration. This guide provides an overview of the many different methods for doing so.
+
+## Integrate with Serverless
+
+[Runpod Serverless endpoints](/serverless/overview) are REST APIs that accept HTTP requests, execute your code, and return the result via HTTP response. Each endpoint provides a unique URL and abstracts away the complexity of managing individual GPUs/CPUs.
+
+To integrate with Serverless:
+
+1. Create a [handler function](/serverless/workers/handler-functions) with the code for your application.
+2. [Create a Dockerfile](/serverless/workers/create-dockerfile) to package your handler function and all its dependencies.
+3. [Package your worker](/serverless/workers/deploy) into a Docker image and push it to a Docker registry.
+4. [Deploy a Serverless endpoint](/serverless/endpoints/overview) using the Runpod console or [REST API](/api-reference/endpoints/POST/endpoints).
+5. Start [sending requests](/serverless/endpoints/send-requests) to the endpoint.
+
+<Tip>
+For a full walkthrough of how to create and test custom endpoints, try the [Serverless quickstart](/serverless/quickstart).
+</Tip>
+
+## Integrate with Pods
+
+[Pods](/pods/overview) are self-contained compute environments, providing instant access to powerful GPU and CPU resources. They're ideal for applications that require a consistent, predictable environment, such as web applications or backend services with a constant workload.
+
+There are two primary methods for integrating a Pod with your application:
+
+### HTTP proxy
+For web-based APIs or UIs, Runpod provides an automated [HTTP proxy](/pods/configuration/expose-ports#http-access-via-runpod-proxy). Any port you expose as an HTTP port in your template or Pod configuration is accessible via a unique URL.
+
+The URL follows this format: 
+
+```bash title="HTTP proxy URL format"
+https://POD_ID-INTERNAL_PORT.proxy.runpod.net
+```
+
+For example, if your Pod's ID is `abc123xyz` and you exposed port 8000, your application would send requests to:
+
+```bash title="HTTP proxy URL example"
+https://abc123xyz-8000.proxy.runpod.net
+```
+
+### Direct TCP
+
+For protocols that require persistent connections or fall outside of standard HTTP, use the [Direct TCP Ports](/pods/configuration/expose-ports#tcp-access-via-public-ip). When you expose a TCP port, Runpod assigns a public IP address and a mapped external port. You can find these details using the [`GET /pods/POD_ID`](/api-reference/pods/GET/pods/POD_ID) endpoint or the [Pod connection menu](/pods/connect-to-a-pod) in the Runpod console.
+
+## Integrate with Public Endpoints
+
+[Public Endpoints](/hub/public-endpoints) are pre-deployed AI models that you can use without setting up your own Serverless endpoint. They are extremely simple to integrate, requiring zero infrastructure configuration, and you can start using them immediately by pointing your application to the Public Endpoint URL.
+
+The easiest way to get started is to use the [Public Endpoint playground](https://console.runpod.io/hub?tabSelected=public_endpoints) to configure your request parameters, then click the `API` tab to copy the code to your application.
+
+
+## Integrate external tools with OpenAI-compatible endpoints
+
+Many external tools and agentic frameworks support OpenAI-compatible endpoints with little-to-no configuration required. Integration is usually straightforward: any library or framework that accepts a custom base URL for API calls will work with Runpod without specialized adapters or connectors. 
+
+This means you can integrate Runpod with tools like n8n, CrewAI, LangChain, and many others by simply pointing them to your Runpod endpoint URL and providing your Runpod API key for authentication:
+
+```bash title="Base URL format"
+https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1
+```
+
+You can integrate OpenAI-compatible tools with Runpod using any of the following methods:
+
+### Public Endpoints
+
+[Public Endpoints](/hub/public-endpoints) are pre-deployed AI models that you can use without setting up your own Serverless endpoint. They're vLLM-compatible and return OpenAI-compatible responses, so you can get started quickly without deploying 
+
+The following Public Endpoint URLs are available for OpenAI-compatible models:
+
+```bash title="Public Endpoint base URLs"
+# Qwen3 32B AWQ base URL
+https://api.runpod.ai/v2/qwen3-32b-awq/openai/v1
+
+# IBM Granite-4.0-H-Small base URL
+https://api.runpod.ai/v2/granite-4-0-h-small/openai/v1
+```
+
+For more information on the parameters and responses for each model, check the [Public Endpoint model reference](/hub/public-endpoint-reference).
+
+### vLLM endpoints
+
+[Serverless vLLM workers](/serverless/vllm/overview) are optimized for running large language models and return [OpenAI-compatible responses](/serverless/vllm/openai-compatibility), making them ideal for tools that expect OpenAI's API format.
+
+When you deploy a vLLM worker, you can access it using the OpenAI-compatible API at this base URL:
+
+```bash title="vLLM endpoint base URL"
+https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1
+```
+
+Where `ENDPOINT_ID` is your Serverless endpoint ID.
+
+<Warning>
+Not all models support tool calling, which is required to integrate with OpenAI-compatible tools. For more information, see the [vLLM tool calling documentation](https://docs.vllm.ai/en/latest/features/tool_calling.html).
+</Warning>
+
+You may need to set a custom chat template or tool call parser to ensure your model returns responses in the format your integration expects. For example, you can configure the `Qwen/qwen3-32b-awq` model for OpenAI compatibility by adding these environment variables to your [vLLM endpoint settings](/serverless/vllm/environment-variables):
+
+```bash title="Qwen3 32B AWQ vLLM environment variables"
+ENABLE_AUTO_TOOL_CHOICE=true
+REASONING_PARSER=qwen3
+TOOL_CALL_PARSER=hermes
+```
+
+### SGLang endpoints
+
+[SGLang workers](https://github.com/runpod-workers/worker-sglang) also return OpenAI-compatible responses, offering optimized performance for certain model types and use cases.
+
+### Load balancing endpoints
+
+[Load balancing endpoints](/serverless/load-balancing/overview) let you create custom endpoints where you define your own inputs and outputs. This gives you complete control over the API contract and is ideal when you need custom behavior beyond standard inference patterns.
+
+## Third-party integrations
+
+For infrastructure management and orchestration, you can also integrate Runpod with:
+
+* [**dstack**](/integrations/dstack): Simplified Pod orchestration for AI/ML workloads.
+* [**SkyPilot**](/integrations/skypilot): Multi-cloud execution framework.
+* [**Mods**](/integrations/mods): AI-powered command-line tool.
