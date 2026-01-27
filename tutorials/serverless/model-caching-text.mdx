@@ -28,253 +28,241 @@ Before starting this tutorial, make sure:
 - Your Runpod account is [connected to GitHub](/serverless/workers/github-integration#authorize-runpod-with-github).
 
 
-## Step 1: Create your handler function
+## Understanding the cached model file structure
 
-Create a file named `handler.py` that processes inference requests using the cached model. This handler enforces offline mode to ensure it only uses cached models and includes a helper function to resolve the correct snapshot path.
+Runpod caches models at `/runpod-volume/huggingface-cache/hub/`.
+
+The directory structure for cached models follows this pattern:
+
+```
+/runpod-volume/huggingface-cache/hub/models--{org}--{model-name}/snapshots/{version-hash}/
+```
+
+For example, `microsoft/Phi-3-mini-4k-instruct` becomes:
+
+```
+/runpod-volume/huggingface-cache/hub/models--microsoft--Phi-3-mini-4k-instruct/snapshots/{hash}/
+```
+
+## Step 1: Create project files
+
+Create a new directory for your project:
+
+```bash
+mkdir runpod-model-store-worker
+cd runpod-model-store-worker
+touch Dockerfile requirements.txt handler.py
+```
+
+Your project structure should now look like this:
+
+```
+runpod-model-store-worker/
+├── Dockerfile
+├── requirements.txt
+└── handler.py
+```
+
+## Step 2: Create requirements.txt
+
+Add the following dependencies to `requirements.txt`:
+
+```txt
+runpod>=1.6.2
+transformers>=4.38.0
+torch>=2.1.0
+accelerate>=0.27.0
+```
+
+## Step 3: Create your handler function
+
+Open `handler.py` and add the following code:
 
 ```python handler.py
-import os
 import runpod
-from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+import torch
+import os
+from transformers import pipeline
 
-MODEL_ID = os.environ.get("MODEL_NAME", "microsoft/Phi-3-mini-4k-instruct")
-HF_CACHE_ROOT = "/runpod-volume/huggingface-cache/hub"
+# Configure Hugging Face to use Runpod's cache directory.
+# These must be set before loading any models.
+os.environ['HF_HOME'] = '/runpod-volume/huggingface-cache'
+os.environ['TRANSFORMERS_CACHE'] = '/runpod-volume/huggingface-cache'
+os.environ['HF_HUB_CACHE'] = '/runpod-volume/huggingface-cache/hub'
 
-# Force offline mode to use only cached models
-os.environ["HF_HUB_OFFLINE"] = "1"
-os.environ["TRANSFORMERS_OFFLINE"] = "1"
+# Model configuration (can be overridden via environment variables)
+MODEL_NAME = os.environ.get('MODEL_NAME', 'microsoft/Phi-3-mini-4k-instruct')
+MODEL_REVISION = os.environ.get('MODEL_REVISION', 'main')
 
+print(f"Loading model: {MODEL_NAME} (revision: {MODEL_REVISION})")
+print(f"Cache directory: {os.environ['HF_HOME']}")
 
-def resolve_snapshot_path(model_id: str) -> str:
-    """
-    Resolve the local snapshot path for a cached model.
+# Verify the model exists in cache before loading
+model_cache_dir = f"models--{MODEL_NAME.replace('/', '--')}"
+model_cache_path = os.path.join(os.environ['HF_HOME'], 'hub', model_cache_dir, 'snapshots')
 
-    Args:
-        model_id: The model name from Hugging Face (e.g., 'microsoft/Phi-3-mini-4k-instruct')
+if os.path.exists(model_cache_path) and os.listdir(model_cache_path):
+    print(f"Model found in cache: {model_cache_path}")
+else:
+    print(f"Model not in cache, will download from Hugging Face")
 
-    Returns:
-        The full path to the cached model snapshot
-    """
-    if "/" not in model_id:
-        raise ValueError(f"MODEL_ID '{model_id}' is not in 'org/name' format")
-
-    org, name = model_id.split("/", 1)
-    model_root = os.path.join(HF_CACHE_ROOT, f"models--{org}--{name}")
-    refs_main = os.path.join(model_root, "refs", "main")
-    snapshots_dir = os.path.join(model_root, "snapshots")
-
-    print(f"[ModelStore] MODEL_ID: {model_id}")
-    print(f"[ModelStore] Model root: {model_root}")
-
-    # Try to read the snapshot hash from refs/main
-    if os.path.isfile(refs_main):
-        with open(refs_main, "r") as f:
-            snapshot_hash = f.read().strip()
-        candidate = os.path.join(snapshots_dir, snapshot_hash)
-        if os.path.isdir(candidate):
-            print(f"[ModelStore] Using snapshot from refs/main: {candidate}")
-            return candidate
-
-    # Fall back to first available snapshot
-    if not os.path.isdir(snapshots_dir):
-        raise RuntimeError(f"[ModelStore] snapshots directory not found: {snapshots_dir}")
-
-    versions = [
-        d for d in os.listdir(snapshots_dir) if os.path.isdir(os.path.join(snapshots_dir, d))
-    ]
-
-    if not versions:
-        raise RuntimeError(f"[ModelStore] No snapshot subdirectories found under {snapshots_dir}")
-
-    versions.sort()
-    chosen = os.path.join(snapshots_dir, versions[0])
-    print(f"[ModelStore] Using first available snapshot: {chosen}")
-    return chosen
-
-
-# Resolve and load the model at startup
-LOCAL_MODEL_PATH = resolve_snapshot_path(MODEL_ID)
-print(f"[ModelStore] Resolved local model path: {LOCAL_MODEL_PATH}")
-
-tokenizer = AutoTokenizer.from_pretrained(
-    LOCAL_MODEL_PATH,
-    trust_remote_code=True,
-    local_files_only=True,
-)
-
-model = AutoModelForCausalLM.from_pretrained(
-    LOCAL_MODEL_PATH,
-    trust_remote_code=True,
-    torch_dtype="auto",
-    device_map="auto",
-    local_files_only=True,
-)
-
-text_gen = pipeline(
+# Load the model into a text-generation pipeline.
+# This runs once at startup; the model stays in GPU memory for all requests.
+pipe = pipeline(
     "text-generation",
-    model=model,
-    tokenizer=tokenizer,
-    torch_dtype="auto",
+    model=MODEL_NAME,
+    revision=MODEL_REVISION,
+    torch_dtype=torch.bfloat16,
     device_map="auto",
+    model_kwargs={"cache_dir": "/runpod-volume/huggingface-cache"},
 )
+print("Model loaded successfully")
 
-print("[ModelStore] Model loaded from local snapshot")
 
-
-def handler(job):
-    """
-    Handler function that processes each inference request.
-
-    Args:
-        job: Runpod job object containing input data
-
-    Returns:
-        Dictionary with generated text or error information
-    """
-    job_input = job.get("input", {}) or {}
-    prompt = job_input.get("prompt", "Hello!")
-    max_tokens = int(job_input.get("max_tokens", 256))
-    temperature = float(job_input.get("temperature", 0.7))
-
-    print(f"[Handler] Prompt: {prompt[:80]!r}")
-    print(f"[Handler] max_tokens={max_tokens}, temperature={temperature}")
-
+def handler(event):
+    """Process a text generation request."""
     try:
-        outputs = text_gen(
-            prompt,
+        # Extract request parameters
+        input_data = event["input"]
+        user_prompt = input_data.get("prompt", "Hello!")
+        max_tokens = input_data.get("max_tokens", 256)
+        temperature = input_data.get("temperature", 0.7)
+
+        # Format the prompt using the model's chat template
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": user_prompt},
+        ]
+        formatted_prompt = pipe.tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+
+        # Generate a response
+        outputs = pipe(
+            formatted_prompt,
             max_new_tokens=max_tokens,
             do_sample=True,
             temperature=temperature,
+            top_k=50,
+            top_p=0.95,
         )
-        generated = outputs[0]["generated_text"]
-        print(f"[Handler] Generated length: {len(generated)} chars")
 
-        return {
-            "status": "success",
-            "output": generated,
-        }
+        return {"output": outputs[0]["generated_text"], "status": "success"}
 
     except Exception as e:
-        print(f"[Handler] Error during generation: {e}")
-        return {
-            "status": "error",
-            "error": str(e),
-        }
+        return {"error": str(e), "status": "error"}
 
 
-runpod.serverless.start({"handler": handler})
+if __name__ == "__main__":
+    runpod.serverless.start({"handler": handler})
 ```
 
 ### Understanding the handler
 
-If you want to learn more about each component of this handler function, expand the section below:
+If you want to learn more about each component of the handler function, expand the following section:
 
 <Accordion title="Handler function details">
 
-The handler is divided into four main sections: configuration, path resolution, model loading, and request handling. Let's examine each part:
+The handler is divided into four main sections: cache configuration, model loading, chat formatting, and request handling.
 
-#### Configuration and offline mode
-
-```python
-MODEL_ID = os.environ.get("MODEL_NAME", "microsoft/Phi-3-mini-4k-instruct")
-HF_CACHE_ROOT = "/runpod-volume/huggingface-cache/hub"
-
-os.environ["HF_HUB_OFFLINE"] = "1"
-os.environ["TRANSFORMERS_OFFLINE"] = "1"
-```
-
-The handler starts by defining two key paths: `MODEL_ID` specifies which Hugging Face model to load (configurable via environment variable, or using the "Model" [endpoint setting](/serverless/endpoints/endpoint-configurations)), and `HF_CACHE_ROOT` points to where Runpod stores cached models. When you enable model caching on your endpoint, Runpod automatically downloads the model to this location before your worker starts.
-
-Setting `HF_HUB_OFFLINE` and `TRANSFORMERS_OFFLINE` to `"1"` forces the Hugging Face libraries into offline mode. This is a safety measure that prevents the worker from accidentally downloading models at runtime, which would defeat the purpose of caching. If the cached model isn't found, the worker fails immediately with a clear error rather than silently downloading gigabytes of data.
-
-#### Path resolution
+#### Cache configuration
 
 ```python
-def resolve_snapshot_path(model_id: str) -> str:
-    org, name = model_id.split("/", 1)
-    model_root = os.path.join(HF_CACHE_ROOT, f"models--{org}--{name}")
-    refs_main = os.path.join(model_root, "refs", "main")
-    snapshots_dir = os.path.join(model_root, "snapshots")
+os.environ['HF_HOME'] = '/runpod-volume/huggingface-cache'
+os.environ['TRANSFORMERS_CACHE'] = '/runpod-volume/huggingface-cache'
+os.environ['HF_HUB_CACHE'] = '/runpod-volume/huggingface-cache/hub'
+
+MODEL_NAME = os.environ.get('MODEL_NAME', 'microsoft/Phi-3-mini-4k-instruct')
+MODEL_REVISION = os.environ.get('MODEL_REVISION', 'main')
 ```
 
-Cached models use a specific directory structure. A model like `microsoft/Phi-3-mini-4k-instruct` gets stored at:
+The handler starts by configuring Hugging Face's cache directories to point to Runpod's cache location. When you enable model caching on your endpoint, Runpod pre-downloads the model to `/runpod-volume/huggingface-cache/` before your worker starts. By setting these environment variables, the Transformers library automatically finds and uses the cached model files.
 
-```
-/runpod-volume/huggingface-cache/hub/models--microsoft--Phi-3-mini-4k-instruct/
-├── refs/
-│   └── main              # Contains the commit hash of the "main" branch
-└── snapshots/
-    └── abc123def.../     # Actual model files, named by commit hash
-```
+`MODEL_NAME` specifies which Hugging Face model to load. You can override this default by setting the `MODEL_NAME` environment variable in your endpoint configuration, which lets you reuse the same handler code with different models. `MODEL_REVISION` controls which version of the model to load (defaults to `main`).
 
-The `resolve_snapshot_path()` function navigates this structure to find the actual model files. It first tries to read the `refs/main` file, which contains the commit hash that the "main" branch points to. This is the most reliable method because it matches exactly what Hugging Face would load if you called `from_pretrained()` with network access.
+#### Cache verification
 
 ```python
-if os.path.isfile(refs_main):
-    with open(refs_main, "r") as f:
-        snapshot_hash = f.read().strip()
-    candidate = os.path.join(snapshots_dir, snapshot_hash)
-    if os.path.isdir(candidate):
-        return candidate
+model_cache_dir = f"models--{MODEL_NAME.replace('/', '--')}"
+model_cache_path = os.path.join(os.environ['HF_HOME'], 'hub', model_cache_dir, 'snapshots')
+
+if os.path.exists(model_cache_path) and os.listdir(model_cache_path):
+    print(f"Model found in cache: {model_cache_path}")
+else:
+    print(f"Model not in cache, will download from Hugging Face")
 ```
 
-If `refs/main` doesn't exist (which can happen with older cache formats), the function falls back to listing the `snapshots` directory and using the first available snapshot. This ensures compatibility with different caching scenarios.
+Before loading the model, the handler checks whether it exists in the cache. Hugging Face stores cached models using a specific directory structure where `microsoft/Phi-3-mini-4k-instruct` becomes `models--microsoft--Phi-3-mini-4k-instruct`. This check provides early feedback in your worker logs about whether caching is working correctly.
 
 #### Model loading
 
 ```python
-LOCAL_MODEL_PATH = resolve_snapshot_path(MODEL_ID)
-
-tokenizer = AutoTokenizer.from_pretrained(
-    LOCAL_MODEL_PATH,
-    trust_remote_code=True,
-    local_files_only=True,
-)
-
-model = AutoModelForCausalLM.from_pretrained(
-    LOCAL_MODEL_PATH,
-    trust_remote_code=True,
-    torch_dtype="auto",
+pipe = pipeline(
+    "text-generation",
+    model=MODEL_NAME,
+    revision=MODEL_REVISION,
+    torch_dtype=torch.bfloat16,
     device_map="auto",
-    local_files_only=True,
+    model_kwargs={"cache_dir": "/runpod-volume/huggingface-cache"},
 )
-
-text_gen = pipeline("text-generation", model=model, tokenizer=tokenizer)
 ```
 
 Model loading happens at the module level, outside any function. This means it runs once when the worker starts, not on every request. The model stays in GPU memory and gets reused across all incoming jobs, which is essential for performance.
 
-The `local_files_only=True` parameter provides an additional layer of safety alongside offline mode. The `device_map="auto"` setting lets the Accelerate library automatically place model layers across available GPUs, and `torch_dtype="auto"` uses the model's native precision (typically float16 or bfloat16) to minimize memory usage.
+The `pipeline()` function creates a high-level interface that handles tokenization, generation, and decoding in a single call. Key parameters:
 
-Finally, wrapping the model and tokenizer in a `pipeline` provides a convenient high-level interface for text generation that handles tokenization, generation, and decoding in a single call.
+- `torch_dtype=torch.bfloat16` uses 16-bit floating point precision to reduce memory usage while maintaining model quality.
+- `device_map="auto"` lets the Accelerate library automatically place model layers across available GPUs.
+- `cache_dir` explicitly points to the Runpod cache location as an additional safeguard.
+
+#### Chat formatting
+
+```python
+messages = [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": user_prompt},
+]
+formatted_prompt = pipe.tokenizer.apply_chat_template(
+    messages, tokenize=False, add_generation_prompt=True
+)
+```
+
+Modern chat models like Phi-3 expect prompts in a specific format with role markers and special tokens. The `apply_chat_template()` method converts a list of message dictionaries into the exact format the model was trained on. This is important because different models use different chat formats; using the tokenizer's built-in template ensures compatibility.
+
+Setting `add_generation_prompt=True` appends the assistant's turn marker, signaling to the model that it should generate a response.
 
 #### Request handling
 
 ```python
-def handler(job):
-    job_input = job.get("input", {}) or {}
-    prompt = job_input.get("prompt", "Hello!")
-    max_tokens = int(job_input.get("max_tokens", 256))
-    temperature = float(job_input.get("temperature", 0.7))
+def handler(event):
+    input_data = event["input"]
+    user_prompt = input_data.get("prompt", "Hello!")
+    max_tokens = input_data.get("max_tokens", 256)
+    temperature = input_data.get("temperature", 0.7)
 ```
 
-The `handler` function is what your worker users to process each incoming request. The `job` parameter is a dictionary containing the request data, with user inputs nested under the `"input"` key. The handler extracts parameters with sensible defaults: if a user doesn't specify `max_tokens`, they get 256; if they don't specify `temperature`, they get 0.7.
+The `handler` function processes each incoming request. The `event` parameter is a dictionary containing the request data, with user inputs nested under the `"input"` key. The handler extracts parameters with sensible defaults.
 
 ```python
-    outputs = text_gen(
-        prompt,
+    outputs = pipe(
+        formatted_prompt,
         max_new_tokens=max_tokens,
         do_sample=True,
         temperature=temperature,
+        top_k=50,
+        top_p=0.95,
     )
-    generated = outputs[0]["generated_text"]
-
-    return {"status": "success", "output": generated}
+    return {"output": outputs[0]["generated_text"], "status": "success"}
 ```
 
-The pipeline outputs a list of dictionaries (one per input sequence). Since we're processing a single prompt, we take `outputs[0]["generated_text"]` to get the generated string. The handler returns a dictionary that becomes the `output` field in the API response.
+The generation parameters control the model's output:
 
-The `try/except` block around generation catches any errors (out of memory, invalid inputs, etc.) and returns them in a structured format rather than crashing the worker.
+- `max_new_tokens` limits the response length.
+- `do_sample=True` enables probabilistic sampling (required for temperature to have an effect).
+- `temperature` controls randomness (higher = more creative, lower = more deterministic).
+- `top_k` and `top_p` provide additional control over the sampling distribution.
+
+The pipeline returns a list of dictionaries. Since we're processing a single prompt, we take `outputs[0]["generated_text"]` and return it in a structured response.
 
 ```python
 runpod.serverless.start({"handler": handler})
@@ -284,35 +272,30 @@ The final line registers the handler function with the Runpod SDK and starts the
 
 </Accordion>
 
-## Step 2: Create the requirements file
-
-Create a `requirements.txt` file to specify the Python dependencies for your worker.
-
-```text requirements.txt
-runpod>=1.6.2
-transformers>=4.36.2
-torch>=2.1.0
-accelerate>=0.25.0
-```
-
-## Step 3: Create a Dockerfile
+## Step 4: Create a Dockerfile
 
 Create a `Dockerfile` to package your handler into a container image.
 
 ```dockerfile Dockerfile
+
+# Use Runpod's PyTorch base image
 FROM runpod/pytorch:2.1.1-py3.10-cuda12.1.1-devel-ubuntu22.04
 
+# Set working directory
 WORKDIR /app
 
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy the handler function to the container
 COPY handler.py .
 
+# Set the handler as the entry point for the container
 CMD ["python", "-u", "handler.py"]
 ```
 
-## Step 4: Set up your GitHub repository
+## Step 5: Set up your GitHub repository
 
 Create a GitHub repository with your handler, requirements, and Dockerfile.
 
@@ -332,7 +315,7 @@ git push -u origin main
 
 Replace `YOUR_USERNAME` with your GitHub username.
 
-## Step 5: Deploy from GitHub
+## Step 6: Deploy from GitHub
 
 Deploy your worker directly from GitHub.
 
@@ -371,7 +354,7 @@ Once deployed, send requests to your endpoint using the Runpod API. Replace `YOU
 
 <Tabs>
   <Tab title="Python">
-```python
+```python request.py
 import requests
 import os
 
