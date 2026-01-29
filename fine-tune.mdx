@@ -16,16 +16,11 @@ Before you begin, you'll need:
 *   A Runpod account.
 *   (Optional) A [Hugging Face](https://huggingface.co/) account and an access token if you plan to use gated models or upload your fine-tuned model.
 
-
 ## Select a base model and dataset
 
 The base model is the starting point for your fine-tuning process, while the dataset provides the specific knowledge needed to adapt the base model to your task.
 
 You can choose from thousands of models and datasets on [Hugging Face](https://huggingface.co/models).
-
-<Tip>
-If you're experimenting with fine-tuning for the first time, we recommend trying the [NousResearch/Meta-Llama-3-8B](https://huggingface.co/NousResearch/Meta-Llama-3-8B) model and the [tatsu-lab/alpaca](https://huggingface.co/datasets/tatsu-lab/alpaca) dataset.
-</Tip>
 
 ## Deploy a fine-tuning Pod
 
@@ -35,7 +30,18 @@ Navigate to the [Fine-Tuning](https://console.runpod.io/fine-tuning) section in 
 </Step>
 
 <Step title="Specify the base model and dataset">
-In the **Base Model** field, enter the Hugging Face model ID (e.g `NousResearch/Meta-Llama-3-8B`). In the **Dataset** field, enter the Hugging Face dataset ID (e.g `tatsu-lab/alpaca`).
+In the **Base Model** field, enter the Hugging Face model ID. In the **Dataset** field, enter the Hugging Face dataset ID.
+
+If this is your first time fine-tuning and you're just experimenting, try:
+
+```sh
+# Base model
+TinyLlama/TinyLlama_v1.1
+
+# Dataset (alpaca)
+mhenrichsen/alpaca_2k_test
+```
+
 </Step>
 
 <Step title="Provide a Hugging Face token (if needed)">
@@ -54,8 +60,9 @@ Select a GPU instance based on your model's requirements. Larger models and data
 Finishing configuring the Pod, then click **Deploy on-demand**. This should open the detail pane for your Pod automatically.
 </Step>
 
-<Step title="Monitor the Pod's deployment">
+<Step title="Monitor Pod deployment">
 Click **Logs** to monitor the system logs for deployment progress. Wait for the success message: `"You've successfully configured your training environment!"` Depending on the size of your model and dataset, this may take some time.
+
 </Step>
 
 <Step title="Connect to your training environment">
@@ -75,13 +82,20 @@ To use SSH, add your public SSH key in your account settings. The system automat
 
 ## Configure your environment
 
+<Tip>
+For a list of working configuration examples, check out the [Axolotl examples repository](https://github.com/axolotl-ai-cloud/axolotl/tree/main/examples) (also available in your training environment at `/workspace/fine-tuning/examples/`).
+</Tip>
+
 Your training environment is located in the `/workspace/fine-tuning/` directory and has the following structure:
 
 *   `examples/`: Sample configurations and scripts.
 *   `outputs/`: Where your training results and model outputs will be saved.
 *   `config.yaml`: The main configuration file for your training parameters.
 
-The system generates an initial `config.yaml` based on your selected base model and dataset. This is where you define all the hyperparameters for your fine-tuning job. You may need to experiment with these settings to achieve the best results:
+The system generates an initial `config.yaml` based on your selected base model and dataset. This is where you define all the hyperparameters for your fine-tuning job. You may need to experiment with these settings to achieve the best results.
+
+<Steps>
+<Step title="Open the configuration file">
 
 Open the configuration file (`config.yaml`) in JupyterLab or using your preferred text editor to review and adjust the fine-tuning parameters:
 
@@ -89,79 +103,162 @@ Open the configuration file (`config.yaml`) in JupyterLab or using your preferre
 nano config.yaml
 ```
 
-Below is a configuration example using common settings. You can replace `NousResearch/Meta-Llama-3-8B` and `tatsu-lab/alpaca` with whichever base model and dataset you selected:
+The `config.yaml` file will look something like this (`base_model` and `datasets` will be replaced with the model and dataset you selected in Step 2):
 
 ```yaml
-base_model: NousResearch/Meta-Llama-3.1-8B
-model_type: LlamaForCausalLM
-tokenizer_type: AutoTokenizer
-
-# 1. Adapter settings
-adapter: qlora
-lora_model_dir:
-lora_r: 32
-lora_alpha: 64
-lora_dropout: 0.05
-lora_target_modules:
-  - q_proj
-  - k_proj
-  - v_proj
-  - o_proj
-  - gate_proj
-  - up_proj
-  - down_proj
-
-# 2. Model loading
-load_in_8bit: false
-load_in_4bit: true
-strict: false
-
-# 3. Dataset configuration
+adapter: lora
+base_model: TinyLlama/TinyLlama_v1.1
+bf16: auto
 datasets:
-  - path: tatsu-lab/alpaca
-    type: alpaca
-dataset_prepared_path: last_run_prepared
-val_set_size: 0.05
-output_dir: ./outputs/out
-
-# 4. Training parameters
-sequence_len: 4096        # Increase if using an A100 80GB GPU
-sample_packing: true
-pad_to_sequence_len: true
-
-# 5. Training optimization
-gradient_accumulation_steps: 4
-micro_batch_size: 2       # Adjusted for better GPU utilization
+- path: mhenrichsen/alpaca_2k_test
+  type: null
+gradient_accumulation_steps: 1
+learning_rate: 0.0002
+load_in_8bit: true
+lora_alpha: 16
+lora_dropout: 0.05
+lora_r: 8
+lora_target_modules:
+- q_proj
+- v_proj
+- k_proj
+- o_proj
+- gate_proj
+- down_proj
+- up_proj
+micro_batch_size: 16
 num_epochs: 1
-optimizer: paged_adamw_8bit
-lr_scheduler: cosine
-learning_rate: 2e-4       # QLoRA typically needs a slightly higher learning rate
-
-# 6. Hardware acceleration
+optimizer: adamw_bnb_8bit
+output_dir: ./outputs/mymodel
+sequence_len: 4096
 train_on_inputs: false
-group_by_length: false
-bf16: true                # Llama 3.1 is native BF16
-fp16: false
-tf32: true                # Enable for Ampere/Hopper GPUs
-
-gradient_checkpointing: true
-gradient_checkpointing_kwargs:
-  use_reentrant: false
-flash_attention: true
-
-# 7. Logging & evaluation
-logging_steps: 1
-warmup_steps: 100
-evals_per_epoch: 2
-saves_per_epoch: 1
-debug:
-
-# 8. Special tokens
-special_tokens:
-  pad_token: "<|finetune_right_pad_id|>"
 ```
 
-For more configuration examples, refer to the [Axolotl examples repository](https://github.com/axolotl-ai-cloud/axolotl/tree/main/examples).
+Here's a breakdown of the `config.yaml` file:
+
+<Accordion title="Configuration breakdown">
+
+Model and precision:
+
+* **`base_model`**: The base model you want to fine-tune.
+* **`bf16: auto`**: This tells the GPU to use **Bfloat16** precision if it can. It’s more stable than standard FP16 and helps prevent the model's math from "overflowing" (exploding) during training.
+* **`load_in_8bit: true`**: This is a memory-saving trick. It squashes the base model weights into 8 bits so it takes up less VRAM, allowing you to train on smaller GPUs.
+
+LoRA settings:
+
+* **`lora_r: 8`**: The rank of the LoRA adapter. 8 is a standard starting point; higher numbers (like 16 or 32) let the model learn more complex patterns but use more VRAM.
+* **`lora_alpha: 16`**: This scales the learned weights.
+* **`lora_target_modules`**: This list tells Axolotl exactly which parts of the Transformer architecture to attach the adapters to.
+
+Dataset logic
+
+* **`path`**: Where the data is coming from (Hugging Face).
+* **`type: null`**: This tells Axolotl how to format the text into prompts.
+<Warning>
+You'll need to change this value depending on the dataset you selected—see the next step for details.
+</Warning>
+* **`train_on_inputs: false`**: This is a smart setting. It tells the model: *"Don't try to predict the user's question; only learn how to predict the assistant's answer."* This focuses the "learning energy" on the responses.
+* **`sequence_len: 4096`**: The maximum length of text the model can "read" at once.
+
+Training mechanics
+
+* **`micro_batch_size: 16`**: How many examples the GPU processes at a single time.
+* **`gradient_accumulation_steps: 1`**: How many batches to "save up" before actually updating the model's weights.
+* **`learning_rate: 0.0002`**: How fast the model changes. Too high and it "forgets" everything; too low and it never learns.
+* **`optimizer: adamw_bnb_8bit`**: A special version of the AdamW optimizer that uses 8-bit math to save even more VRAM.
+
+</Accordion>
+
+</Step>
+
+<Step title="Update the dataset type">
+
+The dataset type is set to `null` by default. Depending on the dataset you selected, you will need to change this. 
+
+For example, if you selected the `mhenrichsen/alpaca_2k_test` dataset, you'll need to change `type: null` to `type: alpaca` to load the dataset.
+
+You can find an overview of common dataset types below:
+
+<Accordion title="Common dataset types">
+
+`chat_template` for chat-based datasets:
+ 
+ ```json
+ {
+  "messages" : [
+    {"role": "user", "content": "What is the capital of France?"},
+    {"role": "assistant", "content": "The capital of France is Paris."}
+  ]
+}
+```
+
+You'll also need to add the `field_messages` key to `datasets` to specify the field that contains the messages:
+
+```yaml
+datasets:
+  - path: your/dataset
+    type: chat_template
+    field_messages: messages
+```
+
+`completion` for raw text datasets:
+
+```json
+{
+  "text": "The quick brown fox jumps over the lazy dog."
+}
+```
+
+`input_output` for template-free datasets:
+
+```json
+{
+  "input": "User: What is the capital of France?\nAssistant: ",
+  "output": "The capital is Paris.</s>"
+}
+```
+
+`alpaca` for instruction-following datasets:
+
+ ```json
+{
+  "instruction": "Summarize the following text.",
+  "input": "The sun is a star at the center of the Solar System.",
+  "output": "The sun is the central star of our solar system."
+}
+```
+
+`sharegpt` for conversational datasets:
+ 
+ ```json
+ {
+  "conversations": [
+    {
+      "from": "human",
+      "value": "What are the three laws of thermodynamics?"
+    },
+    {
+      "from": "gpt",
+      "value": "1. Energy cannot be created or destroyed. 2. Entropy always increases. 3. Absolute zero cannot be reached."
+    }
+  ]
+}
+```
+
+You'll also need to add the `conversation` key to `datasets` to specify the name of the list field that contains the messages:
+
+```yaml
+datasets:
+  - path: your/dataset
+    type: sharegpt
+    conversation: conversations
+```
+
+</Accordion>
+
+</Step>
+
+</Steps>
 
 ## Start the fine-tuning process
 
@@ -174,6 +271,52 @@ axolotl train config.yaml
 ```
 
 Monitor the training progress in your terminal. The output will show the training loss, validation loss, and other metrics.
+
+## Test your model with vLLM
+
+Once the fine-tuning process is complete, you can test the inference capabilities of your fine-tuned model with vLLM.
+
+For example, to serve the fine-tuned TinyLlama model used in the examples above, you would follow these steps:
+
+<Steps>
+
+<Step title="Serve your model">
+
+To serve your fine-tuned model, run the following command:
+
+```sh
+vllm serve TinyLlama/TinyLlama_v1.1 --enable-lora --lora-modules my-adapter=/workspace/fine-tuning/outputs/mymodel --port 8000
+```
+
+</Step>
+
+<Step title="Test your model">
+
+To test your model, first you'll need to start a new terminal window, tab, or pane.
+
+If you're using the [web terminal](/pods/connect-to-a-pod#web-terminal-connection), `tmux` is already installed, and you can create a new horizontal pane by running:
+
+```sh
+tmux split-window -h
+```
+
+In the new window/tab/pane, you can send a test request to the vLLM server using `curl`:
+
+```sh
+curl http://localhost:8000/v1/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "my-adapter",
+    "prompt": "### Instruction:\nExplain gravity in one sentence.\n\n### Response:\n",
+    "max_tokens": 50
+  }'
+```
+
+You should see the response from your model in the terminal.
+
+</Step>
+
+</Steps>
 
 ## Push your model to Hugging Face
 
@@ -192,7 +335,7 @@ huggingface-cli login
 To upload your model files to the Hugging Face Hub, run this command:
 
 ```sh
-huggingface-cli upload YOUR_USERNAME/MODEL_NAME ./outputs/out
+huggingface-cli upload YOUR_USERNAME/MODEL_NAME ./outputs/mymodel
 ```
 Replace `YOUR_USERNAME` with your Hugging Face username and `MODEL_NAME` with your desired model name.
 
@@ -201,7 +344,4 @@ Replace `YOUR_USERNAME` with your Hugging Face username and `MODEL_NAME` with yo
 
 ## Next steps
 
-Now that you have a fine-tuned model, you can deploy it on Runpod for inference:
-
-*   **[Serverless](/serverless/overview)**: Deploy your model as a Serverless endpoint for a pay-as-you-go, scalable solution.
-*   **[Pods](/pods/overview)**: Run your model on a dedicated Pod for more control and persistent workloads.
+Now that you've successfully fine-tuned a model, you can deploy it for inference using [Runpod Serverless](/serverless/overview). If you've uploaded your model to Hugging Face, you can deploy it as a [cached model](/serverless/endpoints/model-caching) to reduce cost and cold start times.
