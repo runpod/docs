@@ -6,7 +6,7 @@ tag: "NEW"
 ---
 
 <Tip>
-You can download the finished code for this tutorial [on GitHub](https://github.com/stuffbyt/model-store-worker).
+You can download the finished code for this tutorial [on GitHub](https://github.com/runpod/cached-model-example). For a simpler starting point, see the [model-store-worker](https://github.com/stuffbyt/model-store-worker) example.
 </Tip>
 
 This tutorial demonstrates how to build a custom Serverless worker that leverages Runpod's [cached model](/serverless/endpoints/model-caching) feature to serve the Phi-3 language model. You'll learn how to create a handler function that locates and loads cached models in offline mode, which can significantly reduce costs and cold start times.
@@ -98,24 +98,23 @@ print(f"[ModelStore] Resolved local model path: {LOCAL_MODEL_PATH}")
 
 tokenizer = AutoTokenizer.from_pretrained(
     LOCAL_MODEL_PATH,
-    trust_remote_code=True,
+    trust_remote_code=False,
     local_files_only=True,
 )
 
 model = AutoModelForCausalLM.from_pretrained(
     LOCAL_MODEL_PATH,
-    trust_remote_code=True,
+    trust_remote_code=False,
     torch_dtype="auto",
     device_map="auto",
     local_files_only=True,
+    attn_implementation="eager",
 )
 
 text_gen = pipeline(
     "text-generation",
     model=model,
     tokenizer=tokenizer,
-    torch_dtype="auto",
-    device_map="auto",
 )
 
 print("[ModelStore] Model loaded from local snapshot")
@@ -227,16 +226,17 @@ LOCAL_MODEL_PATH = resolve_snapshot_path(MODEL_ID)
 
 tokenizer = AutoTokenizer.from_pretrained(
     LOCAL_MODEL_PATH,
-    trust_remote_code=True,
+    trust_remote_code=False,
     local_files_only=True,
 )
 
 model = AutoModelForCausalLM.from_pretrained(
     LOCAL_MODEL_PATH,
-    trust_remote_code=True,
+    trust_remote_code=False,
     torch_dtype="auto",
     device_map="auto",
     local_files_only=True,
+    attn_implementation="eager",
 )
 
 text_gen = pipeline("text-generation", model=model, tokenizer=tokenizer)
@@ -258,7 +258,7 @@ def handler(job):
     temperature = float(job_input.get("temperature", 0.7))
 ```
 
-The `handler` function is what your worker users to process each incoming request. The `job` parameter is a dictionary containing the request data, with user inputs nested under the `"input"` key. The handler extracts parameters with sensible defaults: if a user doesn't specify `max_tokens`, they get 256; if they don't specify `temperature`, they get 0.7.
+The `handler` function is what your worker uses to process each incoming request. The `job` parameter is a dictionary containing the request data, with user inputs nested under the `"input"` key. The handler extracts parameters with sensible defaults: if a user doesn't specify `max_tokens`, they get 256; if they don't specify `temperature`, they get 0.7.
 
 ```python
     outputs = text_gen(
@@ -291,7 +291,6 @@ Create a `requirements.txt` file to specify the Python dependencies for your wor
 ```text requirements.txt
 runpod>=1.6.2
 transformers>=4.36.2
-torch>=2.1.0
 accelerate>=0.25.0
 ```
 
@@ -300,7 +299,7 @@ accelerate>=0.25.0
 Create a `Dockerfile` to package your handler into a container image.
 
 ```dockerfile Dockerfile
-FROM runpod/pytorch:2.1.1-py3.10-cuda12.1.1-devel-ubuntu22.04
+FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
 
 WORKDIR /app
 
@@ -365,7 +364,7 @@ Deploy your worker directly from GitHub.
 
 Runpod automatically builds your Docker image and deploys it to your endpoint. You can monitor the build status in the **Builds** tab.
 
-## Step 7: Test your endpoint
+## Step 6: Test your endpoint
 
 Once deployed, send requests to your endpoint using the Runpod API. Replace `YOUR_ENDPOINT_ID` with your actual endpoint ID.
 
