@@ -8,10 +8,79 @@ on:
       - '**.mdx'
       - '**.md'
       - 'docs.json'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '**.mdx'
+      - '**.md'
+      - 'docs.json'
   workflow_dispatch: # Allow manual trigger
 
 jobs:
+  # Validates configuration on PRs - ensures auth works before merge
+  validate-config:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate Ingestion Workflow Configuration
+        env:
+          RUNPOD_ASSISTANT_BASE_URL: ${{ vars.RUNPOD_ASSISTANT_BASE_URL }}
+          RUNPOD_ASSISTANT_API_KEY: ${{ secrets.RUNPOD_ASSISTANT_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          # Check required environment variables are set
+          if [ -z "${RUNPOD_ASSISTANT_BASE_URL:-}" ]; then
+            echo "ERROR: RUNPOD_ASSISTANT_BASE_URL variable is not configured"
+            echo "Go to Settings → Secrets and variables → Actions → Variables"
+            exit 1
+          fi
+          echo "✓ RUNPOD_ASSISTANT_BASE_URL is configured"
+
+          if [ -z "${RUNPOD_ASSISTANT_API_KEY:-}" ]; then
+            echo "ERROR: RUNPOD_ASSISTANT_API_KEY secret is not configured"
+            echo "Go to Settings → Secrets and variables → Actions → Secrets"
+            exit 1
+          fi
+          echo "✓ RUNPOD_ASSISTANT_API_KEY is configured"
+
+          # Validate auth and workflow existence by creating a test run
+          # Note: This creates an unstarted run as a side effect (harmless)
+          RUN_ID="validation-$(uuidgen | tr '[:upper:]' '[:lower:]')"
+          echo "Validating authentication and workflow existence..."
+
+          response=$(curl -s -w "\n%{http_code}" --max-time 30 -X POST \
+            "${RUNPOD_ASSISTANT_BASE_URL}/api/workflows/ingestDocsWorkflow/create-run?runId=$RUN_ID" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${RUNPOD_ASSISTANT_API_KEY}" \
+            -d '{}')
+
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+
+          if [ "$http_code" -eq 401 ] || [ "$http_code" -eq 403 ]; then
+            echo "ERROR: Authentication failed (HTTP $http_code)"
+            echo "Check that RUNPOD_ASSISTANT_API_KEY is correct"
+            exit 1
+          elif [ "$http_code" -eq 404 ]; then
+            echo "ERROR: Workflow 'ingestDocsWorkflow' not found (HTTP $http_code)"
+            echo "Verify the workflow is deployed to: ${RUNPOD_ASSISTANT_BASE_URL}"
+            exit 1
+          elif [ "$http_code" -ne 200 ]; then
+            echo "ERROR: Unexpected response (HTTP $http_code)"
+            echo "Response: $body"
+            exit 1
+          fi
+
+          echo "✓ Authentication successful"
+          echo "✓ Workflow 'ingestDocsWorkflow' exists"
+          echo ""
+          echo "Configuration validated - safe to merge"
+
+  # Triggers the actual ingestion on merge to main
   trigger-ingestion:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Mastra Docs Ingestion Workflow
@@ -24,7 +93,6 @@ jobs:
           RUN_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
           echo "Run ID: $RUN_ID"
 
-          # Helper function to make API calls and handle responses
           make_request() {
             local endpoint="$1"
             local data="$2"
