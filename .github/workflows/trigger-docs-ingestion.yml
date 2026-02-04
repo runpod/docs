@@ -32,22 +32,27 @@ jobs:
 
           # Check required environment variables are set
           if [ -z "${RUNPOD_ASSISTANT_BASE_URL:-}" ]; then
-            echo "ERROR: RUNPOD_ASSISTANT_BASE_URL variable is not configured"
-            echo "Go to Settings → Secrets and variables → Actions → Variables"
+            echo "::error::RUNPOD_ASSISTANT_BASE_URL is not configured"
+            echo ""
+            echo "To fix: Go to Settings > Secrets and variables > Actions > Variables"
+            echo "Add a variable named RUNPOD_ASSISTANT_BASE_URL with the Mastra endpoint URL"
             exit 1
           fi
-          echo "✓ RUNPOD_ASSISTANT_BASE_URL is configured"
+          echo "[OK] RUNPOD_ASSISTANT_BASE_URL is configured"
 
           if [ -z "${RUNPOD_ASSISTANT_API_KEY:-}" ]; then
-            echo "ERROR: RUNPOD_ASSISTANT_API_KEY secret is not configured"
-            echo "Go to Settings → Secrets and variables → Actions → Secrets"
+            echo "::error::RUNPOD_ASSISTANT_API_KEY is not configured"
+            echo ""
+            echo "To fix: Go to Settings > Secrets and variables > Actions > Secrets"
+            echo "Add a secret named RUNPOD_ASSISTANT_API_KEY with the API key"
             exit 1
           fi
-          echo "✓ RUNPOD_ASSISTANT_API_KEY is configured"
+          echo "[OK] RUNPOD_ASSISTANT_API_KEY is configured"
 
           # Validate auth and workflow existence by creating a test run
           # Note: This creates an unstarted run as a side effect (harmless)
           RUN_ID="validation-$(uuidgen | tr '[:upper:]' '[:lower:]')"
+          echo ""
           echo "Validating authentication and workflow existence..."
 
           response=$(curl -s -w "\n%{http_code}" --max-time 30 -X POST \
@@ -59,24 +64,46 @@ jobs:
           http_code=$(echo "$response" | tail -n1)
           body=$(echo "$response" | sed '$d')
 
-          if [ "$http_code" -eq 401 ] || [ "$http_code" -eq 403 ]; then
-            echo "ERROR: Authentication failed (HTTP $http_code)"
-            echo "Check that RUNPOD_ASSISTANT_API_KEY is correct"
-            exit 1
-          elif [ "$http_code" -eq 404 ]; then
-            echo "ERROR: Workflow 'ingestDocsWorkflow' not found (HTTP $http_code)"
-            echo "Verify the workflow is deployed to: ${RUNPOD_ASSISTANT_BASE_URL}"
-            exit 1
-          elif [ "$http_code" -ne 200 ]; then
-            echo "ERROR: Unexpected response (HTTP $http_code)"
-            echo "Response: $body"
-            exit 1
+          if [ "$http_code" -eq 200 ]; then
+            echo "[OK] Authentication successful"
+            echo "[OK] Workflow 'ingestDocsWorkflow' exists"
+            echo ""
+            echo "Configuration validated - safe to merge"
+            exit 0
           fi
 
-          echo "✓ Authentication successful"
-          echo "✓ Workflow 'ingestDocsWorkflow' exists"
+          # Provide specific error messages based on HTTP status
           echo ""
-          echo "Configuration validated - safe to merge"
+          echo "Response body: $body"
+          echo ""
+
+          case "$http_code" in
+            401|403)
+              echo "::error::Authentication failed (HTTP $http_code)"
+              echo ""
+              echo "Cause: The API key was rejected by the server"
+              echo "To fix: Verify RUNPOD_ASSISTANT_API_KEY is correct in repository secrets"
+              ;;
+            404)
+              echo "::error::Workflow not found (HTTP $http_code)"
+              echo ""
+              echo "Cause: The workflow 'ingestDocsWorkflow' does not exist at the endpoint"
+              echo "To fix: Verify the workflow is deployed at ${RUNPOD_ASSISTANT_BASE_URL}"
+              ;;
+            500|502|503|504)
+              echo "::error::Server error (HTTP $http_code)"
+              echo ""
+              echo "Cause: The runpod-assistant service returned a server error"
+              echo "To fix: Check if runpod-assistant is healthy at ${RUNPOD_ASSISTANT_BASE_URL}"
+              ;;
+            *)
+              echo "::error::Unexpected error (HTTP $http_code)"
+              echo ""
+              echo "Cause: Unknown - see response body above"
+              ;;
+          esac
+
+          exit 1
 
   # Triggers the actual ingestion on merge to main
   trigger-ingestion:
@@ -90,15 +117,32 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Validate required configuration before attempting requests
+          if [ -z "${RUNPOD_ASSISTANT_BASE_URL:-}" ]; then
+            echo "::error::RUNPOD_ASSISTANT_BASE_URL is not configured"
+            echo ""
+            echo "To fix: Go to Settings > Secrets and variables > Actions > Variables"
+            echo "Add a variable named RUNPOD_ASSISTANT_BASE_URL with the Mastra endpoint URL"
+            exit 1
+          fi
+
+          if [ -z "${RUNPOD_ASSISTANT_API_KEY:-}" ]; then
+            echo "::error::RUNPOD_ASSISTANT_API_KEY is not configured"
+            echo ""
+            echo "To fix: Go to Settings > Secrets and variables > Actions > Secrets"
+            echo "Add a secret named RUNPOD_ASSISTANT_API_KEY with the API key"
+            exit 1
+          fi
+
           RUN_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
           echo "Run ID: $RUN_ID"
 
           make_request() {
             local endpoint="$1"
             local data="$2"
-            local description="$3"
+            local step_name="$3"
 
-            echo "$description..."
+            echo "$step_name..."
             response=$(curl -s -w "\n%{http_code}" --max-time 30 -X POST \
               "${RUNPOD_ASSISTANT_BASE_URL}/api/workflows/ingestDocsWorkflow/${endpoint}?runId=$RUN_ID" \
               -H "Content-Type: application/json" \
@@ -107,15 +151,42 @@ jobs:
 
             http_code=$(echo "$response" | tail -n1)
             body=$(echo "$response" | sed '$d')
-            echo "Response: $body (HTTP $http_code)"
 
-            if [ "$http_code" -ne 200 ]; then
-              echo "ERROR: $description failed"
-              exit 1
+            if [ "$http_code" -eq 200 ]; then
+              echo "Success: $body"
+              return 0
             fi
+
+            # Provide specific error messages based on HTTP status
+            echo "::error::$step_name failed with HTTP $http_code"
+            echo ""
+            echo "Response body: $body"
+            echo ""
+
+            case "$http_code" in
+              401|403)
+                echo "Cause: Authentication failed"
+                echo "To fix: Verify RUNPOD_ASSISTANT_API_KEY is correct in repository secrets"
+                ;;
+              404)
+                echo "Cause: Workflow 'ingestDocsWorkflow' not found"
+                echo "To fix: Verify the workflow is deployed at ${RUNPOD_ASSISTANT_BASE_URL}"
+                ;;
+              500|502|503|504)
+                echo "Cause: Server error at ${RUNPOD_ASSISTANT_BASE_URL}"
+                echo "To fix: Check if runpod-assistant is healthy; retry the workflow"
+                ;;
+              *)
+                echo "Cause: Unexpected error"
+                echo "To fix: Check the response body above for details"
+                ;;
+            esac
+
+            exit 1
           }
 
           make_request "create-run" '{}' "Creating workflow run"
           make_request "start" '{"inputData": {"branch": "main"}}' "Starting workflow run"
 
+          echo ""
           echo "Successfully triggered docs ingestion workflow"
