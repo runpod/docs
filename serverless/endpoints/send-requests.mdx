@@ -1053,13 +1053,41 @@ Policy options:
 
 | Option             | Description                                 | Default             | Constraints                    |
 | ------------------ | ------------------------------------------- | ------------------- | ------------------------------ |
-| `executionTimeout` | Maximum job runtime in milliseconds         | 600000 (10 minutes) | Must be > 5000 ms, max 1 week  |
+| `executionTimeout` | Maximum time a job can run while being processed by a worker | 600000 (10 minutes) | Min 5000 ms, max 7 days  |
 | `lowPriority`      | When true, job won't trigger worker scaling | false               | -                              |
-| `ttl`              | Maximum job lifetime in milliseconds          | 86400000 (24 hours) | Must be ≥ 10000 ms, max 1 week |
+| `ttl`              | How long job data is retained while queued or in progress | 86400000 (24 hours) | Min 10000 ms, max 7 days |
 
 <Info>
 Setting `executionTimeout` in a request overrides the default endpoint setting for that specific job only.
 </Info>
+
+#### Long-running jobs (over 24 hours)
+
+By default, `executionTimeout` supports jobs up to 24 hours. For jobs that need to run longer:
+
+1. Set `executionTimeout` to your desired runtime (up to 7 days)
+2. Set `ttl` to a value greater than or equal to `executionTimeout`
+
+```json
+{
+  "input": { "prompt": "Long running task" },
+  "policy": {
+    "executionTimeout": 172800000,
+    "ttl": 259200000
+  }
+}
+```
+
+#### Result retention after completion
+
+After a job completes, results are retained for a fixed period that is separate from the `ttl` setting:
+
+| Request type | Retention period | How to extend |
+|--------------|------------------|---------------|
+| `/run` (async) | 30 minutes | Cannot be extended |
+| `/runsync` (sync) | 1 minute | Append `?wait=300000` for up to 5 minutes |
+
+Once the retention period expires, the job data is permanently deleted.
 
 ### S3-compatible storage integration
 
