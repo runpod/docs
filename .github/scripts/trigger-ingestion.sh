@@ -25,13 +25,12 @@ log_error() { echo "::error::$*"; }
 
 check_required_var() {
     local var_name="$1"
-    local fix_location="$2"
 
     if [ -z "${!var_name:-}" ]; then
         log_error "$var_name is not configured"
         log ""
-        log "To fix: Go to Settings > Secrets and variables > Actions > $fix_location"
-        log "Add: $var_name"
+        log "To fix: Go to Settings > Secrets and variables > Actions > Secrets"
+        log "Add a secret named: $var_name"
         exit 1
     fi
     log_ok "$var_name is configured"
@@ -112,8 +111,8 @@ main() {
 
     # Validate required environment variables
     log "Checking configuration..."
-    check_required_var "RUNPOD_ASSISTANT_BASE_URL" "Variables"
-    check_required_var "RUNPOD_ASSISTANT_API_KEY" "Secrets"
+    check_required_var "RUNPOD_ASSISTANT_BASE_URL"
+    check_required_var "RUNPOD_ASSISTANT_API_KEY"
     log ""
 
     # Generate unique run ID
