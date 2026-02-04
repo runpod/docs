@@ -1,0 +1,53 @@
+name: Trigger Docs Ingestion
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**.mdx'
+      - '**.md'
+      - 'docs.json'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  trigger-ingestion:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Mastra Docs Ingestion Workflow
+        env:
+          RUNPOD_ASSISTANT_BASE_URL: ${{ vars.RUNPOD_ASSISTANT_BASE_URL }}
+          RUNPOD_ASSISTANT_API_KEY: ${{ secrets.RUNPOD_ASSISTANT_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          RUN_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+          echo "Run ID: $RUN_ID"
+
+          # Helper function to make API calls and handle responses
+          make_request() {
+            local endpoint="$1"
+            local data="$2"
+            local description="$3"
+
+            echo "$description..."
+            response=$(curl -s -w "\n%{http_code}" --max-time 30 -X POST \
+              "${RUNPOD_ASSISTANT_BASE_URL}/api/workflows/ingestDocsWorkflow/${endpoint}?runId=$RUN_ID" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${RUNPOD_ASSISTANT_API_KEY}" \
+              -d "$data")
+
+            http_code=$(echo "$response" | tail -n1)
+            body=$(echo "$response" | sed '$d')
+            echo "Response: $body (HTTP $http_code)"
+
+            if [ "$http_code" -ne 200 ]; then
+              echo "ERROR: $description failed"
+              exit 1
+            fi
+          }
+
+          make_request "create-run" '{}' "Creating workflow run"
+          make_request "start" '{"inputData": {"branch": "main"}}' "Starting workflow run"
+
+          echo "Successfully triggered docs ingestion workflow"
