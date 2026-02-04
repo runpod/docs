@@ -1061,28 +1061,37 @@ Policy options:
 Setting `executionTimeout` in a request overrides the default endpoint setting for that specific job only.
 </Info>
 
-#### Long-running jobs (over 24 hours)
+#### Understanding TTL vs execution timeout
 
-The `ttl` and `executionTimeout` settings are independent. If you set `executionTimeout` to 48 hours but leave `ttl` at the default 24 hours, the job data will be deleted when the TTL expires, even though the execution timeout hasn't been reached.
+The `ttl` and `executionTimeout` settings serve different purposes:
+
+- **`ttl`**: Total time the job can exist in the system (queue time + execution time). The timer starts when the job is submitted.
+- **`executionTimeout`**: Maximum time the job can run once a worker picks it up.
+
+<Warning>
+If your `ttl` is too short and the job sits in queue waiting for an available worker, the job may expire before execution even begins—regardless of your `executionTimeout` setting.
+</Warning>
+
+**Example**: You set `executionTimeout` to 2 hours and `ttl` to 1 hour. If the job waits in queue for 1 hour, it expires before a worker ever picks it up. The execution timeout never comes into play.
+
+#### Long-running jobs
 
 For jobs that need to run longer than the default TTL (24 hours):
 
-1. Set `executionTimeout` to your desired runtime
-2. Set `ttl` to a value **greater than or equal to** `executionTimeout`
-
-<Warning>
-The system does not validate that `ttl` >= `executionTimeout`. If TTL expires before execution completes, the job data is deleted and results cannot be retrieved.
-</Warning>
+1. Set `executionTimeout` to your desired maximum runtime
+2. Set `ttl` to cover **both expected queue time and execution time**
 
 ```json
 {
   "input": { "prompt": "Long running task" },
   "policy": {
     "executionTimeout": 172800000,
-    "ttl": 259200000
+    "ttl": 180000000
   }
 }
 ```
+
+In this example, the job can wait in queue and run for a combined total of ~50 hours (`ttl`), with a maximum of 48 hours for the execution itself (`executionTimeout`).
 
 #### Result retention after completion
 
