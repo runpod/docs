@@ -1,5 +1,17 @@
 // PODS
-  
+
+export const TemplateTooltip = () => {
+  return (
+  <Tooltip headline="Template" tip="A pre-configured Pod setup that bundles a Docker image with hardware specs, network settings, and environment variables for quick deployment." cta="Learn more about templates" href="/pods/templates/overview">template</Tooltip>
+  );
+};
+
+export const TemplatesTooltip = () => {
+  return (
+  <Tooltip headline="Templates" tip="Pre-configured Pod setups that bundle Docker images with hardware specs, network settings, and environment variables for quick deployment." cta="Learn more about templates" href="/pods/templates/overview">templates</Tooltip>
+  );
+};
+
 export const PodTooltip = () => {
   return (
   <Tooltip headline="Pod" tip="A dedicated GPU or CPU instance for containerized AI/ML workloads." cta="Learn more about Pods" href="/pods/overview">Pod</Tooltip>
@@ -147,8 +159,14 @@ export const MachineTooltip = () => {
   );
 };
 
-export const EnvironmentVariablesTooltip = () => {
+export const PodEnvironmentVariablesTooltip = () => {
   return (
-  <Tooltip headline="Environment variables" tip="Key-value pairs that you can set and access within your code, allowing you to configure your application without hardcoding credentials or settings.">environment variables</Tooltip>
+  <Tooltip headline="Environment variables" tip="Key-value pairs that you can set in your Pod template and access within your code, allowing you to configure your application without hardcoding credentials or settings." cta="Learn more about Pod environment variables" href="/pods/templates/environment-variables">environment variables</Tooltip>
+  );
+};
+
+export const ServerlessEnvironmentVariablesTooltip = () => {
+  return (
+  <Tooltip headline="Environment variables" tip="Key-value pairs that you can set in your Serverless endpoint configuration and access within your worker code, allowing you to configure your application without hardcoding credentials or settings." cta="Learn more about Serverless environment variables" href="/serverless/development/environment-variables">environment variables</Tooltip>
   );
 };
