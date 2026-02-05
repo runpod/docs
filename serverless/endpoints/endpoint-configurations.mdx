@@ -62,11 +62,32 @@ The idle timeout determines how long a worker remains active after completing a 
 
 ### Execution timeout
 
-The execution timeout acts as a failsafe to prevent runaway jobs from consuming infinite resources. It specifies the maximum duration a single job is allowed to run before being forcibly terminated. We strongly recommend keeping this enabled. The default is 600 seconds (10 minutes), and it can be extended up to 7 days.
+The execution timeout specifies the maximum duration a single job is allowed to run while actively being processed by a worker. When exceeded, the job is marked as failed and the worker is stopped. We strongly recommend keeping this enabled to prevent runaway jobs from consuming infinite resources. The default is 600 seconds (10 minutes). The minimum is 5 seconds and maximum is 7 days.
+
+You can configure the execution timeout in the **Advanced** section of your endpoint settings. You can also override this setting on a per-request basis using the `executionTimeout` field in the [job policy](/serverless/endpoints/send-requests#execution-policies).
 
 ### Job TTL (time-to-live)
 
-This setting defines how long a job request remains valid in the queue before expiring. If a worker does not pick up the job within this window, the system discards it. The default is 24 hours, and it can be extended up to 7 days.
+The TTL defines the total lifespan of a job in the system. Once the TTL expires, the job's data is deleted from the system regardless of its current state—whether it is queued, actively running, or completed. The default is 24 hours. The minimum is 10 seconds and maximum is 7 days.
+
+The TTL timer starts when the job is submitted, not when execution begins. This means if a job sits in the queue waiting for an available worker, that time counts against the TTL. For example, if you set a TTL of 1 hour and the job waits in queue for 45 minutes, only 15 minutes remain for actual execution.
+
+<Warning>
+TTL is a hard limit on the job's existence. If the TTL expires while a job is actively running on a worker, the job is immediately removed from the system and subsequent status checks return a 404. This applies even if the job would have completed successfully given more time. Always set TTL to comfortably cover both expected queue time and execution time.
+</Warning>
+
+You can override this on a per-request basis using the `ttl` field in the [job policy](/serverless/endpoints/send-requests#execution-policies).
+
+### Result retention
+
+After a job completes, the system retains the results for a limited time. This retention period is separate from the Job TTL and cannot be extended:
+
+| Request type | Result retention | Notes |
+|--------------|------------------|-------|
+| Asynchronous (`/run`) | 30 minutes | Retrieve results via `/status/{job_id}` |
+| Synchronous (`/runsync`) | 1 minute | Results returned in the response; also available via `/status/{job_id}` |
+
+Once the retention period expires, the job data is permanently deleted.
 
 ## Performance features
 
