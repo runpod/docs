@@ -1055,7 +1055,7 @@ Policy options:
 | ------------------ | ------------------------------------------- | ------------------- | ------------------------------ |
 | `executionTimeout` | Maximum time a job can run while being processed by a worker | 600000 (10 minutes) | Min 5 seconds, max 7 days |
 | `lowPriority`      | When true, job won't trigger worker scaling | false               | -                              |
-| `ttl`              | How long job data is retained while queued or in progress | 86400000 (24 hours) | Min 10 seconds, max 7 days |
+| `ttl`              | Total lifespan of the job—once expired, the job is deleted regardless of state | 86400000 (24 hours) | Min 10 seconds, max 7 days |
 
 <Info>
 Setting `executionTimeout` in a request overrides the default endpoint setting for that specific job only.
@@ -1065,33 +1065,39 @@ Setting `executionTimeout` in a request overrides the default endpoint setting f
 
 The `ttl` and `executionTimeout` settings serve different purposes:
 
-- **`ttl`**: Total time the job can exist in the system (queue time + execution time). The timer starts when the job is submitted.
-- **`executionTimeout`**: Maximum time the job can run once a worker picks it up.
+- **`ttl`**: Total lifespan of the job in the system. The timer starts when the job is submitted and covers queue time, execution time, and everything in between. When TTL expires, the job is deleted regardless of its current state.
+- **`executionTimeout`**: Maximum time the job can actively run once a worker picks it up. Only enforced during execution.
 
 <Warning>
-If your `ttl` is too short and the job sits in queue waiting for an available worker, the job may expire before execution even begins—regardless of your `executionTimeout` setting.
+TTL is a hard limit on the job's existence. If TTL expires while a job is actively running on a worker, the job is immediately removed and subsequent status checks return a 404—even if the job would have completed successfully. The `executionTimeout` does not extend or override the TTL.
 </Warning>
 
-**Example**: You set `executionTimeout` to 2 hours and `ttl` to 1 hour. If the job waits in queue for 1 hour, it expires before a worker ever picks it up. The execution timeout never comes into play.
+**Example 1 (queue expiry)**: You set `executionTimeout` to 2 hours and `ttl` to 1 hour. If the job waits in queue for 1 hour, it expires before a worker ever picks it up. The execution timeout never comes into play.
+
+**Example 2 (mid-execution expiry)**: You set `executionTimeout` to 7 days and `ttl` to 7 days. If the job waits in queue for 1 day, it only has 6 days of TTL remaining for execution. If the job needs the full 7 days to run, it will be deleted on day 7 while still in progress.
 
 #### Long-running jobs
 
 For jobs that need to run longer than the default TTL (24 hours):
 
-1. Set `executionTimeout` to your desired maximum runtime
-2. Set `ttl` to cover **both expected queue time and execution time**
+1. Set `executionTimeout` to your desired maximum runtime.
+2. Set `ttl` to cover **both expected queue time and execution time**. Since TTL is a hard limit on the job's total lifespan, it must be long enough for the job to finish before being deleted.
 
 ```json
 {
   "input": { "prompt": "Long running task" },
   "policy": {
     "executionTimeout": 172800000,
-    "ttl": 180000000
+    "ttl": 259200000
   }
 }
 ```
 
-In this example, the job can wait in queue and run for a combined total of ~50 hours (`ttl`), with a maximum of 48 hours for the execution itself (`executionTimeout`).
+In this example, the execution timeout allows up to 48 hours of active runtime, while the TTL gives the job 72 hours of total lifespan. The extra 24 hours of TTL headroom accounts for potential queue wait time.
+
+<Warning>
+Both `ttl` and `executionTimeout` have a maximum of 7 days. If your job may queue for an extended period, the effective execution window is reduced: a job with a 7-day TTL that queues for 2 days only has 5 days of TTL remaining for execution, even if `executionTimeout` is also set to 7 days.
+</Warning>
 
 #### Result retention after completion
 
