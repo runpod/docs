@@ -95,11 +95,6 @@ export const NetworkVolumeTooltip = () => {
   );
 };
 
-export const ContainerVolumeTooltip = () => {
-  return (
-  <Tooltip headline="Container volume" tip="A temporary storage that exists only while a worker is running, and is completely lost when the worker is stopped or scaled down." cta="Learn more about container volumes" href="/serverless/storage/container-volumes">container volume</Tooltip>
-  );
-};
 
 export const VolumeDiskTooltip = () => {
   return (
@@ -123,7 +118,7 @@ export const RunpodHubTooltip = () => {
 
 export const PublicEndpointTooltip = () => {
   return (
-  <Tooltip headline="Public Endpoint" tip="A Runpod-managed endpoint providing instant access to state-of-the-art AI models through simple API calls." cta="Learn more about public endpoints" href="/serverless/endpoints/public-endpoints">Public Endpoint</Tooltip>
+  <Tooltip headline="Public Endpoint" tip="A Runpod-managed endpoint providing instant access to state-of-the-art AI models through simple API calls." cta="Learn more about public endpoints" href="/hub/public-endpoints">Public Endpoint</Tooltip>
   );
 };
 
@@ -143,19 +138,26 @@ export const RunpodCLITooltip = () => {
 
 export const ContainerTooltip = () => {
   return (
-  <Tooltip headline="Container" tip="A Docker-based environment that packages your code, dependencies, and runtime into a portable unit that runs consistently across machines." cta="Learn more about containers" href="/containers">container</Tooltip>
+  <Tooltip headline="Container" tip="A Docker-based environment that packages your code, dependencies, and runtime into a portable unit that runs consistently across machines."
+  >container</Tooltip>
   );
 };
 
 export const DataCenterTooltip = () => {
   return (
-  <Tooltip headline="Data center" tip="A physical facility where Runpod's GPU and CPU hardware is located." cta="Learn more about data centers" href="/data-centers">data center</Tooltip>
+  <Tooltip headline="Data center" tip="A physical facility where Runpod's GPU, CPU, and storage hardware is located.">data center</Tooltip>
   );
 };
 
 export const MachineTooltip = () => {
   return (
-  <Tooltip headline="Machine" tip="The physical server hardware within a data center that hosts your workloads." cta="Learn more about machines" href="/machines">machine</Tooltip>
+  <Tooltip headline="Machine" tip="The physical server hardware within a data center that hosts your compute resources.">machine</Tooltip>
+  );
+};
+
+export const MachinesTooltip = () => {
+  return (
+  <Tooltip headline="Machine" tip="The physical server hardware within a data center that hosts your compute resources.">machines</Tooltip>
   );
 };
 
