@@ -4,7 +4,7 @@
 # Used by GitHub Actions to sync documentation changes.
 #
 # Required environment variables:
-#   RUNPOD_ASSISTANT_BASE_URL - Base URL of the assistant API
+#   RUNPOD_ASSISTANT_API_URL - Base URL of the assistant API
 #   RUNPOD_ASSISTANT_API_KEY  - API key for authentication
 #
 # Optional:
@@ -52,7 +52,7 @@ api_request() {
     response=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
         --max-time "$TIMEOUT_SECONDS" \
         -X POST \
-        "${RUNPOD_ASSISTANT_BASE_URL}/api/workflows/${WORKFLOW_ID}/${endpoint}" \
+        "${RUNPOD_ASSISTANT_API_URL}/api/workflows/${WORKFLOW_ID}/${endpoint}" \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer ${RUNPOD_ASSISTANT_API_KEY}" \
         -d "$data")
@@ -82,7 +82,7 @@ api_request() {
             log "Response: $response"
             log ""
             log "Cause: Workflow '$WORKFLOW_ID' doesn't exist at this endpoint"
-            log "To fix: Verify workflow is deployed at $RUNPOD_ASSISTANT_BASE_URL"
+            log "To fix: Verify workflow is deployed at $RUNPOD_ASSISTANT_API_URL"
             return 1
             ;;
         500|502|503|504)
@@ -111,7 +111,7 @@ main() {
 
     # Validate required environment variables
     log "Checking configuration..."
-    check_required_var "RUNPOD_ASSISTANT_BASE_URL"
+    check_required_var "RUNPOD_ASSISTANT_API_URL"
     check_required_var "RUNPOD_ASSISTANT_API_KEY"
     log ""
 
