@@ -1,0 +1,464 @@
+---
+title: "Deploy Phi-3 using model caching"
+sidebarTitle: "Deploy a cached model"
+description: "Learn how to create a custom Serverless endpoint that uses model caching to serve Phi-3 with reduced cost and cold start times."
+tag: "NEW"
+---
+
+<Tip>
+You can download the finished code for this tutorial [on GitHub](https://github.com/runpod-workers/model-store-cache-example).
+</Tip>
+
+This tutorial demonstrates how to build a custom Serverless worker that leverages Runpod's [cached model](/serverless/endpoints/model-caching) feature to serve the Phi-3 language model. You'll learn how to create a handler function that locates and loads cached models in offline mode, which can significantly reduce costs and cold start times.
+
+## What you'll learn
+
+- How to configure a Serverless endpoint with a cached model.
+- How to programmatically locate a cached model in your handler function.
+- How to create a custom handler function for text generation.
+- How to integrate the Phi-3 model with the Hugging Face Transformers library.
+
+## Requirements
+
+Before starting this tutorial, make sure:
+
+- You have a [Runpod account](/get-started/manage-accounts) with sufficient credits.
+- You have a [Runpod API key](/get-started/api-keys).
+- You have a [GitHub account](https://github.com/). 
+- Your Runpod account is [connected to GitHub](/serverless/workers/github-integration#authorize-runpod-with-github).
+
+
+## Step 1: Create your handler function
+
+Create a file named `handler.py` that processes inference requests using the cached model. This handler enforces offline mode to ensure it only uses cached models and includes a helper function to resolve the correct snapshot path.
+
+```python handler.py
+import os
+import runpod
+from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+
+MODEL_ID = os.environ.get("MODEL_NAME", "microsoft/Phi-3-mini-4k-instruct")
+HF_CACHE_ROOT = "/runpod-volume/huggingface-cache/hub"
+
+# Force offline mode to use only cached models
+os.environ["HF_HUB_OFFLINE"] = "1"
+os.environ["TRANSFORMERS_OFFLINE"] = "1"
+
+
+def resolve_snapshot_path(model_id: str) -> str:
+    """
+    Resolve the local snapshot path for a cached model.
+
+    Args:
+        model_id: The model name from Hugging Face (e.g., 'microsoft/Phi-3-mini-4k-instruct')
+
+    Returns:
+        The full path to the cached model snapshot
+    """
+    if "/" not in model_id:
+        raise ValueError(f"MODEL_ID '{model_id}' is not in 'org/name' format")
+
+    org, name = model_id.split("/", 1)
+    model_root = os.path.join(HF_CACHE_ROOT, f"models--{org}--{name}")
+    refs_main = os.path.join(model_root, "refs", "main")
+    snapshots_dir = os.path.join(model_root, "snapshots")
+
+    print(f"[ModelStore] MODEL_ID: {model_id}")
+    print(f"[ModelStore] Model root: {model_root}")
+
+    # Try to read the snapshot hash from refs/main
+    if os.path.isfile(refs_main):
+        with open(refs_main, "r") as f:
+            snapshot_hash = f.read().strip()
+        candidate = os.path.join(snapshots_dir, snapshot_hash)
+        if os.path.isdir(candidate):
+            print(f"[ModelStore] Using snapshot from refs/main: {candidate}")
+            return candidate
+
+    # Fall back to first available snapshot
+    if not os.path.isdir(snapshots_dir):
+        raise RuntimeError(f"[ModelStore] snapshots directory not found: {snapshots_dir}")
+
+    versions = [
+        d for d in os.listdir(snapshots_dir) if os.path.isdir(os.path.join(snapshots_dir, d))
+    ]
+
+    if not versions:
+        raise RuntimeError(f"[ModelStore] No snapshot subdirectories found under {snapshots_dir}")
+
+    versions.sort()
+    chosen = os.path.join(snapshots_dir, versions[0])
+    print(f"[ModelStore] Using first available snapshot: {chosen}")
+    return chosen
+
+
+# Resolve and load the model at startup
+LOCAL_MODEL_PATH = resolve_snapshot_path(MODEL_ID)
+print(f"[ModelStore] Resolved local model path: {LOCAL_MODEL_PATH}")
+
+tokenizer = AutoTokenizer.from_pretrained(
+    LOCAL_MODEL_PATH,
+    trust_remote_code=False,
+    local_files_only=True,
+)
+
+model = AutoModelForCausalLM.from_pretrained(
+    LOCAL_MODEL_PATH,
+    trust_remote_code=False,
+    torch_dtype="auto",
+    device_map="auto",
+    local_files_only=True,
+    attn_implementation="eager",
+)
+
+text_gen = pipeline(
+    "text-generation",
+    model=model,
+    tokenizer=tokenizer,
+)
+
+print("[ModelStore] Model loaded from local snapshot")
+
+
+def handler(job):
+    """
+    Handler function that processes each inference request.
+
+    Args:
+        job: Runpod job object containing input data
+
+    Returns:
+        Dictionary with generated text or error information
+    """
+    job_input = job.get("input", {}) or {}
+    prompt = job_input.get("prompt", "Hello!")
+    max_tokens = int(job_input.get("max_tokens", 256))
+    temperature = float(job_input.get("temperature", 0.7))
+
+    print(f"[Handler] Prompt: {prompt[:80]!r}")
+    print(f"[Handler] max_tokens={max_tokens}, temperature={temperature}")
+
+    try:
+        outputs = text_gen(
+            prompt,
+            max_new_tokens=max_tokens,
+            do_sample=True,
+            temperature=temperature,
+        )
+        generated = outputs[0]["generated_text"]
+        print(f"[Handler] Generated length: {len(generated)} chars")
+
+        return {
+            "status": "success",
+            "output": generated,
+        }
+
+    except Exception as e:
+        print(f"[Handler] Error during generation: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+        }
+
+
+runpod.serverless.start({"handler": handler})
+```
+
+### Understanding the handler
+
+If you want to learn more about each component of this handler function, expand the section below:
+
+<Accordion title="Handler function details">
+
+The handler is divided into four main sections: configuration, path resolution, model loading, and request handling. Let's examine each part:
+
+#### Configuration and offline mode
+
+```python
+MODEL_ID = os.environ.get("MODEL_NAME", "microsoft/Phi-3-mini-4k-instruct")
+HF_CACHE_ROOT = "/runpod-volume/huggingface-cache/hub"
+
+os.environ["HF_HUB_OFFLINE"] = "1"
+os.environ["TRANSFORMERS_OFFLINE"] = "1"
+```
+
+The handler starts by defining two key paths: `MODEL_ID` specifies which Hugging Face model to load (configurable via environment variable, or using the "Model" [endpoint setting](/serverless/endpoints/endpoint-configurations)), and `HF_CACHE_ROOT` points to where Runpod stores cached models. When you enable model caching on your endpoint, Runpod automatically downloads the model to this location before your worker starts.
+
+Setting `HF_HUB_OFFLINE` and `TRANSFORMERS_OFFLINE` to `"1"` forces the Hugging Face libraries into offline mode. This is a safety measure that prevents the worker from accidentally downloading models at runtime, which would defeat the purpose of caching. If the cached model isn't found, the worker fails immediately with a clear error rather than silently downloading gigabytes of data.
+
+#### Path resolution
+
+```python
+def resolve_snapshot_path(model_id: str) -> str:
+    org, name = model_id.split("/", 1)
+    model_root = os.path.join(HF_CACHE_ROOT, f"models--{org}--{name}")
+    refs_main = os.path.join(model_root, "refs", "main")
+    snapshots_dir = os.path.join(model_root, "snapshots")
+```
+
+Cached models use a specific directory structure. A model like `microsoft/Phi-3-mini-4k-instruct` gets stored at:
+
+```
+/runpod-volume/huggingface-cache/hub/models--microsoft--Phi-3-mini-4k-instruct/
+├── refs/
+│   └── main              # Contains the commit hash of the "main" branch
+└── snapshots/
+    └── abc123def.../     # Actual model files, named by commit hash
+```
+
+The `resolve_snapshot_path()` function navigates this structure to find the actual model files. It first tries to read the `refs/main` file, which contains the commit hash that the "main" branch points to. This is the most reliable method because it matches exactly what Hugging Face would load if you called `from_pretrained()` with network access.
+
+```python
+if os.path.isfile(refs_main):
+    with open(refs_main, "r") as f:
+        snapshot_hash = f.read().strip()
+    candidate = os.path.join(snapshots_dir, snapshot_hash)
+    if os.path.isdir(candidate):
+        return candidate
+```
+
+If `refs/main` doesn't exist (which can happen with older cache formats), the function falls back to listing the `snapshots` directory and using the first available snapshot. This ensures compatibility with different caching scenarios.
+
+#### Model loading
+
+```python
+LOCAL_MODEL_PATH = resolve_snapshot_path(MODEL_ID)
+
+tokenizer = AutoTokenizer.from_pretrained(
+    LOCAL_MODEL_PATH,
+    trust_remote_code=False,
+    local_files_only=True,
+)
+
+model = AutoModelForCausalLM.from_pretrained(
+    LOCAL_MODEL_PATH,
+    trust_remote_code=False,
+    torch_dtype="auto",
+    device_map="auto",
+    local_files_only=True,
+    attn_implementation="eager",
+)
+
+text_gen = pipeline("text-generation", model=model, tokenizer=tokenizer)
+```
+
+Model loading happens at the module level, outside any function. This means it runs once when the worker starts, not on every request. The model stays in GPU memory and gets reused across all incoming jobs, which is essential for performance.
+
+The `local_files_only=True` parameter provides an additional layer of safety alongside offline mode. The `device_map="auto"` setting lets the Accelerate library automatically place model layers across available GPUs, and `torch_dtype="auto"` uses the model's native precision (typically float16 or bfloat16) to minimize memory usage.
+
+Finally, wrapping the model and tokenizer in a `pipeline` provides a convenient high-level interface for text generation that handles tokenization, generation, and decoding in a single call.
+
+#### Request handling
+
+```python
+def handler(job):
+    job_input = job.get("input", {}) or {}
+    prompt = job_input.get("prompt", "Hello!")
+    max_tokens = int(job_input.get("max_tokens", 256))
+    temperature = float(job_input.get("temperature", 0.7))
+```
+
+The `handler` function is what your worker uses to process each incoming request. The `job` parameter is a dictionary containing the request data, with user inputs nested under the `"input"` key. The handler extracts parameters with sensible defaults: if a user doesn't specify `max_tokens`, they get 256; if they don't specify `temperature`, they get 0.7.
+
+```python
+    outputs = text_gen(
+        prompt,
+        max_new_tokens=max_tokens,
+        do_sample=True,
+        temperature=temperature,
+    )
+    generated = outputs[0]["generated_text"]
+
+    return {"status": "success", "output": generated}
+```
+
+The pipeline outputs a list of dictionaries (one per input sequence). Since we're processing a single prompt, we take `outputs[0]["generated_text"]` to get the generated string. The handler returns a dictionary that becomes the `output` field in the API response.
+
+The `try/except` block around generation catches any errors (out of memory, invalid inputs, etc.) and returns them in a structured format rather than crashing the worker.
+
+```python
+runpod.serverless.start({"handler": handler})
+```
+
+The final line registers the handler function with the Runpod SDK and starts the worker's event loop, which polls for jobs and dispatches them to your handler.
+
+</Accordion>
+
+## Step 2: Create the requirements file
+
+Create a `requirements.txt` file to specify the Python dependencies for your worker.
+
+```text requirements.txt
+runpod>=1.6.2
+transformers>=4.36.2
+accelerate>=0.25.0
+```
+
+## Step 3: Create a Dockerfile
+
+Create a `Dockerfile` to package your handler into a container image.
+
+```dockerfile Dockerfile
+FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY handler.py .
+
+CMD ["python", "-u", "handler.py"]
+```
+
+## Step 4: Set up your GitHub repository
+
+Create a GitHub repository with your handler, requirements, and Dockerfile.
+
+1. Create a new repository on GitHub (for example, `phi3-cached-worker`).
+
+2. Add your files to the repository:
+
+```bash
+git init
+git add handler.py requirements.txt Dockerfile
+git commit -m "Initial commit: Phi-3 cached model worker"
+
+git remote add origin https://github.com/YOUR_USERNAME/phi3-cached-worker.git
+git branch -M main
+git push -u origin main
+```
+
+Replace `YOUR_USERNAME` with your GitHub username.
+
+## Step 5: Deploy from GitHub
+
+Deploy your worker directly from GitHub.
+
+1. Navigate to the [Serverless section](https://www.console.runpod.io/serverless) and select **New Endpoint**.
+
+2. Under **Import Git Repository**, select your `phi3-cached-worker` repository.
+
+3. Configure deployment options:
+   - **Branch**: Select `main` (or your preferred branch).
+   - **Dockerfile Path**: Leave as default if Dockerfile is in the root.
+   - Select **Next**.
+
+4. Configure endpoint settings:
+   - **Endpoint Name**: Choose a descriptive name (for example, "phi3-cached-inference").
+   - **Endpoint Type**: Make sure it's set to **Queue**.
+   - **GPU Configuration**: Select one or more GPU types with at least 16GB VRAM.
+   - **Workers**: Leave the defaults in place (minimum: 0, maximum: 3).
+   - **Container Disk**: Allocate at least 20 GB (or more if you're using a larger model).
+
+5. **Enable cached models**:
+   - Scroll to the **Model** section.
+   - Enter the model name: 
+      ```text
+      microsoft/Phi-3-mini-4k-instruct
+      ```
+      ... or your preferred model that's available on Hugging Face.
+   - (Optional) If using a gated model, add your Hugging Face token.
+
+6. Select **Deploy Endpoint**.
+
+Runpod automatically builds your Docker image and deploys it to your endpoint. You can monitor the build status in the **Builds** tab.
+
+## Step 6: Test your endpoint
+
+Once deployed, send requests to your endpoint using the Runpod API. Replace `YOUR_ENDPOINT_ID` with your actual endpoint ID.
+
+<Tabs>
+  <Tab title="Python">
+```python
+import requests
+import os
+
+endpoint_id = "YOUR_ENDPOINT_ID"
+api_key = os.environ.get("RUNPOD_API_KEY")
+
+url = f"https://api.runpod.ai/v2/{endpoint_id}/runsync"
+headers = {
+    "Authorization": f"Bearer {api_key}",
+    "Content-Type": "application/json",
+}
+
+payload = {
+    "input": {
+        "prompt": "Explain what large language models are in simple terms.",
+        "max_tokens": 150,
+        "temperature": 0.7,
+    }
+}
+
+response = requests.post(url, json=payload, headers=headers)
+result = response.json()
+
+print("Generated text:", result["output"]["output"])
+```
+  </Tab>
+  <Tab title="cURL">
+```bash
+curl -X POST https://api.runpod.ai/v2/YOUR_ENDPOINT_ID/runsync \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": {
+      "prompt": "Explain what large language models are in simple terms.",
+      "max_tokens": 150,
+      "temperature": 0.7
+    }
+  }'
+```
+  </Tab>
+</Tabs>
+
+Expected response:
+
+```json
+{
+  "id": "sync-request-id",
+  "status": "COMPLETED",
+  "output": {
+    "status": "success",
+    "output": "Explain what large language models are in simple terms. Large language models (LLMs) are AI systems trained on vast amounts of text data..."
+  }
+}
+```
+
+Congratulations! You've successfully deployed a Serverless endpoint that uses model caching to serve Phi-3.
+
+## Benefits of using cached models
+
+By using Runpod's cached model feature in this tutorial, you gain several advantages:
+
+- **Faster cold starts**: Workers start in seconds instead of minutes.
+- **Cost savings**: No billing during model download time.
+- **Simplified deployment**: Models are automatically available to all workers.
+- **Better scalability**: Quick worker scaling without waiting for downloads.
+
+## Next steps
+
+Now that you have a working Phi-3 endpoint with cached models, you can:
+
+- Experiment with different [Phi model variants](https://huggingface.co/microsoft) (Phi-3-medium, Phi-3.5, etc.).
+- Add more sophisticated prompt templates and chat formatting.
+- Implement streaming responses for real-time generation.
+- Integrate with existing applications using the Runpod SDK.
+
+## Related resources
+
+<CardGroup cols={2}>
+  <Card title="Cached models" icon="bolt" href="/serverless/endpoints/model-caching">
+    Learn more about cached models and their benefits
+  </Card>
+  <Card title="GitHub integration" icon="github" href="/serverless/workers/github-integration">
+    Deploy workers directly from GitHub repositories
+  </Card>
+  <Card title="Handler functions" icon="function" href="/serverless/workers/handler-functions">
+    Understand handler function structure and best practices
+  </Card>
+  <Card title="vLLM workers" icon="rocket" href="/serverless/vllm/overview">
+    Explore vLLM for optimized LLM inference
+  </Card>
+</CardGroup>
