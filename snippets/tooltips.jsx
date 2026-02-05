@@ -56,6 +56,24 @@ export const RequestTooltip = () => {
   );
 };
 
+export const RequestsTooltip = () => {
+  return (
+  <Tooltip headline="Requests" tip="HTTP requests that you send to an endpoint, which can include parameters, payloads, and headers that define what the endpoint should process." cta="Learn more about requests" href="/serverless/endpoints/send-requests">requests</Tooltip>
+  );
+};
+
+export const JobTooltip = () => {
+  return (
+  <Tooltip headline="Job" tip="A unit of work submitted to a queue-based Serverless endpoint. Jobs progress through states like IN_QUEUE, RUNNING, and COMPLETED as they are processed by workers." cta="Learn more about job states" href="/serverless/endpoints/job-states">job</Tooltip>
+  );
+};
+
+export const JobsTooltip = () => {
+  return (
+  <Tooltip headline="Jobs" tip="Units of work submitted to a queue-based Serverless endpoint. Jobs progress through states like IN_QUEUE, RUNNING, and COMPLETED as they are processed by workers." cta="Learn more about job states" href="/serverless/endpoints/job-states">jobs</Tooltip>
+  );
+};
+
 
 export const WorkerTooltip = () => {
   return (
@@ -72,6 +90,30 @@ export const WorkersTooltip = () => {
 export const EndpointTooltip = () => {
   return (
   <Tooltip headline="Endpoint" tip="The access point for your Serverless application. Endpoints provide a URL where users or applications can send requests to run your code." cta="Learn more about endpoints" href="/serverless/endpoints/overview">endpoint</Tooltip>
+  );
+};
+
+export const QueueBasedEndpointTooltip = () => {
+  return (
+  <Tooltip headline="Queue-based endpoint" tip="A Serverless endpoint that processes requests sequentially through a managed queue, providing guaranteed execution and automatic retries. Uses handler functions and standard operations like /run and /runsync." cta="Learn more about queue-based endpoints" href="/serverless/endpoints/overview#queue-based-endpoints">queue-based endpoint</Tooltip>
+  );
+};
+
+export const QueueBasedEndpointsTooltip = () => {
+  return (
+  <Tooltip headline="Queue-based endpoints" tip="Serverless endpoints that process requests sequentially through a managed queue, providing guaranteed execution and automatic retries. Use handler functions and standard operations like /run and /runsync." cta="Learn more about queue-based endpoints" href="/serverless/endpoints/overview#queue-based-endpoints">queue-based endpoints</Tooltip>
+  );
+};
+
+export const LoadBalancingEndpointTooltip = () => {
+  return (
+  <Tooltip headline="Load balancing endpoint" tip="A Serverless endpoint that routes requests directly to worker HTTP servers without queuing, ideal for real-time applications and streaming. Supports custom HTTP frameworks like FastAPI or Flask." cta="Learn more about load balancing endpoints" href="/serverless/load-balancing/overview">load balancing endpoint</Tooltip>
+  );
+};
+
+export const LoadBalancingEndpointsTooltip = () => {
+  return (
+  <Tooltip headline="Load balancing endpoints" tip="Serverless endpoints that route requests directly to worker HTTP servers without queuing, ideal for real-time applications and streaming. Support custom HTTP frameworks like FastAPI or Flask." cta="Learn more about load balancing endpoints" href="/serverless/load-balancing/overview">load balancing endpoints</Tooltip>
   );
 };
 
