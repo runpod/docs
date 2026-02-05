@@ -123,6 +123,18 @@ export const VLLMTooltip = () => {
   );
 };
 
+export const PyTorchTooltip = () => {
+  return (
+  <Tooltip headline="PyTorch" tip="An open-source machine learning framework for building and training neural networks, widely used for deep learning research and production deployments." cta="Read the PyTorch documentation" href="https://pytorch.org/projects/pytorch/">PyTorch</Tooltip>
+  );
+};
+
+export const CUDATooltip = () => {
+  return (
+  <Tooltip headline="CUDA" tip="NVIDIA's parallel computing platform that enables GPU-accelerated processing for AI/ML workloads. CUDA provides the low-level interface between your code and NVIDIA GPUs." cta="Read the CUDA docs" href="https://developer.nvidia.com/cuda-toolkit">CUDA</Tooltip>
+  );
+};
+
 export const CachedModelsTooltip = () => {
   return (
   <Tooltip headline="Cached models" tip="An optional Serverless feature that starts workers on machines that already have the model cached, reducing cold start times and improving performance." cta="Learn more about cached models" href="/serverless/endpoints/model-caching">cached models</Tooltip>
