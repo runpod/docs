@@ -83,7 +83,7 @@ export const WorkerTooltip = () => {
 
 export const WorkersTooltip = () => {
   return (
-  <Tooltip headline="Workers" tip="The container instances that execute your code when requests arrive at your endpoint. Runpod automatically manages worker lifecycle, starting them when needed and stopping them when idle to optimize resource utilization." cta="Learn more about workers" href="/serverless/workers/overview">workers</Tooltip>
+  <Tooltip headline="Worker" tip="A container that runs your application code and processes requests to your Serverless endpoint. Workers are automatically started and stopped by Runpod to handle traffic spikes and ensure optimal resource utilization." cta="Learn more about workers" href="/serverless/workers/overview">worker</Tooltip>
   );
 };
 
@@ -101,7 +101,7 @@ export const QueueBasedEndpointTooltip = () => {
 
 export const QueueBasedEndpointsTooltip = () => {
   return (
-  <Tooltip headline="Queue-based endpoints" tip="Serverless endpoints that process requests sequentially through a managed queue, providing guaranteed execution and automatic retries. Use handler functions and standard operations like /run and /runsync." cta="Learn more about queue-based endpoints" href="/serverless/endpoints/overview#queue-based-endpoints">queue-based endpoints</Tooltip>
+  <Tooltip headline="Queue-based endpoint" tip="A Serverless endpoint that processes requests sequentially through a managed queue, providing guaranteed execution and automatic retries. Uses handler functions and standard operations like /run and /runsync." cta="Learn more about queue-based endpoints" href="/serverless/endpoints/overview#queue-based-endpoints">queue-based endpoints</Tooltip>
   );
 };
 
@@ -156,9 +156,15 @@ export const VolumeDiskTooltip = () => {
   );
 };
 
-export const ContainerDiskTooltip = () => {
+export const PodContainerDiskTooltip = () => {
   return (
-  <Tooltip headline="Container disk" tip="A temporary storage that exists only while a Pod is running, and is completely lost when the Pod is stopped or deleted." cta="Learn more about container disks" href="/pods/storage/types">container disk</Tooltip>
+  <Tooltip headline="Container disk" tip="Temporary storage that exists only while a Pod is running, and is completely lost when the Pod is stopped or deleted." cta="Learn more about container disks" href="/pods/storage/types">container disk</Tooltip>
+  );
+};
+
+export const WorkerContainerDiskTooltip = () => {
+  return (
+  <Tooltip headline="Container disk" tip="Temporary storage that exists only while a worker is running, and is completely lost when the worker is stopped or deleted." cta="Learn more about container disks" href="/serverless/storage/overview#container-disk">container disk</Tooltip>
   );
 };
 
@@ -224,5 +230,43 @@ export const PodEnvironmentVariablesTooltip = () => {
 export const ServerlessEnvironmentVariablesTooltip = () => {
   return (
   <Tooltip headline="Environment variables" tip="Key-value pairs that you can set in your Serverless endpoint configuration and access within your worker code, allowing you to configure your application without hardcoding credentials or settings." cta="Learn more about Serverless environment variables" href="/serverless/development/environment-variables">environment variables</Tooltip>
+  );
+};
+
+// AI/ML CONCEPTS
+
+export const TrainingTooltip = () => {
+  return (
+  <Tooltip headline="AI training" tip="The initial phase of AI model development, in which a model analyzes a dataset to learn patterns and relationships.">training</Tooltip>
+  );
+};
+
+export const TrainTooltip = () => {
+  return (
+  <Tooltip headline="AI training" tip="The foundational phase of AI development, in which a model analyzes a dataset to learn patterns and relationships. This process is hardware-intensive and can take hours to weeks, depending on the size of the dataset and the complexity of the model.">train</Tooltip>
+  );
+};
+
+export const FineTuningTooltip = () => {
+  return (
+  <Tooltip headline="AI fine-tuning" tip="The process of adapting a pre-trained model to a specific task using a smaller, specialized dataset." cta="Learn more about fine-tuning" href="/fine-tune">fine-tuning</Tooltip>
+  );
+};
+
+export const FineTuneTooltip = () => {
+  return (
+  <Tooltip headline="AI fine-tuning" tip="The process of adapting a pre-trained model to a specific task using a smaller, specialized dataset. Fine-tuning saves significant time and resources compared to training from scratch.">fine-tune</Tooltip>
+  );
+};
+
+export const InferenceTooltip = () => {
+  return (
+  <Tooltip headline="AI inference" tip="The execution phase where a trained model makes predictions on new data. When you prompt a model and it responds, that's inference.">inference</Tooltip>
+  );
+};
+
+export const ServingTooltip = () => {
+  return (
+  <Tooltip headline="AI serving" tip="The process of deploying and managing a model for inference. When you deploy a model to a Serverless endpoint, that's serving.">serving</Tooltip>
   );
 };
