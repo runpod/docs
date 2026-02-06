@@ -98,7 +98,7 @@ Follow the Runpod style guide (`.cursor/rules/rp-styleguide.mdc`) and Google Dev
 ### Capitalization and Terminology
 
 - **Always use sentence case** for headings and titles
-- **Proper nouns**: Runpod, Pods, Serverless, Hub, Instant Clusters, Secure Cloud, Community Cloud, Tetra
+- **Proper nouns**: Runpod, Pods, Serverless, Hub, Instant Clusters, Secure Cloud, Community Cloud, Flash
 - **Generic terms** (lowercase): endpoint, worker, cluster, template, handler, fine-tune, network volume
 
 ### Writing Style
