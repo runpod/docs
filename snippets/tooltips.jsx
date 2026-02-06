@@ -101,7 +101,7 @@ export const QueueBasedEndpointTooltip = () => {
 
 export const QueueBasedEndpointsTooltip = () => {
   return (
-  <Tooltip headline="Queue-based endpoints" tip="Serverless endpoints that process requests sequentially through a managed queue, providing guaranteed execution and automatic retries. Use handler functions and standard operations like /run and /runsync." cta="Learn more about queue-based endpoints" href="/serverless/endpoints/overview#queue-based-endpoints">queue-based endpoints</Tooltip>
+  <Tooltip headline="Queue-based endpoint" tip="A Serverless endpoint that processes requests sequentially through a managed queue, providing guaranteed execution and automatic retries. Uses handler functions and standard operations like /run and /runsync." cta="Learn more about queue-based endpoints" href="/serverless/endpoints/overview#queue-based-endpoints">queue-based endpoints</Tooltip>
   );
 };
 
