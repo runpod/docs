@@ -1,127 +1,225 @@
 ---
-title: "Build Docker Images on Runpod with Bazel"
+title: "Build Docker images on Runpod with Bazel"
+sidebarTitle: "Build Docker images with Bazel"
+description: "Build and push Docker images from inside a Runpod Pod using Bazel."
+tag: "NEW"
 ---
 
-Runpod's GPU Pods use custom Docker images to run your code. This means you can't directly spin up your own Docker instance or build Docker containers on a GPU Pod. Tools like Docker Compose are also unavailable.
+import { TemplateTooltip, PodTooltip, NetworkVolumeTooltip } from "/snippets/tooltips.jsx";
 
-This limitation can be frustrating when you need to create custom Docker images for your Runpod templates.
+Runpod Pods use custom Docker images, so you can't directly build Docker containers or use Docker Compose on a GPU Pod. However, you can use [Bazel](https://bazel.build) to build and push Docker images from inside a Pod, effectively creating a "Docker in Docker" workflow.
 
-Fortunately, many use cases can be addressed by creating a custom template with the desired Docker image.
+## What you'll learn
 
-In this tutorial, you'll learn how to use the [Bazel](https://bazel.build) build tool to build and push Docker images from inside a Runpod container.
+In this tutorial, you'll learn how to:
 
-By the end of this tutorial, you’ll be able to build custom Docker images on Runpod and push them to Docker Hub for use in your own templates.
+- Deploy a <PodTooltip /> for building Docker images.
+- Install Bazel and Docker dependencies.
+- Configure a Bazel project with [rules_oci](https://github.com/bazel-contrib/rules_oci).
+- Build and push a Docker image to Docker Hub.
 
-## Prerequisites
+## Requirements
 
-Before you begin this guide you'll need the following:
+Before starting, you'll need:
 
-* A Docker Hub account and access token for authenticating the docker login command
-* Enough volume for your image to be built
+- A [Docker Hub account](https://hub.docker.com/) with an access token.
+- A Runpod account with credits.
 
-## Create a Pod
+## Step 1: Deploy a Pod
 
 1. Navigate to [Pods](https://www.console.runpod.io/pods) and select **+ Deploy**.
+2. Choose **GPU** or **CPU** based on your needs.
+3. Select an instance type (for example, **A40**).
+4. (optional) Attach a <NetworkVolumeTooltip /> for larger image builds.
+5. Select a <TemplateTooltip /> (for example, **Runpod Pytorch**).
+6. Select **Deploy On-Demand**.
 
-2. Choose between **GPU** and **CPU**.
-
-3. Customize your an instance by setting up the following:
-
-   1. (optional) Specify a Network volume.
-   2. Select an instance type. For example, **A40**.
-   3. (optional) Provide a template. For example, **Runpod Pytorch**.
-   4. (GPU only) Specify your compute count.
-
-4. Review your configuration and select **Deploy On-Demand**.
-
-For more information, see [Manage Pods](/pods/manage-pods#start-a-pod).
-
-Wait for the Pod to spin up then connect to your Pod through the Web Terminal:
+Wait for the Pod to start, then connect via the web terminal:
 
 1. Select **Connect**.
-2. Choose **Start Web Terminal** and then **Connect to Web Terminal**.
-3. Enter your username and password.
+2. Select **Start Web Terminal**, then **Connect to Web Terminal**.
 
-Now you can clone the example GitHub repository
+## Step 2: Install dependencies
 
-## Clone the example GitHub repository
+Install the required tools:
 
-Clone the example code repository that demonstrates building Docker images with Bazel:
+1. Update packages and install sudo:
+
+   ```bash
+   apt update && apt install -y sudo
+   ```
+
+2. Install Docker:
+
+   ```bash
+   curl -fsSL https://get.docker.com -o get-docker.sh && sudo sh get-docker.sh
+   ```
+
+3. Log in to Docker Hub:
+   1. Go to [Docker Hub Security Settings](https://hub.docker.com/settings/security) and create an access token with **Read/Write** permissions.
+   2. Log in to Docker Hub, replacing `YOUR_USERNAME` with your actual Docker Hub username:
+
+      ```bash
+      docker login -u YOUR_USERNAME
+      ```
+
+      When prompted for a password, paste your access token (not your Docker Hub password).
+
+4. Install Bazel via Bazelisk:
+
+   ```bash
+   wget https://github.com/bazelbuild/bazelisk/releases/download/v1.28.1/bazelisk-linux-amd64 && \
+   chmod +x bazelisk-linux-amd64 && \
+   sudo cp ./bazelisk-linux-amd64 /usr/local/bin/bazel
+   ```
+
+5. Verify the installations:
+
+   ```bash
+   docker --version && bazel --version
+   ```
+
+   You should see version numbers for both Docker and Bazel.
+
+## Step 3: Create the project files
+
+Create a new directory for your Bazel project:
 
 ```bash
-git clone https://github.com/therealadityashankar/build-docker-in-runpod.git && cd build-docker-in-runpod
+mkdir -p ~/docker-build && cd ~/docker-build
 ```
 
-## Install dependencies
-
-Install the required dependencies inside the Runpod container:
-
-Update packages and install sudo:
+Create a `.bazelversion` file to pin to a stable Bazel version:
 
 ```bash
-apt update && apt install -y sudo
+echo "7.4.1" > .bazelversion
 ```
 
-Install Docker using the convenience script:
+Create an empty `MODULE.bazel` file (required by Bazel 7+):
 
 ```bash
-curl -fsSL https://get.docker.com -o get-docker.sh && sudo sh get-docker.sh
+touch MODULE.bazel
 ```
 
-Log in to Docker using an access token:
-
-1. Go to [https://hub.docker.com/settings/security](https://hub.docker.com/settings/security) and click "New Access Token".
-2. Enter a description like "Runpod Token" and select "Read/Write" permissions.
-3. Click "Generate" and copy the token that appears.
-4. In the terminal, run:
+Create the `WORKSPACE` file that declares your dependencies:
 
 ```bash
-docker login -u <your-username>
+cat > WORKSPACE << 'EOF'
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+http_archive(
+    name = "rules_oci",
+    sha256 = "56d5499025d67a6b86b2e6ebae5232c72104ae682b5a21287770bd3bf0661abf",
+    strip_prefix = "rules_oci-1.7.5",
+    url = "https://github.com/bazel-contrib/rules_oci/releases/download/v1.7.5/rules_oci-v1.7.5.tar.gz",
+)
+
+load("@rules_oci//oci:dependencies.bzl", "rules_oci_dependencies")
+rules_oci_dependencies()
+
+load("@rules_oci//oci:repositories.bzl", "LATEST_CRANE_VERSION", "oci_register_toolchains")
+oci_register_toolchains(
+    name = "oci",
+    crane_version = LATEST_CRANE_VERSION,
+)
+
+load("@rules_oci//oci:pull.bzl", "oci_pull")
+oci_pull(
+    name = "base_image",
+    image = "index.docker.io/library/ubuntu",
+    platforms = ["linux/amd64"],
+    tag = "22.04",
+)
+EOF
 ```
 
-When prompted, paste in the access token you copied instead of your password.
-
-Install Bazel via the Bazelisk version manager:
+Create the `BUILD.bazel` file that defines the image build:
 
 ```bash
-wget https://github.com/bazelbuild/bazelisk/releases/download/v1.20.0/bazelisk-linux-amd64
-chmod +x bazelisk-linux-amd64  
-sudo cp ./bazelisk-linux-amd64 /usr/local/bin/bazel
-```
+cat > BUILD.bazel << 'EOF'
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_push")
 
-## Configure the Bazel Build
+oci_image(
+    name = "custom_image",
+    base = "@base_image",
+    tars = [":add_text_file"],
+)
 
-First, install nano if it’s not already installed and open the `BUILD.bazel` file for editing:
+genrule(
+    name = "add_text_file",
+    srcs = [],
+    outs = ["text_layer.tar"],
+    cmd = "echo 'Hello from Bazel on Runpod!' > hello.txt && tar -cf $@ hello.txt",
+)
 
-```bash BUILD.bazel
-sudo apt install nano
-nano BUILD.bazel
-```
-
-Replace the `{YOUR_USERNAME}` placeholder with your Docker Hub username in the `BUILD.bazel` file:
-
-```bash BUILD.bazel
-[label BUILD.bazel]
 oci_push(
     name = "push_custom_image",
     image = ":custom_image",
-    repository = "index.docker.io/{YOUR_USERNAME}/custom_image",
-    remote_tags = ["latest"]
+    repository = "index.docker.io/USERNAME_PLACEHOLDER/custom_image",
+    remote_tags = ["latest"],
 )
+EOF
 ```
 
-## Build and Push the Docker Image
+## Step 4: Configure your Docker Hub username
 
-Run the bazel command to build the Docker image and push it to your Docker Hub account:
+Use `sed` to replace the username placeholder with your Docker Hub username in `BUILD.bazel`. Replace `YOUR_ACTUAL_USERNAME` with your actual Docker Hub username:
+
+```bash
+sed 's/USERNAME_PLACEHOLDER/YOUR_ACTUAL_USERNAME/g' BUILD.bazel > BUILD.bazel.tmp && mv BUILD.bazel.tmp BUILD.bazel
+```
+
+Verify the change was applied:
+
+```bash
+grep "repository" BUILD.bazel
+```
+
+You should see your username in the output:
+
+```
+repository = "index.docker.io/YOUR_ACTUAL_USERNAME/custom_image",
+```
+
+## Step 5: Build and push the image
+
+Run the Bazel command to build and push the Docker image:
 
 ```bash
 bazel run //:push_custom_image
 ```
 
-Once the command completes, go to [https://hub.docker.com/](https://hub.docker.com/) and log in. You should see a new repository called `custom_image` containing the Docker image you just built.
+<Tip>
+The first build may take several minutes as Bazel downloads dependencies and the base image. Subsequent builds will be much faster due to caching.
+</Tip>
 
-You can now reference this custom image in your own Runpod templates.
+Once complete, your image will be available in your Docker Hub repository at `your_username/custom_image:latest`.
 
-## Conclusion
+## Understanding the build files
 
-In this tutorial, you learned how to use Bazel to build and push Docker images from inside Runpod containers. By following the steps outlined, you can now create and utilize custom Docker images for your Runpod templates. The techniques demonstrated can be further expanded to build more complex images, providing a flexible solution for your containerization needs on Runpod.
+### .bazelversion
+
+This file pins the Bazel version to ensure reproducible builds. Bazelisk reads this file and automatically downloads the specified version.
+
+### WORKSPACE
+
+This file declares your project's external dependencies:
+
+- `http_archive`: Downloads the rules_oci package from GitHub.
+- `rules_oci_dependencies`: Loads transitive dependencies.
+- `oci_register_toolchains`: Registers the OCI toolchain (crane) for building images.
+- `oci_pull`: Pulls a base Docker image that your custom image builds on top of.
+
+### BUILD.bazel
+
+This file defines what to build:
+
+- `oci_image`: Creates a new container image by adding layers to a base image.
+- `genrule`: Creates a tar file containing custom content to add to the image.
+- `oci_push`: Pushes the built image to a container registry.
+
+## Next steps
+
+- Use your custom image in a [Runpod template](/pods/templates/overview).
+- Explore [rules_oci documentation](https://github.com/bazel-contrib/rules_oci) for more advanced configurations.
+- Learn how to [manage Pods](/pods/manage-pods) using the Runpod console, CLI, and REST API.

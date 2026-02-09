@@ -1,132 +1,227 @@
 ---
-title: "Run Google'S Gemma Model"
+title: "Deploy a chatbot with Gemma 3 and send requests using the OpenAI API"
+sidebarTitle: "Create a chatbot with Gemma 3"
+description: "Deploy a Serverless endpoint with Google's Gemma 3 model using vLLM and the OpenAI API to build an interactive chatbot."
+tag: "NEW"
 ---
 
-This tutorial walks you through running Google's Gemma model using Runpod's vLLM Worker. Throughout this tutorial, you'll learn to set up a Serverless Endpoint with a gated large language model (LLM).
+import { ServerlessTooltip, EndpointTooltip, VLLMTooltip, WorkerTooltip, ColdStartTooltip } from "/snippets/tooltips.jsx";
 
-## Prerequisites
+This tutorial walks you through deploying a <ServerlessTooltip /> <EndpointTooltip /> with Google's Gemma 3 model using the vLLM worker. You'll deploy the `gemma-3-1b-it` instruction-tuned variant, a lightweight model that runs efficiently on a variety of GPUs.
 
-Before diving into the deployment process, gather the necessary tokens and accepting Google's terms. This step ensures that you have access to the model and are in compliance with usage policies.
+By the end, you'll have a fully functional Serverless endpoint that can respond to chat-style prompts through the [OpenAI-compatible API](/serverless/vllm/openai-compatibility).
 
-* [Hugging Face access token](https://huggingface.co/settings/tokens)
-* [Accepting Google's terms of service](https://huggingface.co/google/gemma-7b)
+## What you'll learn
 
-The next section will guide you through Setting up your Serverless Endpoint with Runpod.
+- How to accept Google's terms for gated models on Hugging Face.
+- How to deploy a <VLLMTooltip /> worker from the Runpod Hub.
+- How to interact with your endpoint using the OpenAI-compatible API.
+- How to build a simple command-line chatbot.
 
-## Get started
+## Requirements
 
-To begin, we'll deploy a vLLM Worker as a Serverless Endpoint. Runpod simplifies the process of running large language models, offering an alternative to the more complex Docker and Kubernetes deployment methods.
+Before starting this tutorial, you'll need:
 
-Follow these steps in the Runpod Serverless console to create your Endpoint.
+- A [Runpod account](https://www.runpod.io/console/signup) with available credits.
+- A [Runpod API key](/get-started/api-keys).
+- A [Hugging Face account](https://huggingface.co/join) and [access token](https://huggingface.co/settings/tokens).
+- Python 3.8+ installed on your local machine.
+- The OpenAI Python client (`pip install openai`).
 
-1. Log in to the [Runpod Serverless console](https://www.console.runpod.io/serverless).
+## Step 1: Accept Google's terms on Hugging Face
 
-2. Select **+ New Endpoint**.
+Gemma 3 is a gated model on Hugging Face. Before deploying, go to the [Gemma 3 1B model page](https://huggingface.co/google/gemma-3-1b-it) and click **Agree and access repository** while logged into your Hugging Face account.
 
-3. Provide the following:
+<Warning>
+You must accept the terms using the same Hugging Face account that you'll use to generate your access token. Without accepting these terms, your deployment will fail to download the model.
+</Warning>
 
-   i. Endpoint name.
+## Step 2: Deploy the vLLM worker
 
-   ii. Select a GPU.
+Deploy a vLLM worker through the Runpod Hub with Gemma 3 as your model:
 
-   iii. Configure the number of Workers.
+1. Open the [vLLM worker listing](https://console.runpod.io/hub/runpod-workers/worker-vllm) in the Runpod Hub.
+2. Click **Deploy**, using the latest vLLM worker version.
+3. In the **Model** field, enter: `google/gemma-3-1b-it`.
+4. Under **Hugging Face access token**, enter your Hugging Face access token.
+5. Click **Advanced** to expand the vLLM settings.
+6. Set **Max Model Length** to `8192`.
+7. Set **Data Type** to `bfloat16`.
+8. Click **Next**.
+9. Select a GPU with at least 16GB of VRAM (such as RTX A4000 or RTX 4000 Ada).
+10. Click **Create Endpoint**.
 
-   iv. (optional) Select **FlashBoot**.
+<Note>
+We're using a lightweight model for this tutorial to reduce cost and speed up response times. For larger Gemma models, you'll need GPUs with more VRAM.
+</Note>
 
-   v. Enter the vLLM Worker image: `runpod/worker-vllm:stable-cuda11.8.0` or `runpod/worker-vllm:stable-cuda12.1.0`.
+Your endpoint will begin initializing. This may take several minutes while Runpod provisions resources and downloads the model. You can monitor the deployment status on the [Serverless endpoints page](https://console.runpod.io/serverless).
 
-   vi. Specify enough storage for your model.
+## Step 3: Note your endpoint ID
 
-   vii. Add the following environment variables:
+Once your endpoint is deployed, make a note of your **Endpoint ID** from the endpoint details page. You'll need this to construct your API base URL.
 
-      a. `MODEL_NAME`: `google/gemma-7b-it`.
+<Frame>
+  <img src="/images/4a0706af-serverless-endpoint-id.png" />
+</Frame>
 
-      b. `HF_TOKEN`: your Hugging Face API token for private models.
+Your API base URL will follow this pattern:
 
-4. Select **Deploy**.
+```
+https://api.runpod.ai/v2/{ENDPOINT_ID}/openai/v1
+```
 
-Once the Endpoint initializes, you can send a request to your [Endpoint](/serverless/endpoints/send-requests). You've now successfully deployed your model, a significant milestone in utilizing Google's Gemma model. As we move forward, the next section will focus on interacting with your model.
+## Step 4: Test your endpoint
 
-## Interact with your model
+Before building a chatbot, verify that your endpoint is working correctly using a simple test request.
 
-With the Endpoint up and running, it's time to leverage its capabilities by sending requests to interact with the model. This section demonstrates how to use OpenAI APIs to communicate with your model.
+Set up your environment variables, replacing `YOUR_RUNPOD_API_KEY` and `YOUR_ENDPOINT_ID` with your actual API key and endpoint ID:
 
-In this example, you'll create a Python chat bot using the `OpenAI` library; however, you can use any programming language and any library that supports HTTP requests.
+```bash
+export RUNPOD_API_KEY="YOUR_RUNPOD_API_KEY" && \
+export RUNPOD_ENDPOINT_ID="YOUR_ENDPOINT_ID"
+```
 
-Here's how to get started:
+Send a test request using `curl`:
 
-Use the `OpenAI` class to interact with the model. The `OpenAI` class takes the following parameters:
+```bash
+curl "https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/openai/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${RUNPOD_API_KEY}" \
+  -d '{
+    "model": "google/gemma-3-1b-it",
+    "messages": [
+      {"role": "user", "content": "Hello! What is your name?"}
+    ],
+    "max_tokens": 100
+  }'
+```
 
-* `base_url`: The base URL of the Serverless Endpoint.
-* `api_key`: Your Runpod API key.
+You should receive a JSON response containing the model's reply. If the request fails, check that:
 
-```javascript
+- Your endpoint has finished initializing (status shows "Ready").
+- Your `HF_TOKEN` environment variable is set correctly on the endpoint.
+- You've accepted Google's terms on Hugging Face.
+
+## Step 5: Build a chatbot
+
+With your endpoint deployed, you can interact with it using the [OpenAI-compatible API](/serverless/vllm/openai-compatibility). The following example creates a command-line chatbot that maintains conversation history and generates responses using your deployed model.
+
+<Note>
+Gemma 3 1B is a lightweight model optimized for efficiency. While it handles most conversational context well, it may give inconsistent responses to questions about personal information (like recalling names) due to its safety training. For more reliable multi-turn conversations, consider larger Gemma variants such as `gemma-3-4b-it` or `gemma-3-12b-it`.
+</Note>
+
+Create a local Python file called `gemma_chat.py`:
+
+```python gemma_chat.py
 from openai import OpenAI
 import os
 
+# Initialize the client with your Runpod endpoint
 client = OpenAI(
-    base_url=os.environ.get("RUNPOD_BASE_URL"),
-    api_key=os.environ.get("RUNPOD_API_KEY"),
+    base_url=f"https://api.runpod.ai/v2/{os.environ['RUNPOD_ENDPOINT_ID']}/openai/v1",
+    api_key=os.environ["RUNPOD_API_KEY"],
 )
-```
 
-<Info>
-
-Set your environment variables `RUNPOD_BASE_URL` and `RUNPOD_API_KEY` to your Runpod API key and base URL. Your `RUNPOD_BASE_URL` will be in the form of:
-
-```
-https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/openai/v1
-```
-
-Where `${RUNPOD_ENDPOINT_ID}` is the ID of your Serverless Endpoint.
-
-</Info>
-
-Next, you can use the `client` to interact with the model. For example, you can use the `chat.completions.create` method to generate a response from the model.
-
-Provide the following parameters to the `chat.completions.create` method:
-
-* `model`: `The model name`.
-* `messages`: A list of messages to send to the model.
-* `max_tokens`: The maximum number of tokens to generate.
-* `temperature`: The randomness of the generated text.
-* `top_p`: The cumulative probability of the generated text.
-* `max_tokens`: The maximum number of tokens to generate.
-
-```python
+# Initialize conversation history
 messages = [
     {
-        "role": "assistant",
-        "content": "Hello, I'm your assistant. How can I help you today?",
+        "role": "system",
+        "content": "You are a helpful assistant.",
     }
 ]
 
 
 def display_chat_history(messages):
+    """Display the conversation history."""
     for message in messages:
-        print(f"{message['role'].capitalize()}: {message['content']}")
+        if message["role"] != "system":
+            print(f"{message['role'].capitalize()}: {message['content']}")
 
 
 def get_assistant_response(messages):
-    r = client.chat.completions.create(
-        model="google/gemma-7b-it",
-        messages=[{"role": m["role"], "content": m["content"]} for m in messages],
+    """Get a response from the Gemma model."""
+    response = client.chat.completions.create(
+        model="google/gemma-3-1b-it",
+        messages=messages,
         temperature=0.7,
-        top_p=0.8,
-        max_tokens=100,
+        top_p=0.9,
+        max_tokens=256,
     )
-    response = r.choices[0].message.content
-    return response
+    return response.choices[0].message.content
 
 
-while True:
-    display_chat_history(messages)
+def main():
+    print("Gemma 3 Chatbot")
+    print("Type 'quit' to exit.\n")
 
-    prompt = input("User: ")
-    messages.append({"role": "user", "content": prompt})
+    while True:
+        # Get user input
+        user_input = input("You: ")
 
-    response = get_assistant_response(messages)
-    messages.append({"role": "assistant", "content": response})
+        if user_input.lower() == "quit":
+            print("Goodbye!")
+            break
+
+        # Add user message to history
+        messages.append({"role": "user", "content": user_input})
+
+        # Get and display response
+        response = get_assistant_response(messages)
+        messages.append({"role": "assistant", "content": response})
+
+        print(f"Assistant: {response}\n")
+
+
+if __name__ == "__main__":
+    main()
 ```
 
-Congratulations! You've successfully set up a Serverless Endpoint and interacted with Google's Gemma model. This tutorial has shown you the essentials of deploying a model on Runpod and creating a simple application to communicate with it. You've taken important steps towards integrating large language models into your projects.
+Before running the script, install the OpenAI Python client and set your environment variables:
+
+```bash
+pip install openai
+```
+
+```bash
+export RUNPOD_API_KEY="your_runpod_api_key"
+export RUNPOD_ENDPOINT_ID="your_endpoint_id"
+```
+
+Run your chatbot script:
+
+```bash
+python gemma_chat.py
+```
+
+<Tip>
+The first request may take longer (30-60 seconds) due to <ColdStartTooltip /> as the endpoint loads the model into GPU memory. Subsequent requests complete in just a few seconds.
+</Tip>
+
+You can now have a conversation with Gemma 3:
+
+```text
+Gemma 3 Chatbot
+Type 'quit' to exit.
+
+You: What are some fun facts about space?
+Assistant: Here are some fun facts about space:
+
+1. A day on Venus is longer than its year - Venus takes 243 Earth days to rotate once but only 225 Earth days to orbit the Sun.
+
+2. There's a planet made of diamonds - 55 Cancri e is believed to be covered in graphite and diamond.
+
+3. Space is completely silent - with no atmosphere to carry sound waves, space is eerily quiet.
+
+You: quit
+Goodbye!
+```
+
+## Next steps
+
+You've successfully deployed Gemma 3 on Runpod Serverless and built a chatbot to interact with it. Here are some ways to extend this tutorial:
+
+- [Configure your endpoint](/serverless/endpoints/endpoint-configurations) to optimize performance and cost.
+- [Learn about vLLM environment variables](/serverless/vllm/environment-variables) to customize model behavior.
+- [Explore OpenAI compatibility](/serverless/vllm/openai-compatibility) for features like streaming and function calling.
+- Build a custom <WorkerTooltip /> for more specialized use cases.
