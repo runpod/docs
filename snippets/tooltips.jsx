@@ -145,7 +145,7 @@ export const CachedModelsTooltip = () => {
 
 export const NetworkVolumeTooltip = () => {
   return (
-  <Tooltip headline="Network volume" tip="A persistent storage that exists independently of your other compute resources and can be attached to multiple Pods or Serverless endpoints to share data between machines." cta="Learn more about network volumes" href="/storage/network-volumes">network volume</Tooltip>
+  <Tooltip headline="Network volume" tip="Persistent storage that exists independently of your other compute resources. Can be attached to multiple Pods or Serverless endpoints to share data between machines." cta="Learn more about network volumes" href="/storage/network-volumes">network volume</Tooltip>
   );
 };
 
