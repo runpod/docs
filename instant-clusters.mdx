@@ -4,15 +4,47 @@ sidebarTitle: "Overview"
 description: "Fully managed compute clusters for multi-node training and AI inference."
 ---
 
-import { DataCenterTooltip, PyTorchTooltip, TrainingTooltip, InferenceTooltip } from "/snippets/tooltips.jsx";
+import { DataCenterTooltip, PyTorchTooltip, TrainingTooltip, InferenceTooltip, SlurmTooltip, TensorFlowTooltip } from "/snippets/tooltips.jsx";
 
-<Tip>
+Runpod Instant Clusters provide fully managed compute clusters with high-performance networking for distributed workloads. Deploy multi-node <TrainingTooltip /> jobs or large-scale AI <InferenceTooltip /> without managing infrastructure, networking, or cluster configuration.
 
-Runpod offers custom Instant Cluster pricing plans for large scale and enterprise workloads. If you're interested in learning more, [contact our sales team](https://ecykq.share.hsforms.com/2MZdZATC3Rb62Dgci7knjbA).
+## Why use Instant Clusters?
 
-</Tip>
+- **Scale beyond single machines.** Train models too large for one GPU, or accelerate training by distributing across multiple nodes.
+- **High-speed networking included.** Clusters include 1600-3200 Gbps networking between nodes, enabling efficient gradient synchronization and data movement.
+- **Zero configuration.** Clusters come pre-configured with static IPs, environment variables, and framework support. Start training immediately.
+- **On-demand availability.** Deploy clusters in minutes and pay only for what you use. Scale up for intensive jobs, then release resources.
 
-Runpod Instant Clusters provide fully managed compute clusters with high-performance networking for distributed workloads like multi-node <TrainingTooltip /> and large-scale AI <InferenceTooltip />.
+## When to use Instant Clusters
+
+Instant Clusters offer distributed computing power beyond the capabilities of single-machine setups. Consider using Instant Clusters for:
+
+- **Multi-GPU language model training.** Accelerate training of models like Llama or GPT across multiple GPUs.
+- **Large-scale computer vision projects.** Process massive imagery datasets for autonomous vehicles or medical analysis.
+- **Scientific simulations.** Run climate, molecular dynamics, or physics simulations that require massive parallel processing.
+- **Real-time AI inference.** Deploy production AI models that demand multiple GPUs for fast output.
+- **Batch processing pipelines.** Create systems for large-scale data processing, including video rendering and genomics.
+
+## Get started
+
+Choose the deployment guide that matches your preferred framework and use case:
+
+<CardGroup>
+  <Card title="Deploy a Slurm cluster" href="/instant-clusters/slurm-clusters" icon="splotch" iconType="solid">
+    Set up a managed Slurm cluster for high-performance computing workloads. Slurm provides job scheduling, resource allocation, and queue management for research environments and batch processing workflows.
+  </Card>
+  <Card title="Deploy a PyTorch distributed training cluster" href="/instant-clusters/pytorch" icon="fire" iconType="solid">
+    Set up multi-node PyTorch training for deep learning models. This tutorial covers distributed data parallel training, gradient synchronization, and performance optimization techniques.
+  </Card>
+  <Card title="Deploy an Axolotl fine-tuning cluster" href="/instant-clusters/axolotl" icon="screwdriver" iconType="solid">
+    Use Axolotl's framework for fine-tuning large language models across multiple GPUs. This approach simplifies customizing pre-trained models like Llama or Mistral with built-in training optimizations.
+  </Card>
+  <Card title="Deploy an unmanaged Slurm cluster" href="/instant-clusters/slurm" icon="splotch" iconType="solid">
+    For advanced users who need full control over Slurm configuration. This option provides a basic Slurm installation that you can customize for specialized workloads.
+  </Card>
+</CardGroup>
+
+You can also follow this [video tutorial](https://www.youtube.com/watch?v=k_5rwWyxo5s?si=r3lZclHcoY3HJYyg) to learn how to deploy Kimi K2 using Instant Clusters.
 
 <iframe
   className="w-full aspect-video rounded-xl"
@@ -23,107 +55,76 @@ Runpod Instant Clusters provide fully managed compute clusters with high-perform
   allowFullScreen
 ></iframe>
 
-## Key features
+## How it works
 
-* High-speed networking from 1600 to 3200 Gbps within a single data center.
-* On-demand clusters are available from 2-8 nodes (16-64 GPUs)
-* [Contact our sales team](https://ecykq.share.hsforms.com/2MZdZATC3Rb62Dgci7knjbA) for larger clusters (up to 512 GPUs).
-* Supports H200, B200, H100, and A100 GPUs.
-* Automatic cluster configuration with static IP and [environment variables](#environment-variables).
-* Multiple [deployment options](#get-started) for different frameworks and use cases.
+When you deploy an Instant Cluster, Runpod provisions multiple GPU nodes within the same <DataCenterTooltip /> and connects them with high-speed networking. One node is designated as the primary node, and all nodes receive pre-configured environment variables for distributed communication.
 
-## Networking performance
+<div style={{ marginLeft: '4rem'}}>
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#9289FE','primaryTextColor':'#fff','primaryBorderColor':'#9289FE','lineColor':'#5F4CFE','secondaryColor':'#AE6DFF','tertiaryColor':'#FCB1FF','edgeLabelBackground':'#5F4CFE', 'fontSize':'15px','fontFamily':'font-inter'}}}%%
 
-Instant Clusters feature high-speed local networking for efficient data movement between nodes:
+flowchart TD
+    internet["Internet"]
+    eth0["eth0<br/>External traffic"]
 
-* Most clusters include 3200 Gbps networking.
-* A100 clusters offer up to 1600 Gbps networking.
+    internet <--> eth0
+    eth0 <--> primary
 
-This fast networking enables efficient scaling of distributed training and inference workloads. Runpod ensures nodes selected for clusters are within the same <DataCenterTooltip /> for optimal performance.
+    subgraph cluster["Instant Cluster"]
+        primary["Primary node<br/>NODE_RANK=0"]
+        node1["Worker node<br/>NODE_RANK=1"]
+        node2["Worker node<br/>NODE_RANK=2"]
+        node3["Worker node<br/>NODE_RANK=3"]
+        ens["ens1-ens8<br/>Up to 3200 Gbps"]
 
-## Zero configuration
+        primary <--> ens
+        node1 <--> ens
+        node2 <--> ens
+        node3 <--> ens
+    end
 
-Runpod automates cluster setup so you can focus on your workloads:
+    style primary fill:#5F4CFE,stroke:#5F4CFE,color:#FFFFFF,stroke-width:2px
+    style node1 fill:#4D38F5,stroke:#4D38F5,color:#FFFFFF,stroke-width:2px
+    style node2 fill:#4D38F5,stroke:#4D38F5,color:#FFFFFF,stroke-width:2px
+    style node3 fill:#4D38F5,stroke:#4D38F5,color:#FFFFFF,stroke-width:2px
+    style internet fill:#22C55E,stroke:#22C55E,color:#000000,stroke-width:2px
+    style eth0 fill:#fb923c,stroke:#fb923c,color:#000000,stroke-width:2px
+    style ens fill:#9289FE,stroke:#9289FE,color:#FFFFFF,stroke-width:2px
+    style cluster fill:#1B0656,stroke:#5F4CFE,color:#FFFFFF,stroke-dasharray: 5 5
 
-* Clusters are pre-configured with static IP address management.
-* All necessary [environment variables](#environment-variables) for distributed training are pre-configured.
-* Supports popular frameworks like <PyTorchTooltip />, TensorFlow, and Slurm.
+    linkStyle default stroke-width:2px,stroke:#5F4CFE
+```
+</div>
 
-## Get started
+The high-speed network interfaces (`ens1`-`ens8`) handle inter-node communication for distributed training frameworks like <PyTorchTooltip />, <TensorFlowTooltip />, and <SlurmTooltip />. The `eth0` interface on the primary node handles external traffic like downloading models or datasets.
 
-Choose the tutorial that matches your preferred framework and use case.
+For more details on environment variables and network configuration, see the [configuration reference](/instant-clusters/configuration).
 
-[Deploy a Slurm cluster](/instant-clusters/slurm-clusters): Set up a managed Slurm cluster for high-performance computing workloads. Slurm provides job scheduling, resource allocation, and queue management for research environments and batch processing workflows.
+## Supported hardware
 
-[Deploy a PyTorch distributed training cluster](/instant-clusters/pytorch): Set up multi-node PyTorch training for deep learning models. This tutorial covers distributed data parallel training, gradient synchronization, and performance optimization techniques.
+| GPU | Network speed | Nodes |
+| --- | ------------- | ----- |
+| B200 | 3200 Gbps | 2-8 nodes (16-64 GPUs) |
+| H200 | 3200 Gbps | 2-8 nodes (16-64 GPUs) |
+| H100 | 3200 Gbps | 2-8 nodes (16-64 GPUs) |
+| A100 | 1600 Gbps | 2-8 nodes (16-64 GPUs) |
 
-[Deploy an Axolotl fine-tuning cluster](/instant-clusters/axolotl): Use Axolotl's framework for fine-tuning large language models across multiple GPUs. This approach simplifies customizing pre-trained models like Llama or Mistral with built-in training optimizations.
+For clusters larger than 8 nodes (up to 512 GPUs), [contact our sales team](https://ecykq.share.hsforms.com/2MZdZATC3Rb62Dgci7knjbA).
 
-[Deploy an unmanaged Slurm cluster](/instant-clusters/slurm): For advanced users who need full control over Slurm configuration. This option provides a basic Slurm installation that you can customize for specialized workloads.
+## Pricing
 
-You can also follow this [video tutorial](https://www.youtube.com/watch?v=k_5rwWyxo5s?si=r3lZclHcoY3HJYyg) to learn how to deploy Kimi K2 using Instant Clusters.
+Instant Cluster pricing is based on the GPU type and the number of nodes in your cluster. For current pricing, see the [Instant Clusters pricing page](https://www.runpod.io/pricing).
 
 <Note>
-
 All accounts have a default spending limit. To deploy a larger cluster, submit a support ticket at [help@runpod.io](mailto:help@runpod.io).
-
 </Note>
 
-## Network interfaces
+## Next steps
 
-High-bandwidth interfaces (`ens1`, `ens2`, etc.) handle communication between nodes, while the management interface (`eth0`) manages external traffic. The [NCCL](https://developer.nvidia.com/nccl) environment variable `NCCL_SOCKET_IFNAME` uses all available interfaces by default. The `PRIMARY_ADDR` corresponds to `ens1` to enable launching and bootstrapping distributed processes.
+- [Configuration reference](/instant-clusters/reference): Learn about environment variables, network interfaces, and NCCL configuration.
+- [Deploy a Slurm cluster](/instant-clusters/slurm-clusters): Set up job scheduling for HPC workloads.
+- [Deploy a PyTorch cluster](/instant-clusters/pytorch): Get started with distributed deep learning.
 
-Instant Clusters support up to 8 interfaces per node. Each interface (`ens1` - `ens8`) provides a private network connection for inter-node communication, made available to distributed backends such as NCCL or GLOO.
-
-## Environment variables
-
-The following environment variables are present in all nodes in an Instant Cluster:
-
-| Environment Variable           | Description                                                                   |
-| ------------------------------ | ----------------------------------------------------------------------------- |
-| `PRIMARY_ADDR` / `MASTER_ADDR` | The address of the primary node.                                               |
-| `PRIMARY_PORT` / `MASTER_PORT` | The port of the primary node. All ports are available.                        |
-| `NODE_ADDR`                    | The static IP of this node within the cluster network.                         |
-| `NODE_RANK`                    | The cluster rank (i.e. global rank) assigned to this node. `NODE_RANK = 0` for the primary node. |
-| `NUM_NODES`                    | The number of nodes in the cluster.                                            |
-| `NUM_TRAINERS`                 | The number of GPUs per node.                                                   |
-| `HOST_NODE_ADDR`               | A convenience variable, defined as `PRIMARY_ADDR:PRIMARY_PORT`.                       |
-| `WORLD_SIZE`                   | The total number of GPUs in the cluster (`NUM_NODES` \* `NUM_TRAINERS`).      |
-
-Each node receives a static IP address (`NODE_ADDR`) on the overlay network. When a cluster is deployed, the system designates one node as the primary node by setting the `PRIMARY_ADDR` and `PRIMARY_PORT` environment variables. This simplifies working with multiprocessing libraries that require a primary node.
-
-The following variables are equivalent: 
-- `MASTER_ADDR` and `PRIMARY_ADDR`
-- `MASTER_PORT` and `PRIMARY_PORT`.
-
-`MASTER_*` variables are available to provide compatibility with tools that expect these legacy names.
-
-## NCCL configuration for multi-node training
-
-For distributed training frameworks like PyTorch, you must explicitly configure NCCL to use the internal network interface to ensure proper inter-node communication:
-
-```bash
-export NCCL_SOCKET_IFNAME=ens1
-```
-
-<Warning>
-Without this configuration, nodes may attempt to communicate using external IP addresses in the 172.xxx range, which are reserved for internet connectivity only. This will result in connection timeouts and failed distributed training jobs in your cluster.
-</Warning>
-
-When troubleshooting multi-node communication issues, also consider adding debug information:
-
-```bash
-export NCCL_DEBUG=INFO
-```
-
-## When to use Instant Clusters
-
-Instant Clusters offer distributed computing power beyond the capabilities of single-machine setups.
-
-Consider using Instant Clusters for:
-
-* Multi-GPU language model training: Accelerate training of models like Llama or GPT across multiple GPUs.
-* Large-scale computer vision projects: Process massive imagery datasets for autonomous vehicles or medical analysis.
-* Scientific simulations: Run climate, molecular dynamics, or physics simulations that require massive parallel processing.
-* Real-time AI inference: Deploy production AI models that demand multiple GPUs for fast output.
-* Batch processing pipelines: Create systems for large-scale data processing, including video rendering and genomics.
+<Tip>
+Runpod offers custom Instant Cluster pricing plans for large scale and enterprise workloads. If you're interested in learning more, [contact our sales team](https://ecykq.share.hsforms.com/2MZdZATC3Rb62Dgci7knjbA).
+</Tip>
