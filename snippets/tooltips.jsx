@@ -184,7 +184,7 @@ export const RunpodHubTooltip = () => {
 
 export const PublicEndpointTooltip = () => {
   return (
-  <Tooltip headline="Public Endpoint" tip="A Runpod-managed endpoint providing instant access to state-of-the-art AI models through simple API calls." cta="Learn more about public endpoints" href="/hub/public-endpoints">Public Endpoint</Tooltip>
+  <Tooltip headline="Public Endpoint" tip="A Runpod-managed endpoint providing instant access to state-of-the-art AI models through simple API calls." cta="Learn more about public endpoints" href="/public-endpoints/overview">Public Endpoint</Tooltip>
   );
 };
 
