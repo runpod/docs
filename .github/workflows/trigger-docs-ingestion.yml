@@ -1,0 +1,50 @@
+name: Trigger Docs Ingestion
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**.mdx'
+      - '**.md'
+      - 'docs.json'
+      - '.github/workflows/trigger-docs-ingestion.yml'
+      - '.github/scripts/trigger-ingestion.sh'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '**.mdx'
+      - '**.md'
+      - 'docs.json'
+      - '.github/workflows/trigger-docs-ingestion.yml'
+      - '.github/scripts/trigger-ingestion.sh'
+  workflow_dispatch:
+
+jobs:
+  # Validates configuration on PRs - ensures auth works before merge
+  validate-config:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate configuration
+        env:
+          RUNPOD_ASSISTANT_API_URL: ${{ secrets.RUNPOD_ASSISTANT_API_URL }}
+          RUNPOD_ASSISTANT_API_KEY: ${{ secrets.RUNPOD_ASSISTANT_API_KEY }}
+          VALIDATE_ONLY: "true"
+        run: .github/scripts/trigger-ingestion.sh
+
+  # Triggers the actual ingestion on merge to main
+  trigger-ingestion:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trigger docs ingestion
+        env:
+          RUNPOD_ASSISTANT_API_URL: ${{ secrets.RUNPOD_ASSISTANT_API_URL }}
+          RUNPOD_ASSISTANT_API_KEY: ${{ secrets.RUNPOD_ASSISTANT_API_KEY }}
+        run: .github/scripts/trigger-ingestion.sh
