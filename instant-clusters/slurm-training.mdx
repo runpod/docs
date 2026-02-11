@@ -1,0 +1,296 @@
+---
+title: "Distributed training with Slurm"
+sidebarTitle: "Distributed training with Slurm"
+description: "Learn how to submit distributed PyTorch training jobs to a Slurm Cluster on Runpod."
+---
+
+import { TrainingTooltip } from "/snippets/tooltips.jsx";
+
+This tutorial demonstrates how to run distributed PyTorch <TrainingTooltip /> on a [Slurm Cluster](/instant-clusters/slurm-clusters). Unlike the [manual PyTorch tutorial](/instant-clusters/pytorch) where you run commands on each node, Slurm lets you submit a job once from the controller node and automatically coordinates execution across all nodes.
+
+By the end of this tutorial, you'll understand how to write Slurm batch scripts for distributed training and submit jobs that scale across multiple GPUs.
+
+## What you'll learn
+
+- How to deploy a managed Slurm Cluster on Runpod.
+- How to write an `sbatch` script for distributed PyTorch training.
+- How to submit and monitor jobs using Slurm commands.
+- How Slurm simplifies multi-node coordination compared to manual approaches.
+
+## Requirements
+
+- A Runpod account with sufficient credits for a multi-node cluster.
+- Basic familiarity with PyTorch and distributed training concepts.
+- Basic understanding of shell scripting.
+
+## Step 1: Deploy a Slurm Cluster
+
+1. Open the [Instant Clusters page](https://console.runpod.io/cluster) on the Runpod console.
+2. Click **Create Cluster**.
+3. Select **Slurm Cluster** from the cluster type dropdown menu.
+4. Configure your cluster:
+   - **Cluster name**: Enter a name (for example, `slurm-training-demo`).
+   - **Pod count**: Set to **2** for this tutorial.
+   - **GPU type**: Select **8x H100 SXM** or another multi-GPU configuration.
+   - **Pod template**: Keep the default Runpod PyTorch template.
+5. Click **Deploy Cluster**.
+
+Wait for your cluster to finish provisioning. You'll see one node labeled **Slurm controller** and one labeled **Slurm agent**.
+
+## Step 2: Connect to the controller node
+
+1. On the [Instant Clusters page](https://console.runpod.io/cluster), click your cluster to expand the node list.
+2. Find the node labeled **Slurm controller** and click to expand it.
+3. Click **Connect**, then click **Web Terminal**.
+
+All Slurm commands should be run from this controller node.
+
+## Step 3: Verify the cluster is ready
+
+Before submitting jobs, verify that Slurm can see all your nodes:
+
+```bash
+sinfo
+```
+
+You should see output showing your nodes in an `idle` state:
+
+```
+PARTITION AVAIL  TIMELIMIT  NODES  STATE NODELIST
+all*         up   infinite      2   idle node[0-1]
+```
+
+If nodes show as `down` or `drain`, wait a moment and run `sinfo` again. The nodes need time to register with the controller after deployment.
+
+## Step 4: Create the training script
+
+Create a simple PyTorch script that initializes distributed training and prints rank information. This is the same script from the [PyTorch tutorial](/instant-clusters/pytorch), but we'll launch it through Slurm instead of manually on each node.
+
+```bash
+mkdir -p ~/slurm-demo && cd ~/slurm-demo
+```
+
+Create the training script:
+
+```bash
+cat << 'EOF' > train.py
+import os
+import torch
+import torch.distributed as dist
+
+def init_distributed():
+    """Initialize the distributed training environment."""
+    dist.init_process_group(backend="nccl")
+
+    local_rank = int(os.environ["LOCAL_RANK"])
+    global_rank = dist.get_rank()
+    world_size = dist.get_world_size()
+
+    device = torch.device(f"cuda:{local_rank}")
+    torch.cuda.set_device(device)
+
+    return local_rank, global_rank, world_size, device
+
+def cleanup_distributed():
+    """Clean up the distributed environment."""
+    dist.destroy_process_group()
+
+def main():
+    local_rank, global_rank, world_size, device = init_distributed()
+
+    # Get node information from Slurm
+    node_name = os.environ.get("SLURMD_NODENAME", "unknown")
+
+    print(f"[{node_name}] Global rank {global_rank}/{world_size-1}, "
+          f"local rank {local_rank}, device: {device}")
+
+    # Simulate some work
+    tensor = torch.ones(1).to(device) * global_rank
+    dist.all_reduce(tensor)
+
+    if global_rank == 0:
+        print(f"All-reduce result: {tensor.item()} "
+              f"(expected: {sum(range(world_size))})")
+
+    cleanup_distributed()
+
+if __name__ == "__main__":
+    main()
+EOF
+```
+
+This script initializes distributed training, prints information about each process, and performs an all-reduce operation to verify inter-node communication is working.
+
+## Step 5: Create the Slurm batch script
+
+Create an `sbatch` script that tells Slurm how to run your training job across the cluster:
+
+```bash
+cat << 'EOF' > submit_training.sh
+#!/bin/bash
+#SBATCH --job-name=distributed-training
+#SBATCH --nodes=2
+#SBATCH --ntasks-per-node=1
+#SBATCH --gpus-per-node=8
+#SBATCH --output=training_%j.log
+#SBATCH --error=training_%j.err
+
+# Configure NCCL for high-speed inter-node communication
+export NCCL_SOCKET_IFNAME=ens1
+export NCCL_DEBUG=INFO
+
+# Get the address of the first node (rank 0)
+MASTER_ADDR=$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1)
+MASTER_PORT=29500
+
+echo "Starting distributed training..."
+echo "Master node: $MASTER_ADDR:$MASTER_PORT"
+echo "Total nodes: $SLURM_NNODES"
+echo "GPUs per node: $SLURM_GPUS_PER_NODE"
+
+# Launch training with srun
+# srun executes torchrun on each node, which then spawns GPU processes
+srun torchrun \
+    --nnodes=$SLURM_NNODES \
+    --nproc_per_node=$SLURM_GPUS_PER_NODE \
+    --rdzv_id=$SLURM_JOB_ID \
+    --rdzv_backend=c10d \
+    --rdzv_endpoint=$MASTER_ADDR:$MASTER_PORT \
+    train.py
+
+echo "Training complete!"
+EOF
+```
+
+<Accordion title="Understanding the sbatch script">
+
+The `#SBATCH` directives at the top configure your job:
+
+| Directive | Description |
+| --------- | ----------- |
+| `--job-name` | A name for your job, visible in `squeue` output. |
+| `--nodes=2` | Request 2 nodes from the cluster. |
+| `--ntasks-per-node=1` | Run one task (one `torchrun` process) per node. |
+| `--gpus-per-node=8` | Allocate 8 GPUs per node. |
+| `--output` / `--error` | Log files for stdout and stderr. `%j` is replaced with the job ID. |
+
+The script then:
+
+1. Sets `NCCL_SOCKET_IFNAME=ens1` to use the high-speed internal network for GPU communication.
+2. Gets the master node address from Slurm's `$SLURM_JOB_NODELIST`.
+3. Uses `srun` to execute `torchrun` on each allocated node.
+
+Slurm automatically sets environment variables like `$SLURM_NNODES` and `$SLURM_GPUS_PER_NODE` based on your `#SBATCH` directives.
+
+</Accordion>
+
+## Step 6: Submit the job
+
+Submit your training job to Slurm:
+
+```bash
+sbatch submit_training.sh
+```
+
+You'll see output like:
+
+```
+Submitted batch job 42
+```
+
+The number is your job ID. Use it to track your job's progress.
+
+## Step 7: Monitor job execution
+
+Check your job's status in the queue:
+
+```bash
+squeue
+```
+
+While running, you'll see:
+
+```
+JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
+   42       all distribu     root  R       0:15      2 node[0-1]
+```
+
+The `ST` column shows state: `R` for running, `PD` for pending, `CG` for completing.
+
+For detailed job information:
+
+```bash
+scontrol show job 42
+```
+
+To watch the output in real-time:
+
+```bash
+tail -f training_42.log
+```
+
+## Step 8: View the results
+
+Once the job completes (no longer appears in `squeue`), view the output:
+
+```bash
+cat training_42.log
+```
+
+You should see output from all 16 GPU processes (8 per node × 2 nodes):
+
+```
+Starting distributed training...
+Master node: node0:29500
+Total nodes: 2
+GPUs per node: 8
+[node0] Global rank 0/15, local rank 0, device: cuda:0
+[node0] Global rank 1/15, local rank 1, device: cuda:1
+[node1] Global rank 8/15, local rank 0, device: cuda:0
+[node1] Global rank 9/15, local rank 1, device: cuda:1
+...
+All-reduce result: 120.0 (expected: 120)
+Training complete!
+```
+
+The all-reduce result confirms that all GPUs successfully communicated across nodes.
+
+<Check>
+You've successfully submitted a distributed training job through Slurm. Unlike the manual approach, you only ran commands on the controller node—Slurm handled launching processes on all nodes automatically.
+</Check>
+
+## Step 9: Clean up
+
+Delete your cluster when you're finished to avoid extra charges:
+
+1. Return to the [Instant Clusters page](https://console.runpod.io/cluster).
+2. Click the **Delete** button for your cluster.
+
+<Tip>
+Monitor your cluster spending in the **Billing Explorer** at the bottom of the [Billing page](https://www.console.runpod.io/user/billing) under the **Cluster** tab.
+</Tip>
+
+## Why use Slurm for distributed training?
+
+Slurm provides several advantages over manual coordination:
+
+| Manual approach | Slurm approach |
+| --------------- | -------------- |
+| Run commands on each node individually | Submit once from controller |
+| Manually coordinate timing | Slurm synchronizes job start |
+| Track processes across terminals | Unified logging with `--output` |
+| No job queue or scheduling | Built-in queue management |
+| Manual resource allocation | Automatic GPU/node allocation |
+
+For production workloads, Slurm's job scheduling, logging, and resource management make it the preferred approach for distributed training.
+
+## Next steps
+
+Now that you understand Slurm job submission, you can:
+
+- **Adapt real training scripts** by replacing the demo `train.py` with your actual model training code.
+- **Use job arrays** (`--array`) to run hyperparameter sweeps across the cluster.
+- **Add checkpointing** to save model state periodically and resume interrupted jobs.
+- **Explore advanced Slurm features** like job dependencies (`--dependency`) for multi-stage pipelines.
+
+For more Slurm commands and options, see the [Slurm documentation](https://slurm.schedmd.com/documentation.html).
