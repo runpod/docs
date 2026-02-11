@@ -1,0 +1,341 @@
+---
+title: "Vercel AI SDK"
+sidebarTitle: "Vercel AI SDK"
+description: "Use the @runpod/ai-sdk-provider package to integrate Public Endpoints with the Vercel AI SDK."
+tag: "NEW"
+---
+
+The `@runpod/ai-sdk-provider` package integrates Runpod Public Endpoints with the [Vercel AI SDK](https://ai-sdk.dev/docs/introduction). This gives you a streamlined, type-safe interface for text generation, streaming, and image generation in JavaScript and TypeScript projects.
+
+The Vercel AI SDK is a popular open-source library for building AI applications. By using the Runpod provider, you can access Runpod's Public Endpoints using the same patterns and APIs you'd use with other AI providers like OpenAI or Anthropic.
+
+## Why use the Vercel AI SDK?
+
+- **Unified interface**: Use the same `generateText`, `streamText`, and `generateImage` functions regardless of which AI provider you're using.
+- **Type safety**: Full TypeScript support with typed responses and parameters.
+- **Streaming built-in**: First-class support for streaming text responses.
+- **Framework integrations**: Works seamlessly with Next.js, React, Svelte, and other frameworks.
+- **Provider switching**: Easily switch between Runpod and other providers without rewriting your code.
+
+## Installation
+
+Install the Runpod provider alongside the Vercel AI SDK:
+
+```bash
+npm install @runpod/ai-sdk-provider ai
+```
+
+## Configuration
+
+### Default configuration
+
+The provider reads your API key from the `RUNPOD_API_KEY` environment variable by default. Import the `runpod` instance and start using it immediately:
+
+```typescript
+import { runpod } from "@runpod/ai-sdk-provider";
+```
+
+Set the environment variable in your shell or `.env` file:
+
+```bash
+export RUNPOD_API_KEY="your-api-key"
+```
+
+### Custom configuration
+
+For more control, use `createRunpod` to create a custom provider instance:
+
+```typescript
+import { createRunpod } from "@runpod/ai-sdk-provider";
+
+const runpod = createRunpod({
+  apiKey: "your-api-key",
+  baseURL: "https://api.runpod.ai/v2",
+  headers: {
+    "X-Custom-Header": "value",
+  },
+});
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `apiKey` | Your Runpod API key | `RUNPOD_API_KEY` env var |
+| `baseURL` | Base URL for API requests | `https://api.runpod.ai/v2` |
+| `headers` | Custom HTTP headers to include with requests | `{}` |
+
+## Text generation
+
+### Basic text generation
+
+Use `generateText` to generate text from a prompt:
+
+```typescript
+import { runpod } from "@runpod/ai-sdk-provider";
+import { generateText } from "ai";
+
+const { text, finishReason, usage } = await generateText({
+  model: runpod("qwen3-32b-awq"),
+  prompt: "Write a Python function that checks if a number is prime:",
+});
+
+console.log(text);
+console.log(`Tokens used: ${usage.totalTokens}`);
+```
+
+The response includes:
+- `text`: The generated text
+- `finishReason`: Why generation stopped (`stop`, `length`, etc.)
+- `usage`: Token counts (`promptTokens`, `completionTokens`, `totalTokens`)
+
+### Chat conversations
+
+For multi-turn conversations, pass a `messages` array instead of a `prompt`:
+
+```typescript
+import { runpod } from "@runpod/ai-sdk-provider";
+import { generateText } from "ai";
+
+const { text } = await generateText({
+  model: runpod("qwen3-32b-awq"),
+  messages: [
+    {
+      role: "system",
+      content: "You are a helpful coding assistant. Be concise.",
+    },
+    {
+      role: "user",
+      content: "How do I read a JSON file in Python?",
+    },
+  ],
+});
+
+console.log(text);
+```
+
+### Generation parameters
+
+Control the generation behavior with additional parameters:
+
+```typescript
+const { text } = await generateText({
+  model: runpod("qwen3-32b-awq"),
+  prompt: "Write a creative story about a robot:",
+  temperature: 0.8, // Higher = more creative (0-1)
+  maxTokens: 500, // Maximum tokens to generate
+  topP: 0.9, // Nucleus sampling threshold
+});
+```
+
+## Streaming
+
+For real-time output (useful for chat interfaces), use `streamText`:
+
+```typescript
+import { runpod } from "@runpod/ai-sdk-provider";
+import { streamText } from "ai";
+
+const { textStream } = await streamText({
+  model: runpod("qwen3-32b-awq"),
+  prompt: "Explain quantum computing in simple terms:",
+  temperature: 0.7,
+});
+
+for await (const chunk of textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+### Streaming with callbacks
+
+You can also use callbacks to handle streaming events:
+
+```typescript
+import { runpod } from "@runpod/ai-sdk-provider";
+import { streamText } from "ai";
+
+const result = await streamText({
+  model: runpod("qwen3-32b-awq"),
+  prompt: "Write a poem about the ocean:",
+  onChunk: ({ chunk }) => {
+    if (chunk.type === "text-delta") {
+      process.stdout.write(chunk.textDelta);
+    }
+  },
+  onFinish: ({ text, usage }) => {
+    console.log(`\n\nTotal tokens: ${usage.totalTokens}`);
+  },
+});
+```
+
+## Image generation
+
+### Text-to-image
+
+Generate images using models like [Flux](/public-endpoints/models/flux-dev):
+
+```typescript
+import { runpod } from "@runpod/ai-sdk-provider";
+import { experimental_generateImage as generateImage } from "ai";
+import { writeFileSync } from "fs";
+
+const { image } = await generateImage({
+  model: runpod.image("black-forest-labs-flux-1-dev"),
+  prompt: "A serene mountain landscape at sunset, photorealistic",
+  aspectRatio: "16:9",
+});
+
+// Save the image to a file
+writeFileSync("output.png", image.uint8Array);
+
+// Or access as base64
+console.log(image.base64);
+```
+
+The response includes:
+- `image.uint8Array`: Binary image data
+- `image.base64`: Base64-encoded image
+- `image.mimeType`: Image MIME type (e.g., `image/png`)
+
+### Image editing
+
+Edit existing images by providing reference images:
+
+```typescript
+import { runpod } from "@runpod/ai-sdk-provider";
+import { experimental_generateImage as generateImage } from "ai";
+
+const { image } = await generateImage({
+  model: runpod.image("google-nano-banana-edit"),
+  prompt: {
+    text: "Add modern Scandinavian furniture to this room",
+    images: ["https://example.com/empty-room.png"],
+  },
+  aspectRatio: "16:9",
+});
+```
+
+For models that support multiple reference images:
+
+```typescript
+const { image } = await generateImage({
+  model: runpod.image("google-nano-banana-edit"),
+  prompt: {
+    text: "Combine these into an epic band photo",
+    images: [
+      "https://example.com/drummer.png",
+      "https://example.com/guitarist.png",
+      "https://example.com/bassist.png",
+      "https://example.com/singer.png",
+    ],
+  },
+});
+```
+
+### Provider options
+
+Pass model-specific parameters using `providerOptions`:
+
+```typescript
+const { image } = await generateImage({
+  model: runpod.image("black-forest-labs-flux-1-dev"),
+  prompt: "A sunset over the ocean",
+  providerOptions: {
+    runpod: {
+      negative_prompt: "blurry, low quality, distorted",
+      num_inference_steps: 30,
+      guidance: 7.5,
+      seed: 42,
+      enable_safety_checker: true,
+    },
+  },
+});
+```
+
+| Option | Description |
+|--------|-------------|
+| `negative_prompt` | Elements to exclude from the image |
+| `num_inference_steps` | Number of denoising steps (higher = more detail) |
+| `guidance` | How closely to follow the prompt (0-10) |
+| `seed` | Seed for reproducible results (-1 for random) |
+| `enable_safety_checker` | Enable content safety filtering |
+| `maxPollAttempts` | Max polling attempts for async generation |
+| `pollIntervalMillis` | Milliseconds between status polls |
+
+## Supported models
+
+### Text models
+
+| Model ID | Description |
+|----------|-------------|
+| `qwen3-32b-awq` | [Qwen3 32B](/public-endpoints/models/qwen3-32b) with AWQ quantization. Good for general text and code generation. |
+| `gpt-oss-120b` | [GPT OSS 120B](/public-endpoints/models/gpt-oss-120b). Supports tool calling. |
+
+### Image models
+
+| Model ID | Description |
+|----------|-------------|
+| `black-forest-labs-flux-1-dev` | [Flux Dev](/public-endpoints/models/flux-dev). High quality, detailed images. |
+| `black-forest-labs-flux-1-schnell` | [Flux Schnell](/public-endpoints/models/flux-schnell). Fast generation, good for prototyping. |
+| `google-nano-banana-edit` | [Nano Banana Edit](/public-endpoints/models/nano-banana-edit). Supports multiple reference images. |
+| `bytedance-seedream-4-0-t2i` | [Seedream 4.0](/public-endpoints/models/seedream-4-t2i). Text-to-image with good prompt adherence. |
+
+For a complete list of available models and their parameters, see the [model reference](/public-endpoints/reference).
+
+## Example: Chat application
+
+Here's a complete example of a simple chat application using streaming:
+
+```typescript
+import { runpod } from "@runpod/ai-sdk-provider";
+import { streamText } from "ai";
+import * as readline from "readline";
+
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
+
+const messages: { role: "user" | "assistant"; content: string }[] = [];
+
+async function chat(userMessage: string) {
+  messages.push({ role: "user", content: userMessage });
+
+  const { textStream } = await streamText({
+    model: runpod("qwen3-32b-awq"),
+    system: "You are a helpful assistant.",
+    messages,
+  });
+
+  let assistantMessage = "";
+  process.stdout.write("\nAssistant: ");
+
+  for await (const chunk of textStream) {
+    process.stdout.write(chunk);
+    assistantMessage += chunk;
+  }
+
+  messages.push({ role: "assistant", content: assistantMessage });
+  console.log("\n");
+}
+
+function prompt() {
+  rl.question("You: ", async (input) => {
+    if (input.toLowerCase() === "exit") {
+      rl.close();
+      return;
+    }
+    await chat(input);
+    prompt();
+  });
+}
+
+console.log('Chat started. Type "exit" to quit.\n');
+prompt();
+```
+
+## Next steps
+
+- [Model reference](/public-endpoints/reference): View all available models and their parameters.
+- [Make API requests](/public-endpoints/requests): Learn about the REST API for lower-level control.
+- [@runpod/ai-sdk-provider on GitHub](https://github.com/runpod/ai-sdk-provider): View the source code and contribute.
+- [Vercel AI SDK documentation](https://ai-sdk.dev/docs/introduction): Learn more about the AI SDK.

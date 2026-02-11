@@ -129,6 +129,12 @@ export const PyTorchTooltip = () => {
   );
 };
 
+export const TensorFlowTooltip = () => {
+  return (
+  <Tooltip headline="TensorFlow" tip="An open-source machine learning framework developed by Google for building and deploying neural networks at scale, widely used for both research and production ML applications." cta="Read the TensorFlow documentation" href="https://www.tensorflow.org/">TensorFlow</Tooltip>
+  );
+};
+
 export const CUDATooltip = () => {
   return (
   <Tooltip headline="CUDA" tip="NVIDIA's parallel computing platform that enables GPU-accelerated processing for AI/ML workloads. CUDA provides the low-level interface between your code and NVIDIA GPUs." cta="Read the CUDA docs" href="https://developer.nvidia.com/cuda-toolkit">CUDA</Tooltip>
@@ -178,13 +184,19 @@ export const RunpodHubTooltip = () => {
 
 export const PublicEndpointTooltip = () => {
   return (
-  <Tooltip headline="Public Endpoint" tip="A Runpod-managed endpoint providing instant access to state-of-the-art AI models through simple API calls." cta="Learn more about public endpoints" href="/hub/public-endpoints">Public Endpoint</Tooltip>
+  <Tooltip headline="Public Endpoint" tip="A Runpod-managed endpoint providing instant access to state-of-the-art AI models through simple API calls." cta="Learn more about public endpoints" href="/public-endpoints/overview">Public Endpoint</Tooltip>
   );
 };
 
 export const InstantClusterTooltip = () => {
   return (
   <Tooltip headline="Instant Cluster" tip="A managed compute cluster with high-speed networking for multi-node distributed workloads like training large AI models." cta="Learn more about Instant Clusters" href="/instant-clusters">Instant Cluster</Tooltip>
+  );
+};
+
+export const SlurmTooltip = () => {
+  return (
+  <Tooltip headline="Slurm" tip="An open-source job scheduler for high-performance computing that provides job management, scheduling, and resource allocation across multiple nodes." cta="Learn more about Slurm on Runpod" href="/instant-clusters/slurm">Slurm</Tooltip>
   );
 };
 
