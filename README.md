@@ -38,7 +38,7 @@ vale path/to/*.md
 Install `blacken-docs`.
 
 ```bash
-python -m pip install blacken-docs
+python3 -m pip install blacken-docs
 ```
 
 Run the formatter.
@@ -54,6 +54,12 @@ git ls-files -z -- '*.md' | xargs -0 blacken-docs
 ## Update CPU and GPUs
 
 ```bash
-python helpers/gpu-types.py
-python helpers/cpu-types.py
+# Set up virtual environment
+python3 -m venv helpers/venv
+source helpers/venv/bin/activate
+pip install -r helpers/requirements.txt
+
+# Run scripts
+python3 helpers/gpu_types.py
+python3 helpers/sls_cpu_types.py
 ```
