@@ -1,0 +1,269 @@
+---
+title: "Resource configuration reference"
+sidebarTitle: "Configuration reference"
+description: "Complete reference for Flash resource configuration options."
+tag: "BETA"
+---
+
+Flash provides several resource configuration classes for different use cases. This reference covers all available parameters and options.
+
+## LiveServerless
+
+`LiveServerless` is the primary configuration class for Flash. It supports full remote code execution, allowing you to run arbitrary Python functions on Runpod's infrastructure.
+
+```python
+from runpod_flash import LiveServerless, GpuGroup, CpuInstanceType, PodTemplate
+
+gpu_config = LiveServerless(
+    name="ml-inference",
+    gpus=[GpuGroup.AMPERE_80],
+    workersMax=5,
+    idleTimeout=10,
+    template=PodTemplate(containerDiskInGb=100)
+)
+```
+
+### Parameters
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `name` | `string` | Name for your endpoint (required) | - |
+| `gpus` | `list[GpuGroup]` | GPU pool IDs that can be used by workers | `[GpuGroup.ANY]` |
+| `gpuCount` | `int` | Number of GPUs per worker | 1 |
+| `instanceIds` | `list[CpuInstanceType]` | CPU instance types (forces CPU endpoint) | `None` |
+| `workersMin` | `int` | Minimum number of workers | 0 |
+| `workersMax` | `int` | Maximum number of workers | 3 |
+| `idleTimeout` | `int` | Minutes before scaling down | 5 |
+| `env` | `dict` | Environment variables | `None` |
+| `networkVolumeId` | `string` | Persistent storage volume ID | `None` |
+| `executionTimeoutMs` | `int` | Max execution time in milliseconds | 0 (no limit) |
+| `scalerType` | `string` | Scaling strategy | `QUEUE_DELAY` |
+| `scalerValue` | `int` | Scaling parameter value | 4 |
+| `locations` | `string` | Preferred datacenter locations | `None` |
+| `template` | `PodTemplate` | Pod template overrides | `None` |
+
+### GPU configuration example
+
+```python
+from runpod_flash import LiveServerless, GpuGroup, PodTemplate
+
+config = LiveServerless(
+    name="gpu-inference",
+    gpus=[GpuGroup.AMPERE_80],  # A100 80GB
+    gpuCount=1,
+    workersMin=0,
+    workersMax=5,
+    idleTimeout=10,
+    template=PodTemplate(containerDiskInGb=100),
+    env={"MODEL_ID": "llama-7b"}
+)
+```
+
+### CPU configuration example
+
+```python
+from runpod_flash import LiveServerless, CpuInstanceType
+
+config = LiveServerless(
+    name="cpu-processor",
+    instanceIds=[CpuInstanceType.CPU5C_4_8],  # 4 vCPU, 8GB RAM
+    workersMax=3,
+    idleTimeout=5
+)
+```
+
+## ServerlessEndpoint
+
+`ServerlessEndpoint` is for GPU workloads that require custom Docker images. Unlike `LiveServerless`, it only supports dictionary payloads and cannot execute arbitrary Python functions.
+
+```python
+from runpod_flash import ServerlessEndpoint, GpuGroup
+
+config = ServerlessEndpoint(
+    name="custom-ml-env",
+    imageName="pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime",
+    gpus=[GpuGroup.AMPERE_80]
+)
+```
+
+### Parameters
+
+All parameters from `LiveServerless` are available, plus:
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `imageName` | `string` | Custom Docker image | - |
+
+### Limitations
+
+- Only supports dictionary payloads in the form of `{"input": {...}}`.
+- Cannot execute arbitrary Python functions remotely.
+- Requires a custom Docker image with a handler that processes the input dictionary.
+
+### Example
+
+```python
+from runpod_flash import ServerlessEndpoint, GpuGroup
+
+# Custom image with pre-installed models
+config = ServerlessEndpoint(
+    name="stable-diffusion",
+    imageName="my-registry/stable-diffusion:v1.0",
+    gpus=[GpuGroup.AMPERE_24],
+    workersMax=3
+)
+
+# Send requests as dictionaries
+result = await config.run({
+    "input": {
+        "prompt": "A beautiful sunset over mountains",
+        "width": 512,
+        "height": 512
+    }
+})
+```
+
+## CpuServerlessEndpoint
+
+`CpuServerlessEndpoint` is for CPU workloads that require custom Docker images. Like `ServerlessEndpoint`, it only supports dictionary payloads.
+
+```python
+from runpod_flash import CpuServerlessEndpoint, CpuInstanceType
+
+config = CpuServerlessEndpoint(
+    name="data-processor",
+    imageName="python:3.11-slim",
+    instanceIds=[CpuInstanceType.CPU5C_4_8]
+)
+```
+
+### Parameters
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `name` | `string` | Name for your endpoint (required) | - |
+| `imageName` | `string` | Custom Docker image | - |
+| `instanceIds` | `list[CpuInstanceType]` | CPU instance types | - |
+| `workersMin` | `int` | Minimum number of workers | 0 |
+| `workersMax` | `int` | Maximum number of workers | 3 |
+| `idleTimeout` | `int` | Minutes before scaling down | 5 |
+| `env` | `dict` | Environment variables | `None` |
+| `networkVolumeId` | `string` | Persistent storage volume ID | `None` |
+| `executionTimeoutMs` | `int` | Max execution time in milliseconds | 0 (no limit) |
+
+## Resource class comparison
+
+| Feature | LiveServerless | ServerlessEndpoint | CpuServerlessEndpoint |
+|---------|----------------|--------------------|-----------------------|
+| Remote code execution | ✅ Full Python function execution | ❌ Dictionary payload only | ❌ Dictionary payload only |
+| Custom Docker images | ❌ Fixed optimized images | ✅ Any Docker image | ✅ Any Docker image |
+| Use case | Dynamic remote functions | Traditional API endpoints | Traditional CPU endpoints |
+| Function returns | Any Python object | Dictionary only | Dictionary only |
+| `@remote` decorator | Full functionality | Limited to payload passing | Limited to payload passing |
+
+## Available GPU types
+
+The `GpuGroup` enum provides access to GPU pools. Some common options:
+
+| GpuGroup | Description | VRAM |
+|----------|-------------|------|
+| `GpuGroup.ANY` | Any available GPU (default) | Varies |
+| `GpuGroup.ADA_24` | RTX 4090 | 24GB |
+| `GpuGroup.AMPERE_24` | RTX A5000, L4, RTX 3090 | 24GB |
+| `GpuGroup.AMPERE_48` | A40, RTX A6000 | 48GB |
+| `GpuGroup.AMPERE_80` | A100 80GB | 80GB |
+
+See [GPU types](/references/gpu-types#gpu-pools) for the complete list of available GPU pools.
+
+## Available CPU instance types
+
+The `CpuInstanceType` enum provides access to CPU configurations:
+
+### 3rd generation general purpose
+
+| CpuInstanceType | ID | vCPU | RAM |
+|-----------------|-----|------|-----|
+| `CPU3G_1_4` | cpu3g-1-4 | 1 | 4GB |
+| `CPU3G_2_8` | cpu3g-2-8 | 2 | 8GB |
+| `CPU3G_4_16` | cpu3g-4-16 | 4 | 16GB |
+| `CPU3G_8_32` | cpu3g-8-32 | 8 | 32GB |
+
+### 3rd generation compute-optimized
+
+| CpuInstanceType | ID | vCPU | RAM |
+|-----------------|-----|------|-----|
+| `CPU3C_1_2` | cpu3c-1-2 | 1 | 2GB |
+| `CPU3C_2_4` | cpu3c-2-4 | 2 | 4GB |
+| `CPU3C_4_8` | cpu3c-4-8 | 4 | 8GB |
+| `CPU3C_8_16` | cpu3c-8-16 | 8 | 16GB |
+
+### 5th generation compute-optimized
+
+| CpuInstanceType | ID | vCPU | RAM |
+|-----------------|-----|------|-----|
+| `CPU5C_1_2` | cpu5c-1-2 | 1 | 2GB |
+| `CPU5C_2_4` | cpu5c-2-4 | 2 | 4GB |
+| `CPU5C_4_8` | cpu5c-4-8 | 4 | 8GB |
+| `CPU5C_8_16` | cpu5c-8-16 | 8 | 16GB |
+
+## PodTemplate
+
+Use `PodTemplate` to configure additional pod settings:
+
+```python
+from runpod_flash import LiveServerless, PodTemplate
+
+config = LiveServerless(
+    name="custom-template",
+    template=PodTemplate(
+        containerDiskInGb=100,
+        env=[{"key": "PYTHONPATH", "value": "/workspace"}]
+    )
+)
+```
+
+### Parameters
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `containerDiskInGb` | `int` | Container disk size in GB | 20 |
+| `env` | `list[dict]` | Environment variables as key-value pairs | `None` |
+
+## Environment variables
+
+Environment variables can be set in two ways:
+
+### Using the `env` parameter
+
+```python
+config = LiveServerless(
+    name="api-worker",
+    env={"HF_TOKEN": "your_token", "MODEL_ID": "gpt2"}
+)
+```
+
+### Using PodTemplate
+
+```python
+config = LiveServerless(
+    name="api-worker",
+    template=PodTemplate(
+        env=[
+            {"key": "HF_TOKEN", "value": "your_token"},
+            {"key": "MODEL_ID", "value": "gpt2"}
+        ]
+    )
+)
+```
+
+<Note>
+
+Environment variables are excluded from configuration hashing. Changing environment values won't trigger endpoint recreation, which allows different processes to load environment variables from `.env` files without causing false drift detection. Only structural changes (like GPU type, image, or template modifications) trigger endpoint updates.
+
+</Note>
+
+## Next steps
+
+- [Create remote functions](/flash/remote-functions) using these configurations.
+- [Deploy Flash applications](/flash/deploy-apps) for production.
+- [Learn about pricing](/flash/pricing) to optimize costs.
