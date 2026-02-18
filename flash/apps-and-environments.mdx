@@ -1,0 +1,218 @@
+---
+title: "Manage apps and environments"
+sidebarTitle: "Manage apps and environments"
+description: "Understand the Flash deployment hierarchy and learn how to manage your apps."
+tag: "BETA"
+---
+
+Flash organizes deployments using a two-level hierarchy: **apps** and **environments**. This structure enables standard development workflows where you can test changes in development, validate in staging, and deploy to production.
+
+## What is a Flash app?
+
+A **Flash app** is a cloud-side container that groups everything related to a single project. Think of it as a project namespace in Runpod that keeps your deployments organized together.
+
+Each app contains:
+
+- **Environments**: Deployment contexts like `dev`, `staging`, and `production`.
+- **Builds**: Versioned artifacts created from your code.
+- **Configuration**: App-wide settings and metadata.
+
+### App hierarchy
+
+```text
+Flash App (my-project)
+│
+├── Environments
+│   ├── dev
+│   │   ├── Endpoints (gpu-worker, cpu-worker)
+│   │   └── Volumes (model-cache)
+│   ├── staging
+│   │   ├── Endpoints (gpu-worker, cpu-worker)
+│   │   └── Volumes (model-cache)
+│   └── production
+│       ├── Endpoints (gpu-worker, cpu-worker)
+│       └── Volumes (model-cache)
+│
+└── Builds
+    ├── build_v1 (2024-01-15)
+    ├── build_v2 (2024-01-18)
+    └── build_v3 (2024-01-20)
+```
+
+### Creating apps
+
+Apps are created automatically when you first run `flash deploy`. You can also create them explicitly:
+
+```bash
+flash app create my-project
+```
+
+### Managing apps
+
+Use `flash app` commands to manage your apps:
+
+```bash
+# List all apps
+flash app list
+
+# Get app details
+flash app get my-project
+
+# Delete an app and all its resources
+flash app delete --app my-project
+```
+
+<Warning>
+
+Deleting an app removes all environments, builds, endpoints, and volumes associated with it. This operation is irreversible.
+
+</Warning>
+
+## What is an environment?
+
+An **environment** is an isolated deployment context within a Flash app. Each environment is a separate "stage" that contains its own:
+
+- **Deployed endpoints**: Serverless endpoints provisioned from your `@remote` functions.
+- **Active build version**: The specific version of your code running in this environment.
+- **Network volumes**: Persistent storage for models, caches, and data.
+- **Deployment state**: Current status (PENDING, DEPLOYING, DEPLOYED, etc.).
+
+Environments are completely independent. Deploying to one environment has no effect on others.
+
+### Creating environments
+
+Environments are created automatically when you deploy with `--env`:
+
+```bash
+# Creates 'staging' environment if it doesn't exist
+flash deploy --env staging
+```
+
+You can also create them explicitly:
+
+```bash
+flash env create staging
+```
+
+### Managing environments
+
+Use `flash env` commands to manage environments:
+
+```bash
+# List all environments
+flash env list
+
+# Get environment details
+flash env get production
+
+# Delete an environment
+flash env delete dev
+```
+
+### Environment states
+
+| State | Description |
+|-------|-------------|
+| PENDING | Environment created but not deployed |
+| DEPLOYING | Deployment in progress |
+| DEPLOYED | Successfully deployed and running |
+| FAILED | Deployment or health check failed |
+| DELETING | Deletion in progress |
+
+## Deployment workflows
+
+### Single environment (simple projects)
+
+For simple projects, use a single `production` environment:
+
+```bash
+# First deployment creates app and environment
+flash deploy
+```
+
+### Multiple environments (team projects)
+
+For team projects, use multiple environments:
+
+```bash
+# Create environments
+flash env create dev
+flash env create staging
+flash env create production
+
+# Deploy to each
+flash deploy --env dev          # Development testing
+flash deploy --env staging      # QA validation
+flash deploy --env production   # Live deployment
+```
+
+### Feature branch deployments
+
+Create temporary environments for feature testing:
+
+```bash
+# Create feature environment
+flash env create feature-auth
+
+# Deploy feature branch
+git checkout feature-auth
+flash deploy --env feature-auth
+
+# Clean up after merge
+flash env delete feature-auth
+```
+
+## Best practices
+
+### Naming conventions
+
+Use clear, descriptive names:
+
+```bash
+# Good
+flash env create dev
+flash env create staging
+flash env create production
+
+# Avoid
+flash env create env1
+flash env create test123
+```
+
+### Environment strategy
+
+**Three-tier approach** (recommended for teams):
+
+| Environment | Purpose |
+|-------------|---------|
+| `dev` | Active development, frequent deploys |
+| `staging` | Pre-production testing, QA validation |
+| `production` | Live user-facing deployment |
+
+**Simple approach** (small projects):
+
+| Environment | Purpose |
+|-------------|---------|
+| `dev` | Development and testing |
+| `production` | Live deployment |
+
+### Workflow recommendations
+
+1. **Develop locally**: Test with `flash run` before deploying.
+2. **Deploy to dev**: `flash deploy --env dev` for initial testing.
+3. **Deploy to staging**: `flash deploy --env staging` for QA.
+4. **Deploy to production**: `flash deploy --env production` after approval.
+
+### Resource management
+
+- Monitor environments regularly with `flash env list`.
+- Clean up unused environments to avoid resource accumulation.
+- Check resource usage with `flash env get <name>`.
+- Delete environments carefully as deletion is irreversible.
+
+## Next steps
+
+- [Deploy your first app](/flash/deploy-apps) with `flash deploy`.
+- [Learn about the CLI](/flash/cli/overview) for all available commands.
+- [View the env command reference](/flash/cli/env) for detailed options.
+- [View the app command reference](/flash/cli/app) for detailed options.

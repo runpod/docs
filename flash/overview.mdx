@@ -11,34 +11,18 @@ Flash is currently in beta. [Join our Discord](https://discord.gg/cUpRmau42V) to
 
 Flash is a Python SDK for developing and deploying AI workflows on [Runpod Serverless](/serverless/overview). You write Python functions locally, and Flash handles infrastructure management, GPU/CPU provisioning, dependency installation, and data transfer automatically.
 
-There are two ways to run workloads with Flash:
-
-- **Standalone scripts:** Add the `@remote` decorator to Python functions, and they'll run automatically on Runpod's cloud infrastructure when you run the script locally.
-- **API endpoints:** Convert those functions into persistent endpoints that can be accessed via HTTP, scaling GPU/CPU resources automatically based on demand.
-
-Ready to try it out? Check out the quickstart guide and examples repository:
-
 <CardGroup>
-<Card title="Get started" icon="bolt" href="/flash/quickstart">
-    Follow the quickstart to create your first Flash function in minutes.
-</Card>
-
-<Card title="Examples" icon="code" href="https://github.com/runpod/flash-examples">
-    Check out our repository of prebuilt Flash applications.
-</Card>
-
-  <Card title="Create remote functions" href="/flash/remote-functions" icon="code">
-    Learn about resource configuration, dependencies, and parallel execution.
+  <Card title="Quickstart" href="/flash/quickstart" icon="bolt">
+    Write a standalone Flash script for instant access to Runpod infrastructure.
   </Card>
-  <Card title="Create an API endpoint" href="/flash/api-endpoints" icon="server">
-    Build HTTP APIs with FastAPI and Flash.
+  <Card title="Build an app" href="/flash/build-app" icon="code">
+    Create a Flash app with a FastAPI server and deploy it on Runpod to serve production endpoints.
   </Card>
 </CardGroup>
 
-
 ## Why use Flash?
 
-**Flash is the easiest and fastest way to test and deploy AI/ML workloads on Runpod.** It's designed for local development and live-testing workflows, but can also be used to deploy production-ready applications.
+**Flash is the easiest and fastest way to test and deploy AI/ML workloads on Runpod.** Whether you're prototyping a new model or deploying a production API, Flash handles the infrastructure complexity so you can focus on your code.
 
 When you run a `@remote` function, Flash:
 - Automatically provisions resources on Runpod's infrastructure.
@@ -50,8 +34,11 @@ You can specify the exact GPU hardware you need, from RTX 4090s to A100 80GB GPU
 
 Flash uses [Runpod's Serverless pricing](/serverless/pricing) with per-second billing. You're only charged for actual compute time; there are no costs when your code isn't running.
 
-
 ## Install Flash
+
+<Note>
+Flash requires Python 3.10 or higher.
+</Note>
 
 Create a Python virtual environment and use `pip` to install Flash:
 
@@ -67,7 +54,7 @@ In your project directory, create a `.env` file and add your Runpod API key, rep
 touch .env && echo "RUNPOD_API_KEY=YOUR_API_KEY" > .env
 ```
 
-## Concepts
+## Core concepts
 
 ### Remote functions
 
@@ -100,6 +87,8 @@ gpu_config = LiveServerless(
 )
 ```
 
+[View the complete configuration reference](/flash/resource-configuration).
+
 ### Dependency management
 
 Specify Python packages in the decorator, and Flash installs them automatically on the remote worker:
@@ -129,18 +118,154 @@ results = await asyncio.gather(
 )
 ```
 
-## How it works
+## Development workflows
 
-Flash orchestrates workflow execution through a multi-step process:
+Flash supports two main methods for running workloads on Runpod: standalone scripts and Flash apps.
 
-1. **Function identification**: The `@remote` decorator marks functions for remote execution, enabling Flash to distinguish between local and remote operations.
-2. **Dependency analysis**: Flash automatically analyzes function dependencies to construct an optimal execution order.
-3. **Resource provisioning and execution**: For each remote function, Flash:
-   - Dynamically provisions endpoint and worker resources on Runpod's infrastructure.
-   - Serializes and securely transfers input data to the remote worker.
-   - Executes the function on the remote infrastructure with the specified GPU or CPU resources.
-   - Returns results to your local environment.
-4. **Data orchestration**: Results flow seamlessly between functions according to your local Python code structure.
+
+### Standalone scripts
+
+This is the fastest way to get started with Flash. Just write a Python script with `@remote` decorated functions and run it locally with `python script.py`.
+
+```python
+import asyncio
+from runpod_flash import remote, LiveServerless, GpuGroup
+
+config = LiveServerless(
+    name="gpu-inference",
+    gpus=[GpuGroup.ADA_24],
+)
+
+@remote(resource_config=config, dependencies=["torch"])
+def process_on_gpu(data):
+    import torch
+    # Your GPU workload here
+    return {"result": "processed"}
+
+async def main():
+    result = await process_on_gpu({"input": "data"})
+    print(result)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+Run the script locally, and Flash executes the `@remote` function on Runpod's infrastructure:
+
+```bash
+python my_script.py
+```
+
+**Use this approach for:**
+- Quick prototypes and experiments.
+- Batch processing jobs.
+- One-off data processing tasks.
+- Local development and testing.
+
+[Follow the quickstart](/flash/quickstart) to create your first Flash script.
+
+### Flash apps
+
+Build FastAPI applications with HTTP endpoints that run on Runpod Serverless. Flash apps provide a complete development and deployment workflow with local testing and production deployment.
+
+```python
+# main.py
+from fastapi import FastAPI
+from runpod_flash import remote, LiveServerless, GpuGroup
+
+app = FastAPI()
+
+config = LiveServerless(
+    name="api-worker",
+    gpus=[GpuGroup.ADA_24],
+)
+
+@remote(resource_config=config, dependencies=["torch"])
+def inference(prompt: str):
+    import torch
+    # Your inference logic
+    return {"output": "result"}
+
+@app.post("/inference")
+async def inference_endpoint(prompt: str):
+    result = await inference(prompt)
+    return result
+```
+
+Develop and test locally with automatic updates:
+
+```bash
+flash run
+```
+
+Deploy to production when ready:
+
+```bash
+flash deploy
+```
+
+**Use this approach for:**
+
+- Production HTTP APIs.
+- Persistent endpoints.
+- Long-running services.
+- Team collaboration with staging/production environments.
+
+[Follow this tutorial](/flash/build-app) to build your first Flash app.
+
+
+### Flash apps
+
+1. **Initialize**: Create a project with `flash init`
+2. **Develop**: Write your FastAPI app with `@remote` functions
+3. **Test locally**: Run `flash run` to test with automatic updates
+4. **Deploy**: Run `flash deploy` to push to production
+
+This workflow is ideal for production APIs and services that need persistent endpoints.
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#9289FE','primaryTextColor':'#fff','primaryBorderColor':'#9289FE','lineColor':'#5F4CFE','secondaryColor':'#AE6DFF','tertiaryColor':'#FCB1FF','edgeLabelBackground':'#5F4CFE', 'fontSize':'14px','fontFamily':'font-inter'}}}%%
+
+flowchart LR
+    Init["flash init"]
+    Dev["Write code"]
+    Run["flash run<br/>(test locally)"]
+    Deploy["flash deploy<br/>(production)"]
+
+    Init --> Dev
+    Dev --> Run
+    Run -->|"Ready"| Deploy
+    Run -->|"Continue developing"| Dev
+
+    style Init fill:#5F4CFE,stroke:#5F4CFE,color:#fff
+    style Dev fill:#22C55E,stroke:#22C55E,color:#000
+    style Run fill:#4D38F5,stroke:#4D38F5,color:#fff
+    style Deploy fill:#AE6DFF,stroke:#AE6DFF,color:#000
+```
+
+[Learn more about the Flash app workflow](/flash/build-apps-overview).
+
+
+
+## CLI commands
+
+Flash provides CLI commands for managing Flash apps:
+
+| Command | Description |
+|---------|-------------|
+| [`flash init`](/flash/cli/init) | Create a new Flash app project |
+| [`flash run`](/flash/cli/run) | Start the local development server |
+| [`flash build`](/flash/cli/build) | Build a deployment artifact |
+| [`flash deploy`](/flash/cli/deploy) | Build and deploy to Runpod |
+| [`flash env`](/flash/cli/env) | Manage deployment environments |
+| [`flash app`](/flash/cli/app) | Manage Flash applications |
+| [`flash undeploy`](/flash/cli/undeploy) | Remove deployed endpoints |
+
+<Note>
+CLI commands are primarily for Flash apps. Standalone scripts don't require the CLI—just run them with `python`.
+</Note>
+
+See the [CLI reference](/flash/cli/overview) for detailed documentation on each command.
 
 ## Use cases
 
@@ -153,41 +278,29 @@ Flash is well-suited for a range of AI and data processing workloads:
 - **Data processing workflows**: Process large datasets using CPU workers for general computation and GPU workers for accelerated tasks.
 - **Hybrid GPU/CPU workflows**: Optimize cost and performance by combining CPU preprocessing with GPU inference.
 
-## Development workflow
-
-A typical Flash development workflow looks like this:
-
-1. Write Python functions with the `@remote` decorator.
-2. Specify resource requirements and dependencies in the decorator.
-3. Run your script locally. Flash handles remote execution automatically.
-
-For API deployments, use `flash init` to create a project, then `flash run` to start your server. For a full walkthrough, see [Create a Flash API endpoint](/flash/api-endpoints).
-
 ## Limitations
 
 - Serverless deployments using Flash are currently restricted to the `EU-RO-1` datacenter.
-- Flash is designed primarily for local development and live-testing workflows.
-- Endpoints created by Flash persist until manually deleted through the Runpod console. A `flash undeploy` command is currently in development to clean up unused endpoints.
 - Be aware of your account's maximum worker capacity limits. Flash can rapidly scale workers across multiple endpoints, and you may hit capacity constraints. Contact [Runpod support](https://www.runpod.io/contact) to increase your account's capacity allocation if needed.
 
 ## Next steps
 
 <CardGroup cols={2}>
   <Card title="Quickstart" href="/flash/quickstart" icon="bolt">
-    Get started with your first Flash function.
+    Write your first standalone script with Flash
+  </Card>
+  <Card title="Build an app" href="/flash/build-app" icon="code">
+    Create a FastAPI app with Flash
   </Card>
   <Card title="Configuration reference" href="/flash/resource-configuration" icon="sliders">
-    Complete reference for resource configuration options.
+    Complete reference for resource configuration
+  </Card>
+  <Card title="CLI reference" href="/flash/cli/overview" icon="terminal">
+    Learn about Flash CLI commands
   </Card>
 </CardGroup>
 
 
 ## Getting help
 
-- Join the [Runpod community on Discord](https://discord.gg/cUpRmau42V) for support and discussion.
-
-## Next steps
-
-- [View the resource configuration reference](/flash/resource-configuration) for all available options.
-- [Learn about pricing](/flash/pricing) to optimize costs.
-- [Deploy Flash applications](/flash/deploy-apps) for production.
+Join the [Runpod community on Discord](https://discord.gg/cUpRmau42V) for support and discussion.

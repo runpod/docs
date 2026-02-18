@@ -1,106 +1,179 @@
 ---
-title: "Build and deploy Flash apps"
-sidebarTitle: "Deploy Flash apps"
-description: "Package and deploy Flash applications for production with `flash build`."
+title: "Deploy Flash apps to Runpod"
+sidebarTitle: "Deploy to Runpod"
+description: "Bild and deploy your FastAPI app to Runpod."
 tag: "BETA"
 ---
 
-Flash uses a build process to package your application for deployment. This page covers how the build process works, including handler generation, cross-platform builds, and troubleshooting common issues.
+Flash provides a complete deployment workflow for taking your local development project to production. Use `flash deploy` to build and deploy your application in a single command, or use `flash build` for more control over the build process.
 
-## Build process and handler generation
 
-When you run `flash build`, the following happens:
+## Deployment workflow
 
-1. **Discovery**: Flash scans your code for `@remote` decorated functions.
-2. **Grouping**: Functions are grouped by their `resource_config`.
-3. **Handler generation**: For each resource config, Flash generates a lightweight handler file.
-4. **Manifest creation**: A `flash_manifest.json` file maps functions to their endpoints.
-5. **Dependency installation**: Python packages are installed with Linux `x86_64` compatibility.
-6. **Packaging**: Everything is bundled into `archive.tar.gz` for deployment.
+A typical deployment workflow looks like this:
 
-### Handler architecture
+1. **Create a new project**: Use [`flash init`](/flash/cli/init) to create a new project.
+2. **Develop locally**: Use [`flash run`](/flash/cli/run) to test your application. Any functions decorated with `@remote` will be run on Runpod Serverless workers.
+3. **Preview** (optional): Use [`flash deploy --preview`](/flash/cli/deploy) to test locally with Docker.
+4. **Deploy**: Use [`flash deploy`](/flash/cli/deploy) to push to Runpod Serverless.
+5. **Manage**: Use [`flash env`](/flash/cli/env) and [`flash app`](/flash/cli/app) to manage your deployments.
 
-Flash uses a factory pattern for handlers to eliminate code duplication:
+## Deploy your application
 
-```python
-# Generated handler (handler_gpu_config.py)
-from runpod_flash.runtime.generic_handler import create_handler
-from workers.gpu import process_data
+When you're satisfied with your `@remote` functions and ready to move to production, use `flash deploy` to build and deploy your Flash application:
 
-FUNCTION_REGISTRY = {
-    "process_data": process_data,
-}
-
-handler = create_handler(FUNCTION_REGISTRY)
+```bash
+flash deploy
 ```
 
-This approach provides:
+This command performs the following steps:
 
-- **Single source of truth**: All handler logic in one place.
-- **Easier maintenance**: Bug fixes don't require rebuilding projects.
+1. **Build**: Packages your code, dependencies, and manifest.
+2. **Upload**: Sends the artifact to Runpod's storage.
+3. **Provision**: Creates or updates Serverless endpoints.
+4. **Configure**: Sets up environment variables and service discovery.
+5. **Verify**: Confirms endpoints are healthy.
 
-## Cross-platform builds
+### Deployment architecture
 
-Flash automatically handles cross-platform builds, ensuring your deployments work correctly regardless of your development platform:
+After deployment, your entire application runs on Runpod Serverless:
 
-- **Automatic platform targeting**: Dependencies are installed for Linux `x86_64` (required for [Runpod Serverless](/serverless/overview)), even when building on macOS or Windows.
-- **Python version matching**: The build uses your current Python version to ensure package compatibility.
-- **Binary wheel enforcement**: Only pre-built binary wheels are used, preventing platform-specific compilation issues.
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#9289FE','primaryTextColor':'#fff','primaryBorderColor':'#9289FE','lineColor':'#5F4CFE','secondaryColor':'#AE6DFF','tertiaryColor':'#FCB1FF','edgeLabelBackground':'#5F4CFE', 'fontSize':'14px','fontFamily':'font-inter'}}}%%
 
-This means you can build on macOS ARM64, Windows, or any other platform, and the resulting package will run correctly on [Runpod Serverless](/serverless/overview).
+flowchart TB
+    Users(["USERS"])
 
-## Cross-endpoint function calls
+    subgraph Runpod ["RUNPOD SERVERLESS"]
+        Mothership["MOTHERSHIP ENDPOINT<br/>(your FastAPI app from main.py)<br/>• Your HTTP routes<br/>• Orchestrates @remote calls<br/>• Public URL for users"]
+        GPU["gpu-worker<br/>(your @remote function)"]
+        CPU["cpu-worker<br/>(your @remote function)"]
 
-Flash enables functions on different endpoints to call each other:
+        Mothership -->|"internal"| GPU
+        Mothership -->|"internal"| CPU
+    end
 
-```python
-# CPU endpoint function
-@remote(resource_config=cpu_config)
-def preprocess(data):
-    # Preprocessing logic
-    return clean_data
+    Users -->|"HTTPS (authenticated)"| Mothership
 
-# GPU endpoint function
-@remote(resource_config=gpu_config)
-async def inference(data):
-    # Can call CPU endpoint function
-    clean = await preprocess(data)
-    # Run inference on clean data
-    return result
+    style Runpod fill:#1a1a2e,stroke:#5F4CFE,stroke-width:2px,color:#fff
+    style Users fill:#4D38F5,stroke:#4D38F5,color:#fff
+    style Mothership fill:#5F4CFE,stroke:#5F4CFE,color:#fff
+    style GPU fill:#22C55E,stroke:#22C55E,color:#000
+    style CPU fill:#22C55E,stroke:#22C55E,color:#000
 ```
 
-The runtime automatically discovers endpoints and routes calls appropriately using the [`flash_manifest.json`](#build-artifacts) file generated during the build process. This lets you build pipelines that use CPU workers for preprocessing and GPU workers for inference, optimizing costs by using the appropriate hardware for each task.
+### Deploy to an environment
 
-## Build artifacts
+Flash organizes deployments using [apps and environments](/flash/apps-and-environments). Deploy to a specific environment using the `--env` flag:
 
-After running `flash build`, you'll find these artifacts in the `.flash/` directory:
+```bash
+# Deploy to staging
+flash deploy --env staging
+
+# Deploy to production
+flash deploy --env production
+```
+
+If the specified environment doesn't exist, Flash creates it automatically.
+
+### Post-deployment
+
+After a successful deployment, Flash displays:
+
+- The public URL for your application.
+- Available routes from your `@remote` decorated functions.
+- Instructions for authenticating requests.
+
+```text
+✓ Deployment Complete
+
+Your mothership is deployed at:
+https://api-xxxxx.runpod.net
+
+Available Routes:
+POST   /api/hello
+POST   /gpu/process
+
+All endpoints require authentication:
+curl -X POST https://api-xxxxx.runpod.net/api/hello \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"message": "Hello"}'
+```
+
+## Preview before deploying
+
+Test your deployment locally using Docker before pushing to production:
+
+```bash
+flash deploy --preview
+```
+
+This command:
+
+1. Builds your project (creates the archive and manifest).
+2. Creates a Docker network for inter-container communication.
+3. Starts one container per resource config (mothership + workers).
+4. Exposes the mothership on `localhost:8000`.
+
+Use preview mode to:
+
+- Validate your deployment configuration.
+- Test cross-endpoint function calls.
+- Debug resource provisioning issues.
+- Verify the manifest structure.
+
+Press `Ctrl+C` to stop the preview environment.
+
+## Managing deployment size
+
+Runpod Serverless has a **500MB deployment limit**. If your deployment exceeds this limit, use the `--exclude` flag to skip packages already included in your base worker image:
+
+```bash
+# Exclude PyTorch packages (pre-installed in GPU images)
+flash deploy --exclude torch,torchvision,torchaudio
+```
+
+### Base image packages
+
+Which packages to exclude depends on your resource configuration:
+
+| Resource type | Base image | Pre-installed packages |
+|--------------|------------|------------------------|
+| GPU (`LiveServerless` with `gpus`) | PyTorch base | `torch`, `torchvision`, `torchaudio` |
+| CPU (`LiveServerless` with `instanceIds`) | Python slim | None |
+| Load-balanced | Same as GPU/CPU | Same as GPU/CPU |
+
+<Tip>
+
+Check the [worker-flash repository](https://github.com/runpod-workers/worker-flash) for current base images and pre-installed packages.
+
+</Tip>
+
+## Build process
+
+When you run `flash deploy` (or `flash build`), Flash:
+
+1. **Discovers** all `@remote` decorated functions.
+2. **Groups** functions by their `resource_config`.
+3. **Generates** handler files for each resource config.
+4. **Creates** a `flash_manifest.json` file for service discovery.
+5. **Installs** dependencies with Linux x86_64 compatibility.
+6. **Packages** everything into `.flash/artifact.tar.gz`.
+
+### Cross-platform builds
+
+Flash automatically handles cross-platform builds. You can build on macOS, Windows, or Linux, and the resulting package will run correctly on Runpod's Linux x86_64 infrastructure.
+
+### Build artifacts
+
+After building, these artifacts are created in the `.flash/` directory:
 
 | Artifact | Description |
 |----------|-------------|
-| `.flash/.build/` | Temporary build directory (removed unless `--keep-build`) |
-| `.flash/archive.tar.gz` | Deployment package |
+| `.flash/artifact.tar.gz` | Deployment package |
 | `.flash/flash_manifest.json` | Service discovery configuration |
-
-### Managing bundle size
-
-Runpod Serverless has a **500MB deployment limit**. Exceeding this limit will cause your build to fail.
-
-Use `--exclude` to skip packages that are already included in your base worker image:
-
-```bash
-# For GPU deployments (PyTorch pre-installed)
-flash build --exclude torch,torchvision,torchaudio
-```
-
-Which packages to exclude depends on your [resource config](/flash/resource-configuration):
-
-- **GPU resources** use PyTorch as the base image, which has `torch`, `torchvision`, and `torchaudio` pre-installed.
-- **CPU resources** use Python slim images, which have no ML frameworks pre-installed.
-- **Load-balancer** resources use the same base image as their GPU/CPU counterparts.
-
-<Tip>
-    You can find details about the Flash worker image in the [runpod-workers/flash](https://github.com/runpod-workers/flash) repository. Find the `Dockerfile` for your endpoint type: `Dockerfile` (for GPU workers), `Dockerfile-cpu` (for CPU workers), or `Dockerfile-lb` (for load balancing workers).
-</Tip>
+| `.flash/.build/` | Temporary build directory (removed by default) |
 
 ## Troubleshooting
 
@@ -108,68 +181,47 @@ Which packages to exclude depends on your [resource config](/flash/resource-conf
 
 If the build process can't find your remote functions:
 
-- Ensure your functions are decorated with `@remote(resource_config)`.
-- Check that Python files are not excluded by `.gitignore` or `.flashignore`.
-- Verify function decorators have valid syntax.
+- Ensure functions are decorated with `@remote(resource_config=...)`.
+- Check that Python files aren't excluded by `.gitignore` or `.flashignore`.
+- Verify decorator syntax is correct.
 
-### Handler generation failed
+### Deployment size limit exceeded
 
-If handler generation fails:
+If your deployment exceeds 500MB:
 
-- Check for syntax errors in your Python files (they should be logged in the terminal).
-- Verify all imports in your worker modules are available.
-- Ensure resource config variables (e.g., `gpu_config`) are defined before a function references them.
-- Use `--keep-build` to inspect generated handler files in `.flash/.build/`.
-
-### Build succeeded but deployment failed
-
-If the build succeeds but deployment fails:
-
-- Verify all function imports work in the deployment environment.
-- Check that environment variables required by your functions are available.
-- Review the generated `flash_manifest.json` for correct function mappings.
-
-### Dependency installation failed
-
-If dependency installation fails during the build:
-
-- If a package doesn't have pre-built Linux `x86_64`` wheels, the build will fail with an error.
-- For newer Python versions (3.13+), some packages may require `manylinux_2_27`` or higher.
-- Ensure you have standard pip installed (`python -m ensurepip --upgrade`) for best compatibility.
-- Check PyPI to verify the package supports your Python version on Linux.
+```bash
+# Exclude packages already in base image
+flash deploy --exclude torch,torchvision,torchaudio
+```
 
 ### Authentication errors
-
-If you're seeing authentication errors:
 
 Verify your API key is set correctly:
 
 ```bash
-echo $RUNPOD_API_KEY  # Should show your key
+echo $RUNPOD_API_KEY
+```
+
+If not set, add it to your `.env` file or export it:
+
+```bash
+export RUNPOD_API_KEY=your_api_key_here
 ```
 
 ### Import errors in remote functions
 
-Remember to import packages inside remote functions:
+Import packages inside the remote function, not at the top of the file:
 
 ```python
-@remote(dependencies=["requests"])
+@remote(resource_config=config, dependencies=["requests"])
 def fetch_data(url):
-    import requests  # Import here, not at top of file
+    import requests  # Import here
     return requests.get(url).json()
 ```
 
-## Performance optimization
-
-To optimize performance:
-
-- Set `workersMin=1` to keep workers warm and avoid cold starts.
-- Use `idleTimeout` to balance cost and responsiveness.
-- Choose appropriate GPU types for your workload.
-- Use `--auto-provision` with `flash run` to eliminate cold-start delays during development.
-
 ## Next steps
 
-- [View the resource configuration reference](/flash/resource-configuration) for all available options.
+- [Learn about apps and environments](/flash/apps-and-environments) for managing deployments.
+- [View the CLI reference](/flash/cli/overview) for all available commands.
+- [Configure resources](/flash/resource-configuration) for your endpoints.
 - [Monitor and debug](/flash/monitoring) your deployments.
-- [Learn about pricing](/flash/pricing) to optimize costs.

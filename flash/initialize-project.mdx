@@ -1,0 +1,209 @@
+---
+title: "Initialize a Flash app project"
+sidebarTitle: "Initialize a project"
+description: "Use flash init to create a new Flash project with a ready-to-use structure."
+tag: "BETA"
+---
+
+The `flash init` command creates a new Flash project with a complete project structure, including a FastAPI server, example GPU and CPU workers, and configuration files. This gives you a working starting point for building Flash applications.
+
+Use `flash init` whenever you want to start a new Flash project, fully configured for you to run `flash run` and `flash deploy`.
+
+## Create a new project
+
+Create a new project in a new directory:
+
+```bash
+flash init my-project
+cd my-project
+```
+
+Or initialize in your current directory:
+
+```bash
+flash init .
+```
+
+## Project structure
+
+`flash init` creates the following structure:
+
+```text
+my-project/
+├── main.py              # FastAPI application entry point
+├── mothership.py        # Mothership endpoint configuration
+├── workers/
+│   ├── gpu/             # GPU worker
+│   │   ├── __init__.py
+│   │   └── endpoint.py
+│   └── cpu/             # CPU worker
+│       ├── __init__.py
+│       └── endpoint.py
+├── .env.example         # Environment variables template
+├── .flashignore         # Files to exclude from deployment
+├── .gitignore           # Git ignore patterns
+├── pyproject.toml       # Python project configuration
+├── requirements.txt     # Python dependencies
+└── README.md            # Project documentation
+```
+
+### Key files
+
+**main.py**: The FastAPI application that imports and registers your worker routers.
+
+**mothership.py**: Configuration for the "mothership" endpoint—the main entry point that orchestrates calls to your workers when deployed.
+
+**workers/gpu/endpoint.py**: An example GPU worker with a `@remote` decorated function. This is where you define functions that run on GPU workers.
+
+**workers/cpu/endpoint.py**: An example CPU worker for tasks that don't require GPU acceleration.
+
+**.flashignore**: Lists files and directories to exclude from the deployment artifact (similar to `.gitignore`).
+
+## Set up the project
+
+After initialization, complete the setup:
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Copy environment template
+cp .env.example .env
+
+# Add your API key to .env
+# RUNPOD_API_KEY=your_api_key_here
+```
+
+## How it fits into the workflow
+
+`flash init` is the first step in the Flash development workflow:
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#9289FE','primaryTextColor':'#fff','primaryBorderColor':'#9289FE','lineColor':'#5F4CFE','secondaryColor':'#AE6DFF','tertiaryColor':'#FCB1FF','edgeLabelBackground':'#5F4CFE', 'fontSize':'14px','fontFamily':'font-inter'}}}%%
+
+flowchart LR
+    Init["flash init"]
+    Dev["flash run"]
+    Deploy["flash deploy"]
+
+    Init -->|"Create project"| Dev
+    Dev -->|"Test locally"| Deploy
+
+    style Init fill:#5F4CFE,stroke:#5F4CFE,color:#fff
+    style Dev fill:#22C55E,stroke:#22C55E,color:#000
+    style Deploy fill:#4D38F5,stroke:#4D38F5,color:#fff
+```
+
+1. **`flash init`**: Creates project structure and boilerplate.
+2. **`flash run`**: Starts local development server for testing.
+3. **`flash deploy`**: Builds and deploys to Runpod Serverless.
+
+## Customize your project
+
+### Add a new GPU endpoint
+
+To add a new GPU endpoint, you need to create a new file in the `workers/gpu/` directory. This file will contain the code for the endpoint and be automatically included in the FastAPI app.
+
+1. Create a new file in `workers/gpu/` with the name of the endpoint. For example, `inference.py`:
+
+```python
+# workers/gpu/inference.py
+from runpod_flash import remote, LiveServerless, GpuGroup
+
+config = LiveServerless(
+    name="inference-worker",
+    gpus=[GpuGroup.ADA_24],
+    workersMax=3,
+)
+
+@remote(resource_config=config, dependencies=["transformers", "torch"])
+def run_inference(prompt: str) -> dict:
+    # Rember to import endpoint dependencies inside the function.
+    from transformers import pipeline
+
+    generator = pipeline("text-generation", model="gpt2")
+    result = generator(prompt, max_length=50)
+    return {"output": result[0]["generated_text"]}
+```
+
+2. Add a route in `workers/gpu/__init__.py`:
+
+```python
+from fastapi import APIRouter
+from .inference import run_inference
+
+router = APIRouter(prefix="/gpu", tags=["GPU Workers"])
+
+@router.post("/inference")
+async def inference_endpoint(prompt: str):
+    result = await run_inference(prompt)
+    return result
+```
+
+3. The router is automatically included via `main.py`.
+
+### Add a CPU endpoint
+
+Follow the same pattern in `workers/cpu/`. CPU endpoints use `instanceIds` instead of `gpus`:
+
+```python
+from runpod_flash import remote, LiveServerless, CpuInstanceType
+
+config = LiveServerless(
+    name="data-processor",
+    instanceIds=[CpuInstanceType.CPU5C_4_8],
+    workersMax=2,
+)
+
+@remote(resource_config=config, dependencies=["pandas"])
+def process_data(data: list) -> dict:
+    import pandas as pd
+    df = pd.DataFrame(data)
+    return df.describe().to_dict()
+```
+
+## Handle existing files
+
+If you run `flash init` in a directory with existing files, Flash detects conflicts and prompts for confirmation:
+
+```text
+┌─ File Conflicts Detected ─────────────────────┐
+│ Warning: The following files will be          │
+│ overwritten:                                  │
+│                                               │
+│   • main.py                                   │
+│   • requirements.txt                          │
+└───────────────────────────────────────────────┘
+Continue and overwrite these files? [y/N]:
+```
+
+Use `--force` to skip the prompt and overwrite files:
+
+```bash
+flash init . --force
+```
+
+## Start developing
+
+Once your project is set up:
+
+```bash
+# Start the development server
+flash run
+
+# Open the API explorer
+# http://localhost:8888/docs
+```
+
+Make changes to your workers, and the server reloads automatically. When you're ready, deploy with:
+
+```bash
+flash deploy
+```
+
+## Next steps
+
+- [Test locally](/flash/local-testing) with `flash run`.
+- [Build your app](/flash/build-app) by customizing workers.
+- [Deploy to production](/flash/deploy-apps) with `flash deploy`.
+- [View the flash init reference](/flash/cli/init) for all options.

@@ -1,42 +1,75 @@
 ---
-title: "Create a Flash API endpoint"
-sidebarTitle: "Create an endpoint"
-description: "Build and serve HTTP APIs using FastAPI with Flash."
+title: "Build a Flash app"
+sidebarTitle: "Build a Flash app"
+description: "Create a Flash app, test it locally, and deploy it to production."
 tag: "BETA"
 ---
 
-Flash API endpoints let you build HTTP APIs with FastAPI that run on Runpod Serverless workers. Use them to deploy production APIs that need GPU or CPU acceleration.
+Flash apps let you build FastAPI apps to serve AI/ML workloads on Runpod Serverless. This guide walks you through the process of building a Flash app from scratch, from project initialization and local testing to production deployment.
 
-Unlike standalone scripts that run once and return results, this lets you create a persistent endpoint for handling incoming HTTP requests. Each request is processed by a Serverless worker using the same remote functions you'd use in a standalone script.
+<Tip>
+If you haven't already, we recommend starting with the [Quickstart](/flash/quickstart) guide to get a feel for how Flash `@remote` functions work.
+</Tip>
 
-<Note>
+## Requirements:
 
-Flash API endpoints are currently available for local testing only. Run `flash run` to start the API server on your local machine. Production deployment support is coming in future updates.
+- You've [created a Runpod account](/get-started/manage-accounts).
+- You've [created a Runpod API key](/get-started/api-keys).
+- You've installed [Python 3.10 (or higher)](https://www.python.org/downloads/).
 
-</Note>
+## What you'll learn
+
+In this tutorial you'll learn how to:
+
+- Create a new Flash project with a template structure.
+- Explore the project template.
+- Install Python dependencies.
+- Add your API key to the environment.
+- Start the local development server.
+- Test the API endpoint using cURL.
+- Open the API explorer.
+- Customize your API endpoint.
+- Deploy to production.
 
 ## Step 1: Initialize a new project
 
-Use the `flash init` command to generate a structured project template with a preconfigured FastAPI application entry point.
-
-Run this command to initialize a new project directory:
+Create a new directory and Python virtual environment:
 
 ```bash
-flash init my_project
+# Create the project directory and navigate into it:
+mkdir flash_app
+cd flash_app
+
+# Install Flash:
+python3 -m venv venv
+source venv/bin/activate
+pip install runpod-flash
 ```
 
-You can also initialize your current directory:
+Use the `flash init` command to generate a structured project template with a preconfigured FastAPI application entry point:
 
 ```bash
 flash init
 ```
+
+Make sure your API key is set in the environment, either by creating a `.env` file or exporting the `RUNPOD_API_KEY` environment variable:
+
+```bash
+# Set the API key as an environment variable:
+export RUNPOD_API_KEY=YOUR_API_KEY
+
+# Or create a `.env` file:
+touch .env && echo "RUNPOD_API_KEY=YOUR_API_KEY" > .env
+```
+
+Replace `YOUR_API_KEY` with your actual Runpod API key.
 
 ## Step 2: Explore the project template
 
 This is the structure of the project template created by `flash init`:
 
 ```text
-my_project/
+flash_app/
 ├── main.py                    # FastAPI application entry point
 ├── workers/
 │   ├── gpu/                   # GPU worker example
@@ -45,7 +78,6 @@ my_project/
 │   └── cpu/                   # CPU worker example
 │       ├── __init__.py        # FastAPI router
 │       └── endpoint.py        # CPU script with @remote decorated function
-├── .env                       # Environment variable template
 ├── .gitignore                 # Git ignore patterns
 ├── .flashignore               # Flash deployment ignore patterns
 ├── requirements.txt           # Python dependencies
@@ -55,7 +87,7 @@ my_project/
 This template includes:
 
 - A FastAPI application entry point and routers.
-- Templates for Python dependencies, `.env`, `.gitignore`, etc.
+- Templates for `requirements.txt`, `.env`, `.gitignore`, etc.
 - Flash scripts (`endpoint.py`) for both GPU and CPU workers, which include:
   - Pre-configured worker scaling limits using the `LiveServerless()` object.
   - A `@remote` decorated function that returns a response from a worker.
@@ -63,12 +95,6 @@ This template includes:
 When you start the FastAPI server, it creates API endpoints at `/gpu/hello` and `/cpu/hello`, which call the remote function described in their respective `endpoint.py` files.
 
 ## Step 3: Install Python dependencies
-
-After initializing the project, navigate into the project directory:
-
-```bash
-cd my_project
-```
 
 Install required dependencies:
 
@@ -199,35 +225,42 @@ async def generate(prompt: str, width: int = 512, height: int = 512):
 
 3. Include the router in `main.py` if not already included.
 
-## Load-balanced endpoints
+## Step 8: Deploy to Runpod
 
-For API endpoints requiring low-latency HTTP access with direct routing, use load-balanced endpoints:
+When you're ready to deploy your app to Runpod, use `flash deploy`:
 
-```python
-from runpod_flash import LiveLoadBalancer, remote
-
-api = LiveLoadBalancer(name="api-service")
-
-@remote(api, method="POST", path="/api/process")
-async def process_data(x: int, y: int):
-    return {"result": x + y}
-
-@remote(api, method="GET", path="/api/health")
-def health_check():
-    return {"status": "ok"}
-
-# Call functions directly
-result = await process_data(5, 3)  # → {"result": 8}
+```bash
+flash deploy
 ```
 
-Key differences from queue-based endpoints:
+This command:
 
-- **Direct HTTP routing**: Requests routed directly to workers, no queue.
-- **Lower latency**: No queuing overhead.
-- **Custom HTTP methods**: GET, POST, PUT, DELETE, PATCH support.
-- **No automatic retries**: Users handle errors directly.
+1. Builds your application into a deployment artifact.
+2. Uploads it to Runpod's storage.
+3. Provisions Serverless endpoints for your `@remote` functions.
+4. Deploys your FastAPI application as the "mothership" endpoint.
 
-Load-balanced endpoints are ideal for REST APIs, webhooks, and real-time services. Queue-based endpoints are better for batch processing and fault-tolerant workflows.
+After deployment, you'll receive a public URL for your API:
+
+```text
+Your mothership is deployed at:
+https://api-xxxxx.runpod.net
+
+Available Routes:
+POST   /gpu/hello
+POST   /cpu/hello
+```
+
+All requests to the deployed app require authentication with your Runpod API key:
+
+```bash
+curl -X POST https://api-xxxxx.runpod.net/gpu/hello \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"message": "Hello from production!"}'
+```
+
+For detailed deployment options including environment management, see [Deploy Flash apps](/flash/deploy-apps).
 
 ## Next steps
 

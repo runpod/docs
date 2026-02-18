@@ -1,0 +1,184 @@
+---
+title: "build"
+sidebarTitle: "build"
+---
+
+Build a deployment-ready artifact for your Flash application without deploying. Use this for more control over the build process or to inspect the artifact before deploying.
+
+```bash
+flash build [OPTIONS]
+```
+
+## Example
+
+Build with all dependencies:
+
+```bash
+flash build
+```
+
+Build and launch local preview environment:
+
+```bash
+flash build --preview
+```
+
+Build with excluded packages (for smaller deployment size):
+
+```bash
+flash build --exclude torch,torchvision,torchaudio
+```
+
+Keep the build directory for inspection:
+
+```bash
+flash build --keep-build
+```
+
+## Flags
+
+<ResponseField name="--no-deps">
+Skip transitive dependencies during pip install. Only installs direct dependencies specified in `@remote` decorators. Useful when the base image already includes dependencies.
+</ResponseField>
+
+<ResponseField name="--keep-build">
+Keep the `.flash/.build` directory after creating the archive. Useful for debugging build issues or inspecting generated files.
+</ResponseField>
+
+<ResponseField name="--output, -o" type="string" default="artifact.tar.gz">
+Custom name for the output archive file.
+</ResponseField>
+
+<ResponseField name="--exclude" type="string">
+Comma-separated list of packages to exclude from the build (e.g., `torch,torchvision`). Use this to skip packages already in the base image.
+</ResponseField>
+
+<ResponseField name="--preview">
+Launch a local Docker-based test environment after building. Automatically enables `--keep-build`.
+</ResponseField>
+
+## What happens during build
+
+1. **Function discovery**: Finds all `@remote` decorated functions.
+2. **Grouping**: Groups functions by their `resource_config`.
+3. **Manifest generation**: Creates `.flash/flash_manifest.json` with endpoint definitions.
+4. **Dependency installation**: Installs Python packages for Linux x86_64.
+5. **Packaging**: Bundles everything into `.flash/artifact.tar.gz`.
+
+## Build artifacts
+
+After running `flash build`:
+
+| File/Directory | Description |
+|----------------|-------------|
+| `.flash/artifact.tar.gz` | Deployment package ready for Runpod |
+| `.flash/flash_manifest.json` | Service discovery configuration |
+| `.flash/.build/` | Temporary build directory (removed unless `--keep-build`) |
+
+## Cross-platform builds
+
+Flash automatically handles cross-platform builds:
+
+- **Automatic platform targeting**: Dependencies are installed for Linux x86_64, regardless of your build platform.
+- **Python version matching**: Uses your current Python version for package compatibility.
+- **Binary wheel enforcement**: Only pre-built wheels are used, preventing compilation issues.
+
+You can build on macOS, Windows, or Linux, and the deployment will work on Runpod.
+
+## Managing deployment size
+
+Runpod Serverless has a **500MB deployment limit**. Use `--exclude` to skip packages already in your base image:
+
+```bash
+# For GPU deployments (PyTorch pre-installed)
+flash build --exclude torch,torchvision,torchaudio
+```
+
+### Base image reference
+
+| Resource type | Base image | Safe to exclude |
+|--------------|------------|-----------------|
+| GPU | PyTorch base | `torch`, `torchvision`, `torchaudio` |
+| CPU | Python slim | Do not exclude ML packages |
+
+<Tip>
+
+Check the [worker-flash repository](https://github.com/runpod-workers/worker-flash) for current base images and pre-installed packages.
+
+</Tip>
+
+## Preview environment
+
+Test your deployment locally before pushing to Runpod:
+
+```bash
+flash build --preview
+```
+
+This:
+
+1. Builds your project (creates archive and manifest).
+2. Creates a Docker network for inter-container communication.
+3. Starts one container per resource config (mothership + workers).
+4. Exposes the mothership on `localhost:8000`.
+5. On shutdown (`Ctrl+C`), stops and removes all containers.
+
+### When to use preview
+
+- Test deployment configuration before production.
+- Validate manifest structure.
+- Debug resource provisioning.
+- Verify cross-endpoint function calls.
+
+## Troubleshooting
+
+### Build fails with "functions not found"
+
+Ensure your project has `@remote` decorated functions:
+
+```python
+from runpod_flash import remote, LiveServerless
+
+config = LiveServerless(name="my-worker")
+
+@remote(resource_config=config)
+def my_function(data):
+    return {"result": data}
+```
+
+### Archive is too large
+
+Use `--exclude` or `--no-deps`:
+
+```bash
+flash build --exclude torch,torchvision,torchaudio
+```
+
+### Dependency installation fails
+
+If a package doesn't have Linux x86_64 wheels:
+
+1. Ensure standard pip is installed: `python -m ensurepip --upgrade`
+2. Check PyPI for Linux wheel availability.
+3. For Python 3.13+, some packages may require newer manylinux versions.
+
+### Need to examine generated files
+
+Use `--keep-build`:
+
+```bash
+flash build --keep-build
+ls .flash/.build/
+```
+
+## Related commands
+
+- [`flash deploy`](/flash/cli/deploy) - Build and deploy in one step
+- [`flash run`](/flash/cli/run) - Start development server
+- [`flash env`](/flash/cli/env) - Manage environments
+
+<Note>
+
+Most users should use `flash deploy` instead, which runs build and deploy in one step. Use `flash build` when you need more control or want to inspect the artifact.
+
+</Note>
