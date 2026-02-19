@@ -55,8 +55,8 @@ git ls-files -z -- '*.md' | xargs -0 blacken-docs
 
 ```bash
 # Set up virtual environment
-python3 -m venv helpers/venv
-source helpers/venv/bin/activate
+python3 -m venv helpers/.venv
+source helpers/.venv/bin/activate
 pip install -r helpers/requirements.txt
 
 # Run scripts
