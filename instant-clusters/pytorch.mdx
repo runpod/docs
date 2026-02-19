@@ -5,9 +5,19 @@ sidebarTitle: "PyTorch"
 
 import { PyTorchTooltip } from "/snippets/tooltips.jsx";
 
-This tutorial demonstrates how to use Instant Clusters with <PyTorchTooltip /> to run distributed workloads across multiple GPUs. By leveraging PyTorch's distributed processing capabilities and Runpod's high-speed networking infrastructure, you can significantly accelerate your training process compared to single-GPU setups.
+This tutorial demonstrates how to use [Instant Clusters](/instant-clusters) with <PyTorchTooltip /> to run distributed workloads across multiple GPUs. By leveraging PyTorch's distributed processing capabilities and Runpod's high-speed networking infrastructure, you can significantly accelerate your training process compared to single-GPU setups.
 
-Follow the steps below to deploy a cluster and start running distributed PyTorch workloads efficiently.
+## What you'll learn
+
+- How to deploy an Instant Cluster with PyTorch
+- How to initialize a distributed PyTorch environment using Runpod's pre-configured environment variables
+- How to launch multi-node training with `torchrun`
+- How local and global ranks map to GPUs across your cluster
+
+## Requirements
+
+- A Runpod account with sufficient credits for a multi-node cluster
+- Basic familiarity with PyTorch and distributed training concepts
 
 ## Step 1: Deploy an Instant Cluster
 
@@ -45,16 +55,16 @@ def init_distributed():
    """Initialize the distributed training environment"""
    # Initialize the process group
    dist.init_process_group(backend="nccl")
-   
+
    # Get local rank and global rank
    local_rank = int(os.environ["LOCAL_RANK"])
    global_rank = dist.get_rank()
    world_size = dist.get_world_size()
-   
+
    # Set device for this process
    device = torch.device(f"cuda:{local_rank}")
    torch.cuda.set_device(device)
-       
+
    return local_rank, global_rank, world_size, device
 
 def cleanup_distributed():
@@ -64,19 +74,36 @@ def cleanup_distributed():
 def main():
    # Initialize distributed environment
    local_rank, global_rank, world_size, device = init_distributed()
-   
+
    print(f"Running on rank {global_rank}/{world_size-1} (local rank: {local_rank}), device: {device}")
 
    # Your code here
-   
+
    # Clean up distributed environment when done
    cleanup_distributed()
-   
+
 if __name__ == "__main__":
    main()
 ```
 
-This is the minimal code necessary for initializing a distributed environment. The `main()` function prints the local and global rank for each GPU process (this is also where you can add your own code). `LOCAL_RANK` is assigned dynamically to each process by PyTorch. All other environment variables are set automatically by Runpod during deployment.
+This is the minimal code necessary for initializing a distributed environment. The `main()` function prints the local and global rank for each GPU process (this is also where you can add your own code).
+
+<Accordion title="Instant Cluster environment variables">
+
+PyTorch assigns `LOCAL_RANK` dynamically to each process. All other environment variables are set automatically by Runpod when you deploy your cluster:
+
+| Variable | Description |
+| -------- | ----------- |
+| `MASTER_ADDR` / `PRIMARY_ADDR` | Address of the primary node for process coordination |
+| `MASTER_PORT` / `PRIMARY_PORT` | Port on the primary node |
+| `NUM_NODES` | Number of nodes in your cluster |
+| `NUM_TRAINERS` | Number of GPUs per node |
+| `NODE_RANK` | This node's rank in the cluster (0 for primary) |
+| `WORLD_SIZE` | Total GPUs across all nodes |
+
+For a complete list of environment variables, see the [configuration reference](/instant-clusters/configuration#environment-variables).
+
+</Accordion>
 
 ## Step 4: Start the PyTorch process on each Pod
 
@@ -96,10 +123,20 @@ torch-demo/main.py
 
 This command launches eight `main.py` processes per node (one per GPU in the Pod).
 
+<Accordion title="NCCL network configuration details">
+
+The `NCCL_SOCKET_IFNAME=ens1` setting tells NCCL to use the high-speed internal network interface (`ens1`) for GPU-to-GPU communication between nodes. Instant Clusters provide up to 8 high-bandwidth interfaces (`ens1`-`ens8`) for inter-node traffic, separate from `eth0` which handles external internet traffic.
+
+The `NCCL_DEBUG=INFO` setting enables detailed logging, which is helpful for troubleshooting communication issues. For more information on NCCL configuration and troubleshooting, see the [configuration reference](/instant-clusters/configuration#nccl-configuration).
+
 <Warning>
 The `NCCL_SOCKET_IFNAME=ens1` setting is critical for proper inter-node communication. Without this configuration, nodes may attempt to communicate using external IP addresses (172.xxx range) instead of the internal network interface, leading to connection timeouts and failed distributed training jobs.
 </Warning>
 
+</Accordion>
+
+
+### Expected output
 
 After running the command on the last Pod, you should see output similar to this:
 
@@ -128,11 +165,11 @@ This diagram illustrates how local and global ranks are distributed across multi
 
 If you no longer need your cluster, make sure you return to the [Instant Clusters page](https://www.console.runpod.io/cluster) and delete your cluster to avoid incurring extra charges.
 
-<Info>
+<Tip>
 
 You can monitor your cluster usage and spending using the **Billing Explorer** at the bottom of the [Billing page](https://www.console.runpod.io/user/billing) section under the **Cluster** tab.
 
-</Info>
+</Tip>
 
 ## Next steps
 
@@ -142,5 +179,6 @@ Now that you've successfully deployed and tested a PyTorch distributed applicati
 * **Scale your training** by adjusting the number of Pods in your cluster to handle larger models or datasets.
 * **Try different frameworks** like [Axolotl](/instant-clusters/axolotl) for fine-tuning large language models.
 * **Optimize performance** by experimenting with different distributed training strategies like Data Parallel (DP), Distributed Data Parallel (DDP), or Fully Sharded Data Parallel (FSDP).
+* **Review the [configuration reference](/instant-clusters/configuration)** for detailed information on environment variables, network interfaces, and troubleshooting.
 
 For more information on distributed training with PyTorch, refer to the [PyTorch Distributed Training documentation](https://pytorch.org/tutorials/beginner/dist_overview.html).
