@@ -175,6 +175,95 @@ After building, these artifacts are created in the `.flash/` directory:
 | `.flash/flash_manifest.json` | Service discovery configuration |
 | `.flash/.build/` | Temporary build directory (removed by default) |
 
+## What gets deployed to Runpod
+
+When you deploy a Flash app, you're deploying a **build artifact** (tarball) onto pre-built Flash Docker images. This architecture is similar to AWS Lambda layers: the base runtime is pre-built, and your code and dependencies are layered on top.
+
+### The build artifact
+
+The `.flash/artifact.tar.gz` file (max 500 MB) contains:
+
+```text
+artifact.tar.gz/
+├── main.py                      # Your FastAPI application
+├── workers/                     # Your worker modules
+│   ├── gpu/
+│   │   └── endpoint.py          # Functions with @remote
+│   └── cpu/
+│       └── endpoint.py
+├── flash_manifest.json          # Deployment manifest (critical!)
+├── requirements.txt             # (empty or minimal)
+└── [installed dependencies]/    # All pip packages bundled
+    ├── numpy/
+    ├── torch/
+    └── ...
+```
+
+Dependencies are installed locally during the build process and bundled into the tarball. They are **not** installed at runtime on Runpod workers.
+
+### The deployment manifest
+
+The `flash_manifest.json` file is the brain of your deployment. It tells each endpoint:
+
+- Which functions to execute
+- What Docker image to use
+- How to configure resources (GPUs, workers, scaling)
+- How to route HTTP requests (for load balancer endpoints)
+
+```json
+{
+  "resources": {
+    "mothership": {
+      "resource_type": "CpuLiveLoadBalancer",
+      "is_mothership": true,
+      "imageName": "runpod/flash-lb-cpu:latest",
+      "main_file": "main.py",
+      "app_variable": "app",
+      "functions": [...]
+    },
+    "gpu-worker": {
+      "resource_type": "LiveServerless",
+      "imageName": "runpod/flash:latest",
+      "gpuIds": "...",
+      "workersMax": 5,
+      "functions": [
+        {
+          "name": "process_on_gpu",
+          "module": "workers.gpu.endpoint"
+        }
+      ]
+    }
+  },
+  "routes": {
+    "mothership": {
+      "POST /api/process": "process_endpoint"
+    }
+  }
+}
+```
+
+### What gets created on Runpod
+
+For each resource in the manifest, Flash creates a Serverless endpoint:
+
+**Mothership/orchestrator endpoint ([load balancer](/serverless/load-balancing/overview))**
+- **Purpose**: Receives HTTP requests, orchestrates `@remote` calls
+- **Image**: Pre-built `runpod/flash-lb-cpu:latest` or `runpod/flash-lb:latest`
+- **Startup process**:
+  1. Container extracts your tarball
+  2. Auto-generated handler imports your `main.py`
+  3. FastAPI routes are mounted
+  4. Uvicorn server starts
+
+**Worker endpoints (queue-based by default)**
+- **Purpose**: Execute compute-intensive `@remote` functions
+- **Image**: Pre-built `runpod/flash:latest` (GPU) or `runpod/flash-cpu:latest` (CPU)
+- **Startup process**:
+  1. Container extracts your tarball
+  2. Your worker modules are imported
+  3. Function registry is created (maps function names to actual function objects)
+  4. Workers listen for jobs with function name + serialized arguments
+
 ## Troubleshooting
 
 ### No @remote functions found

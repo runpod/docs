@@ -64,6 +64,46 @@ Deleting an app removes all environments, builds, endpoints, and volumes associa
 
 </Warning>
 
+## Understanding builds and deployments
+
+When you run `flash deploy`, three things happen on Runpod:
+
+### 1. Build artifact is uploaded
+
+Flash creates a **tarball** (`.flash/artifact.tar.gz`) containing:
+
+- Your Python code (`main.py`, `workers/`, etc.)
+- Pre-installed dependencies (bundled during build)
+- Deployment manifest (`flash_manifest.json`)
+- Auto-generated handler code
+
+This tarball is uploaded to Runpod's storage and associated with your app as a "build."
+
+### 2. Serverless endpoints are provisioned
+
+For each resource in the manifest, Flash creates a Serverless endpoint:
+
+**Mothership endpoint** (Load-Balanced):
+- Runs your FastAPI app from `main.py`
+- Provides the public HTTPS URL for users
+- Orchestrates calls to worker endpoints
+- Uses pre-built image: `runpod/flash-lb-cpu:latest`
+
+**Worker endpoints** (Queue-Based):
+- Execute your `@remote` functions
+- Scale automatically based on load
+- Run on GPUs or CPUs based on configuration
+- Uses pre-built images: `runpod/flash:latest` (GPU) or `runpod/flash-cpu:latest` (CPU)
+
+### 3. Environment is activated
+
+The environment is linked to:
+- The uploaded build (specific version of your code)
+- The provisioned endpoints (running infrastructure)
+- Deployment state (health, status, metrics)
+
+**Key insight:** You're **not** building custom Docker images. The Flash images are pre-built and generic—they extract your tarball and run your code. This is why deployments are fast (no image build step) and limited to 500 MB (only code and dependencies, not full Docker images).
+
 ## Environments
 
 An **environment** is an isolated deployment stage within a Flash app (e.g., `dev`, `staging`, `production`). Each environment has its own endpoints, build version, volumes, and deployment state. Environments are completely independent.
