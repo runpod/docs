@@ -1,0 +1,324 @@
+---
+title: "Use custom Docker images with Flash"
+sidebarTitle: "Custom Docker images"
+description: "Deploy pre-built Docker images with Flash using ServerlessEndpoint."
+tag: "BETA"
+---
+
+Flash's `LiveServerless` configuration handles most use cases by automatically managing dependencies and executing arbitrary Python code. However, for specialized environments that require custom Docker images—such as pre-built ML frameworks, specific CUDA versions, or system-level dependencies—you can use `ServerlessEndpoint` or `CpuServerlessEndpoint`.
+
+## When to use custom Docker images
+
+Use custom Docker images when you need:
+
+- **Pre-built inference servers**: vLLM, TensorRT-LLM, or other specialized serving frameworks.
+- **System-level dependencies**: Custom CUDA versions, cuDNN, or system libraries not installable via `pip`.
+- **Baked-in models**: Large models pre-downloaded in the image to avoid runtime downloads.
+- **Existing Serverless workers**: You already have a working Runpod Serverless Docker image that you want to use with Flash.
+
+<Tip>
+For most use cases, you should use `LiveServerless` and [remote functions](/flash/remote-functions). It's simpler, faster, and lets you execute arbitrary Python code remotely.
+</Tip>
+
+## How it works
+
+Unlike `LiveServerless` (which delivers your Python code to pre-built Flash workers), you can use `ServerlessEndpoint` to create a traditional [Runpod Serverless endpoint](/serverless/overview) using any Docker image you specify.
+
+
+
+Here are the key differences between `ServerlessEndpoint` and `LiveServerless` resources:
+
+| Aspect | LiveServerless | ServerlessEndpoint |
+|--------|---------------|-------------------|
+| **Code execution** | Delivers Python code with each request | Uses the [handler function](/serverless/workers/handler-functions) in your Docker image |
+| **Input format** | Any Python arguments | Dictionary: `{"input": {...}}` |
+| **Docker image** | Pre-built Flash images | Your custom image |
+| **Dependencies** | Specified in decorator | Baked into Docker image |
+| **Use case** | Dynamic Python functions | Pre-built inference servers |
+
+## Basic usage
+
+<Steps>
+<Step title="Create a ServerlessEndpoint configuration">
+Create a `ServerlessEndpoint` resource configuration pointing to your Docker image. For example:
+
+```python
+from runpod_flash import ServerlessEndpoint, GpuGroup
+
+config = ServerlessEndpoint(
+    name="my-custom-worker",
+    imageName="your-registry/your-image:tag",
+    gpus=[GpuGroup.AMPERE_24],
+    workersMax=3
+)
+```
+</Step>
+
+<Step title="Make requests">
+
+Call `.run()` with a dictionary payload in the format `{"input": {...}}`:
+
+```python
+import asyncio
+from runpod_flash import ServerlessEndpoint, GpuGroup, ResourceManager
+
+async def main():
+    # Explicitly provision the endpoint if it doesn't already exist
+    manager = ResourceManager()
+    deployed_endpoint = await manager.get_or_deploy_resource(config)
+
+    # Send a request to the endpoint
+    result = await config.run({
+        "input": {
+            "prompt": "Your input data",
+            "param1": "value1"
+        }
+    })
+    print(result)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+**No `@remote` decorator is needed**. The endpoint will process the request using the [handler function](/serverless/workers/handler-functions) that's baked into your Docker image.
+
+</Step>
+</Steps>
+
+## Complete example: vLLM inference
+
+This example uses Runpod's official [vLLM worker](/serverless/vllm/overview) to deploy the `microsoft/Phi-3.5-mini-instruct` language model:
+
+```python title="vllm_example.py"
+import asyncio
+from runpod_flash import ServerlessEndpoint, GpuGroup, ResourceManager
+
+# Configure vLLM endpoint
+vllm_config = ServerlessEndpoint(
+    name="vllm-small-model",
+    imageName="runpod/worker-vllm:stable-cuda12.1.0",
+    gpus=[GpuGroup.AMPERE_24],  # RTX 4090 or similar (24GB)
+    workersMax=3,
+    env={
+        "MODEL_NAME": "microsoft/Phi-3.5-mini-instruct",
+        "MAX_MODEL_LEN": "4096",
+        "GPU_MEMORY_UTILIZATION": "0.9",
+        "MAX_CONCURRENCY": "30",
+    }
+)
+
+async def main():
+    # Explicitly provision the endpoint if it doesn't exist
+    manager = ResourceManager()
+    deployed_endpoint = await manager.get_or_deploy_resource(vllm_config)
+
+    print(f"Endpoint deployed at: {deployed_endpoint.endpoint_url}")
+
+    # Generate text
+    result = await deployed_endpoint.run({
+        "input": {
+            "prompt": "Explain quantum computing in simple terms:",
+            "max_tokens": 100,
+            "temperature": 0.7
+        }
+    })
+
+    # Extract the generated text
+    text = result.output[0]['choices'][0]['tokens'][0]
+    print(f"\nGenerated text: {text}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+Here's what happens when you run this code:
+
+
+1. **Resource configuration**: The `ServerlessEndpoint` configuration specifies the official Runpod [vLLM worker](/serverless/vllm/overview) Docker image and GPU requirements.
+2. **Environment variables**: Model and vLLM settings are configured via `env`.
+3. **Provisioning**: In `main()`, `ResourceManager.get_or_deploy_resource()` creates the endpoint if it doesn't already exist.
+3. **Request**: The input is sent as a dictionary via `.run()` to the deployed vLLM endpoint, matching the worker's expected input format.
+4. **Response**: The results are extracted from the nested response structure.
+
+## Available Docker images
+
+### Official Runpod workers
+
+Runpod provides pre-built worker images for common frameworks:
+
+| Framework | Image | Image link |
+|-----------|-------|---------------|
+| vLLM | `runpod/worker-vllm` | [Link](https://hub.docker.com/r/runpod/worker-vllm) |
+| Automatic1111 | `runpod/worker-a1111:stable` | [A1111 docs](/serverless/workers/sdxl-a1111) |
+| ComfyUI | `runpod/worker-comfy` | [Link]](https://hub.docker.com/r/runpod/worker-comfyui) |
+
+### Custom images
+
+To use your own Docker image:
+
+1. **Build a handler**: Follow the [Serverless handler guide](/serverless/workers/handler-functions)
+2. **Create a Dockerfile**: Package your handler with dependencies
+3. **Push to registry**: Upload to Docker Hub, GitHub Container Registry, or Runpod's registry
+4. **Use in Flash**: Reference the image in `imageName`
+
+See [Deploy custom workers](/serverless/workers/deploy) for details.
+
+## Configuration options
+
+All parameters from `LiveServerless` are available:
+
+```python
+config = ServerlessEndpoint(
+    name="custom-worker",
+    imageName="your-registry/image:tag",  # Required
+    gpus=[GpuGroup.AMPERE_80],
+    workersMin=0,
+    workersMax=5,
+    idleTimeout=10,
+    env={
+        "MODEL_PATH": "/models/llama",
+        "MAX_BATCH_SIZE": "32"
+    },
+    networkVolumeId="vol_abc123",  # Optional: persistent storage
+    executionTimeoutMs=300000  # 5 minutes
+)
+```
+
+See the [resource configuration reference](/flash/resource-configuration) for all available options.
+
+## CPU endpoints
+
+For CPU workloads, use `CpuServerlessEndpoint`:
+
+```python
+from runpod_flash import CpuServerlessEndpoint, CpuInstanceType
+
+config = CpuServerlessEndpoint(
+    name="cpu-worker",
+    imageName="your-registry/cpu-worker:latest",
+    instanceIds=[CpuInstanceType.CPU5C_4_8]  # 4 vCPU, 8GB RAM
+)
+```
+
+## Environment variables
+
+Pass configuration to your Docker image via environment variables. For example:
+
+```python
+config = ServerlessEndpoint(
+    name="vllm-worker",
+    imageName="runpod/worker-vllm:stable-cuda12.1.0",
+    env={
+        "MODEL_NAME": "meta-llama/Llama-3.2-3B-Instruct",
+        "MAX_MODEL_LEN": "8192",
+        "HF_TOKEN": "hf_...",  # For gated models
+        "TRUST_REMOTE_CODE": "True"
+    }
+)
+```
+
+## Explicit provisioning
+
+If it doesn't already exist, you'll need to provision the endpoint before you can make requests. For example:
+
+```python
+from runpod_flash import ResourceManager
+
+async def main():
+    manager = ResourceManager()
+    deployed = await manager.get_or_deploy_resource(config)
+
+    print(f"Endpoint ID: {deployed.id}")
+    print(f"Endpoint URL: {deployed.endpoint_url}")
+
+    # Now make requests
+    result = await deployed.run({"input": {...}})
+```
+
+## Request/response format
+
+### Request structure
+
+All requests must use the format `{"input": {...}}`. For example:
+
+```python
+{
+    "input": {
+        # Your worker-specific parameters
+        "param1": "value1",
+        "param2": "value2"
+    }
+}
+```
+
+### Response structure
+
+The response is a `JobOutput` object with these attributes:
+
+```python
+result.id              # Job ID
+result.workerId        # Worker that processed the request
+result.status          # COMPLETED, IN_PROGRESS, FAILED
+result.delayTime       # Queue delay in ms
+result.executionTime   # Execution time in ms
+result.output          # Worker response (structure varies by worker)
+result.error           # Error message if failed
+```
+
+Extract data from `result.output` based on your worker's output format.
+
+
+
+## Limitations
+
+- **Input format**: Only supports dictionary payloads `{"input": {...}}`. You cannot pass arbitrary Python arguments like with `LiveServerless`.
+- **Code execution**: Cannot execute arbitrary Python code remotely. Your Docker image must include all logic.
+- **@remote decorator**: The `@remote` decorator does not work with `ServerlessEndpoint`. Use `.run()` directly.
+- **Handler required**: Your Docker image must implement a Runpod Serverless [handler function](/serverless/workers/handler-functions).
+
+## Troubleshooting
+
+### Endpoint fails to initialize
+
+**Problem**: Workers fail to start or crash immediately.
+
+**Solutions**:
+- Check that your Docker image is compatible with [Runpod Serverless](/serverless/overview)
+- Verify environment variables are correct
+- Ensure the image includes a valid handler function
+- Check worker logs in the Runpod console
+
+### Out of memory errors
+
+**Problem**: Workers crash with CUDA OOM or RAM errors.
+
+**Solutions**:
+- Use a larger GPU: `gpus=[GpuGroup.AMPERE_80]`
+- Reduce `GPU_MEMORY_UTILIZATION` (for vLLM/ML frameworks)
+- Lower `MAX_MODEL_LEN` or batch size
+- Reduce `workersMax` to limit parallel execution
+
+### Wrong response format
+
+**Problem**: Cannot extract data from `result.output`.
+
+**Solutions**:
+- Check your worker's documentation for response format
+- Print the full `result` to see the structure
+- Look at worker logs for errors
+
+### Authentication errors
+
+**Problem**: Cannot download gated models or private images.
+
+**Solutions**:
+- Add `HF_TOKEN` to `env` for Hugging Face gated models
+- Configure Docker registry authentication in Runpod console for private images
+- Verify API keys are correct
+
+## Next steps
+
+- [View the resource configuration reference](/flash/resource-configuration) for all `ServerlessEndpoint` options
+- [Learn about vLLM deployment](/serverless/vllm/overview) for LLM inference
+- [Build custom Serverless workers](/serverless/workers/overview) for specialized use cases
+- [Create Flash apps](/flash/apps/build-app) combining custom images with FastAPI
