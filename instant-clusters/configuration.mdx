@@ -1,0 +1,113 @@
+---
+title: "Configuration reference"
+sidebarTitle: "Configuration"
+description: "Environment variables, network interfaces, and NCCL configuration for Instant Clusters."
+---
+
+This page provides reference information for configuring and troubleshooting Instant Clusters.
+
+## Environment variables
+
+The following environment variables are automatically set on all nodes in an Instant Cluster:
+
+| Environment Variable           | Description                                                                   |
+| ------------------------------ | ----------------------------------------------------------------------------- |
+| `PRIMARY_ADDR` / `MASTER_ADDR` | The address of the primary node.                                               |
+| `PRIMARY_PORT` / `MASTER_PORT` | The port of the primary node. All ports are available.                        |
+| `NODE_ADDR`                    | The static IP of this node within the cluster network.                         |
+| `NODE_RANK`                    | The cluster rank (i.e. global rank) assigned to this node. `NODE_RANK = 0` for the primary node. |
+| `NUM_NODES`                    | The number of nodes in the cluster.                                            |
+| `NUM_TRAINERS`                 | The number of GPUs per node.                                                   |
+| `HOST_NODE_ADDR`               | A convenience variable, defined as `PRIMARY_ADDR:PRIMARY_PORT`.                       |
+| `WORLD_SIZE`                   | The total number of GPUs in the cluster (`NUM_NODES` * `NUM_TRAINERS`).      |
+
+Each node receives a static IP address (`NODE_ADDR`) on the overlay network. When a cluster is deployed, the system designates one node as the primary node by setting the `PRIMARY_ADDR` and `PRIMARY_PORT` environment variables. This simplifies working with multiprocessing libraries that require a primary node.
+
+The following variables are equivalent:
+- `MASTER_ADDR` and `PRIMARY_ADDR`
+- `MASTER_PORT` and `PRIMARY_PORT`
+
+`MASTER_*` variables are available to provide compatibility with tools that expect these legacy names.
+
+## Network interfaces
+
+Instant Clusters use dedicated high-bandwidth network interfaces for inter-node communication, separate from the management interface used for external traffic.
+
+| Interface | Purpose |
+| --------- | ------- |
+| `ens1` - `ens8` | High-bandwidth interfaces for inter-node communication. Each interface provides a private network connection. |
+| `eth0` | Management interface for external traffic (internet connectivity). |
+
+Instant Clusters support up to 8 high-bandwidth interfaces per node. The `PRIMARY_ADDR` environment variable corresponds to `ens1`, which enables launching and bootstrapping distributed processes.
+
+<Warning>
+Do not use `eth0` for inter-node communication. The 172.xxx IP addresses on `eth0` are reserved for internet connectivity only and will result in connection timeouts for distributed workloads.
+</Warning>
+
+## NCCL configuration
+
+[NCCL](https://developer.nvidia.com/nccl) (NVIDIA Collective Communications Library) handles GPU-to-GPU communication in distributed training. You must configure NCCL to use the internal network interfaces.
+
+### Required configuration
+
+Set the `NCCL_SOCKET_IFNAME` environment variable to use the internal network:
+
+```bash
+export NCCL_SOCKET_IFNAME=ens1
+```
+
+By default, `NCCL_SOCKET_IFNAME` uses all available interfaces. However, explicitly setting it to `ens1` ensures NCCL uses the high-bandwidth internal network.
+
+<Warning>
+Without this configuration, nodes may attempt to communicate using external IP addresses in the 172.xxx range, which are reserved for internet connectivity only. This will result in connection timeouts and failed distributed training jobs.
+</Warning>
+
+### Debugging NCCL
+
+To troubleshoot multi-node communication issues, enable NCCL debug logging:
+
+```bash
+export NCCL_DEBUG=INFO
+```
+
+This outputs detailed information about NCCL's network discovery and communication attempts, helping identify configuration issues.
+
+## Troubleshooting
+
+### Connection timeouts during distributed training
+
+**Symptom:** Training jobs fail with connection timeout errors between nodes.
+
+**Cause:** NCCL is attempting to communicate over the external network interface (`eth0`) instead of the internal interfaces (`ens1`-`ens8`).
+
+**Solution:** Set the `NCCL_SOCKET_IFNAME` environment variable:
+
+```bash
+export NCCL_SOCKET_IFNAME=ens1
+```
+
+### Nodes cannot find the primary node
+
+**Symptom:** Worker nodes fail to connect to the primary node during initialization.
+
+**Cause:** The `PRIMARY_ADDR` or `MASTER_ADDR` environment variable is not being used correctly in your distributed training script.
+
+**Solution:** Verify your script uses the `PRIMARY_ADDR` environment variable for the rendezvous address. For PyTorch distributed training:
+
+```python
+import os
+
+master_addr = os.environ.get("PRIMARY_ADDR", "localhost")
+master_port = os.environ.get("PRIMARY_PORT", "29500")
+```
+
+### Inconsistent training performance
+
+**Symptom:** Training speed varies significantly between runs or degrades over time.
+
+**Cause:** Network congestion or suboptimal NCCL configuration.
+
+**Solution:**
+1. Ensure all nodes are in the same data center (Runpod handles this automatically).
+2. Enable NCCL debugging to identify bottlenecks: `export NCCL_DEBUG=INFO`
+3. Verify your batch sizes are appropriate for the cluster size to maintain efficient GPU utilization.
