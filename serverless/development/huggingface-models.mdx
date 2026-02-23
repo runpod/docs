@@ -1,0 +1,201 @@
+---
+title: "Use Hugging Face models"
+sidebarTitle: "Hugging Face models"
+description: "Learn how to integrate pre-trained Hugging Face models into your Serverless handler functions."
+---
+
+import { HandlerFunctionTooltip, WorkerTooltip, ServerlessTooltip } from "/snippets/tooltips.jsx";
+
+Hugging Face provides thousands of pre-trained models for natural language processing, computer vision, audio processing, and more. You can integrate these models into your <HandlerFunctionTooltip /> to deploy AI capabilities without training models from scratch.
+
+This guide shows you how to load and use Hugging Face models in your Serverless handlers, using sentiment analysis as an example that you can adapt for other model types.
+
+<Tip>
+**Use cached models for production:** The approach shown in this guide downloads models when workers start, which increases cold start times and costs. For production, use [cached models](/serverless/endpoints/model-caching) instead. Cached models reduce cold starts to just a few seconds and eliminate charges for model download time. See the [cached model tutorial](/tutorials/serverless/model-caching-text) for a complete example.
+</Tip>
+
+## Install dependencies
+
+Your handler needs the `transformers` library to load Hugging Face models, and `torch` to run inference. Install both in your development environment:
+
+```bash
+pip install torch transformers
+```
+
+When deploying to Runpod, you'll need to include these dependencies in your [Dockerfile](/serverless/workers/create-dockerfile) or requirements file.
+
+## Create your handler
+
+Create a file named `handler.py` and follow these steps to build a handler that performs sentiment analysis using a Hugging Face model.
+
+<Steps>
+  <Step title="Import libraries">
+    Start by importing the necessary libraries:
+
+    ```python handler.py
+    import runpod
+    from transformers import pipeline
+    ```
+
+    The `pipeline` function from the `transformers` library provides a simple interface for using pre-trained models. It handles tokenization, model inference, and post-processing automatically.
+
+    <Warning>
+    The `pipeline` approach shown in this guide is convenient for local testing and development. For production endpoints, you should use [cached models](/serverless/endpoints/model-caching) instead, which dramatically reduce cold start times and eliminate charges for model download time.
+    </Warning>
+  </Step>
+
+  <Step title="Load the model efficiently">
+    Load your model outside the handler function to avoid reloading it on every request. This significantly improves performance by initializing the model only once when the <WorkerTooltip /> starts:
+
+    ```python handler.py
+    # Load model once when worker starts
+    model = pipeline(
+        "sentiment-analysis",
+        model="distilbert-base-uncased-finetuned-sst-2-english"
+    )
+    ```
+
+    The `pipeline` function takes two arguments: the task type (like `"sentiment-analysis"`, `"text-generation"`, or `"image-classification"`) and the specific model identifier from the Hugging Face model hub.
+  </Step>
+
+  <Step title="Define the handler function">
+    Create a handler function that extracts input text from the request, validates it, runs inference, and returns results:
+
+    ```python handler.py
+    def handler(job):
+        # Extract input from the job
+        job_input = job["input"]
+        text = job_input.get("text")
+
+        # Validate input
+        if not text:
+            return {"error": "No text provided for analysis."}
+
+        # Run inference
+        result = model(text)[0]
+
+        # Return formatted results
+        return {
+            "sentiment": result["label"],
+            "score": float(result["score"])
+        }
+    ```
+
+    The handler follows Runpod's standard pattern: extract input, validate it, process it, and return results. The model returns a list of predictions, so we take the first result with `[0]` and extract the label and confidence score.
+  </Step>
+
+  <Step title="Start the Serverless worker">
+    Add this line at the end of your file to register the handler and start the worker:
+
+    ```python handler.py
+    runpod.serverless.start({"handler": handler})
+    ```
+  </Step>
+</Steps>
+
+### Complete implementation
+
+Here's the complete code:
+
+```python handler.py
+import runpod
+from transformers import pipeline
+
+# Load model once when worker starts
+model = pipeline(
+    "sentiment-analysis",
+    model="distilbert-base-uncased-finetuned-sst-2-english"
+)
+
+def handler(job):
+    # Extract input from the job
+    job_input = job["input"]
+    text = job_input.get("text")
+
+    # Validate input
+    if not text:
+        return {"error": "No text provided for analysis."}
+
+    # Run inference
+    result = model(text)[0]
+
+    # Return formatted results
+    return {
+        "sentiment": result["label"],
+        "score": float(result["score"])
+    }
+
+runpod.serverless.start({"handler": handler})
+```
+
+## Test locally
+
+Create a test input file to verify your handler works correctly:
+
+```json test_input.json
+{
+  "input": {
+    "text": "This is absolutely wonderful and amazing!"
+  }
+}
+```
+
+Run your handler locally using the Runpod SDK:
+
+```bash
+python handler.py --rp_server_api
+```
+
+You should see output indicating successful sentiment analysis:
+
+```bash
+--- Starting Serverless Worker |  Version 1.6.2 ---
+INFO   | Using test_input.json as job input.
+DEBUG  | Retrieved local job: {'input': {'text': 'This is absolutely wonderful and amazing!'}, 'id': 'local_test'}
+INFO   | local_test | Started.
+DEBUG  | local_test | Handler output: {'sentiment': 'POSITIVE', 'score': 0.999880313873291}
+INFO   | Job local_test completed successfully.
+```
+
+The first time you run this, Hugging Face will download the model files. Subsequent runs will use the cached model.
+
+## Adapt for other models
+
+This pattern works for any Hugging Face model. To use a different model:
+
+1. **Choose your model**: Browse the [Hugging Face model hub](https://huggingface.co/models) to find a model for your task.
+
+2. **Update the pipeline**: Change the task type and model identifier:
+
+   ```python
+   # Text generation example
+   model = pipeline("text-generation", model="gpt2")
+
+   # Image classification example
+   model = pipeline("image-classification", model="google/vit-base-patch16-224")
+
+   # Translation example
+   model = pipeline("translation_en_to_fr", model="t5-base")
+   ```
+
+3. **Adjust input/output handling**: Different models expect different input formats and return different output structures. Check the model's documentation on Hugging Face to understand its API.
+
+## Production deployment
+
+When deploying Hugging Face models to production endpoints, follow these best practices:
+
+- **Use cached models**: The approach shown in this guide downloads models when workers start, which increases cold start times and costs. For production, use [cached models](/serverless/endpoints/model-caching) instead. Cached models reduce cold starts to just a few seconds and eliminate charges for model download time. See the [cached model tutorial](/tutorials/serverless/model-caching-text) for a complete example.
+
+- **Model size**: Larger models require more VRAM and take longer to load. Choose the smallest model that meets your accuracy requirements.
+
+- **GPU utilization**: Most Hugging Face models run faster on GPUs. Ensure your endpoint uses GPU workers for optimal performance.
+
+- **Batch processing**: If your model supports batching, process multiple inputs together to improve throughput.
+
+## Next steps
+
+- **For production**: Learn about [cached models](/serverless/endpoints/model-caching) and follow the [cached model tutorial](/tutorials/serverless/model-caching-text) to improve cold start times and reduce costs.
+- [Create a Dockerfile](/serverless/workers/create-dockerfile) to package your handler with its dependencies.
+- [Deploy your worker](/serverless/workers/deploy) to a Runpod endpoint.
+- Explore [optimization techniques](/serverless/development/optimization) to improve performance.
+- Learn about [error handling](/serverless/development/error-handling) for production deployments.
