@@ -315,6 +315,140 @@ Result mean: 500.1321
 Result standard deviation: 9.8879
 ```
 
+## Step 11: Use transformers for text generation
+
+Flash makes it easy to use popular machine learning libraries like Hugging Face transformers. This example shows how to run a pretrained language model on a GPU to generate text.
+
+Create a new file called `transformers_example.py`:
+
+```python
+import asyncio
+from dotenv import load_dotenv
+from runpod_flash import remote, LiveServerless, GpuGroup
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Configuration for a Serverless endpoint using GPU workers
+gpu_config = LiveServerless(
+    gpus=[GpuGroup.AMPERE_24, GpuGroup.ADA_24],  # Use any 24GB GPU
+    workersMax=3,
+    name="flash_transformers",
+)
+
+
+@remote(
+    resource_config=gpu_config,
+    dependencies=["transformers", "torch", "accelerate"]
+)
+def generate_text(prompt, max_length=50):
+    """Generate text using a pretrained language model from Hugging Face transformers."""
+    import torch
+    from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    # Load a small GPT-2 model for demonstration
+    model_name = "gpt2"
+
+    # Check GPU availability
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
+
+    # Load tokenizer and model
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(model_name).to(device)
+
+    # Tokenize input
+    inputs = tokenizer(prompt, return_tensors="pt").to(device)
+
+    # Generate text
+    with torch.no_grad():
+        outputs = model.generate(
+            **inputs,
+            max_length=max_length,
+            num_return_sequences=1,
+            temperature=0.7,
+            do_sample=True,
+            pad_token_id=tokenizer.eos_token_id
+        )
+
+    # Decode the generated text
+    generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+    return {
+        "prompt": prompt,
+        "generated_text": generated_text,
+        "model_name": model_name,
+        "device": device,
+        "device_name": device_name,
+        "max_length": max_length
+    }
+
+
+async def main():
+    # Run text generation on GPU
+    print("Starting text generation with transformers on GPU...")
+
+    prompt = "The future of artificial intelligence is"
+    result = await generate_text(prompt, max_length=100)
+
+    # Print the results
+    print("\nText generation results:")
+    print(f"Prompt: {result['prompt']}")
+    print(f"Generated text: {result['generated_text']}")
+    print(f"\nModel: {result['model_name']}")
+    print(f"Device: {result['device']}")
+    print(f"GPU: {result['device_name']}")
+    print(f"Max length: {result['max_length']}")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+This example demonstrates several advanced features:
+
+- Using the Hugging Face transformers library with Flash by including it in the `dependencies` list.
+- Loading a pretrained model (`gpt2`) inside the remote function.
+- Moving the model to the GPU using `.to(device)` for faster inference.
+- Generating text with customizable parameters like `max_length` and `temperature`.
+- Returning both the generated text and metadata about the execution.
+
+The `generate_text` function:
+
+- Loads the GPT-2 model and tokenizer from Hugging Face.
+- Checks for GPU availability and uses it if available.
+- Tokenizes the input prompt and generates text using the model.
+- Returns the generated text along with information about the model and device used.
+
+Run the example:
+
+```bash
+python transformers_example.py
+```
+
+You should see output similar to this:
+
+```text
+Starting text generation with transformers on GPU...
+Resource LiveServerless_8a3c9f2d1b4e7a6c88e5f932e421d7b8 already exists, reusing.
+Registering RunPod endpoint: server_LiveServerless_8a3c9f2d1b4e7a6c88e5f932e421d7b8 at https://api.runpod.ai/abc123xyz
+Initialized RunPod stub for endpoint: https://api.runpod.ai/abc123xyz (ID: abc123xyz)
+Executing function on RunPod endpoint ID: abc123xyz
+Initial job status: IN_QUEUE
+Job completed, output received
+
+Text generation results:
+Prompt: The future of artificial intelligence is
+Generated text: The future of artificial intelligence is bright and full of possibilities. With advancements in machine learning and deep learning, we're seeing AI systems that can understand natural language, recognize images, and even create art. The potential applications are endless, from healthcare to transportation to education.
+
+Model: gpt2
+Device: cuda
+GPU: NVIDIA GeForce RTX 4090
+Max length: 100
+```
+
+The first time you run this example, Flash will need to download the model weights (about 500MB for GPT-2), which may take a minute or two. Subsequent runs will be faster because the model is cached on the worker.
+
 ## Clean up
 
 When you're done testing, you can clean up the endpoints created during this tutorial. Use the [`flash undeploy`](/flash/cli/undeploy) command to remove development endpoints:
