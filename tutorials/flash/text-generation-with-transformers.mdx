@@ -1,10 +1,11 @@
 ---
 title: "Generate text with Flash and transformers"
-sidebarTitle: "Generate text with Flash + transformers"
+sidebarTitle: "Generate text"
 description: "Learn how to use Flash with Hugging Face transformers to build a GPU-accelerated text generation application."
+tag: "BETA"
 ---
 
-This tutorial shows you how to build a text generation application using Flash and Hugging Face's transformers library. You'll learn how to load a pretrained language model on a GPU worker and generate text from prompts.
+This tutorial shows you how to build a text generation script using Flash and Hugging Face's transformers library. You'll learn how to load a pretrained language model on a GPU worker and generate text from prompts.
 
 ## What you'll learn
 
@@ -161,44 +162,56 @@ def generate_text(prompt, max_length=50):
     }
 ```
 
-**Key concepts**:
+This function:
+- Loads the GPT-2 model from Hugging Face.
+- Moves the model to the GPU.
+- Tokenizes the input prompt.
+- Generates text from the prompt.
+- Decodes the generated tokens back to text.
+- Returns the generated text and other metadata.
 
-**1. Dependencies**: The function requires three packages:
+Expand this section for a full breakdown:
+
+<Accordion title="Code breakdown">
+
+**Dependencies**: The function requires three packages:
    - `transformers`: Hugging Face library for language models
    - `torch`: PyTorch for GPU computation
    - `accelerate`: Helper library for loading large models efficiently
 
-**2. Model loading**:
+**Model loading**:
    ```python
    tokenizer = AutoTokenizer.from_pretrained(model_name)
    model = AutoModelForCausalLM.from_pretrained(model_name)
    ```
    These lines download and load the GPT-2 model from Hugging Face Hub. The first time this runs, it downloads ~500MB of model weights. Subsequent runs use the cached version.
 
-**3. GPU acceleration**:
+**GPU acceleration**:
    ```python
    device = "cuda" if torch.cuda.is_available() else "cpu"
    model = model.to(device)
    ```
    This moves the model to GPU for faster inference. On Runpod workers, `torch.cuda.is_available()` returns `True`.
 
-**4. Tokenization**:
+**Tokenization**:
    ```python
    inputs = tokenizer(prompt, return_tensors="pt").to(device)
    ```
    Converts your text prompt into token IDs that the model understands. The `.to(device)` moves these tokens to GPU memory.
 
-**5. Generation parameters**:
+**Generation parameters**:
    - `max_length=50`: Maximum number of tokens to generate
    - `temperature=0.7`: Controls randomness (0.0 = deterministic, 1.0+ = very random)
    - `do_sample=True`: Use sampling instead of greedy decoding for more diverse outputs
    - `num_return_sequences=1`: Generate one completion per prompt
 
-**6. No gradient tracking**:
+**No gradient tracking**:
    ```python
    with torch.no_grad():
    ```
    Disables gradient computation, reducing memory usage and speeding up inference.
+
+</Accordion>
 
 ## Step 6: Add the main function
 
@@ -330,11 +343,11 @@ You'll see three different completions generated sequentially on the same GPU wo
 
 ### Model download fails
 
-**Issue**: `Error: Failed to download model from Hugging Face`
+**Issue**: `Error: Failed to download model from Hugging Face`.
 
 **Solutions**:
-1. Check internet connectivity from workers (rare issue on Runpod)
-2. Try a different model that might be available faster
+1. Check internet connectivity from workers (rare issue on Runpod).
+2. Try a different model that might be available faster.
 3. Increase execution timeout in configuration:
    ```python
    gpu_config = LiveServerless(
@@ -345,11 +358,11 @@ You'll see three different completions generated sequentially on the same GPU wo
 
 ### Out of memory error
 
-**Issue**: `RuntimeError: CUDA out of memory`
+**Issue**: `RuntimeError: CUDA out of memory`.
 
 **Solutions**:
-1. Use smaller models (GPT-2 instead of GPT-2 Large)
-2. Reduce `max_length` parameter
+1. Use smaller models (GPT-2 instead of GPT-2 Large).
+2. Reduce `max_length` parameter.
 3. Use larger GPUs:
    ```python
    gpus=[GpuGroup.AMPERE_48]  # 48GB GPUs
@@ -357,24 +370,24 @@ You'll see three different completions generated sequentially on the same GPU wo
 
 ### Slow generation
 
-**Issue**: Text generation takes >30 seconds per request
+**Issue**: Text generation takes >30 seconds per request.
 
 **Possible causes**:
-1. Worker scaled down (cold start)
-2. Model not cached
-3. Large `max_length` value
+1. Worker scaled down (cold start).
+2. Model not cached.
+3. Large `max_length` value.
 
 **Solutions**:
 1. Increase `idleTimeout` to keep workers active:
    ```python
    idleTimeout=30  # Keep active for 30 minutes
    ```
-2. Set `workersMin=1` to always have a warm worker ready
-3. Reduce `max_length` to generate fewer tokens
+2. Set `workersMin=1` to always have a warm worker ready.
+3. Reduce `max_length` to generate fewer tokens.
 
 ### Generation quality is poor
 
-**Issue**: Generated text is incoherent or repetitive
+**Issue**: Generated text is incoherent or repetitive.
 
 **Solutions**:
 1. Adjust `temperature` (try 0.7-0.9)
@@ -389,11 +402,11 @@ You'll see three different completions generated sequentially on the same GPU wo
        do_sample=True
    )
    ```
-3. Try a larger model (GPT-2 Medium or Large)
+3. Try a larger model (GPT-2 Medium or Large).
 
 ## Next steps
 
-Now that you've built a text generation app with Flash, you can:
+Now that you've built a text generation script with Flash, you can:
 
 ### Explore other models
 
@@ -437,14 +450,14 @@ flash deploy
 
 ### Optimize performance
 
-- Use [network volumes](/flash/managing-endpoints) to cache models across workers.
+- Use [network volumes](/storage/network-volumes) to cache models across workers.
 - Implement [request batching](/flash/remote-functions#parallel-execution) for higher throughput.
 - Try [quantized models](https://huggingface.co/docs/transformers/main_classes/quantization) for faster inference.
 
 ## Related resources
 
-- [Flash remote functions guide](/flash/remote-functions)
-- [Flash resource configuration](/flash/resource-configuration)
-- [Managing Flash endpoints](/flash/managing-endpoints)
-- [Hugging Face transformers documentation](https://huggingface.co/docs/transformers/index)
-- [Hugging Face model hub](https://huggingface.co/models)
+- [Flash remote functions guide](/flash/remote-functions).
+- [Flash resource configuration](/flash/resource-configuration).
+- [Managing Flash endpoints](/flash/managing-endpoints).
+- [Hugging Face transformers documentation](https://huggingface.co/docs/transformers/index).
+- [Hugging Face model hub](https://huggingface.co/models).
