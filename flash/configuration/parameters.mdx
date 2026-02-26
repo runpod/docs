@@ -1,0 +1,590 @@
+---
+title: "Configuration parameter reference"
+sidebarTitle: "Parameter reference"
+description: "Complete reference for all Flash configuration parameters."
+tag: "BETA"
+---
+
+This page provides a complete reference for all parameters available across Flash configuration classes.
+
+## Common parameters
+
+These parameters are available on all configuration classes (`LiveServerless`, `CpuLiveServerless`, `LiveLoadBalancer`, `CpuLiveLoadBalancer`, `ServerlessEndpoint`, `CpuServerlessEndpoint`):
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `name` | `string` | Name for your endpoint (required, visible in console) | - |
+| `workersMin` | `int` | Minimum number of workers (always running) | 0 |
+| `workersMax` | `int` | Maximum number of workers (scaling limit) | 3 |
+| `idleTimeout` | `int` | Minutes before scaling down idle workers | 5 |
+| `env` | `dict` | Environment variables as key-value pairs | `None` |
+| `networkVolumeId` | `string` | Persistent storage [network volume](/storage/network-volumes) ID | `None` |
+| `executionTimeoutMs` | `int` | Maximum execution time in milliseconds (0 = no limit) | 0 |
+| `scalerType` | `string` | Scaling strategy algorithm | `QUEUE_DELAY` |
+| `scalerValue` | `int` | Scaling parameter value (jobs per worker threshold) | 4 |
+| `locations` | `string` | Preferred datacenter locations (comma-separated) | `None` |
+| `template` | `PodTemplate` | Pod template overrides for advanced configuration | `None` |
+
+## GPU-specific parameters
+
+These parameters are available on GPU configurations (`LiveServerless`, `LiveLoadBalancer`, `ServerlessEndpoint`):
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `gpus` | `list[GpuGroup \| GpuType]` | GPU pools or specific GPU types that can be used by workers | `[GpuGroup.ANY]` |
+| `gpuCount` | `int` | Number of GPUs per worker | 1 |
+
+### GPU selection
+
+The `gpus` parameter accepts a list of `GpuGroup` (pools) or `GpuType` (specific GPUs), or a mix of both. Flash attempts to provision workers in the order specified:
+
+**Using GPU pools (recommended):**
+
+```python
+from runpod_flash import LiveServerless, GpuGroup
+
+# Single GPU pool
+config = LiveServerless(
+    name="specific-pool",
+    gpus=[GpuGroup.AMPERE_80]  # Any A100 80GB variant
+)
+
+# Fallback strategy with pools
+config = LiveServerless(
+    name="flexible-gpu",
+    gpus=[
+        GpuGroup.AMPERE_80,  # Try A100 first
+        GpuGroup.AMPERE_48,  # Then A40/A6000
+        GpuGroup.ADA_24      # Finally RTX 4090
+    ]
+)
+
+# Any available (fastest provisioning)
+config = LiveServerless(
+    name="any-gpu",
+    gpus=[GpuGroup.ANY]  # Default
+)
+```
+
+**Using specific GPU types:**
+
+```python
+from runpod_flash import LiveServerless, GpuType
+
+# Single specific GPU
+config = LiveServerless(
+    name="specific-gpu",
+    gpus=[GpuType.NVIDIA_A100_80GB_PCIe]  # Only A100 PCIe variant
+)
+
+# Fallback with specific GPUs
+config = LiveServerless(
+    name="specific-fallback",
+    gpus=[
+        GpuType.NVIDIA_A100_80GB_PCIe,
+        GpuType.NVIDIA_A100_SXM4_80GB,
+        GpuType.NVIDIA_A40
+    ]
+)
+```
+
+**Mixing pools and specific types:**
+
+```python
+from runpod_flash import LiveServerless, GpuGroup, GpuType
+
+# Combine pools and specific GPUs
+config = LiveServerless(
+    name="hybrid-selection",
+    gpus=[
+        GpuType.NVIDIA_H100_80GB_HBM3,  # Try H100 specifically
+        GpuGroup.AMPERE_80,             # Then any A100
+        GpuGroup.ANY                     # Ultimate fallback
+    ]
+)
+```
+
+See [GPU types reference](/flash/configuration/gpu-types) for all available GPU pools and specific types.
+
+### Multi-GPU workers
+
+Use `gpuCount` to request multiple GPUs per worker:
+
+```python
+config = LiveServerless(
+    name="multi-gpu-training",
+    gpus=[GpuGroup.AMPERE_80],
+    gpuCount=4,  # Each worker gets 4 GPUs
+    workersMax=2  # Maximum 2 workers = 8 GPUs total
+)
+```
+
+## CPU-specific parameters
+
+These parameters are available on CPU configurations (`CpuLiveServerless`, `CpuLiveLoadBalancer`, `CpuServerlessEndpoint`):
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `instanceIds` | `list[CpuInstanceType]` | CPU instance types (forces CPU endpoint) | Default instances |
+
+### CPU instance selection
+
+The `instanceIds` parameter accepts a list of `CpuInstanceType` enums:
+
+```python
+from runpod_flash import CpuLiveServerless, CpuInstanceType
+
+# Single instance type
+config = CpuLiveServerless(
+    name="cpu-worker",
+    instanceIds=[CpuInstanceType.CPU5C_4_8]  # 4 vCPU, 8GB RAM
+)
+
+# Fallback strategy
+config = CpuLiveServerless(
+    name="flexible-cpu",
+    instanceIds=[
+        CpuInstanceType.CPU5C_8_16,  # Try first: 8 vCPU, 16GB
+        CpuInstanceType.CPU5C_4_8,   # Then: 4 vCPU, 8GB
+        CpuInstanceType.CPU3G_4_16   # Finally: 3rd gen, 4 vCPU, 16GB
+    ]
+)
+```
+
+See [CPU types reference](/flash/configuration/cpu-types) for all available CPU instance types.
+
+## Load balancing parameters
+
+Load balancing configurations support all common parameters. The key difference is that `@remote` functions require `method=` and `path=` parameters:
+
+```python
+from runpod_flash import CpuLiveLoadBalancer, remote
+
+config = CpuLiveLoadBalancer(
+    name="api-server",
+    workersMin=1,
+    workersMax=10
+)
+
+# method= and path= are required for load balancer routes
+@remote(resource_config=config, method="POST", path="/process")
+async def process_data(data: dict) -> dict:
+    return {"result": "processed"}
+
+@remote(resource_config=config, method="GET", path="/health")
+async def health() -> dict:
+    return {"status": "healthy"}
+```
+
+See [load balancing configurations](/flash/configuration/load-balancing) for complete usage guide.
+
+## Parameter details
+
+<ResponseField name="name" type="string" required>
+The endpoint name visible in the Runpod console. While the name helps you identify endpoints, it doesn't determine endpoint identity - configuration hashing does.
+
+```python
+config = LiveServerless(
+    name="ml-inference-prod"  # Appears in console
+)
+```
+
+In the console, endpoints appear with auto-generated identifiers like `server_LiveServerless_[id]`.
+
+<Tip>
+Use descriptive names like `image-generation-prod` or `batch-processor-dev` to easily identify endpoints in the [Runpod console](https://www.runpod.io/console/serverless).
+</Tip>
+</ResponseField>
+
+<ResponseField name="workersMin" type="int" default="0">
+Minimum number of workers that remain active. Workers above this minimum will scale down after `idleTimeout`.
+
+```python
+# Cost-optimized: scale to zero when idle
+config = LiveServerless(name="batch-job", workersMin=0)
+
+# Latency-optimized: always keep workers ready
+config = LiveServerless(name="api", workersMin=2)
+```
+
+**Recommendations**:
+- Set to `0` for cost optimization (allows scale to zero).
+- Set to `1+` for low latency (avoids cold starts).
+- For load balancers, set `≥ 1` to ensure immediate API response.
+</ResponseField>
+
+<ResponseField name="workersMax" type="int" default="3">
+Maximum number of workers that can run concurrently. This caps your scaling and controls maximum costs.
+
+```python
+config = LiveServerless(
+    name="production-api",
+    workersMax=20  # Handle up to 20 concurrent jobs
+)
+```
+
+**Recommendations**:
+- Set based on expected peak load.
+- Consider cost implications (max workers × cost per worker).
+- For development, use low values (1-3) to limit expenses.
+</ResponseField>
+
+<ResponseField name="idleTimeout" type="int" default="5">
+Minutes workers stay active with no traffic before scaling down (to `workersMin`).
+
+```python
+# Quick scale-down for cost savings
+config = LiveServerless(name="batch", idleTimeout=5)
+
+# Keep workers longer for variable traffic
+config = LiveServerless(name="api", idleTimeout=30)
+```
+
+**Recommendations**:
+- `5-10 minutes`: Cost-optimized, infrequent traffic.
+- `15-30 minutes`: Balanced, variable traffic patterns.
+- `30-60 minutes`: Latency-optimized, consistent traffic.
+</ResponseField>
+
+<ResponseField name="env" type="dict">
+Environment variables passed to all workers. Useful for configuration, API keys, and feature flags.
+
+```python
+config = LiveServerless(
+    name="ml-worker",
+    env={
+        "HF_TOKEN": "your_huggingface_token",
+        "MODEL_ID": "gpt2",
+        "LOG_LEVEL": "INFO",
+        "FEATURE_FLAG_NEW_MODEL": "true"
+    }
+)
+```
+
+<Note>
+You can change environment variables without recreating workers. This makes it easy to rotate API keys or allow different developers to use their own .env files.
+</Note>
+
+Access environment variables in your remote functions:
+
+```python
+@remote(resource_config=config)
+async def my_function():
+    import os
+    token = os.getenv("HF_TOKEN")
+    model_id = os.getenv("MODEL_ID")
+    # Use in your logic
+```
+</ResponseField>
+
+<ResponseField name="networkVolumeId" type="string">
+ID of a [network volume](/storage/network-volumes) to attach to workers. Volumes are mounted at `/runpod-volume/` and persist across workers.
+
+```python
+config = LiveServerless(
+    name="model-server",
+    networkVolumeId="vol_abc123"
+)
+```
+
+**Use cases**:
+- Share large models across workers (avoid downloading each time).
+- Persist data between runs.
+- Share datasets across multiple endpoints.
+
+```python
+@remote(resource_config=config, dependencies=["transformers"])
+async def load_model():
+    from transformers import AutoModel
+
+    # Model loaded from persistent storage
+    model = AutoModel.from_pretrained("/runpod-volume/models/bert-base")
+    return {"status": "loaded"}
+```
+
+See the [storage guide](/flash/configuration/storage) for complete setup instructions and best practices.
+</ResponseField>
+
+<ResponseField name="executionTimeoutMs" type="int" default="0">
+Maximum execution time for a single job or request in milliseconds. `0` means no limit. Jobs exceeding this timeout are terminated.
+
+```python
+# 5 minute timeout
+config = LiveServerless(
+    name="training",
+    executionTimeoutMs=300000  # 5 * 60 * 1000
+)
+
+# 30 second timeout
+config = LiveServerless(
+    name="quick-inference",
+    executionTimeoutMs=30000
+)
+
+# No timeout
+config = LiveServerless(
+    name="long-job",
+    executionTimeoutMs=0  # Default
+)
+```
+
+**Recommendations**:
+- Set reasonable timeouts to prevent runaway jobs.
+- For APIs, use shorter timeouts (30-60 seconds).
+- For batch jobs, use longer timeouts or no limit.
+- Monitor execution times and adjust accordingly.
+</ResponseField>
+
+<ResponseField name="scalerType" type="string" default="QUEUE_DELAY">
+Scaling algorithm strategy. The default `QUEUE_DELAY` scales based on queue depth and delay.
+
+```python
+config = LiveServerless(
+    name="auto-scaler",
+    scalerType="QUEUE_DELAY"  # Default, recommended
+)
+```
+
+<Note>
+For most use cases, use the default `QUEUE_DELAY`. Other scaler types are advanced configurations.
+</Note>
+</ResponseField>
+
+<ResponseField name="scalerValue" type="int" default="4">
+Parameter value for the scaling algorithm. With `QUEUE_DELAY`, this represents the target number of jobs per worker before scaling up.
+
+```python
+# Scale up when > 4 jobs per worker in queue
+config = LiveServerless(
+    name="default-scaler",
+    scalerType="QUEUE_DELAY",
+    scalerValue=4  # Default
+)
+
+# More aggressive scaling (scale up sooner)
+config = LiveServerless(
+    name="responsive-scaler",
+    scalerValue=2  # Scale when > 2 jobs per worker
+)
+```
+</ResponseField>
+
+<ResponseField name="locations" type="string">
+Preferred datacenter locations for workers (comma-separated). Use location codes like `US-CA-1`, `EU-RO-1`.
+
+```python
+config = LiveServerless(
+    name="us-workers",
+    locations="US-CA-1,US-OR-1"  # Prefer US West locations
+)
+```
+
+<Note>
+This parameter hints at preferred locations but doesn't guarantee workers will run there. Availability depends on capacity.
+</Note>
+</ResponseField>
+
+<ResponseField name="template" type="PodTemplate">
+Advanced pod configuration overrides using `PodTemplate` class. See [PodTemplate reference](#podtemplate) below.
+
+```python
+from runpod_flash import LiveServerless, PodTemplate
+
+config = LiveServerless(
+    name="custom-template",
+    template=PodTemplate(
+        containerDiskInGb=100,
+        env=[{"key": "PYTHONPATH", "value": "/workspace"}]
+    )
+)
+```
+</ResponseField>
+
+## PodTemplate
+
+`PodTemplate` provides advanced pod configuration options:
+
+### Parameters
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `containerDiskInGb` | `int` | Container disk size in GB | 20 |
+| `env` | `list[dict]` | Environment variables as list of `{"key": "...", "value": "..."}` | `None` |
+
+### Example
+
+```python
+from runpod_flash import LiveServerless, PodTemplate
+
+config = LiveServerless(
+    name="custom-pod",
+    template=PodTemplate(
+        containerDiskInGb=100,  # 100GB container disk
+        env=[
+            {"key": "PYTHONPATH", "value": "/workspace"},
+            {"key": "CUDA_VISIBLE_DEVICES", "value": "0"}
+        ]
+    )
+)
+```
+
+<Tip>
+For simple environment variables, use the `env` parameter on the configuration class instead of `PodTemplate.env`. The `template.env` format is for advanced use cases requiring list-based configuration.
+</Tip>
+
+### containerDiskInGb
+
+**Type**: `int`
+**Default**: `20`
+
+Container disk size in GB. Increase this if your workload requires more disk space for temporary files, model downloads, or processing.
+
+```python
+# Large disk for model downloads
+template = PodTemplate(containerDiskInGb=100)
+
+# Default disk size
+template = PodTemplate(containerDiskInGb=20)
+```
+
+**Recommendations**:
+- Default (20GB): Sufficient for most workloads.
+- 50-100GB: Large model downloads or intermediate files.
+- 100GB+: Video processing, large datasets.
+
+## How configuration changes affect your endpoint
+
+When you change your configuration and redeploy, Flash automatically updates your existing endpoint. Understanding which changes require worker recreation helps you predict downtime and optimize deployments.
+
+### Changes that recreate workers
+
+These changes update your endpoint and restart all workers with the new configuration:
+
+- **GPU configuration**: Changing GPU types (`gpus`), GPU count (`gpuCount`), or instance types (`instanceIds`).
+- **Docker image**: Updating the container image (`imageName`).
+- **Storage**: Adding or changing network volumes (`networkVolumeId`).
+- **Hardware placement**: Modifying datacenter locations (`locations`).
+- **Boot configuration**: Toggling Flashboot (`flashboot`).
+
+Workers will be temporarily unavailable during recreation (typically 30-90 seconds).
+
+### Changes that update settings only
+
+These changes update your endpoint settings without recreating workers:
+
+- **Scaling limits**: Changing `workersMin` or `workersMax`.
+- **Scaling behavior**: Modifying `scalerType` or `scalerValue`.
+- **Timeouts**: Updating `idleTimeout` or `executionTimeoutMs`.
+- **Environment variables**: Changing any values in `env`.
+- **Display name**: Updating the `name` parameter.
+
+These updates apply immediately with no downtime.
+
+### Example
+
+```python
+# First deployment - creates endpoint
+config = LiveServerless(
+    name="inference-api",
+    gpus=[GpuGroup.AMPERE_80],
+    workersMax=5,
+    env={"MODEL": "v1"}
+)
+
+# Update scaling - no worker recreation
+config = LiveServerless(
+    name="inference-api",
+    gpus=[GpuGroup.AMPERE_80],  # Same GPU
+    workersMax=10,  # Changed - updates settings only
+    env={"MODEL": "v2"}  # Changed - updates settings only
+)
+# Result: Endpoint updated, existing workers continue running
+
+# Change GPU type - workers recreated
+config = LiveServerless(
+    name="inference-api",
+    gpus=[GpuGroup.ADA_24],  # Changed GPU type
+    workersMax=10,
+    env={"MODEL": "v2"}
+)
+# Result: Endpoint updated, all workers recreated with new GPU type
+```
+
+## Best practices
+
+### Production workloads
+
+```python
+config = LiveServerless(
+    name="production-inference",
+    gpus=[GpuGroup.AMPERE_80],  # Specific GPU, not ANY
+    workersMin=2,  # Always keep workers ready
+    workersMax=20,  # Allow scaling for bursts
+    idleTimeout=30,  # Keep workers longer
+    executionTimeoutMs=300000,  # 5 minute timeout
+    networkVolumeId="vol_abc123",  # Persistent storage
+    env={
+        "MODEL_PATH": "/runpod-volume/models",
+        "LOG_LEVEL": "INFO"
+    }
+)
+```
+
+### Development workloads
+
+```python
+config = LiveServerless(
+    name="dev-testing",
+    gpus=[GpuGroup.ANY],  # Fast provisioning
+    workersMin=0,  # Scale to zero
+    workersMax=2,  # Limit costs
+    idleTimeout=5,  # Quick scale-down
+    env={"LOG_LEVEL": "DEBUG"}
+)
+```
+
+### Cost-optimized batch processing
+
+```python
+config = LiveServerless(
+    name="batch-processor",
+    gpus=[GpuGroup.ADA_24],  # Cost-effective GPU
+    workersMin=0,  # No minimum workers
+    workersMax=10,  # Scale up as needed
+    idleTimeout=5,  # Scale down quickly
+    executionTimeoutMs=600000  # 10 minute timeout
+)
+```
+
+### Low-latency APIs
+
+```python
+config = LiveLoadBalancer(
+    name="realtime-api",
+    gpus=[GpuGroup.AMPERE_80, GpuGroup.ADA_24],
+    workersMin=3,  # Always ready
+    workersMax=15,  # Scale for load
+    idleTimeout=20,  # Keep workers longer
+    executionTimeoutMs=30000  # 30 second timeout
+)
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="GPU types" href="/flash/configuration/gpu-types" icon="microchip">
+    Available GPU pools and specific GPU types.
+  </Card>
+  <Card title="CPU types" href="/flash/configuration/cpu-types" icon="microchip">
+    Available CPU instance types.
+  </Card>
+  <Card title="Queue-based configurations" href="/flash/configuration/queue-based" icon="layer-group">
+    Usage guide for LiveServerless and CpuLiveServerless.
+  </Card>
+  <Card title="Load balancing configurations" href="/flash/configuration/load-balancing" icon="arrow-progress">
+    Usage guide for LiveLoadBalancer and CpuLiveLoadBalancer.
+  </Card>
+  <Card title="Create remote functions" href="/flash/remote-functions" icon="code">
+    Learn how to use @remote decorator with these configurations.
+  </Card>
+</CardGroup>

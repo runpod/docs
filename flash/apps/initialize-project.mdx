@@ -5,7 +5,9 @@ description: "Use flash init to create a new Flash project with a ready-to-use s
 tag: "BETA"
 ---
 
-The `flash init` command creates a new Flash project with a complete project structure, including a FastAPI server, example GPU and CPU workers, and configuration files. This gives you a working starting point for building Flash applications.
+import { LoadBalancingEndpointsTooltip, QueueBasedEndpointsTooltip } from "/snippets/tooltips.jsx";
+
+The `flash init` command creates a new Flash project with a complete project structure, including example <LoadBalancingEndpointsTooltip /> and <QueueBasedEndpointsTooltip />, and configuration files. This gives you a working starting point for building Flash applications.
 
 Use `flash init` whenever you want to start a new Flash project, fully configured for you to run `flash run` and `flash deploy`.
 
@@ -28,36 +30,31 @@ flash init .
 
 `flash init` creates the following structure:
 
-```text
-PROJECT_NAME/
-├── main.py              # FastAPI application entry point
-├── mothership.py        # Mothership endpoint configuration
-├── workers/
-│   ├── gpu/             # GPU worker
-│   │   ├── __init__.py
-│   │   └── endpoint.py
-│   └── cpu/             # CPU worker
-│       ├── __init__.py
-│       └── endpoint.py
-├── .env.example         # Environment variables template
-├── .flashignore         # Files to exclude from deployment
-├── .gitignore           # Git ignore patterns
-├── pyproject.toml       # Python project configuration
-├── requirements.txt     # Python dependencies
-└── README.md            # Project documentation
-```
+<Tree>
+  <Tree.Folder name="PROJECT_NAME" defaultOpen>
+    <Tree.File name="lb_worker.py" />
+    <Tree.File name="gpu_worker.py" />
+    <Tree.File name="cpu_worker.py" />
+    <Tree.File name=".env.example" />
+    <Tree.File name=".flashignore" />
+    <Tree.File name=".gitignore" />
+    <Tree.File name="pyproject.toml" />
+    <Tree.File name="requirements.txt" />
+    <Tree.File name="README.md" />
+  </Tree.Folder>
+</Tree>
 
 ### Key files
 
-**main.py**: The FastAPI application that imports and registers your worker routers.
+**lb_worker.py**: An example load-balanced worker with HTTP routes. Contains `@remote` functions with custom HTTP methods and paths (e.g., `POST /process`, `GET /health`). Creates one endpoint when deployed.
 
-**mothership.py**: Configuration for the "mothership" endpoint—the main entry point that orchestrates calls to your workers when deployed.
+**gpu_worker.py**: An example GPU queue-based worker. Contains `@remote` functions that run on GPU hardware. Provides `/runsync` route for job submission. Creates one endpoint when deployed.
 
-**workers/gpu/endpoint.py**: An example GPU worker with a `@remote` decorated function. This is where you define functions that run on GPU workers.
-
-**workers/cpu/endpoint.py**: An example CPU worker for tasks that don't require GPU acceleration.
+**cpu_worker.py**: An example CPU queue-based worker. Contains `@remote` functions that run on CPU-only instances. Provides `/runsync` route for job submission. Creates one endpoint when deployed.
 
 **.flashignore**: Lists files and directories to exclude from the deployment artifact (similar to `.gitignore`).
+
+Each worker file defines a resource configuration and its associated functions. When you deploy, Flash creates one Serverless endpoint per unique resource configuration.
 
 ## Set up the project
 
@@ -98,70 +95,6 @@ flowchart LR
 2. **`flash run`**: Starts local development server for testing.
 3. **`flash deploy`**: Builds and deploys to Runpod Serverless.
 
-## Customize your project
-
-### Add a new GPU endpoint
-
-To add a new GPU endpoint, you need to create a new file in the `workers/gpu/` directory. This file will contain the code for the endpoint and be automatically included in the FastAPI app.
-
-1. Create a new file in `workers/gpu/` with the name of the endpoint. For example, `inference.py`:
-
-```python
-# workers/gpu/inference.py
-from runpod_flash import remote, LiveServerless, GpuGroup
-
-config = LiveServerless(
-    name="inference-worker",
-    gpus=[GpuGroup.ADA_24],
-    workersMax=3,
-)
-
-@remote(resource_config=config, dependencies=["transformers", "torch"])
-def run_inference(prompt: str) -> dict:
-    # Rember to import endpoint dependencies inside the function.
-    from transformers import pipeline
-
-    generator = pipeline("text-generation", model="gpt2")
-    result = generator(prompt, max_length=50)
-    return {"output": result[0]["generated_text"]}
-```
-
-2. Add a route in `workers/gpu/__init__.py`:
-
-```python
-from fastapi import APIRouter
-from .inference import run_inference
-
-router = APIRouter(prefix="/gpu", tags=["GPU Workers"])
-
-@router.post("/inference")
-async def inference_endpoint(prompt: str):
-    result = await run_inference(prompt)
-    return result
-```
-
-3. The router is automatically included via `main.py`.
-
-### Add a CPU endpoint
-
-Follow the same pattern in `workers/cpu/`. CPU endpoints use `instanceIds` instead of `gpus`:
-
-```python
-from runpod_flash import remote, LiveServerless, CpuInstanceType
-
-config = LiveServerless(
-    name="data-processor",
-    instanceIds=[CpuInstanceType.CPU5C_4_8],
-    workersMax=2,
-)
-
-@remote(resource_config=config, dependencies=["pandas"])
-def process_data(data: list) -> dict:
-    import pandas as pd
-    df = pd.DataFrame(data)
-    return df.describe().to_dict()
-```
-
 ## Handle existing files
 
 If you run `flash init` in a directory with existing files, Flash detects conflicts and prompts for confirmation:
@@ -171,7 +104,8 @@ If you run `flash init` in a directory with existing files, Flash detects confli
 │ Warning: The following files will be          │
 │ overwritten:                                  │
 │                                               │
-│   • main.py                                   │
+│   • lb_worker.py                              │
+│   • gpu_worker.py                             │
 │   • requirements.txt                          │
 └───────────────────────────────────────────────┘
 Continue and overwrite these files? [y/N]:
@@ -195,7 +129,7 @@ flash run
 # http://localhost:8888/docs
 ```
 
-Make changes to your workers, and the server reloads automatically. When you're ready, deploy with:
+Make changes to your worker files, and the server reloads automatically. When you're ready, deploy with:
 
 ```bash
 flash deploy
@@ -203,7 +137,7 @@ flash deploy
 
 ## Next steps
 
-- [Test locally](/flash/apps/local-testing) with `flash run`
-- [Build your app](/flash/apps/build-app) by customizing workers.
-- [Deploy to production](/flash/apps/deploy-apps) with `flash deploy`
+- [Customize your app](/flash/apps/customize-app) to add endpoints and modify configurations.
+- [Test locally](/flash/apps/local-testing) with `flash run`.
+- [Deploy to production](/flash/apps/deploy-apps) with `flash deploy`.
 - [View the flash init reference](/flash/cli/init) for all options.

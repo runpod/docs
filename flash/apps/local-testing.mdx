@@ -5,7 +5,7 @@ description: "Use flash run to test your Flash application locally before deploy
 tag: "BETA"
 ---
 
-The `flash run` command starts a local development server that lets you test your Flash application before deploying to production. Your FastAPI app runs locally and updates automatically as you edit files. When you call a `@remote` function, Flash sends the latest function code to Serverless workers on Runpod, so your changes are reflected immediately.
+The `flash run` command starts a local development server that lets you test your Flash application before deploying to production. The development server runs locally and updates automatically as you edit files. When you call a `@remote` function, Flash sends the latest function code to Serverless workers on Runpod, so your changes are reflected immediately.
 
 Use `flash run` when you want to:
 
@@ -22,7 +22,7 @@ From inside your [project directory](/flash/apps/initialize-project), run:
 flash run
 ```
 
-The server starts at `http://localhost:8888` by default. Your FastAPI routes are available immediately, and `@remote` functions provision Serverless endpoints on first call.
+The server starts at `http://localhost:8888` by default. Your endpoints are available immediately for testing, and `@remote` functions provision Serverless endpoints on first call.
 
 ### Custom host and port
 
@@ -72,27 +72,34 @@ This scans your project for `@remote` functions and deploys them before the serv
 
 ## How it works
 
-With `flash run`, your system runs in a hybrid architecture:
+With `flash run`, Flash starts a local development server alongside remote Serverless endpoints:
 
 ```mermaid
 %%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#9289FE','primaryTextColor':'#fff','primaryBorderColor':'#9289FE','lineColor':'#5F4CFE','secondaryColor':'#AE6DFF','tertiaryColor':'#FCB1FF','edgeLabelBackground':'#5F4CFE', 'fontSize':'14px','fontFamily':'font-inter'}}}%%
 
 flowchart TB
+    Browser(["BROWSER/CURL"])
+
     subgraph Local ["YOUR MACHINE (localhost:8888)"]
-        FastAPI["FastAPI App<br/>• Updates automatically<br/>• Your HTTP routes"]
+        DevServer["Development Server<br/>• Auto-reload on changes<br/>• API explorer at /docs<br/>• Routes requests"]
     end
 
     subgraph Runpod ["RUNPOD SERVERLESS"]
-        GPU["live-gpu-worker"]
-        CPU["live-cpu-worker"]
+        LB["live-lb_worker"]
+        GPU["live-gpu_worker"]
+        CPU["live-cpu_worker"]
     end
 
-    FastAPI -->|"HTTPS"| GPU
-    FastAPI -->|"HTTPS"| CPU
+    Browser -->|"HTTP"| DevServer
+    DevServer -->|"HTTPS"| LB
+    DevServer -->|"HTTPS"| GPU
+    DevServer -->|"HTTPS"| CPU
 
     style Local fill:#1a1a2e,stroke:#5F4CFE,stroke-width:2px,color:#fff
     style Runpod fill:#1a1a2e,stroke:#5F4CFE,stroke-width:2px,color:#fff
-    style FastAPI fill:#5F4CFE,stroke:#5F4CFE,color:#fff
+    style Browser fill:#4D38F5,stroke:#4D38F5,color:#fff
+    style DevServer fill:#5F4CFE,stroke:#5F4CFE,color:#fff
+    style LB fill:#22C55E,stroke:#22C55E,color:#000
     style GPU fill:#22C55E,stroke:#22C55E,color:#000
     style CPU fill:#22C55E,stroke:#22C55E,color:#000
 ```
@@ -101,9 +108,9 @@ flowchart TB
 
 | Component | Location |
 |-----------|----------|
-| FastAPI app (`main.py`) | Your machine |
-| HTTP routes | Your machine |
+| Development server | Your machine (localhost:8888) |
 | `@remote` function code | Runpod Serverless |
+| Endpoint storage | Runpod Serverless |
 
 Your code updates automatically as you edit files. Endpoints created by `flash run` are prefixed with `live-` to distinguish them from production endpoints.
 

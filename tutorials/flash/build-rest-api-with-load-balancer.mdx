@@ -1,0 +1,546 @@
+---
+title: "Build a REST API with Flash load balancers"
+sidebarTitle: "Build a REST API"
+description: "Learn how to build a production-ready REST API using Flash load balancing endpoints with custom HTTP routes."
+tag: "BETA"
+---
+
+This tutorial shows you how to build a REST API using Flash load balancing configurations. You'll create a multi-route API that handles text processing, demonstrates both CPU and GPU endpoints, and deploys to production.
+
+## What you'll learn
+
+In this tutorial you'll learn how to:
+
+- Use `CpuLiveLoadBalancer` to create HTTP APIs with custom routes
+- Define multiple routes on a single endpoint with `method=` and `path=` parameters
+- Add GPU-accelerated routes with `LiveLoadBalancer`
+- Test your API locally with `flash run`
+- Deploy your API to production with `flash deploy`
+- Call your deployed endpoints with proper authentication
+
+## Requirements
+
+- You've [created a Runpod account](/get-started/manage-accounts)
+- You've [created a Runpod API key](/get-started/api-keys)
+- You've installed [Python 3.10 or higher](https://www.python.org/downloads/)
+- You've completed the [Flash quickstart](/flash/quickstart) or are familiar with Flash basics
+
+## What you'll build
+
+By the end of this tutorial, you'll have a working REST API that:
+
+- Accepts text input via `POST /analyze`
+- Returns system health via `GET /health`
+- Provides API information via `GET /info`
+- Runs GPU-accelerated sentiment analysis via `POST /sentiment` (optional GPU route)
+- Deploys to Runpod Serverless with proper authentication
+
+## Step 1: Set up your project
+
+Create a new directory for your project and set up a Python virtual environment:
+
+```bash
+mkdir flash-api
+cd flash-api
+python3 -m venv venv
+source venv/bin/activate
+```
+
+Install Flash:
+
+```bash
+pip install runpod-flash
+```
+
+Set your API key in the environment:
+
+```bash
+export RUNPOD_API_KEY=YOUR_API_KEY
+
+# Or create a .env file
+echo "RUNPOD_API_KEY=YOUR_API_KEY" > .env
+```
+
+Replace `YOUR_API_KEY` with your actual Runpod API key.
+
+## Step 2: Create the API server file
+
+Create a new file called `api.py`:
+
+```bash
+touch api.py
+```
+
+## Step 3: Define the CPU load balancer configuration
+
+Add the following code to `api.py`:
+
+```python
+from runpod_flash import CpuLiveLoadBalancer, remote
+
+# CPU load balancer for general API routes
+api_config = CpuLiveLoadBalancer(
+    name="text-api",
+    workersMin=1,      # Keep at least 1 worker ready
+    workersMax=10,     # Scale up to 10 workers under load
+    idleTimeout=10     # Keep workers active for 10 minutes
+)
+```
+
+This configuration creates a CPU-only load balancing endpoint that can handle multiple HTTP routes.
+
+## Step 4: Add API routes
+
+Add three routes to your API - health check, info, and text analysis:
+
+```python
+@remote(resource_config=api_config, method="GET", path="/health")
+async def health_check() -> dict:
+    """Health check endpoint for monitoring."""
+    return {
+        "status": "healthy",
+        "service": "text-api",
+        "version": "1.0.0"
+    }
+
+@remote(resource_config=api_config, method="GET", path="/info")
+async def get_info() -> dict:
+    """API information endpoint."""
+    return {
+        "name": "Text Analysis API",
+        "version": "1.0.0",
+        "endpoints": [
+            {"method": "GET", "path": "/health", "description": "Health check"},
+            {"method": "GET", "path": "/info", "description": "API information"},
+            {"method": "POST", "path": "/analyze", "description": "Analyze text"}
+        ]
+    }
+
+@remote(resource_config=api_config, method="POST", path="/analyze")
+async def analyze_text(text: str) -> dict:
+    """Analyze text and return statistics."""
+    words = text.split()
+    word_count = len(words)
+    char_count = len(text)
+    avg_word_length = sum(len(word) for word in words) / word_count if word_count > 0 else 0
+
+    return {
+        "text": text,
+        "statistics": {
+            "word_count": word_count,
+            "character_count": char_count,
+            "average_word_length": round(avg_word_length, 2),
+            "sentence_count": text.count('.') + text.count('!') + text.count('?')
+        }
+    }
+```
+
+All three routes share the same `api_config` load balancer, meaning they deploy to a single Serverless endpoint.
+
+## Step 5: Add a GPU-accelerated route (optional)
+
+For GPU-accelerated sentiment analysis, add a separate load balancer configuration:
+
+```python
+from runpod_flash import LiveLoadBalancer, GpuGroup
+
+# GPU load balancer for ML inference
+gpu_api_config = LiveLoadBalancer(
+    name="gpu-sentiment",
+    gpus=[GpuGroup.ADA_24],  # RTX 4090 for cost-effective inference
+    workersMin=0,            # Scale to zero when idle
+    workersMax=3,            # Up to 3 workers under load
+    idleTimeout=5
+)
+
+@remote(
+    resource_config=gpu_api_config,
+    method="POST",
+    path="/sentiment",
+    dependencies=["transformers", "torch"]
+)
+async def analyze_sentiment(text: str) -> dict:
+    """Analyze sentiment using a pretrained model."""
+    from transformers import pipeline
+    import torch
+
+    # Load sentiment analysis pipeline
+    device = 0 if torch.cuda.is_available() else -1
+    sentiment_analyzer = pipeline(
+        "sentiment-analysis",
+        model="distilbert-base-uncased-finetuned-sst-2-english",
+        device=device
+    )
+
+    # Analyze sentiment
+    result = sentiment_analyzer(text)[0]
+
+    return {
+        "text": text,
+        "sentiment": {
+            "label": result["label"],
+            "score": round(result["score"], 4)
+        },
+        "device": "GPU" if torch.cuda.is_available() else "CPU"
+    }
+```
+
+This creates a second endpoint specifically for GPU-accelerated tasks.
+
+<Note>
+The sentiment analysis route uses a separate GPU configuration because it requires different hardware than the CPU routes. This is a common pattern: use CPU load balancers for lightweight API logic and GPU load balancers for ML inference.
+</Note>
+
+## Step 6: Add the main execution block
+
+Add the following at the end of `api.py` to enable local testing:
+
+```python
+import asyncio
+
+async def main():
+    """Test the API locally."""
+    print("Testing Text Analysis API\n")
+
+    # Test health check
+    print("1. Testing health check...")
+    health = await health_check()
+    print(f"   Result: {health}\n")
+
+    # Test info endpoint
+    print("2. Testing info endpoint...")
+    info = await get_info()
+    print(f"   Result: {info}\n")
+
+    # Test text analysis
+    print("3. Testing text analysis...")
+    sample_text = "Flash makes it easy to build REST APIs with GPU acceleration."
+    analysis = await analyze_text(sample_text)
+    print(f"   Result: {analysis}\n")
+
+    # Test sentiment analysis (if GPU route is defined)
+    print("4. Testing sentiment analysis...")
+    sentiment = await analyze_sentiment(sample_text)
+    print(f"   Result: {sentiment}\n")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Step 7: Test locally
+
+Run your script to test the API locally:
+
+```bash
+python api.py
+```
+
+You should see output similar to:
+
+```text
+Testing Text Analysis API
+
+1. Testing health check...
+   Resource text-api already exists, reusing.
+   Registering RunPod endpoint: server_CpuLiveLoadBalancer_a1b2c3d4
+   Result: {'status': 'healthy', 'service': 'text-api', 'version': '1.0.0'}
+
+2. Testing info endpoint...
+   Result: {'name': 'Text Analysis API', 'version': '1.0.0', 'endpoints': [...]}
+
+3. Testing text analysis...
+   Result: {'text': '...', 'statistics': {'word_count': 10, ...}}
+
+4. Testing sentiment analysis...
+   Creating endpoint: server_LiveLoadBalancer_e5f6g7h8
+   Result: {'text': '...', 'sentiment': {'label': 'POSITIVE', 'score': 0.9998}}
+```
+
+The first run will take longer as Flash provisions the endpoints and installs dependencies.
+
+## Step 8: Build a Flash app for production
+
+To deploy your API to production, convert your script to a Flash app:
+
+```bash
+flash init api-project
+cd api-project
+```
+
+Move your API code to the project. Replace the contents of `lb_worker.py` with your `api.py` code:
+
+```bash
+cp ../api.py lb_worker.py
+```
+
+If you added the GPU sentiment route, create a new file `gpu_worker.py`:
+
+```python
+from runpod_flash import LiveLoadBalancer, GpuGroup, remote
+
+gpu_api_config = LiveLoadBalancer(
+    name="gpu-sentiment",
+    gpus=[GpuGroup.ADA_24],
+    workersMin=0,
+    workersMax=3,
+    idleTimeout=5
+)
+
+@remote(
+    resource_config=gpu_api_config,
+    method="POST",
+    path="/sentiment",
+    dependencies=["transformers", "torch"]
+)
+async def analyze_sentiment(text: str) -> dict:
+    from transformers import pipeline
+    import torch
+
+    device = 0 if torch.cuda.is_available() else -1
+    sentiment_analyzer = pipeline(
+        "sentiment-analysis",
+        model="distilbert-base-uncased-finetuned-sst-2-english",
+        device=device
+    )
+
+    result = sentiment_analyzer(text)[0]
+
+    return {
+        "text": text,
+        "sentiment": {
+            "label": result["label"],
+            "score": round(result["score"], 4)
+        },
+        "device": "GPU" if torch.cuda.is_available() else "CPU"
+    }
+```
+
+## Step 9: Test with the development server
+
+Start the Flash development server:
+
+```bash
+flash run
+```
+
+Open http://localhost:8888/docs in your browser to see the interactive API documentation. You can test all your routes directly in the Swagger UI.
+
+Test with curl:
+
+```bash
+# Test health check
+curl -X GET http://localhost:8888/health
+
+# Test text analysis
+curl -X POST http://localhost:8888/analyze \
+    -H "Content-Type: application/json" \
+    -d '{"text": "Flash makes building APIs easy"}'
+
+# Test sentiment analysis (if you added the GPU route)
+curl -X POST http://localhost:8888/sentiment \
+    -H "Content-Type: application/json" \
+    -d '{"text": "I love using Flash for my APIs"}'
+```
+
+## Step 10: Deploy to production
+
+When you're ready to deploy, use `flash deploy`:
+
+```bash
+flash deploy
+```
+
+After deployment, Flash displays your endpoint URLs:
+
+```text
+✓ Deployment Complete
+
+Load-balanced endpoints:
+  https://api-abc123.runpod.net  (text-api)
+    GET    /health
+    GET    /info
+    POST   /analyze
+
+  https://api-def456.runpod.net  (gpu-sentiment)
+    POST   /sentiment
+```
+
+## Step 11: Call your deployed API
+
+Call your production endpoints with authentication:
+
+```bash
+# Health check
+curl -X GET https://api-abc123.runpod.net/health \
+    -H "Authorization: Bearer $RUNPOD_API_KEY"
+
+# Text analysis
+curl -X POST https://api-abc123.runpod.net/analyze \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"text": "Flash makes building APIs easy and fast"}'
+
+# GPU sentiment analysis
+curl -X POST https://api-def456.runpod.net/sentiment \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"text": "I love using Flash for my APIs"}'
+```
+
+Expected response:
+
+```json
+{
+  "text": "I love using Flash for my APIs",
+  "sentiment": {
+    "label": "POSITIVE",
+    "score": 0.9998
+  },
+  "device": "GPU"
+}
+```
+
+## Understanding the deployment architecture
+
+Your deployed API creates two independent Serverless endpoints:
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#9289FE','primaryTextColor':'#fff','primaryBorderColor':'#9289FE','lineColor':'#5F4CFE','secondaryColor':'#AE6DFF','tertiaryColor':'#FCB1FF','edgeLabelBackground':'#5F4CFE', 'fontSize':'14px','fontFamily':'font-inter'}}}%%
+
+flowchart TB
+    Client([Client])
+
+    subgraph Runpod [RUNPOD SERVERLESS]
+        CPU[text-api endpoint<br/>CPU load balancer<br/>GET /health<br/>GET /info<br/>POST /analyze]
+        GPU[gpu-sentiment endpoint<br/>GPU load balancer<br/>POST /sentiment]
+    end
+
+    Client -->|HTTPS + Auth| CPU
+    Client -->|HTTPS + Auth| GPU
+
+    style Runpod fill:#1a1a2e,stroke:#5F4CFE,stroke-width:2px
+    style Client fill:#4D38F5,stroke:#4D38F5,color:#fff
+    style CPU fill:#5F4CFE,stroke:#5F4CFE,color:#fff
+    style GPU fill:#22C55E,stroke:#22C55E,color:#000
+```
+
+**Key points:**
+- **CPU endpoint** (`text-api`) handles three routes on one Serverless endpoint
+- **GPU endpoint** (`gpu-sentiment`) handles GPU inference on a separate endpoint
+- Both endpoints scale independently based on load
+- All requests require authentication with your API key
+
+## Troubleshooting
+
+### Import errors in sentiment analysis
+
+**Issue**: `ModuleNotFoundError: No module named 'transformers'`
+
+**Solution**: Ensure dependencies are specified in the `@remote` decorator:
+
+```python
+@remote(
+    resource_config=gpu_api_config,
+    method="POST",
+    path="/sentiment",
+    dependencies=["transformers", "torch"]  # Must include these
+)
+```
+
+### Method or path not specified error
+
+**Issue**: `ValueError: LoadBalancerSlsResource requires both 'method' and 'path' parameters`
+
+**Solution**: Load balancer routes require both parameters:
+
+```python
+@remote(
+    resource_config=api_config,
+    method="POST",    # Must specify
+    path="/analyze"   # Must specify
+)
+```
+
+### Path validation error
+
+**Issue**: `ValueError: path must start with '/'. Got: analyze`
+
+**Solution**: Paths must start with a forward slash:
+
+```python
+@remote(resource_config=api_config, method="POST", path="/analyze")  # Correct
+```
+
+### Endpoint stays in queue
+
+**Issue**: GPU sentiment route stays in `IN_QUEUE` status
+
+**Solutions**:
+1. Check [GPU availability](https://www.runpod.io/console/serverless) in console
+2. Add fallback GPU types:
+   ```python
+   gpus=[GpuGroup.ADA_24, GpuGroup.AMPERE_24, GpuGroup.ANY]
+   ```
+3. Use CPU for testing:
+   ```python
+   # For testing without GPU
+   gpu_api_config = CpuLiveLoadBalancer(name="sentiment-cpu")
+   ```
+
+## Next steps
+
+Now that you've built a REST API with Flash, you can:
+
+### Add more routes
+
+Expand your API with additional functionality:
+
+```python
+@remote(resource_config=api_config, method="POST", path="/summarize")
+async def summarize_text(text: str, max_length: int = 100) -> dict:
+    """Summarize long text."""
+    # Summarization logic
+    return {"summary": text[:max_length]}
+
+@remote(resource_config=api_config, method="POST", path="/translate")
+async def translate_text(text: str, target_lang: str) -> dict:
+    """Translate text to another language."""
+    # Translation logic
+    return {"translated": text, "target": target_lang}
+```
+
+### Add authentication middleware
+
+Implement custom authentication for your API:
+
+```python
+@remote(resource_config=api_config, method="POST", path="/protected")
+async def protected_route(text: str, api_key: str) -> dict:
+    """Route with custom authentication."""
+    if api_key != "your-secret-key":
+        return {"error": "Unauthorized"}, 401
+    return {"data": "protected content"}
+```
+
+### Monitor your API
+
+- Track endpoint health in the [Runpod console](https://www.runpod.io/console/serverless)
+- Monitor request counts and error rates
+- Adjust `workersMin` and `workersMax` based on traffic patterns
+
+### Use multiple environments
+
+Deploy to different environments for testing:
+
+```bash
+flash deploy --env dev        # Development
+flash deploy --env staging    # Staging
+flash deploy --env production # Production
+```
+
+## Related resources
+
+- [Load balancing configurations reference](/flash/configuration/load-balancing)
+- [Create remote functions guide](/flash/remote-functions)
+- [Deploy Flash apps](/flash/apps/deploy-apps)
+- [Managing endpoints](/flash/managing-endpoints)

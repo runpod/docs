@@ -1,0 +1,477 @@
+---
+title: "Queue-based endpoints"
+sidebarTitle: "Queue-based endpoints"
+description: "Build batch processing and asynchronous workloads using LiveServerless and CpuLiveServerless."
+tag: "BETA"
+---
+
+Queue-based configurations create Serverless endpoints that process jobs asynchronously through a queue. Jobs are submitted via `/run` (async) or `/runsync` (sync with timeout) routes.
+
+## When to use queue-based configurations
+
+Choose queue-based configurations when you need:
+
+- **Batch processing**: Process multiple items over time.
+- **Asynchronous workloads**: Jobs that can wait in a queue.
+- **GPU-intensive tasks**: Model training, image generation, video processing.
+- **Job retries and tracking**: Automatic retry handling and job status monitoring.
+- **Long-running tasks**: Operations that may take minutes to complete.
+
+**Key characteristic**: One resource configuration = one `@remote` function = one Serverless endpoint
+
+## LiveServerless
+
+`LiveServerless` is the primary configuration for GPU-accelerated batch processing. It supports full remote code execution, allowing you to run arbitrary Python functions on Runpod's GPU infrastructure.
+
+### Basic example
+
+```python
+from runpod_flash import LiveServerless, GpuGroup, remote
+
+config = LiveServerless(
+    name="ml-inference",
+    gpus=[GpuGroup.AMPERE_80],  # A100 80GB
+    workersMax=5,
+    idleTimeout=10
+)
+
+@remote(resource_config=config, dependencies=["torch"])
+async def run_inference(data: dict) -> dict:
+    import torch
+    # GPU processing logic
+    return {"result": "processed"}
+```
+
+### Configuration parameters
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `name` | `string` | Name for your endpoint (required) | - |
+| `gpus` | `list[GpuGroup \| GpuType]` | GPU pools or specific GPU types | `[GpuGroup.ANY]` |
+| `gpuCount` | `int` | Number of GPUs per worker | 1 |
+| `workersMin` | `int` | Minimum number of workers | 0 |
+| `workersMax` | `int` | Maximum number of workers | 3 |
+| `idleTimeout` | `int` | Minutes before scaling down | 5 |
+| `env` | `dict` | Environment variables | `None` |
+| `networkVolumeId` | `string` | Persistent storage volume ID | `None` |
+| `executionTimeoutMs` | `int` | Max execution time in milliseconds | 0 (no limit) |
+| `scalerType` | `string` | Scaling strategy | `QUEUE_DELAY` |
+| `scalerValue` | `int` | Scaling parameter value | 4 |
+| `locations` | `string` | Preferred datacenter locations | `None` |
+| `template` | `PodTemplate` | Pod template overrides | `None` |
+
+### GPU selection
+
+The `gpus` parameter accepts GPU pools (`GpuGroup`) or specific GPU types (`GpuType`), or a mix of both:
+
+**Using GPU pools (recommended):**
+
+```python
+# Single GPU pool
+config = LiveServerless(
+    name="specific-pool",
+    gpus=[GpuGroup.AMPERE_80]  # Any A100 80GB variant
+)
+
+# Multiple GPU pools (fallback strategy)
+config = LiveServerless(
+    name="fallback-pools",
+    gpus=[
+        GpuGroup.AMPERE_80,  # Try A100 80GB first
+        GpuGroup.AMPERE_48,  # Fall back to A40/A6000 48GB
+        GpuGroup.ADA_24      # Final fallback to RTX 4090 24GB
+    ]
+)
+
+# Any available GPU
+config = LiveServerless(
+    name="any-gpu",
+    gpus=[GpuGroup.ANY]  # Default, fastest provisioning
+)
+```
+
+**Using specific GPU types:**
+
+```python
+from runpod_flash import LiveServerless, GpuType
+
+# Target exact GPU models
+config = LiveServerless(
+    name="specific-gpus",
+    gpus=[
+        GpuType.NVIDIA_A100_80GB_PCIe,  # Only PCIe variant
+        GpuType.NVIDIA_A100_SXM4_80GB   # Then SXM4 variant
+    ]
+)
+```
+
+**Mixing pools and specific types:**
+
+```python
+from runpod_flash import LiveServerless, GpuGroup, GpuType
+
+# Combine for advanced fallback strategies
+config = LiveServerless(
+    name="hybrid",
+    gpus=[
+        GpuType.NVIDIA_H100_80GB_HBM3,  # Try H100 first
+        GpuGroup.AMPERE_80,             # Then any A100
+        GpuGroup.ANY                     # Ultimate fallback
+    ]
+)
+```
+
+See [GPU types reference](/flash/configuration/gpu-types) for all available GPU pools and specific types.
+
+### Multi-GPU workers
+
+Request multiple GPUs per worker using `gpuCount`:
+
+```python
+config = LiveServerless(
+    name="multi-gpu-training",
+    gpus=[GpuGroup.AMPERE_80],
+    gpuCount=4,  # Each worker gets 4 GPUs
+    workersMax=2  # Maximum 2 workers (8 GPUs total)
+)
+```
+
+### Complete example
+
+```python
+from runpod_flash import LiveServerless, GpuGroup, PodTemplate, remote
+
+config = LiveServerless(
+    name="gpu-inference",
+    gpus=[GpuGroup.AMPERE_80, GpuGroup.AMPERE_48],
+    gpuCount=1,
+    workersMin=0,
+    workersMax=5,
+    idleTimeout=10,
+    executionTimeoutMs=300000,  # 5 minutes
+    networkVolumeId="vol_abc123",
+    template=PodTemplate(containerDiskInGb=100),
+    env={"MODEL_ID": "llama-7b", "HF_TOKEN": "your_token"}
+)
+
+@remote(resource_config=config, dependencies=["torch", "transformers"])
+async def generate_text(prompt: str) -> dict:
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    # Load model from network volume
+    model_path = "/runpod-volume/models/llama-7b"
+    model = AutoModelForCausalLM.from_pretrained(model_path)
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+
+    # Generate text
+    inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+    outputs = model.generate(**inputs, max_length=100)
+    text = tokenizer.decode(outputs[0])
+
+    return {"generated_text": text}
+```
+
+## CpuLiveServerless
+
+`CpuLiveServerless` is optimized for CPU-only batch processing. Use it for workloads that don't require GPU acceleration.
+
+### Basic example
+
+```python
+from runpod_flash import CpuLiveServerless, CpuInstanceType, remote
+
+config = CpuLiveServerless(
+    name="data-processor",
+    instanceIds=[CpuInstanceType.CPU5C_4_8],  # 4 vCPU, 8GB RAM
+    workersMax=3,
+    idleTimeout=5
+)
+
+@remote(resource_config=config, dependencies=["pandas"])
+async def process_csv(file_url: str) -> dict:
+    import pandas as pd
+    df = pd.read_csv(file_url)
+    return {"rows": len(df), "columns": list(df.columns)}
+```
+
+### Configuration parameters
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `name` | `string` | Name for your endpoint (required) | - |
+| `instanceIds` | `list[CpuInstanceType]` | CPU instance types | Required |
+| `workersMin` | `int` | Minimum number of workers | 0 |
+| `workersMax` | `int` | Maximum number of workers | 3 |
+| `idleTimeout` | `int` | Minutes before scaling down | 5 |
+| `env` | `dict` | Environment variables | `None` |
+| `networkVolumeId` | `string` | Persistent storage volume ID | `None` |
+| `executionTimeoutMs` | `int` | Max execution time in milliseconds | 0 (no limit) |
+| `scalerType` | `string` | Scaling strategy | `QUEUE_DELAY` |
+| `scalerValue` | `int` | Scaling parameter value | 4 |
+| `locations` | `string` | Preferred datacenter locations | `None` |
+| `template` | `PodTemplate` | Pod template overrides | `None` |
+
+### CPU instance selection
+
+Specify CPU instance types using `instanceIds`:
+
+```python
+from runpod_flash import CpuLiveServerless, CpuInstanceType
+
+# Single instance type
+config = CpuLiveServerless(
+    name="cpu-worker",
+    instanceIds=[CpuInstanceType.CPU5C_4_8]  # 4 vCPU, 8GB RAM
+)
+
+# Multiple instance types (fallback strategy)
+config = CpuLiveServerless(
+    name="flexible-cpu",
+    instanceIds=[
+        CpuInstanceType.CPU5C_8_16,  # Try 8 vCPU, 16GB first
+        CpuInstanceType.CPU5C_4_8,   # Fall back to 4 vCPU, 8GB
+        CpuInstanceType.CPU3G_4_16   # Final fallback
+    ]
+)
+```
+
+See [CPU types reference](/flash/configuration/cpu-types) for all available CPU instance types.
+
+### Complete example
+
+```python
+from runpod_flash import CpuLiveServerless, CpuInstanceType, PodTemplate, remote
+
+config = CpuLiveServerless(
+    name="batch-processor",
+    instanceIds=[CpuInstanceType.CPU5C_8_16],
+    workersMin=1,
+    workersMax=10,
+    idleTimeout=15,
+    executionTimeoutMs=600000,  # 10 minutes
+    template=PodTemplate(containerDiskInGb=50),
+    env={"API_KEY": "your_api_key"}
+)
+
+@remote(resource_config=config, dependencies=["requests", "pandas"])
+async def process_batch(urls: list) -> dict:
+    import requests
+    import pandas as pd
+
+    results = []
+    for url in urls:
+        response = requests.get(url)
+        results.append(response.json())
+
+    df = pd.DataFrame(results)
+    return {
+        "processed": len(results),
+        "summary": df.describe().to_dict()
+    }
+```
+
+<Note>
+You can also use `LiveServerless` with `instanceIds` parameter for CPU configurations. Both approaches work identically - `CpuLiveServerless` is a convenience class that's specifically typed for CPU workloads.
+</Note>
+
+## Calling queue-based endpoints
+
+Queue-based endpoints provide two routes for job submission:
+
+### Asynchronous calls (`/run`)
+
+Submit a job and receive a job ID for later status checking:
+
+```bash
+curl -X POST https://api-abc123.runpod.net/run \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"input": {"prompt": "Hello world"}}'
+```
+
+Response:
+```json
+{
+    "id": "job-abc-123",
+    "status": "IN_QUEUE"
+}
+```
+
+Check status later:
+```bash
+curl https://api-abc123.runpod.net/status/job-abc-123 \
+    -H "Authorization: Bearer $RUNPOD_API_KEY"
+```
+
+### Synchronous calls (`/runsync`)
+
+Wait for job completion and receive results directly:
+
+```bash
+curl -X POST https://api-abc123.runpod.net/runsync \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"input": {"prompt": "Hello world"}}'
+```
+
+Response (after job completes):
+```json
+{
+    "id": "job-abc-123",
+    "status": "COMPLETED",
+    "output": {
+        "generated_text": "Hello world from GPU!"
+    }
+}
+```
+
+<Tip>
+Use `/run` for long-running jobs that you'll check later. Use `/runsync` for quick jobs where you want immediate results (with timeout protection).
+</Tip>
+
+## Handling GPU unavailability
+
+If no GPUs in your list are available, jobs will stay in queue:
+
+```text
+Initial job status: IN_QUEUE
+[Job waits for capacity]
+```
+
+**Solutions:**
+
+1. **Check console**: View [GPU availability](https://www.runpod.io/console/serverless) in the Runpod console
+2. **Add more GPU types**: Expand your `gpus` list to include fallback options
+3. **Use GpuGroup.ANY**: Switch to `[GpuGroup.ANY]` for maximum availability
+4. **Contact support**: If capacity is consistently unavailable, contact [Runpod support](https://www.runpod.io/contact)
+
+## Worker scaling
+
+Queue-based endpoints automatically scale workers based on queue depth and load.
+
+### Scaling parameters
+
+| Parameter | Description | Recommendation |
+|-----------|-------------|----------------|
+| `workersMin` | Always-running workers | Set to 0 for cost savings, 1+ for low latency |
+| `workersMax` | Maximum concurrent workers | Set based on expected peak load |
+| `idleTimeout` | Minutes before scaling down | 5-10 for variable traffic, 20-30 for consistent loads |
+| `scalerType` | Scaling strategy | Use default `QUEUE_DELAY` |
+| `scalerValue` | Jobs per worker threshold | Use default 4 |
+
+### Scaling strategies
+
+**Cost-optimized (scale to zero):**
+```python
+config = LiveServerless(
+    name="batch-job",
+    gpus=[GpuGroup.AMPERE_80],
+    workersMin=0,    # No minimum workers
+    workersMax=10,   # Scale up when needed
+    idleTimeout=5    # Quick scale-down
+)
+```
+
+**Latency-optimized (always-ready):**
+```python
+config = LiveServerless(
+    name="production-api",
+    gpus=[GpuGroup.ADA_24],
+    workersMin=2,    # Always keep 2 workers ready
+    workersMax=20,   # Scale up to 20 under load
+    idleTimeout=30   # Keep workers longer
+)
+```
+
+**Balanced:**
+```python
+config = LiveServerless(
+    name="ml-inference",
+    gpus=[GpuGroup.AMPERE_80],
+    workersMin=1,    # One worker always ready
+    workersMax=5,    # Moderate scaling
+    idleTimeout=10   # Medium retention
+)
+```
+
+## Persistent storage
+
+Queue-based endpoints support persistent storage via network volumes. Attach a volume using the `networkVolumeId` parameter to share models, datasets, and files across workers:
+
+```python
+config = LiveServerless(
+    name="model-server",
+    gpus=[GpuGroup.AMPERE_80],
+    networkVolumeId="vol_abc123"  # Network volumes mount at /runpod-volume/
+)
+```
+
+See the [storage guide](/flash/configuration/storage) for complete details on using network volumes, including setup, access patterns, and best practices.
+
+## Environment variables
+
+Pass configuration and secrets to workers using environment variables:
+
+```python
+config = LiveServerless(
+    name="api-worker",
+    gpus=[GpuGroup.ADA_24],
+    env={
+        "HF_TOKEN": "your_huggingface_token",
+        "MODEL_ID": "gpt2",
+        "API_KEY": "your_api_key"
+    }
+)
+```
+
+<Note>
+You can change environment variables without recreating workers. This makes it easy to rotate API keys or allow different developers to use their own .env files.
+</Note>
+
+## Best practices
+
+### For production workloads
+
+- Pin specific GPU types instead of using `GpuGroup.ANY`.
+- Set `workersMin ≥ 1` to avoid cold starts on first request.
+- Use network volumes for large models to avoid downloading on each worker.
+- Set appropriate `executionTimeoutMs` to prevent runaway jobs.
+- Use environment variables for configuration, not hardcoded values.
+
+### For development
+
+- Use `GpuGroup.ANY` for fastest provisioning.
+- Set `workersMin=0` to minimize costs during testing.
+- Keep `workersMax` low (1-3) to control expenses.
+- Use shorter `idleTimeout` (5 minutes) to scale down quickly.
+
+### For cost optimization
+
+- Set `workersMin=0` to scale to zero when idle.
+- Use smaller GPU types when possible (e.g., `ADA_24` instead of `AMPERE_80`).
+- Reduce `idleTimeout` for infrequent workloads.
+- Batch multiple operations into single job submissions.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration parameters" href="/flash/configuration/parameters" icon="sliders">
+    Complete parameter reference for all configuration options.
+  </Card>
+  <Card title="Storage" href="/flash/configuration/storage" icon="hard-drive">
+    Use network volumes to share models and data across workers.
+  </Card>
+  <Card title="GPU types" href="/flash/configuration/gpu-types" icon="microchip">
+    Available GPU pools and specific GPU types.
+  </Card>
+  <Card title="CPU types" href="/flash/configuration/cpu-types" icon="microchip">
+    Available CPU instance types.
+  </Card>
+  <Card title="Create remote functions" href="/flash/remote-functions" icon="code">
+    Learn how to use @remote decorator with queue-based configs.
+  </Card>
+  <Card title="Load balancing configurations" href="/flash/configuration/load-balancing" icon="arrow-progress">
+    Build HTTP APIs with LiveLoadBalancer and CpuLiveLoadBalancer.
+  </Card>
+</CardGroup>

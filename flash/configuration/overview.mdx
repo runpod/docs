@@ -1,0 +1,176 @@
+---
+title: "Resource configuration overview"
+sidebarTitle: "Overview"
+description: "Choose the right resource configuration for your Flash workload."
+tag: "BETA"
+---
+
+Resource configurations define the compute resources, scaling behavior, and infrastructure settings for your Flash functions. Flash provides six configuration types optimized for different workload patterns.
+
+## Configuration types
+
+Flash offers six resource configuration classes:
+
+[Queue-based configurations](/flash/configuration/queue-based):
+- `LiveServerless` - GPU-accelerated queue-based endpoints.
+- `CpuLiveServerless` - CPU-only queue-based endpoints.
+
+[Load balancing configurations](/flash/configuration/load-balancing):
+- `LiveLoadBalancer` - GPU-accelerated load balancing endpoints.
+- `CpuLiveLoadBalancer` - CPU-only load balancing endpoints.
+
+[Custom Docker images](/flash/configuration/custom-docker-images):
+- `ServerlessEndpoint` - GPU-accelerated custom Docker endpoints.
+- `CpuServerlessEndpoint` - CPU-only custom Docker endpoints.
+
+## Quick comparison
+
+| Configuration | When to use | Endpoint pattern | Example use cases |
+|---------------|-------------|------------------|-------------------|
+| `LiveServerless` | GPU-accelerated batch jobs | Queue-based (`/run`, `/runsync`) | Model training, image generation, video processing |
+| `CpuLiveServerless` | CPU-only batch jobs | Queue-based (`/run`, `/runsync`) | Data preprocessing, file conversion, API orchestration |
+| `LiveLoadBalancer` | GPU-accelerated APIs | HTTP routes (`POST /inference`) | Real-time inference APIs, ML-powered webhooks |
+| `CpuLiveLoadBalancer` | CPU-only APIs | HTTP routes (`GET /status`) | REST APIs, webhooks, microservices |
+| `ServerlessEndpoint` | Pre-built GPU workers | Queue-based (`/run`, `/runsync`) | vLLM inference, TensorRT-LLM, custom ML frameworks |
+| `CpuServerlessEndpoint` | Pre-built CPU workers | Queue-based (`/run`, `/runsync`) | Custom API workers, specialized processing |
+
+## Key differences
+
+### Queue-based vs. load balancing
+
+The primary difference is how clients interact with your endpoints:
+
+**Queue-based configurations** (`LiveServerless`, `CpuLiveServerless`):
+- Jobs submitted to a queue and processed asynchronously.
+- Best for batch processing and long-running tasks.
+- Called via `/run` (async) or `/runsync` (sync with timeout) routes.
+- One resource configuration = one `@remote` function = one Serverless endpoint.
+- Returns job IDs for async polling with `/status`.
+
+**Load balancing configurations** (`LiveLoadBalancer`, `CpuLiveLoadBalancer`):
+- Direct HTTP request/response pattern.
+- Best for real-time APIs and synchronous operations.
+- Called via custom HTTP paths (e.g., `POST /generate`, `GET /health`).
+- One resource configuration = multiple `@remote` functions = one Serverless endpoint.
+- Requires `method=` and `path=` parameters on each function.
+
+### GPU vs. CPU
+
+**GPU configurations** (`LiveServerless`, `LiveLoadBalancer`):
+- Access to NVIDIA GPUs (A100, H100, RTX 4090, etc.).
+- Configure via `gpus` parameter with GPU pools (`GpuGroup`) or specific GPU types (`GpuType`).
+- Higher cost, optimized for parallel computation.
+- Best for: Deep learning, computer vision, scientific computing.
+
+**CPU configurations** (`CpuLiveServerless`, `CpuLiveLoadBalancer`):
+- Access to CPU instances.
+- Configure via `instanceIds` parameter with CPU instance types.
+- Lower cost, optimized for general computation.
+- Best for: API routing, data processing, business logic.
+
+### Prebuilt vs. custom Docker images
+
+**Prebuilt Flash workers** (`LiveServerless`, `CpuLiveServerless`, `LiveLoadBalancer`, `CpuLiveLoadBalancer`):
+- Execute arbitrary Python code using the `@remote` decorator.
+- Dependencies installed automatically via `dependencies=` parameter.
+- Flash manages the Docker image and runtime environment.
+- Flexible: Change code and dependencies without rebuilding the image.
+- Best for: Most use cases, rapid development, dynamic workflows.
+
+**Custom Docker images** (`ServerlessEndpoint`, `CpuServerlessEndpoint`):
+- Implement a [Runpod Serverless handler function](/serverless/workers/handler-functions).
+- Create a [Serverless worker image](/serverless/workers/overview) to package your handler function and all its dependencies.
+- Must rebuild and redeploy the image to change code.
+- Best for: vLLM, TensorRT-LLM, specialized frameworks, models baked into the image.
+
+See [Custom Docker images](/flash/configuration/custom-docker-images) for details.
+
+## Common patterns
+
+### Pattern 1: ML inference API
+
+Use `LiveLoadBalancer` for GPU-accelerated inference with multiple routes:
+
+```python
+from runpod_flash import LiveLoadBalancer, GpuGroup, remote
+
+config = LiveLoadBalancer(
+    name="ml-api",
+    gpus=[GpuGroup.ADA_24],
+    workersMin=1,
+    workersMax=5
+)
+
+@remote(resource_config=config, method="POST", path="/classify")
+async def classify_image(image_url: str) -> dict:
+    # GPU inference logic
+    return {"class": "cat", "confidence": 0.95}
+
+@remote(resource_config=config, method="GET", path="/health")
+async def health() -> dict:
+    return {"status": "healthy"}
+```
+
+### Pattern 2: Batch image processing
+
+Use `LiveServerless` for GPU-accelerated batch jobs:
+
+```python
+from runpod_flash import LiveServerless, GpuGroup, remote
+
+config = LiveServerless(
+    name="batch-processor",
+    gpus=[GpuGroup.AMPERE_80],
+    workersMax=10
+)
+
+@remote(resource_config=config, dependencies=["torch", "pillow"])
+async def process_images(image_urls: list) -> dict:
+    # GPU batch processing
+    return {"processed": len(image_urls)}
+```
+
+### Pattern 3: CPU-based REST API
+
+Use `CpuLiveLoadBalancer` for lightweight HTTP APIs:
+
+```python
+from runpod_flash import CpuLiveLoadBalancer, remote
+
+config = CpuLiveLoadBalancer(
+    name="data-api",
+    workersMin=1,
+    workersMax=5
+)
+
+@remote(resource_config=config, method="POST", path="/process")
+async def process_data(data: dict) -> dict:
+    # CPU processing logic
+    return {"result": "processed"}
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Queue-based configurations" href="/flash/configuration/queue-based" icon="layer-group">
+    Configure LiveServerless and CpuLiveServerless for batch processing.
+  </Card>
+  <Card title="Load balancing configurations" href="/flash/configuration/load-balancing" icon="arrow-progress">
+    Configure LiveLoadBalancer and CpuLiveLoadBalancer for HTTP APIs.
+  </Card>
+  <Card title="Custom Docker images" href="/flash/configuration/custom-docker-images" icon="docker">
+    Use ServerlessEndpoint and CpuServerlessEndpoint with pre-built Docker images.
+  </Card>
+  <Card title="Configuration parameters" href="/flash/configuration/parameters" icon="sliders">
+    Complete reference for all configuration parameters.
+  </Card>
+  <Card title="Storage" href="/flash/configuration/storage" icon="hard-drive">
+    Use network volumes to share models and data across workers.
+  </Card>
+  <Card title="GPU types" href="/flash/configuration/gpu-types" icon="microchip">
+    Available GPU pools and specific GPU types.
+  </Card>
+  <Card title="CPU types" href="/flash/configuration/cpu-types" icon="microchip">
+    Available CPU instance types.
+  </Card>
+</CardGroup>

@@ -1,0 +1,520 @@
+---
+title: "Load balancing endpoints"
+sidebarTitle: "Load balancing endpoints"
+description: "Build HTTP APIs with custom routes using LiveLoadBalancer and CpuLiveLoadBalancer."
+tag: "BETA"
+---
+
+Load balancing configurations create Serverless endpoints that handle direct HTTP requests with custom routes and paths. Unlike queue-based endpoints, load balancers provide synchronous request/response patterns ideal for REST APIs.
+
+## When to use load balancing configurations
+
+Choose load balancing configurations when you need:
+
+- **REST APIs**: Build HTTP APIs with custom routes (GET, POST, PUT, DELETE).
+- **Webhooks**: Create public-facing HTTP endpoints.
+- **Real-time responses**: Synchronous request/response patterns.
+- **Multiple routes**: Share one endpoint across many HTTP paths.
+- **Microservices**: Deploy HTTP-based services.
+
+Unlike [queue-based endpoints](/flash/configuration/queue-based), load balancing endpoints can serve multiple HTTP routes on a single Serverless endpoint.
+
+## CpuLiveLoadBalancer
+
+`CpuLiveLoadBalancer` creates CPU-only HTTP API endpoints. Multiple `@remote` functions can share the same configuration, with each function defining its own HTTP route using `method=` and `path=` parameters.
+
+### Basic example
+
+```python
+from runpod_flash import CpuLiveLoadBalancer, remote
+
+api_config = CpuLiveLoadBalancer(
+    name="api-server",
+    workersMin=1,      # Keep at least 1 worker running
+    workersMax=10,     # Scale up to 10 workers under load
+    idleTimeout=10     # Scale down after 10 minutes idle
+)
+
+@remote(resource_config=api_config, method="POST", path="/process")
+async def process_data(data: dict) -> dict:
+    # CPU processing logic
+    return {"result": "processed", "items": len(data)}
+
+@remote(resource_config=api_config, method="GET", path="/health")
+async def health_check() -> dict:
+    return {"status": "healthy", "service": "api-server"}
+```
+
+Both routes deploy to a single Serverless endpoint with URL like `https://api-abc123.runpod.net`.
+
+### Configuration parameters
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `name` | `string` | Name for your endpoint (required) | - |
+| `instanceIds` | `list[CpuInstanceType]` | CPU instance types | Default CPU instances |
+| `workersMin` | `int` | Minimum number of workers | 0 |
+| `workersMax` | `int` | Maximum number of workers | 3 |
+| `idleTimeout` | `int` | Minutes before scaling down | 5 |
+| `env` | `dict` | Environment variables | `None` |
+| `networkVolumeId` | `string` | Persistent storage volume ID | `None` |
+| `executionTimeoutMs` | `int` | Max execution time in milliseconds | 0 (no limit) |
+| `scalerType` | `string` | Scaling strategy | `QUEUE_DELAY` |
+| `scalerValue` | `int` | Scaling parameter value | 4 |
+| `locations` | `string` | Preferred datacenter locations | `None` |
+| `template` | `PodTemplate` | Pod template overrides | `None` |
+
+### Complete example
+
+```python
+from runpod_flash import CpuLiveLoadBalancer, CpuInstanceType, remote
+
+api_config = CpuLiveLoadBalancer(
+    name="data-api",
+    instanceIds=[CpuInstanceType.CPU5C_4_8],  # 4 vCPU, 8GB RAM
+    workersMin=1,
+    workersMax=10,
+    idleTimeout=15,
+    env={"API_VERSION": "v1"}
+)
+
+@remote(resource_config=api_config, method="POST", path="/analyze")
+async def analyze_text(text: str) -> dict:
+    words = text.split()
+    return {
+        "word_count": len(words),
+        "char_count": len(text)
+    }
+
+@remote(resource_config=api_config, method="POST", path="/validate")
+async def validate_input(data: dict) -> dict:
+    required_fields = ["name", "email"]
+    missing = [f for f in required_fields if f not in data]
+
+    return {
+        "valid": len(missing) == 0,
+        "missing_fields": missing
+    }
+
+@remote(resource_config=api_config, method="GET", path="/info")
+async def get_info() -> dict:
+    return {
+        "name": "Data API",
+        "version": "1.0.0",
+        "endpoints": ["/analyze", "/validate", "/info"]
+    }
+```
+
+### Calling CPU load balanced endpoints
+
+All routes share the same base URL:
+
+```bash
+# Call /analyze route
+curl -X POST https://api-abc123.runpod.net/analyze \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"text": "Hello world from Flash"}'
+
+# Call /validate route
+curl -X POST https://api-abc123.runpod.net/validate \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"name": "Alice", "email": "alice@example.com"}'
+
+# Call /info route
+curl -X GET https://api-abc123.runpod.net/info \
+    -H "Authorization: Bearer $RUNPOD_API_KEY"
+```
+
+## LiveLoadBalancer
+
+`LiveLoadBalancer` creates GPU-accelerated HTTP API endpoints. Like `CpuLiveLoadBalancer`, multiple routes can share the same configuration for GPU-powered real-time inference.
+
+### Basic example
+
+```python
+from runpod_flash import LiveLoadBalancer, GpuGroup, remote
+
+gpu_api_config = LiveLoadBalancer(
+    name="gpu-api",
+    gpus=[GpuGroup.ADA_24],  # RTX 4090 GPUs
+    workersMin=1,
+    workersMax=5,
+    idleTimeout=10
+)
+
+@remote(resource_config=gpu_api_config, method="POST", path="/inference")
+async def run_inference(input: dict) -> dict:
+    import torch
+    device = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
+    # GPU-accelerated processing
+    return {"result": "processed", "device": device}
+
+@remote(resource_config=gpu_api_config, method="GET", path="/model-info")
+async def get_model_info() -> dict:
+    import torch
+    return {
+        "cuda_available": torch.cuda.is_available(),
+        "device_count": torch.cuda.device_count() if torch.cuda.is_available() else 0
+    }
+```
+
+### Configuration parameters
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `name` | `string` | Name for your endpoint (required) | - |
+| `gpus` | `list[GpuGroup \| GpuType]` | GPU pools or specific GPU types | `[GpuGroup.ANY]` |
+| `gpuCount` | `int` | Number of GPUs per worker | 1 |
+| `workersMin` | `int` | Minimum number of workers | 0 |
+| `workersMax` | `int` | Maximum number of workers | 3 |
+| `idleTimeout` | `int` | Minutes before scaling down | 5 |
+| `env` | `dict` | Environment variables | `None` |
+| `networkVolumeId` | `string` | Persistent storage volume ID | `None` |
+| `executionTimeoutMs` | `int` | Max execution time in milliseconds | 0 (no limit) |
+| `scalerType` | `string` | Scaling strategy | `QUEUE_DELAY` |
+| `scalerValue` | `int` | Scaling parameter value | 4 |
+| `locations` | `string` | Preferred datacenter locations | `None` |
+| `template` | `PodTemplate` | Pod template overrides | `None` |
+
+### Complete example
+
+```python
+from runpod_flash import LiveLoadBalancer, GpuGroup, GpuType, PodTemplate, remote
+
+inference_config = LiveLoadBalancer(
+    name="ml-inference-api",
+    gpus=[GpuGroup.AMPERE_80, GpuGroup.ADA_24],  # A100 or RTX 4090 pools
+    # Or use specific GPU types:
+    # gpus=[GpuType.NVIDIA_A100_80GB_PCIe, GpuType.NVIDIA_GEFORCE_RTX_4090],
+    gpuCount=1,
+    workersMin=2,
+    workersMax=10,
+    idleTimeout=20,
+    networkVolumeId="vol_abc123",
+    template=PodTemplate(containerDiskInGb=100),
+    env={"MODEL_PATH": "/runpod-volume/models"}
+)
+
+@remote(
+    resource_config=inference_config,
+    method="POST",
+    path="/classify",
+    dependencies=["torch", "transformers", "pillow"]
+)
+async def classify_image(image_url: str) -> dict:
+    import torch
+    from transformers import AutoImageProcessor, AutoModelForImageClassification
+    from PIL import Image
+    import requests
+
+    # Load model
+    processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
+    model = AutoModelForImageClassification.from_pretrained("microsoft/resnet-50")
+    model = model.to("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Process image
+    image = Image.open(requests.get(image_url, stream=True).raw)
+    inputs = processor(image, return_tensors="pt").to(model.device)
+
+    # Run inference
+    with torch.no_grad():
+        outputs = model(**inputs)
+        logits = outputs.logits
+        predicted_class = logits.argmax(-1).item()
+
+    return {
+        "class_id": predicted_class,
+        "class_name": model.config.id2label[predicted_class]
+    }
+
+@remote(resource_config=inference_config, method="POST", path="/generate")
+async def generate_text(prompt: str, max_length: int = 100) -> dict:
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    model_name = "gpt2"
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(model_name)
+    model = model.to("cuda" if torch.cuda.is_available() else "cpu")
+
+    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+    outputs = model.generate(**inputs, max_length=max_length)
+    text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+    return {"generated_text": text}
+
+@remote(resource_config=inference_config, method="GET", path="/health")
+async def health_check() -> dict:
+    import torch
+    return {
+        "status": "healthy",
+        "cuda_available": torch.cuda.is_available(),
+        "gpu_name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None
+    }
+```
+
+### GPU selection for load balancers
+
+Like queue-based configurations, load balancers support both GPU pools and specific GPU types:
+
+**Using GPU pools:**
+
+```python
+# Single pool
+config = LiveLoadBalancer(
+    name="gpu-api",
+    gpus=[GpuGroup.ADA_24]  # Any RTX 4090
+)
+
+# Multiple pools (fallback)
+config = LiveLoadBalancer(
+    name="flexible-api",
+    gpus=[
+        GpuGroup.AMPERE_80,  # Try A100 first
+        GpuGroup.ADA_24      # Fall back to RTX 4090
+    ]
+)
+```
+
+**Using specific GPU types:**
+
+```python
+from runpod_flash import LiveLoadBalancer, GpuType
+
+config = LiveLoadBalancer(
+    name="specific-gpu-api",
+    gpus=[
+        GpuType.NVIDIA_A100_80GB_PCIe,  # PCIe variant only
+        GpuType.NVIDIA_A40               # Fallback to A40
+    ]
+)
+```
+
+**Mixing pools and types:**
+
+```python
+from runpod_flash import LiveLoadBalancer, GpuGroup, GpuType
+
+config = LiveLoadBalancer(
+    name="hybrid-api",
+    gpus=[
+        GpuType.NVIDIA_H100_80GB_HBM3,  # Try H100 specifically
+        GpuGroup.AMPERE_80,             # Then any A100
+        GpuGroup.ANY                     # Ultimate fallback
+    ]
+)
+```
+
+See [GPU types](/flash/configuration/gpu-types) for all available options.
+
+### Calling GPU load balanced endpoints
+
+All routes share the same base URL:
+
+```bash
+# Call /classify route
+curl -X POST https://api-abc123.runpod.net/classify \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"image_url": "https://example.com/image.jpg"}'
+
+# Call /generate route
+curl -X POST https://api-abc123.runpod.net/generate \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"prompt": "Once upon a time", "max_length": 50}'
+
+# Call /health route
+curl -X GET https://api-abc123.runpod.net/health \
+    -H "Authorization: Bearer $RUNPOD_API_KEY"
+```
+
+The required input data format depends on your remote function.
+
+## Route requirements
+
+Load balancer routes have specific requirements:
+
+### Required parameters
+
+Both `method=` and `path=` are required for all load balancer routes:
+
+```python
+# ✅ Correct
+@remote(resource_config=api_config, method="POST", path="/process")
+async def process_data(data: dict) -> dict:
+    return {"result": "processed"}
+
+# ❌ Missing method
+@remote(resource_config=api_config, path="/process")
+async def process_data(data: dict) -> dict:
+    return {"result": "processed"}
+
+# ❌ Missing path
+@remote(resource_config=api_config, method="POST")
+async def process_data(data: dict) -> dict:
+    return {"result": "processed"}
+```
+
+### Path format
+
+Paths must start with `/`:
+
+```python
+# ✅ Correct
+@remote(resource_config=api_config, method="GET", path="/status")
+
+# ❌ Incorrect - missing leading slash
+@remote(resource_config=api_config, method="GET", path="status")
+```
+
+### Valid HTTP methods
+
+Supported HTTP methods: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`.
+
+```python
+# ✅ All valid methods
+@remote(resource_config=api_config, method="GET", path="/items")
+@remote(resource_config=api_config, method="POST", path="/items")
+@remote(resource_config=api_config, method="PUT", path="/items/{id}")
+@remote(resource_config=api_config, method="DELETE", path="/items/{id}")
+@remote(resource_config=api_config, method="PATCH", path="/items/{id}")
+```
+
+## Worker scaling for load balancers
+
+Load balanced endpoints scale based on concurrent request volume:
+
+### Production API (always-ready workers)
+
+```python
+api_config = CpuLiveLoadBalancer(
+    name="production-api",
+    workersMin=3,    # Always keep 3 workers ready
+    workersMax=20,   # Scale up to 20 under load
+    idleTimeout=30   # Keep workers active longer
+)
+```
+
+**Best for**: High-traffic APIs requiring low latency.
+
+### Development API (cost-optimized)
+
+```python
+api_config = CpuLiveLoadBalancer(
+    name="dev-api",
+    workersMin=0,    # Scale to zero when idle
+    workersMax=5,    # Limited scaling
+    idleTimeout=5    # Quick scale-down
+)
+```
+
+**Best for**: Development, testing, low-traffic APIs
+
+### GPU inference API (balanced)
+
+```python
+gpu_api_config = LiveLoadBalancer(
+    name="gpu-inference",
+    gpus=[GpuGroup.ADA_24],
+    workersMin=1,    # One worker always ready
+    workersMax=10,   # Scale up for burst traffic
+    idleTimeout=15   # Moderate retention
+)
+```
+
+**Best for**: Production ML inference with variable traffic.
+
+<Tip>
+**Load balancer best practice**: Set `workersMin ≥ 1` for production APIs to avoid cold starts on first request. Unlike queue-based endpoints where jobs can wait, API clients expect immediate responses.
+</Tip>
+
+## Persistent storage
+
+Load balancing endpoints support persistent storage via network volumes. Attach a volume using the `networkVolumeId` parameter to share models, datasets, and files across workers:
+
+```python
+config = LiveLoadBalancer(
+    name="model-api",
+    gpus=[GpuGroup.AMPERE_80],
+    networkVolumeId="vol_abc123"  # Network volumes mount at /runpod-volume/
+)
+```
+
+See the [storage guide](/flash/configuration/storage) for complete details on using network volumes, including setup, access patterns, and best practices.
+
+## Environment variables
+
+Pass configuration to all routes using environment variables:
+
+```python
+api_config = CpuLiveLoadBalancer(
+    name="api-server",
+    env={
+        "API_VERSION": "v2",
+        "LOG_LEVEL": "INFO",
+        "FEATURE_FLAGS": "new_ui,async_processing"
+    }
+)
+
+@remote(resource_config=api_config, method="GET", path="/config")
+async def get_config() -> dict:
+    import os
+    return {
+        "version": os.getenv("API_VERSION"),
+        "log_level": os.getenv("LOG_LEVEL")
+    }
+```
+
+<Note>
+You can change environment variables without recreating workers. This makes it easy to rotate API keys or allow different developers to use their own .env files.
+</Note>
+
+## Best practices
+
+### For production APIs
+
+- Set `workersMin ≥ 1` to avoid cold starts on first request.
+- Use specific GPU types instead of `GpuGroup.ANY` for predictable performance.
+- Set appropriate `executionTimeoutMs` for your routes.
+- Use network volumes for large models to avoid downloading on each worker.
+- Include health check routes (e.g., `GET /health`) for monitoring.
+
+### For development
+
+- Set `workersMin=0` to minimize costs during development.
+- Use `GpuGroup.ANY` for fastest provisioning (GPU endpoints).
+- Keep `idleTimeout` short (5 minutes) to scale down quickly.
+- Test locally with `flash run` before deploying.
+
+### For cost optimization
+
+- Set `workersMin=0` for APIs with infrequent traffic.
+- Use CPU load balancers when GPU acceleration isn't needed.
+- Reduce `idleTimeout` for sporadic workloads.
+- Use smaller GPU types when possible (e.g., `ADA_24` vs. `AMPERE_80`).
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Build a REST API tutorial" href="/tutorials/flash/build-rest-api-with-load-balancer" icon="code">
+    Hands-on tutorial for building REST APIs with load balancers.
+  </Card>
+  <Card title="Configuration parameters" href="/flash/configuration/parameters" icon="sliders">
+    Complete parameter reference for all configuration options.
+  </Card>
+  <Card title="Storage" href="/flash/configuration/storage" icon="hard-drive">
+    Use network volumes to share models and data across workers.
+  </Card>
+  <Card title="GPU types" href="/flash/configuration/gpu-types" icon="microchip">
+    Available GPU pools and specific GPU types.
+  </Card>
+  <Card title="CPU types" href="/flash/configuration/cpu-types" icon="microchip">
+    Available CPU instance types.
+  </Card>
+  <Card title="Queue-based configurations" href="/flash/configuration/queue-based" icon="layer-group">
+    Learn about LiveServerless and CpuLiveServerless for batch processing.
+  </Card>
+</CardGroup>

@@ -23,16 +23,18 @@ When you call a remote function from a local Python script or [Flash app](/flash
 
 ## Resource configuration
 
-Every remote function requires a resource configuration that specifies the compute resources to use.
+Every remote function requires a resource configuration that specifies the compute resources to use. Flash provides six resource types:
 
-`LiveServerless` is the primary configuration class for Flash. It supports full remote code execution, allowing you to run arbitrary Python functions on Runpod's infrastructure.
+- **Queue-based** (`LiveServerless`, `CpuLiveServerless`) - For batch processing with `/run` or `/runsync` routes
+- **Load balancing** (`LiveLoadBalancer`, `CpuLiveLoadBalancer`) - For HTTP APIs with custom routes
+- **Custom Docker** (`ServerlessEndpoint`, `CpuServerlessEndpoint`) - For custom Docker images
 
-### GPU configuration
+### Quick start with GPU configuration
 
-For GPU workloads, create a `LiveServerless` configuration and specify the [GPU pool(s)](/references/gpu-types#gpu-pools) that your workers will use with the `gpus` parameter.
+For GPU workloads, create a `LiveServerless` configuration and specify the [GPU pool(s)](/flash/configuration/gpu-types#gpu-pools) your workers will use:
 
 ```python
-from runpod_flash import LiveServerless, GpuGroup
+from runpod_flash import LiveServerless, GpuGroup, remote
 
 gpu_config = LiveServerless(
     name="ml-inference",
@@ -42,53 +44,76 @@ gpu_config = LiveServerless(
 )
 
 @remote(resource_config=gpu_config, dependencies=["torch"])
-def run_inference(data):
+async def run_inference(data):
     import torch
     # Your inference code here
     return result
 ```
 
-Here are the common configuration options for `LiveServerless`:
+### Quick start with CPU configuration
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `name` | Name for your endpoint (required) | - |
-| `gpus` | [GPU pool IDs](/references/gpu-types#gpu-pools) that can be used by workers | `[GpuGroup.ANY]` |
-| `workersMax` | Maximum number of workers | 3 |
-| `workersMin` | Minimum number of workers | 0 |
-| `idleTimeout` | Minutes before scaling down | 5 |
-
-See the [resource configuration reference](/flash/resource-configuration) for all available options.
-
-<Tip>
-Learn how to view, update, and delete your endpoints in the [managing endpoints guide](/flash/managing-endpoints).
-</Tip>
-
-### CPU configuration
-
-For CPU workloads, specify `instanceIds` instead of `gpus`:
+For CPU-only workloads, use `CpuLiveServerless`:
 
 ```python
-from runpod_flash import LiveServerless, CpuInstanceType
+from runpod_flash import CpuLiveServerless, CpuInstanceType, remote
 
-cpu_config = LiveServerless(
+cpu_config = CpuLiveServerless(
     name="data-processor",
     instanceIds=[CpuInstanceType.CPU5C_4_8],  # 4 vCPU, 8GB RAM
     workersMax=3
 )
 
 @remote(resource_config=cpu_config, dependencies=["pandas"])
-def process_data(data):
+async def process_data(data):
     import pandas as pd
     df = pd.DataFrame(data)
     return df.describe().to_dict()
 ```
 
+### Quick start with load balancing
+
+For HTTP APIs with custom routes, use load balancing configurations:
+
+```python
+from runpod_flash import CpuLiveLoadBalancer, remote
+
+api_config = CpuLiveLoadBalancer(
+    name="api-server",
+    workersMin=1,
+    workersMax=10
+)
+
+@remote(resource_config=api_config, method="POST", path="/process")
+async def process_request(data: dict) -> dict:
+    return {"processed": data, "status": "complete"}
+
+@remote(resource_config=api_config, method="GET", path="/status")
+async def get_status() -> dict:
+    return {"status": "healthy"}
+```
+
+Load balancer routes require both `method=` and `path=` parameters.
+
+<CardGroup cols={2}>
+  <Card title="Configuration overview" href="/flash/configuration/overview" icon="book-open">
+    Choose the right configuration type for your workload.
+  </Card>
+  <Card title="Queue-based configs" href="/flash/configuration/queue-based" icon="layer-group">
+    Complete guide to LiveServerless and CpuLiveServerless.
+  </Card>
+  <Card title="Load balancing configs" href="/flash/configuration/load-balancing" icon="arrow-progress">
+    Build HTTP APIs with LiveLoadBalancer and CpuLiveLoadBalancer.
+  </Card>
+  <Card title="Configuration parameters" href="/flash/configuration/parameters" icon="sliders">
+    Complete parameter reference for all options.
+  </Card>
+</CardGroup>
+
 ### Custom Docker images
 
-For specialized environments that require pre-built Docker images—such as vLLM, TensorRT, or images with custom system dependencies—you'll need to use the `ServerlessEndpoint` configuration.
+For specialized environments requiring pre-built Docker images (vLLM, TensorRT, custom system dependencies), use `ServerlessEndpoint` or `CpuServerlessEndpoint`.
 
-See [Custom Docker images](/flash/custom-docker-images) for details.
+See [Custom Docker images](/flash/configuration/custom-docker-images) for details.
 
 
 ## Dependency management
@@ -249,25 +274,75 @@ def run_inference(prompt):
 
 ## Environment variables
 
-Pass environment variables to remote functions using the `env` parameter:
+Pass environment variables to remote functions using the `env` parameter in your configuration:
 
 ```python
 config = LiveServerless(
     name="api-worker",
-    env={"HF_TOKEN": "your_token", "MODEL_ID": "gpt2"}
+    env={
+        "HF_TOKEN": "your_huggingface_token",
+        "MODEL_ID": "gpt2",
+        "API_KEY": "your_api_key"
+    }
 )
 ```
 
+### Accessing environment variables in remote functions
+
+Access environment variables inside your remote functions using Python's `os.getenv()`:
+
+```python
+@remote(resource_config=config, dependencies=["transformers"])
+def load_model():
+    import os
+    from transformers import AutoModel
+
+    # Access environment variables set in the configuration
+    hf_token = os.getenv("HF_TOKEN")
+    model_id = os.getenv("MODEL_ID")
+
+    # Use them in your function logic
+    model = AutoModel.from_pretrained(
+        model_id,
+        use_auth_token=hf_token
+    )
+
+    return {"model_loaded": model_id}
+```
+
+You can also provide default values if the environment variable is not set:
+
+```python
+@remote(resource_config=config)
+def process_data(data):
+    import os
+
+    # Get environment variable with a default value
+    log_level = os.getenv("LOG_LEVEL", "INFO")
+    max_retries = int(os.getenv("MAX_RETRIES", "3"))
+
+    # Your processing logic here
+    return {"processed": True}
+```
+
 <Note>
-
-Environment variables are excluded from configuration hashing. Changing environment values won't trigger endpoint recreation, which allows different processes to load environment variables from `.env` files without causing false drift detection.
-
+You can change environment variables without recreating your endpoint. This makes it easy to rotate API keys or allow different developers to use their own .env files.
 </Note>
 
 
 ## Next steps
 
-- [Create API endpoints](/flash/apps/build-app) using FastAPI.
-- [Deploy Flash applications](/flash/apps/deploy-apps) for production.
-- [View the resource configuration reference](/flash/resource-configuration) for all available options.
-- [Clean up development endpoints](/flash/cli/undeploy) when you're done testing.
+<CardGroup cols={2}>
+  <Card title="Configuration overview" href="/flash/configuration/overview" icon="book-open">
+    Choose the right configuration type for your workload.
+  </Card>
+  <Card title="Build API endpoints" href="/flash/apps/build-app" icon="code">
+    Create API endpoints using FastAPI.
+  </Card>
+  <Card title="Deploy applications" href="/flash/apps/deploy-apps" icon="rocket">
+    Deploy Flash applications for production.
+  </Card>
+  <Card title="Clean up endpoints" href="/flash/cli/undeploy" icon="trash">
+    Remove development endpoints when done testing.
+  </Card>
+</CardGroup>

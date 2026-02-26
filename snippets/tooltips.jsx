@@ -155,6 +155,12 @@ export const NetworkVolumeTooltip = () => {
   );
 };
 
+export const NetworkVolumesTooltip = () => {
+  return (
+  <Tooltip headline="Network volume" tip="Persistent storage that exists independently of your other compute resources. Can be attached to multiple Pods or Serverless endpoints to share data between machines." cta="Learn more about network volumes" href="/storage/network-volumes">network volumes</Tooltip>
+  );
+};
+
 
 export const VolumeDiskTooltip = () => {
   return (

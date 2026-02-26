@@ -76,7 +76,7 @@ Bundle local `runpod_flash` source instead of the PyPI version. For development 
 
 ## Architecture
 
-After deployment, your entire application runs on Runpod Serverless:
+After deployment, your Flash app runs as independent Serverless endpoints on Runpod:
 
 <div style={{ marginLeft: '4rem'}}>
 ```mermaid
@@ -84,25 +84,35 @@ After deployment, your entire application runs on Runpod Serverless:
 
 flowchart TB
     Users(["USERS"])
+    StateManager["Runpod GraphQL API<br/>• Service discovery<br/>• Manifest registry"]
 
     subgraph Runpod ["RUNPOD SERVERLESS"]
-        Mothership["MOTHERSHIP ENDPOINT<br/>(your FastAPI app from main.py)<br/>• Your HTTP routes<br/>• Orchestrates @remote calls<br/>• Public URL for users"]
-        GPU["gpu-worker<br/>(your @remote function)"]
-        CPU["cpu-worker<br/>(your @remote function)"]
+        LB["lb_worker ENDPOINT<br/>(load-balanced)<br/>• POST /process<br/>• GET /health"]
+        GPU["gpu_worker ENDPOINT<br/>(queue-based)<br/>• POST /runsync"]
+        CPU["cpu_worker ENDPOINT<br/>(queue-based)<br/>• POST /runsync"]
 
-        Mothership -->|"internal"| GPU
-        Mothership -->|"internal"| CPU
+        LB <-.->|"inter-endpoint calls"| GPU
+        LB <-.->|"inter-endpoint calls"| CPU
+
+        LB -.->|"service discovery"| StateManager
+        GPU -.->|"service discovery"| StateManager
+        CPU -.->|"service discovery"| StateManager
     end
 
-    Users -->|"HTTPS (authenticated)"| Mothership
+    Users -->|"call directly"| LB
+    Users -->|"call directly"| GPU
+    Users -->|"call directly"| CPU
 
     style Runpod fill:#1a1a2e,stroke:#5F4CFE,stroke-width:2px,color:#fff
     style Users fill:#4D38F5,stroke:#4D38F5,color:#fff
-    style Mothership fill:#5F4CFE,stroke:#5F4CFE,color:#fff
+    style LB fill:#5F4CFE,stroke:#5F4CFE,color:#fff
     style GPU fill:#22C55E,stroke:#22C55E,color:#000
     style CPU fill:#22C55E,stroke:#22C55E,color:#000
+    style StateManager fill:#AE6DFF,stroke:#AE6DFF,color:#fff
 ```
 </div>
+
+Each resource configuration in your code creates an independent endpoint. You can call any endpoint directly based on your needs.
 
 ## Environment management
 
@@ -137,24 +147,34 @@ If no environment exists and none is specified, Flash creates a `production` env
 
 ## Post-deployment
 
-After successful deployment, Flash displays:
+After successful deployment, Flash displays all deployed endpoints:
 
 ```text
 ✓ Deployment Complete
 
-Your mothership is deployed at:
-https://api-xxxxx.runpod.net
+Load-balanced endpoints:
+  https://api-abc123.runpod.net  (lb_worker)
+    POST   /process
+    GET    /health
 
-Available Routes:
-POST   /api/hello
-POST   /gpu/process
+  Try it:
+    curl -X POST https://api-abc123.runpod.net/process \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $RUNPOD_API_KEY" \
+        -d '{"input": {}}'
 
-All endpoints require authentication:
-curl -X POST https://api-xxxxx.runpod.net/api/hello \
-    -H "Authorization: Bearer $RUNPOD_API_KEY" \
-    -H "Content-Type: application/json" \
-    -d '{"param": "value"}'
+Queue-based endpoints:
+  https://api-def456.runpod.net  (gpu_worker)
+  https://api-ghi789.runpod.net  (cpu_worker)
+
+  Try it:
+    curl -X POST https://api-def456.runpod.net/runsync \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $RUNPOD_API_KEY" \
+        -d '{"input": {}}'
 ```
+
+Each endpoint is independent with its own URL and can be called directly.
 
 ### Authentication
 
@@ -179,8 +199,9 @@ flash deploy --preview
 
 This builds your project and runs it in Docker containers locally:
 
-- Mothership exposed on `localhost:8000`.
+- Each endpoint runs in its own container.
 - All containers communicate via Docker network.
+- Endpoints exposed on local ports for testing.
 - Press `Ctrl+C` to stop.
 
 ## Managing deployment size
@@ -201,10 +222,10 @@ flash deploy --exclude torch,torchvision,torchaudio
 
 | Aspect | `flash run` | `flash deploy` |
 |--------|-------------|----------------|
-| FastAPI app runs on | Your machine | Runpod Serverless |
+| Local development server | Yes (http://localhost:8888) | No |
 | `@remote` functions run on | Runpod Serverless | Runpod Serverless |
-| Endpoint naming | `live-` prefix | No prefix |
-| Automatic updates | Yes | No |
+| Endpoint persistence | Temporary (`live-` prefix) | Persistent |
+| Code updates | Automatic reload | Manual redeploy |
 | Use case | Development | Production |
 
 ## Troubleshooting

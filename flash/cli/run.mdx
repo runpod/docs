@@ -3,7 +3,7 @@ title: "run"
 sidebarTitle: "run"
 ---
 
-Start the Flash development server for local testing with automatic updates. Your FastAPI app runs locally while `@remote` functions execute on Runpod Serverless.
+Start the Flash development server for local testing with automatic updates. A local development server provides a unified interface for testing while `@remote` functions execute on Runpod Serverless.
 
 ```bash
 flash run [OPTIONS]
@@ -49,39 +49,46 @@ Auto-provision all Serverless endpoints on startup instead of lazily on first ca
 
 ## Architecture
 
-With `flash run`, your system runs in a hybrid architecture:
+With `flash run`, Flash starts a local development server alongside remote Serverless endpoints:
 
 ```mermaid
 %%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#9289FE','primaryTextColor':'#fff','primaryBorderColor':'#9289FE','lineColor':'#5F4CFE','secondaryColor':'#AE6DFF','tertiaryColor':'#FCB1FF','edgeLabelBackground':'#5F4CFE', 'fontSize':'14px','fontFamily':'font-inter'}}}%%
 
 flowchart TB
+    Browser(["BROWSER/CURL"])
+
     subgraph Local ["YOUR MACHINE (localhost:8888)"]
-        FastAPI["FastAPI App (main.py)<br/>• Your HTTP routes<br/>• Orchestrates @remote calls<br/>• Updates automatically"]
+        DevServer["Development Server<br/>• Auto-reload on changes<br/>• API explorer at /docs<br/>• Routes requests"]
     end
 
     subgraph Runpod ["RUNPOD SERVERLESS"]
-        GPU["live-gpu-worker<br/>(your @remote function)"]
-        CPU["live-cpu-worker<br/>(your @remote function)"]
+        LB["live-lb_worker"]
+        GPU["live-gpu_worker"]
+        CPU["live-cpu_worker"]
     end
 
-    FastAPI -->|"HTTPS"| GPU
-    FastAPI -->|"HTTPS"| CPU
+    Browser -->|"HTTP"| DevServer
+    DevServer -->|"HTTPS"| LB
+    DevServer -->|"HTTPS"| GPU
+    DevServer -->|"HTTPS"| CPU
 
     style Local fill:#1a1a2e,stroke:#5F4CFE,stroke-width:2px,color:#fff
     style Runpod fill:#1a1a2e,stroke:#5F4CFE,stroke-width:2px,color:#fff
-    style FastAPI fill:#5F4CFE,stroke:#5F4CFE,color:#fff
+    style Browser fill:#4D38F5,stroke:#4D38F5,color:#fff
+    style DevServer fill:#5F4CFE,stroke:#5F4CFE,color:#fff
+    style LB fill:#22C55E,stroke:#22C55E,color:#000
     style GPU fill:#22C55E,stroke:#22C55E,color:#000
     style CPU fill:#22C55E,stroke:#22C55E,color:#000
 ```
 
 **Key points:**
 
-- Your FastAPI app runs locally and updates automatically for rapid iteration.
-- `@remote` functions run on Runpod as Serverless endpoints.
-- Endpoints are prefixed with `live-` to distinguish from production.
-- Changes to local code are picked up instantly.
+- A local development server provides a convenient testing interface at `localhost:8888`.
+- `@remote` functions deploy to Runpod Serverless with `live-` prefix to distinguish from production.
+- Code changes are picked up automatically without restarting the server.
+- The development server routes requests to appropriate remote endpoints.
 
-This is different from `flash deploy`, where everything runs on Runpod.
+This differs from `flash deploy`, where all endpoints run on Runpod without a local server.
 
 ## Auto-provisioning
 
@@ -143,10 +150,10 @@ Open http://localhost:8888/docs for the interactive API explorer.
 
 | Aspect | `flash run` | `flash deploy` |
 |--------|-------------|----------------|
-| FastAPI app runs on | Your machine (localhost) | Runpod Serverless |
+| Local development server | Yes (http://localhost:8888) | No |
 | `@remote` functions run on | Runpod Serverless | Runpod Serverless |
-| Endpoint naming | `live-` prefix | No prefix |
-| Automatic updates | Yes | No |
+| Endpoint persistence | Temporary (`live-` prefix) | Persistent |
+| Code updates | Automatic reload | Manual redeploy |
 | Use case | Development | Production |
 
 ## Related commands

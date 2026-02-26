@@ -1,0 +1,466 @@
+---
+title: "Customize your Flash app"
+sidebarTitle: "Customize your app"
+description: "Modify the Flash project template to build your application."
+tag: "BETA"
+---
+
+import { LoadBalancingEndpointsTooltip, QueueBasedEndpointsTooltip } from "/snippets/tooltips.jsx";
+
+After running `flash init`, you have a working project template with example <LoadBalancingEndpointsTooltip /> and <QueueBasedEndpointsTooltip />. This guide shows you how to customize the template to build your application.
+
+## Understanding endpoint architecture
+
+The relationship between resource configurations and deployed Serverless endpoints differs between load-balanced and queue-based endpoints. Understanding this mapping is critical for building Flash apps correctly.
+
+### Key rules
+
+**Queue-based endpoints** follow a strict 1:1:1 rule:
+- 1 resource configuration : 1 `@remote` function : 1 Serverless endpoint.
+- Each function must have its own unique resource configuration.
+- Each endpoint gets its own URL (e.g., `https://api-abc123.runpod.net`)
+- Called via `/run` or `/runsync` routes.
+
+**Load-balanced endpoints** allow multiple routes on one endpoint:
+- 1 resource configuration = multiple `@remote` functions = 1 Serverless endpoint.
+- Multiple routes can share the same configuration.
+- All routes share one URL with different paths (e.g., `/generate`, `/health`).
+- Each route defined by `method=` and `path=` parameters.
+
+<Warning>
+**Do not reuse the same resource configuration for multiple queue-based remote functions when deploying Flash apps.** Each queue-based remote function must have its own unique `LiveServerless` resource configuration with a unique `name` parameter.
+</Warning>
+
+### Examples
+
+The following sections demonstrate progressively complex scenarios:
+
+<Accordion title="Scenario 1: A single queue-based endpoint">
+
+**Your code:**
+
+```python title="gpu_worker.py"
+from runpod_flash import LiveServerless, GpuGroup, remote
+
+gpu_config = LiveServerless(name="gpu-inference", gpus=[GpuGroup.AMPERE_80])
+
+@remote(resource_config=gpu_config, dependencies=["torch"])
+async def process_data(input: dict) -> dict:
+    import torch
+    # Your processing logic
+    return {"result": "processed"}
+```
+
+**What gets deployed:**
+
+- **1 Serverless endpoint**: `https://api-abc123.runpod.net`
+  - Named: `gpu-inference`
+  - Hardware: Ampere 80GB GPUs.
+  - When you call the endpoint: A worker runs the `process_data` remote function using the input data you provide.
+
+**How to call it:**
+
+```bash
+# Synchronous call:
+curl -X POST https://api-abc123.runpod.net/runsync \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -d '{"input": {"your": "data"}}'
+
+# Asynchronous call:
+curl -X POST https://api-abc123.runpod.net/run \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -d '{"input": {"your": "data"}}'
+```
+
+**Key takeaway:** Each queue-based function must have its own unique resource configuration name. Do not reuse the same resource config for multiple queue-based functions in Flash apps.
+</Accordion>
+
+<Accordion title="Scenario 2: Multiple queue-based endpoints">
+
+**Your code:**
+
+```python title="gpu_worker.py"
+from runpod_flash import LiveServerless, GpuGroup, remote
+
+# Each remote function needs its own resource config
+preprocess_config = LiveServerless(name="preprocess", gpus=[GpuGroup.AMPERE_80])
+inference_config = LiveServerless(name="inference", gpus=[GpuGroup.AMPERE_80])
+
+@remote(resource_config=preprocess_config, dependencies=["torch"])
+async def preprocess(data: dict) -> dict:
+    return {"preprocessed": data}
+
+@remote(resource_config=inference_config, dependencies=["transformers"])
+async def run_model(input: dict) -> dict:
+    return {"output": "result"}
+```
+
+**What gets deployed:**
+
+- **2 Serverless endpoints**:
+  1. `https://api-abc123.runpod.net` (Named: `preprocess` in the console)
+  2. `https://api-def456.runpod.net` (Named: `inference` in the console)
+
+**How to call them:**
+
+```bash
+# Call preprocess endpoint:
+curl -X POST https://api-abc123.runpod.net/runsync \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -d '{"input": {"your": "data"}}'
+
+# Call inference endpoint:
+curl -X POST https://api-def456.runpod.net/runsync \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -d '{"input": {"your": "data"}}'
+```
+
+**Key takeaway:** Each queue-based function must have its own unique resource configuration name. Do not reuse the same resource config for multiple queue-based functions in Flash apps.
+
+</Accordion>
+
+<Accordion title="Scenario 3: Load-balanced endpoint with multiple routes">
+
+**Your code:**
+
+```python title="lb_worker.py"
+from runpod_flash import CpuLiveLoadBalancer, remote
+
+api_config = CpuLiveLoadBalancer(name="api-server", workersMin=1)
+
+@remote(resource_config=api_config, method="POST", path="/generate")
+async def generate_text(prompt: str) -> dict:
+    return {"text": "generated"}
+
+@remote(resource_config=api_config, method="POST", path="/translate")
+async def translate_text(text: str, target: str) -> dict:
+    return {"translated": text}
+
+@remote(resource_config=api_config, method="GET", path="/health")
+async def health_check() -> dict:
+    return {"status": "healthy"}
+```
+
+**What gets deployed:**
+
+- **1 Serverless endpoint**: `https://api-abc123.runpod.net` (Named: `api-server`)
+- **3 HTTP routes**: `POST /generate`, `POST /translate`, `GET /health` (Defined by the `@remote` decorators in `lb_worker.py`)
+
+ **How to call them:**
+
+```bash
+# Call /generate route:
+curl -X POST https://api-abc123.runpod.net/generate \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -d '{"prompt": "hello"}'
+
+# Call /health route (same endpoint URL):
+curl -X GET https://api-abc123.runpod.net/health \
+    -H "Authorization: Bearer $RUNPOD_API_KEY"
+```
+
+**Key takeaway:** Load-balanced endpoints can have multiple routes on a single Serverless endpoint. The `path=` parameter determines each route.
+
+</Accordion>
+
+<Accordion title="Scenario 4: Mixing load-balanced and queue-based endpoints">
+
+**Your code:**
+
+```python title="mixed_api_worker.py"
+from runpod_flash import CpuLiveLoadBalancer, LiveServerless, GpuGroup, remote
+
+# Public-facing API (load-balanced)
+api_config = CpuLiveLoadBalancer(name="public-api")
+
+@remote(resource_config=api_config, method="POST", path="/process")
+async def handle_request(data: dict) -> dict:
+    # Call internal GPU worker
+    result = await run_gpu_inference(data)
+    return {"result": result}
+
+# Internal GPU worker (queue-based)
+gpu_config = LiveServerless(name="gpu-backend", gpus=[GpuGroup.AMPERE_80])
+
+@remote(resource_config=gpu_config, dependencies=["torch"])
+async def run_gpu_inference(input: dict) -> dict:
+    import torch
+    # Heavy GPU computation
+    return {"inference": "result"}
+```
+
+**What gets deployed:**
+
+- **2 Serverless endpoints**:
+  1. `https://api-abc123.runpod.net` (public-api, load-balanced)
+  2. `https://api-def456.runpod.net` (gpu-backend, queue-based)
+
+**Key takeaway:** You can mix endpoint types. Load-balanced endpoints can call queue-based endpoints internally.
+
+</Accordion>
+
+### Quick reference
+
+| Endpoint Type | Resource config rule | Result |
+|---------------|-------------|--------|
+| Queue-based | 1 config : 1 remote function | 1 Serverless endpoint |
+| Load-balanced | 1 config : 1 or more remote functions | 1 Serverless endpoint with >= 1 paths |
+| Mixed | Different config names : Different remote functions | Separate Serverless endpoints |
+
+## Working with the `flash init` template structure
+
+### Understanding the worker files
+
+The `flash init` template includes three worker files:
+
+**`lb_worker.py`** (load-balanced HTTP API)
+- Use for user-facing API routes.
+- Multiple routes share one Serverless endpoint.
+- Define custom HTTP methods and paths using the `method` and `path` parameters.
+- Best for real-time request/response patterns.
+
+**`gpu_worker.py`** (GPU queue-based compute)
+- Use for GPU-intensive workloads.
+- Each function needs its own resource configuration.
+- Accessed via `/run` or `/runsync` routes.
+- Best for model inference, training, batch processing.
+
+**`cpu_worker.py`** (CPU queue-based compute)
+- Use for non-GPU workloads.
+- Each function needs its own resource configuration.
+- Accessed via `/run` or `/runsync` routes.
+- Best for data preprocessing, file processing, API calls.
+
+### When to create new files vs. modify existing
+
+**Modify existing files when:**
+- Adding routes to the load-balancing API.
+- Adding functionality to existing endpoints.
+- Customizing the example functions.
+
+**Create new files when:**
+- Adding new queue-based endpoints with different purposes.
+- Organizing code by domain (e.g., `image_worker.py`, `text_worker.py`).
+- Separating concerns across multiple endpoints.
+
+**Example structure for a larger Flash app:**
+
+```bash
+my-flash-app/
+├── lb_worker.py              # Public API routes
+├── image_inference.py         # Image processing endpoint
+├── text_inference.py          # Text processing endpoint
+└── batch_processing.py        # Background batch jobs
+```
+
+Each file with `@remote` functions gets discovered during `flash deploy`, which creates the appropriate endpoints.
+
+## Add load balancing routes
+
+To add routes to an existing load balancing endpoint, use the `@remote` decorator with the `method` and `path` parameters:
+
+```python title="lb_worker.py"
+from runpod_flash import CpuLiveLoadBalancer, remote
+
+api_config = CpuLiveLoadBalancer(name="lb_worker", workersMin=1)
+
+# Existing routes
+@remote(resource_config=api_config, method="POST", path="/process")
+async def process(input_data: dict) -> dict:
+    # ... existing code ...
+    pass
+
+# Add a new route
+@remote(resource_config=api_config, method="GET", path="/status")
+async def get_status() -> dict:
+    return {"status": "healthy", "version": "1.0"}
+```
+
+All routes share the same `lb_worker` Serverless endpoint. Each route is accessible at its defined path.
+
+**Key points:**
+- Multiple routes can share one resource configuration
+- Each route has its own HTTP method and path
+- All routes on the same config deploy to one Serverless endpoint
+
+## Add queue-based endpoints
+
+To add a new queue-based endpoint, create a new resource configuration with a unique name:
+
+```python title="gpu_worker.py"
+from runpod_flash import LiveServerless, GpuGroup, remote
+
+# Existing endpoint
+gpu_inference_config = LiveServerless(
+    name="gpu-inference",
+    gpus=[GpuGroup.AMPERE_80],
+    workersMax=3
+)
+
+@remote(resource_config=gpu_inference_config, dependencies=["torch"])
+async def run_inference(input: dict) -> dict:
+    import torch
+    # Inference logic
+    return {"result": "processed"}
+
+# New endpoint for a different workload
+gpu_training_config = LiveServerless(
+    name="gpu-training",
+    gpus=[GpuGroup.AMPERE_80],
+    workersMax=1
+)
+
+@remote(resource_config=gpu_training_config, dependencies=["torch", "transformers"])
+async def train_model(config: dict) -> dict:
+    import torch
+    from transformers import Trainer
+    # Training logic
+    return {"model_path": "/models/trained"}
+```
+
+This creates two separate Serverless endpoints, each with its own URL and scaling configuration.
+
+<Warning>
+**Each queue-based function must have its own unique resource configuration.** Do not assign multiple `@remote` functions to the same `LiveServerless` resource configuration when building Flash apps.
+</Warning>
+
+## Modify resource configurations
+
+You can adjust resource configurations to optimize for your workload:
+
+### Change GPU types
+
+```python
+# For large models requiring 80GB VRAM
+gpu_config = LiveServerless(
+    name="large-model",
+    gpus=[GpuGroup.AMPERE_80]  # A100 80GB
+)
+
+# For cost-effective inference on smaller models
+gpu_config = LiveServerless(
+    name="small-model",
+    gpus=[GpuGroup.ADA_24]  # RTX 4090 24GB
+)
+
+# For maximum availability with fallback options
+gpu_config = LiveServerless(
+    name="flexible-gpu",
+    gpus=[
+        GpuGroup.AMPERE_80,  # Try A100 80GB first
+        GpuGroup.AMPERE_48,  # Fall back to A40/A6000 48GB
+        GpuGroup.ADA_24      # Final fallback to RTX 4090 24GB
+    ]
+)
+```
+
+### Adjust worker scaling
+
+```python
+# High-traffic endpoint with minimum workers
+config = LiveServerless(
+    name="production-api",
+    gpus=[GpuGroup.AMPERE_80],
+    workersMin=2,    # Always keep 2 workers ready
+    workersMax=10    # Scale up to 10 workers under load
+)
+
+# Low-traffic batch processing
+config = LiveServerless(
+    name="batch-job",
+    gpus=[GpuGroup.AMPERE_80],
+    workersMin=0,    # No minimum workers (scale to zero)
+    workersMax=3     # Scale up to 3 workers when needed
+)
+```
+
+### Configure timeouts
+
+```python
+# Long-running training jobs
+config = LiveServerless(
+    name="training",
+    gpus=[GpuGroup.AMPERE_80],
+    idleTimeout=30,           # Keep workers active for 30 minutes
+    executionTimeoutMs=600000  # 10-minute execution timeout
+)
+
+# Quick inference requests
+config = LiveServerless(
+    name="inference",
+    gpus=[GpuGroup.ADA_24],
+    idleTimeout=5,            # Scale down after 5 minutes idle
+    executionTimeoutMs=60000  # 1-minute execution timeout
+)
+```
+
+See the [complete resource configuration reference](/flash/configuration/overview) for all available options.
+
+## Manage dependencies
+
+Specify Python packages in the `dependencies` parameter of the `@remote` decorator:
+
+```python
+@remote(
+    resource_config=gpu_config,
+    dependencies=[
+        "transformers==4.36.0",  # Pin specific versions
+        "torch",                 # Or use latest
+        "pillow",
+        "requests"
+    ]
+)
+async def process_with_deps(input: dict) -> dict:
+    # Import inside the function
+    from transformers import pipeline
+    import torch
+    from PIL import Image
+    import requests
+
+    # Your processing logic
+    return {"result": "processed"}
+```
+
+**Best practices:**
+- Pin versions for production deployments (e.g., `transformers==4.36.0`)
+- Import packages inside the function body, not at the top of the file
+- Only include packages you actually use to reduce cold start time
+- For large packages already in base images (like `torch`), consider using `--exclude` during deployment
+
+See [dependency management](/flash/remote-functions#dependency-management) for more details.
+
+## Test your customizations
+
+After customizing your app, test locally with `flash run`:
+
+```bash
+flash run
+```
+
+This starts a development server at http://localhost:8888 with:
+- Interactive API documentation at `/docs`
+- Auto-reload on code changes
+- Real remote execution on Runpod workers
+
+Make sure to test:
+- All HTTP routes work as expected
+- Remote functions execute correctly
+- Dependencies install properly
+- Error handling works
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Test locally" href="/flash/apps/local-testing" icon="flask">
+    Use `flash run` for local development and testing.
+  </Card>
+  <Card title="Deploy to Runpod" href="/flash/apps/deploy-apps" icon="rocket">
+    Deploy your application to production with `flash deploy`.
+  </Card>
+  <Card title="Configure hardware resources" href="/flash/configuration/overview" icon="sliders">
+    Complete reference for resource configuration options.
+  </Card>
+  <Card title="Create remote functions" href="/flash/remote-functions" icon="code">
+    Learn more about writing and optimizing remote functions.
+  </Card>
+</CardGroup>

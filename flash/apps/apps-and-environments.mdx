@@ -5,6 +5,8 @@ description: "Manage Flash apps and environments with the flash app and flash en
 tag: "BETA"
 ---
 
+import { LoadBalancingEndpointsTooltip, QueueBasedEndpointsTooltip } from "/snippets/tooltips.jsx";
+
 This page covers practical commands and workflows for managing Flash apps and environments. For a conceptual overview of the deployment hierarchy, see the [development lifecycle guide](/flash/apps/overview).
 
 ## Flash apps
@@ -13,25 +15,47 @@ A **Flash app** is a namespace registered on Runpod's backend that groups all re
 
 ### App hierarchy
 
-```text
-Flash App (my-project)
-│
-├── Environments
-│   ├── dev
-│   │   ├── Endpoints (gpu-worker, cpu-worker)
-│   │   └── Volumes (model-cache)
-│   ├── staging
-│   │   ├── Endpoints (gpu-worker, cpu-worker)
-│   │   └── Volumes (model-cache)
-│   └── production
-│       ├── Endpoints (gpu-worker, cpu-worker)
-│       └── Volumes (model-cache)
-│
-└── Builds
-    ├── build_v1 (2024-01-15)
-    ├── build_v2 (2024-01-18)
-    └── build_v3 (2024-01-20)
-```
+<Tree>
+  <Tree.Folder name="Flash App (my-project)" defaultOpen>
+    <Tree.Folder name="Environments" defaultOpen>
+      <Tree.Folder name="dev" defaultOpen>
+        <Tree.Folder name="Endpoints" defaultClosed>
+          <Tree.File name="lb_worker" />
+          <Tree.File name="gpu_worker" />
+          <Tree.File name="cpu_worker" />
+        </Tree.Folder>
+        <Tree.Folder name="Volumes" defaultClosed>
+          <Tree.File name="model-cache" />
+        </Tree.Folder>
+      </Tree.Folder>
+      <Tree.Folder name="staging" defaultOpen>
+        <Tree.Folder name="Endpoints" defaultClosed>
+          <Tree.File name="lb_worker" />
+          <Tree.File name="gpu_worker" />
+          <Tree.File name="cpu_worker" />
+        </Tree.Folder>
+        <Tree.Folder name="Volumes" defaultClosed>
+          <Tree.File name="model-cache" />
+        </Tree.Folder>
+      </Tree.Folder>
+      <Tree.Folder name="production" defaultOpen>
+        <Tree.Folder name="Endpoints" defaultClosed>
+          <Tree.File name="lb_worker" />
+          <Tree.File name="gpu_worker" />
+          <Tree.File name="cpu_worker" />
+        </Tree.Folder>
+        <Tree.Folder name="Volumes" defaultClosed>
+          <Tree.File name="model-cache" />
+        </Tree.Folder>
+      </Tree.Folder>
+    </Tree.Folder>
+    <Tree.Folder name="Builds" defaultOpen>
+      <Tree.File name="build_v1" />
+      <Tree.File name="build_v2" />
+      <Tree.File name="build_v3" />
+    </Tree.Folder>
+  </Tree.Folder>
+</Tree>
 
 ### Creating apps
 
@@ -68,44 +92,39 @@ Deleting an app removes all environments, builds, endpoints, and volumes associa
 
 When you run `flash deploy`, three things happen on Runpod:
 
-### 1. Build artifact is uploaded
+<Steps>
+  <Step title="Build artifact is uploaded">
+    Flash creates a **tarball** (`.flash/artifact.tar.gz`) containing:
+    - Your Python code (worker files like `lb_worker.py`, `gpu_worker.py`, `cpu_worker.py`).
+    - Pre-installed dependencies (bundled during build).
+    - Deployment manifest (`flash_manifest.json`).
+    - Auto-generated handler code.
+    This tarball is uploaded to Runpod's storage and associated with your app as a "build."
+  </Step>
 
-Flash creates a **tarball** (`.flash/artifact.tar.gz`) containing:
+  <Step title="Serverless endpoints are provisioned">
+    For each resource configuration in the manifest, Flash creates a Serverless endpoint. Each endpoint is independent with its own URL and runs on pre-built Flash Docker images.
 
-- Your Python code (`main.py`, `workers/`, etc.).
-- Pre-installed dependencies (bundled during build).
-- Deployment manifest (`flash_manifest.json`).
-- Auto-generated handler code.
+  - Execute `@remote` functions on GPUs or CPUs.
+  - Example: `gpu_worker` and `cpu_worker`
+  - Pre-built images: `runpod/flash:latest` (GPU) or `runpod/flash-cpu:latest` (CPU).
+  - Scale automatically based on load.
+  - Provide `/runsync` endpoint for job submission.
 
-This tarball is uploaded to Runpod's storage and associated with your app as a "build."
+  </Step>
 
-### 2. Serverless endpoints are provisioned
+  <Step title="Environment is activated">
+    The environment is linked to:
+    - The uploaded build (specific version of your code).
+    - The provisioned endpoints (running infrastructure).
+    - Deployment state (health, status, metrics).
 
-For each resource in the manifest, Flash creates a Serverless endpoint:
+    Each environment maintains its own set of endpoints and can be updated independently.
 
-**Mothership endpoint** (Load-Balanced):
+  </Step>
+</Steps>
 
-- Runs your FastAPI app from `main.py`.
-- Provides the public HTTPS URL for users.
-- Orchestrates calls to worker endpoints.
-- Uses pre-built image: `runpod/flash-lb-cpu:latest`
-
-**Worker endpoints** (Queue-Based):
-
-- Execute your `@remote` functions.
-- Scale automatically based on load.
-- Run on GPUs or CPUs based on configuration.
-- Uses pre-built images: `runpod/flash:latest` (GPU) or `runpod/flash-cpu:latest` (CPU).
-
-### 3. Environment is activated
-
-The environment is linked to:
-
-- The uploaded build (specific version of your code).
-- The provisioned endpoints (running infrastructure).
-- Deployment state (health, status, metrics).
-
-**Key insight:** You're **not** building custom Docker images. The Flash images are pre-built and generic—they extract your tarball and run your code. This is why deployments are fast (no image build step) and limited to 500 MB (only code and dependencies, not full Docker images).
+It's important to remember that you're **not** building custom Docker images. The Flash images are pre-built and generic—they extract your tarball and run your code. This is why deployments are fast (no image build step) and limited to 500 MB (only code and dependencies).
 
 ## Environments
 

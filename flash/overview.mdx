@@ -5,7 +5,7 @@ description: "Rapidly develop and deploy AI/ML apps with the Flash Python SDK."
 tag: "BETA"
 ---
 
-import { ServerlessTooltip, PodsTooltip, WorkersTooltip } from "/snippets/tooltips.jsx";
+import { ServerlessTooltip, PodsTooltip, WorkersTooltip, LoadBalancingEndpointsTooltip, QueueBasedEndpointsTooltip } from "/snippets/tooltips.jsx";
 
 <Note>
 Flash is currently in beta. [Join our Discord](https://discord.gg/cUpRmau42V) to provide feedback and get support.
@@ -60,13 +60,35 @@ Your Flash API key needs **All** access permissions to your Runpod account. You 
 
 ## Core concepts
 
+### Resource configuration
+
+Flash provides fine-grained control over hardware allocation through configuration objects. Choose from GPU or CPU configurations, queue-based or load-balanced endpoints, and customize worker counts, scaling behavior, and more.
+
+```python
+from runpod_flash import LiveServerless, GpuGroup
+
+gpu_config = LiveServerless(
+    name="ml-inference",
+    gpus=[GpuGroup.AMPERE_80],  # A100 80GB
+    workersMax=5,
+    idleTimeout=10
+)
+```
+
+Flash currently offers six resource types:
+- **Queue-based endpoints** (`LiveServerless`, `CpuLiveServerless`) - For batch processing.
+- **Load balancing endpoints** (`LiveLoadBalancer`, `CpuLiveLoadBalancer`) - For HTTP APIs.
+**Custom Docker endpoints** (`ServerlessEndpoint`, `CpuServerlessEndpoint`) - For pre-built Docker images.
+
+[View the complete configuration guide](/flash/configuration/overview).
+
 ### Remote functions
 
 The `@remote` decorator marks functions for execution on Runpod's infrastructure. Code inside the decorated function runs remotely on a Serverless worker, while code outside the function runs locally on your machine.
 
 ```python
-@remote(resource_config=config, dependencies=["pandas"])
-def process_data(data):
+@remote(resource_config=gpu_config, dependencies=["pandas"])
+async def process_data(data):
     # This code runs remotely on Runpod
     import pandas as pd
     df = pd.DataFrame(data)
@@ -74,32 +96,17 @@ def process_data(data):
 
 async def main():
     # This code runs locally
-    result = await process_data(my_data)
+    result = await process_data(data)
+    print(result)
 ```
 
-When you run a remote function, Flash:
+When you call a remote function, Flash:
 - Automatically provisions resources on Runpod's infrastructure.
-- Installs your dependencies automatically.
-- Runs your function on a remote GPU/CPU.
-- Returns the result to your local environment.
+- Installs your dependencies on the remote worker.
+- Executes your function on a remote GPU/CPU.
+- Returns the result to your local environment
 
 [Learn more about remote functions](/flash/remote-functions).
-
-### Resource configuration
-
-Flash provides fine-grained control over hardware allocation through configuration objects. You can configure GPU types, worker counts, idle timeouts, environment variables, and more.
-
-```python
-from runpod_flash import remote, LiveServerless, GpuGroup
-
-gpu_config = LiveServerless(
-    name="ml-inference",
-    gpus=[GpuGroup.AMPERE_80],  # A100 80GB
-    workersMax=5
-)
-```
-
-[View the complete resource configuration reference](/flash/resource-configuration).
 
 ### Dependency management
 
@@ -187,7 +194,7 @@ To get started, initialize a new Flash app project in your current directory:
 flash init
 ```
 
-This creates a new project with a FastAPI server and example workers. Remote functions are defined in the `workers/` directory.
+This creates a new project with example <LoadBalancingEndpointsTooltip /> and <QueueBasedEndpointsTooltip /> (`lb_worker.py`, `gpu_worker.py`, `cpu_worker.py`).
 
 Start a local development server to test your app:
 
@@ -247,11 +254,11 @@ This allows your coding agent to provide more accurate Flash code suggestions an
   <Card title="Build an app" href="/flash/apps/build-app" icon="code">
     Create a FastAPI app with Flash
   </Card>
-  <Card title="Configuration reference" href="/flash/resource-configuration" icon="sliders">
-    Complete reference for resource configuration
+  <Card title="Configure hardware resources" href="/flash/configuration/overview" icon="sliders">
+    Complete guide for configuring hardware resources
   </Card>
   <Card title="CLI reference" href="/flash/cli/overview" icon="terminal">
-    Learn about Flash CLI commands
+    Learn about the Flash CLI commands
   </Card>
 </CardGroup>
 

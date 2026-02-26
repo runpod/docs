@@ -68,28 +68,25 @@ Replace `YOUR_API_KEY` with your actual Runpod API key.
 
 This is the structure of the project template created by `flash init`:
 
-```text
-flash_app/
-├── main.py                    # FastAPI application entry point
-├── workers/
-│   ├── gpu/                   # GPU worker example
-│   │   ├── __init__.py        # FastAPI router
-│   │   └── endpoint.py        # GPU script with @remote decorated function
-│   └── cpu/                   # CPU worker example
-│       ├── __init__.py        # FastAPI router
-│       └── endpoint.py        # CPU script with @remote decorated function
-├── .gitignore                 # Git ignore patterns
-├── .flashignore               # Flash deployment ignore patterns
-├── requirements.txt           # Python dependencies
-└── README.md                  # Project documentation
-```
+<Tree>
+  <Tree.Folder name="flash_app" defaultOpen>
+    <Tree.File name="lb_worker.py" />
+    <Tree.File name="gpu_worker.py" />
+    <Tree.File name="cpu_worker.py" />
+    <Tree.File name=".env.example" />
+    <Tree.File name=".flashignore" />
+    <Tree.File name=".gitignore" />
+    <Tree.File name="pyproject.toml" />
+    <Tree.File name="requirements.txt" />
+    <Tree.File name="README.md" />
+  </Tree.Folder>
+</Tree>
 
 This template includes:
 
-- A FastAPI application entry point and routers.
-- Templates for `requirements.txt`, `.env`, `.gitignore`, etc.
-- Flash scripts (`endpoint.py`) for both GPU and CPU workers, which include:
-  - Pre-configured worker scaling limits using the `LiveServerless()` object.
+- Example worker files with `@remote` decorated functions for load-balanced and queue-based endpoints.
+- Templates for `requirements.txt`, `.env.example`, `.gitignore`, etc.
+- Pre-configured resource configurations using `LiveServerless` and `CpuLiveLoadBalancer` objects.
   - A `@remote` decorated function that returns a response from a worker.
 
 When you start the FastAPI server, it creates API endpoints at `/gpu/hello` and `/cpu/hello`, which call the remote function described in their respective `endpoint.py` files.
@@ -161,35 +158,34 @@ To run remote functions in the explorer:
 
 You'll get a response from your workers right in the explorer.
 
-## Step 7: Customize your API
+## Step 7: Customize your endpoints
 
-To customize your API endpoint and functionality:
+To customize your endpoints:
 
-1. Add or edit remote functions in your `endpoint.py` files.
-2. Test the scripts individually by running `python endpoint.py`.
-3. Configure your FastAPI routers by editing the `__init__.py` files.
-4. Add any new endpoints to your `main.py` file.
+1. Edit the `@remote` functions in your worker files (`lb_worker.py`, `gpu_worker.py`, `cpu_worker.py`).
+2. Add new worker files for new endpoints.
+3. Test individual workers by running them as scripts (e.g., `python gpu_worker.py`).
+4. Restart the development server to pick up changes.
 
-### Example: Adding a custom endpoint
+### Example: Adding a custom GPU endpoint
 
-To add a new GPU endpoint for image generation:
-
-1. Create a new file at `workers/gpu/image_gen.py`:
+To add a new GPU endpoint for image generation, create a new worker file or modify an existing one. For deployed apps, each queue-based function needs its own unique resource configuration:
 
 ```python
 from runpod_flash import remote, LiveServerless, GpuGroup
 
-config = LiveServerless(
-    name="image-generator",
-    gpus=[GpuGroup.AMPERE_24],
+# Separate configuration for image generation endpoint
+image_gen_config = LiveServerless(
+    name="image_generator",
+    gpus=[GpuGroup.ADA_24],  # RTX 4090 for efficient inference
     workersMax=2
 )
 
 @remote(
-    resource_config=config,
-    dependencies=["diffusers", "torch", "transformers"]
+    resource_config=image_gen_config,
+    dependencies=["diffusers", "torch", "transformers", "pillow"]
 )
-def generate_image(prompt: str, width: int = 512, height: int = 512):
+async def generate_image(prompt: str, width: int = 512, height: int = 512) -> dict:
     import torch
     from diffusers import StableDiffusionPipeline
     import base64
@@ -209,21 +205,7 @@ def generate_image(prompt: str, width: int = 512, height: int = 512):
     return {"image": img_str, "prompt": prompt}
 ```
 
-2. Add a route in `workers/gpu/__init__.py`:
-
-```python
-from fastapi import APIRouter
-from .image_gen import generate_image
-
-router = APIRouter()
-
-@router.post("/generate")
-async def generate(prompt: str, width: int = 512, height: int = 512):
-    result = await generate_image(prompt, width, height)
-    return result
-```
-
-3. Include the router in `main.py` if not already included.
+This creates a new Serverless endpoint specifically for image generation. When deployed, it will be available at its own endpoint URL with its own `/run` or `/runsync` routes.
 
 ## Step 8: Deploy to Runpod
 
@@ -237,27 +219,38 @@ This command:
 
 1. Builds your application into a deployment artifact.
 2. Uploads it to Runpod's storage.
-3. Provisions Serverless endpoints for your `@remote` functions.
-4. Deploys your FastAPI application as the "mothership" endpoint.
+3. Provisions independent Serverless endpoints for each resource configuration.
+4. Configures service discovery for inter-endpoint communication.
 
-After deployment, you'll receive a public URL for your API:
+After deployment, you'll receive URLs for all deployed endpoints, grouped by resource configuration type:
 
 ```text
-Your mothership is deployed at:
-https://api-xxxxx.runpod.net
+✓ Deployment Complete
 
-Available Routes:
-POST   /gpu/hello
-POST   /cpu/hello
+Load-balanced endpoints:
+  https://api-abc123.runpod.net  (lb_worker)
+    POST   /process
+    GET    /health
+
+Queue-based endpoints:
+  https://api-def456.runpod.net  (gpu_worker)
+  https://api-ghi789.runpod.net  (cpu_worker)
 ```
 
-All requests to the deployed app require authentication with your Runpod API key:
+All requests to deployed endpoints require authentication with your Runpod API key. For example:
 
 ```bash
-curl -X POST https://api-xxxxx.runpod.net/gpu/hello \
+# Call a load-balanced endpoint
+curl -X POST https://api-abc123.runpod.net/process \
     -H "Authorization: Bearer $RUNPOD_API_KEY" \
     -H "Content-Type: application/json" \
-    -d '{"message": "Hello from production!"}'
+    -d '{"input": {}}'
+
+# Call a queue-based endpoint
+curl -X POST https://api-def456.runpod.net/runsync \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"input": {}}'
 ```
 
 For detailed deployment options including environment management, see [Deploy Flash apps](/flash/apps/deploy-apps).
@@ -265,5 +258,5 @@ For detailed deployment options including environment management, see [Deploy Fl
 ## Next steps
 
 - [Deploy Flash applications](/flash/apps/deploy-apps) for production use.
-- [Configure resources](/flash/resource-configuration) for your endpoints.
+- [Configure hardware resources](/flash/configuration/overview) for your endpoints.
 - [Monitor and debug](/flash/monitoring) your endpoints.

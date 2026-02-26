@@ -1,0 +1,452 @@
+---
+title: "GPU types"
+sidebarTitle: "GPU types"
+description: "Available GPU pools and specific GPU types for Flash GPU configurations."
+tag: "BETA"
+---
+
+Flash provides access to a wide range of NVIDIA GPUs through both pool-based and specific GPU selection. This reference lists all available GPU types and their specifications.
+
+## GPU selection methods
+
+Flash offers two ways to specify GPU hardware:
+
+1. **Pool-based selection (`GpuGroup`)**: Select from predefined pools of similar GPUs grouped by architecture and VRAM. Recommended for most use cases.
+2. **Specific GPU selection (`GpuType`)**: Target exact GPU models when you need precise hardware characteristics.
+
+You can use either method or mix both in the same configuration for advanced fallback strategies.
+
+## GPU pools
+
+The `GpuGroup` enum provides access to GPU pools. Each pool contains specific GPU models grouped by architecture and VRAM capacity.
+
+### Available GPU pools
+
+| GpuGroup | GPUs Included | VRAM | Best For |
+|----------|---------------|------|----------|
+| `GpuGroup.ANY` | Any available GPU | Varies | Fast provisioning, prototyping, development |
+| `GpuGroup.AMPERE_16` | RTX A4000, A4500, RTX 4000 Ada, RTX 2000 Ada | 16GB | Small models, basic inference |
+| `GpuGroup.AMPERE_24` | L4, RTX A5000, RTX 3090 | 24GB | General ML workloads, mid-size models |
+| `GpuGroup.ADA_24` | RTX 4090 | 24GB | Cost-effective inference, gaming GPUs |
+| `GpuGroup.ADA_32_PRO` | RTX 5090 | 32GB | Latest consumer flagship, high performance |
+| `GpuGroup.AMPERE_48` | A40, RTX A6000 | 48GB | Large models, fine-tuning |
+| `GpuGroup.ADA_48_PRO` | RTX 6000 Ada | 48GB | Professional inference, large models |
+| `GpuGroup.AMPERE_80` | A100 80GB PCIe, A100-SXM4-80GB | 80GB | XL models, intensive training |
+| `GpuGroup.ADA_80_PRO` | H100 80GB HBM3 | 80GB | Cutting-edge inference, latest architecture |
+| `GpuGroup.HOPPER_141` | H200 | 141GB | Largest models, maximum VRAM |
+
+### Using GPU pools
+
+Import and use GPU pools in your configurations:
+
+```python
+from runpod_flash import LiveServerless, GpuGroup
+
+# Single GPU type
+config = LiveServerless(
+    name="inference",
+    gpus=[GpuGroup.AMPERE_80]
+)
+
+# Multiple GPU types (fallback strategy)
+config = LiveServerless(
+    name="flexible",
+    gpus=[
+        GpuGroup.AMPERE_80,  # Try A100 first
+        GpuGroup.AMPERE_48,  # Fall back to A40/A6000
+        GpuGroup.ADA_24      # Final fallback to RTX 4090
+    ]
+)
+
+# Any available GPU
+config = LiveServerless(
+    name="development",
+    gpus=[GpuGroup.ANY]
+)
+```
+
+### GPU selection behavior
+
+**Single GPU type:**
+Flash waits for this specific GPU to become available. If none are available, the job will stay in queue.
+
+```python
+gpus=[GpuGroup.AMPERE_80]  # Only A100 80GB
+```
+
+**Multiple GPU types (fallback):**
+Flash attempts to provision in the order specified. If your first choice is unavailable, it tries the next, and so on.
+
+```python
+gpus=[GpuGroup.AMPERE_80, GpuGroup.AMPERE_48, GpuGroup.ADA_24]
+# Tries: A100 → A40/A6000 → RTX 4090
+```
+
+**GpuGroup.ANY:**
+Flash selects the first available GPU from any pool based on current capacity. The selection is availability-based, not cost-optimized.
+
+```python
+gpus=[GpuGroup.ANY]  # Fastest provisioning, unpredictable GPU type
+```
+
+**Tradeoffs:**
+
+| Selection | Availability | Cost Predictability | Performance Consistency |
+|-----------|--------------|---------------------|-------------------------|
+| Single type | Low | High | High |
+| Fallback (2-3 types) | Medium | Medium | Medium |
+| GpuGroup.ANY | High | Low | Low |
+
+<Tip>
+**For production**: Use specific GPU types for predictable cost and performance.
+**For development**: Use `GpuGroup.ANY` for fastest iteration.
+</Tip>
+
+### GPU pool details
+
+<AccordionGroup>
+
+<Accordion title="AMPERE_16 (RTX A4000, A4500, RTX 4000 Ada, RTX 2000 Ada)">
+**GPUs**: RTX A4000, A4500, RTX 4000 Ada Generation, RTX 2000 Ada Generation
+**VRAM**: 16GB
+**Architecture**: Ampere (with some Ada models)
+
+**Best for:**
+- Small to medium language models (up to 7B parameters)
+- Basic image classification
+- Entry-level deep learning
+- Development and testing
+
+**Not suitable for:**
+- Large language models (70B+)
+- High-resolution image generation
+- Video processing
+</Accordion>
+
+<Accordion title="AMPERE_24 (L4, RTX A5000, RTX 3090)">
+**GPUs**: L4, RTX A5000, RTX 3090
+**VRAM**: 24GB
+**Architecture**: Ampere
+
+**Best for:**
+- General ML inference
+- Mid-size language models (7-13B parameters)
+- Image generation (Stable Diffusion)
+- Computer vision tasks
+- Fine-tuning smaller models
+
+**Popular use cases:**
+- Text generation with GPT-2, BLOOM-7B
+- Image generation with Stable Diffusion
+- Object detection and segmentation
+</Accordion>
+
+<Accordion title="ADA_24 (RTX 4090)">
+**GPUs**: RTX 4090
+**VRAM**: 24GB
+**Architecture**: Ada Lovelace (newer than Ampere)
+
+**Best for:**
+- Cost-effective inference
+- Gaming and consumer workloads
+- Real-time inference
+- Mid-size models with better performance than AMPERE_24
+
+**Advantages over AMPERE_24:**
+- Newer architecture (better performance per watt)
+- Often lower cost
+- Faster for supported workloads
+
+**Considerations:**
+- Consumer GPU (may have less availability than datacenter GPUs)
+</Accordion>
+
+<Accordion title="ADA_32_PRO (RTX 5090)">
+**GPUs**: RTX 5090
+**VRAM**: 32GB
+**Architecture**: Ada Lovelace (latest consumer flagship)
+
+**Best for:**
+- High-performance inference
+- Large model serving (30B+ parameters)
+- Real-time applications requiring more VRAM than RTX 4090
+- Latest consumer GPU technology
+
+**Advantages:**
+- Latest consumer flagship GPU
+- 33% more VRAM than RTX 4090
+- Excellent performance per dollar
+- Ada Lovelace architecture benefits
+
+**Considerations:**
+- Newer GPU (may have varying availability)
+- Consumer GPU (not datacenter-grade)
+</Accordion>
+
+<Accordion title="AMPERE_48 (A40, RTX A6000)">
+**GPUs**: A40, RTX A6000
+**VRAM**: 48GB
+**Architecture**: Ampere
+
+**Best for:**
+- Large language models (13-30B parameters)
+- Fine-tuning medium to large models
+- High-resolution image generation
+- Multi-model ensembles
+- Production inference for large models
+
+**Popular use cases:**
+- LLaMA-13B, GPT-J-6B inference
+- Stable Diffusion XL
+- Fine-tuning BERT-large variants
+</Accordion>
+
+<Accordion title="ADA_48_PRO (RTX 6000 Ada)">
+**GPUs**: RTX 6000 Ada Generation
+**VRAM**: 48GB
+**Architecture**: Ada Lovelace
+
+**Best for:**
+- Professional inference workloads
+- Large model serving (30-65B parameters)
+- Production ML applications
+- Newer architecture than AMPERE_48
+
+**Advantages:**
+- Latest professional Ada architecture
+- Better efficiency than AMPERE_48
+- Professional-grade reliability
+- Improved ray tracing and AI capabilities
+</Accordion>
+
+<Accordion title="AMPERE_80 (A100 80GB)">
+**GPUs**: A100 80GB PCIe, A100-SXM4-80GB
+**VRAM**: 80GB
+**Architecture**: Ampere
+
+**Best for:**
+- Extra-large language models (30-70B parameters)
+- Model training and fine-tuning
+- Multi-GPU setups (with `gpuCount`)
+- Research and experimentation
+- Production serving of large models
+
+**Popular use cases:**
+- LLaMA-65B, GPT-3 variants
+- Large-scale fine-tuning
+- Multi-model pipelines
+- Training custom models
+
+**Considerations:**
+- Higher cost than smaller GPUs
+- Excellent for memory-intensive workloads
+- PCIe and SXM4 variants available (use `GpuType` for specific variant)
+</Accordion>
+
+<Accordion title="ADA_80_PRO (H100 80GB)">
+**GPUs**: H100 80GB HBM3
+**VRAM**: 80GB
+**Architecture**: Hopper (newest available)
+
+**Best for:**
+- Cutting-edge inference
+- Latest model architectures
+- Maximum performance at 80GB VRAM
+- Production workloads requiring top performance
+
+**Advantages:**
+- Newest architecture (post-Ampere)
+- Best performance per GPU
+- Optimized for transformer models
+
+**Considerations:**
+- Premium pricing
+- May have limited availability
+</Accordion>
+
+<Accordion title="HOPPER_141 (H200)">
+**GPUs**: H200
+**VRAM**: 141GB
+**Architecture**: Hopper
+
+**Best for:**
+- Largest language models (100B+ parameters)
+- Models requiring maximum VRAM
+- Frontier research
+- Ultra-large context windows
+
+**Popular use cases:**
+- GPT-4 scale models
+- Mixture-of-experts models
+- Multi-billion parameter fine-tuning
+
+**Considerations:**
+- Highest cost tier
+- May have limited availability
+- Only needed for truly massive models
+</Accordion>
+
+</AccordionGroup>
+
+## Specific GPU types
+
+The `GpuType` enum provides access to specific GPU models. Use these when you need exact hardware characteristics or want fine-grained control over GPU selection.
+
+### Available GPU types
+
+Flash supports the following specific GPU types:
+
+| GpuType | GPU Model | VRAM | Architecture |
+|---------|-----------|------|--------------|
+| `GpuType.NVIDIA_RTX_A4000` | NVIDIA RTX A4000 | 16GB | Ampere |
+| `GpuType.NVIDIA_RTX_A4500` | NVIDIA RTX A4500 | 16GB | Ampere |
+| `GpuType.NVIDIA_RTX_4000_ADA_GENERATION` | NVIDIA RTX 4000 Ada Generation | 16GB | Ada Lovelace |
+| `GpuType.NVIDIA_RTX_2000_ADA_GENERATION` | NVIDIA RTX 2000 Ada Generation | 16GB | Ada Lovelace |
+| `GpuType.NVIDIA_RTX_A5000` | NVIDIA RTX A5000 | 24GB | Ampere |
+| `GpuType.NVIDIA_L4` | NVIDIA L4 | 24GB | Ampere |
+| `GpuType.NVIDIA_GEFORCE_RTX_3090` | NVIDIA GeForce RTX 3090 | 24GB | Ampere |
+| `GpuType.NVIDIA_GEFORCE_RTX_4090` | NVIDIA GeForce RTX 4090 | 24GB | Ada Lovelace |
+| `GpuType.NVIDIA_GEFORCE_RTX_5090` | NVIDIA GeForce RTX 5090 | 32GB | Ada Lovelace |
+| `GpuType.NVIDIA_A40` | NVIDIA A40 | 48GB | Ampere |
+| `GpuType.NVIDIA_RTX_A6000` | NVIDIA RTX A6000 | 48GB | Ampere |
+| `GpuType.NVIDIA_RTX_6000_ADA_GENERATION` | NVIDIA RTX 6000 Ada Generation | 48GB | Ada Lovelace |
+| `GpuType.NVIDIA_A100_80GB_PCIe` | NVIDIA A100 80GB PCIe | 80GB | Ampere |
+| `GpuType.NVIDIA_A100_SXM4_80GB` | NVIDIA A100-SXM4-80GB | 80GB | Ampere |
+| `GpuType.NVIDIA_H100_80GB_HBM3` | NVIDIA H100 80GB HBM3 | 80GB | Hopper |
+| `GpuType.NVIDIA_H200` | NVIDIA H200 | 141GB | Hopper |
+
+### Using specific GPU types
+
+Import and use specific GPU types in your configurations:
+
+```python
+from runpod_flash import LiveServerless, GpuType
+
+# Single specific GPU
+config = LiveServerless(
+    name="inference",
+    gpus=[GpuType.NVIDIA_A100_80GB_PCIe]
+)
+
+# Multiple specific GPUs (fallback strategy)
+config = LiveServerless(
+    name="flexible",
+    gpus=[
+        GpuType.NVIDIA_A100_80GB_PCIe,  # Try A100 PCIe first
+        GpuType.NVIDIA_A100_SXM4_80GB,  # Fall back to A100 SXM4
+        GpuType.NVIDIA_A40               # Final fallback to A40
+    ]
+)
+```
+
+### Mixing pools and specific types
+
+You can combine `GpuGroup` and `GpuType` for advanced fallback strategies. For example:
+
+```python
+from runpod_flash import LiveServerless, GpuGroup, GpuType
+
+# Try specific GPU first, then fall back to pool
+config = LiveServerless(
+    name="hybrid-selection",
+    gpus=[
+        GpuType.NVIDIA_A100_80GB_PCIe,  # Specific GPU first
+        GpuGroup.AMPERE_48,             # Pool fallback
+        GpuGroup.ANY                     # Ultimate fallback
+    ]
+)
+
+# Mix multiple specific types and pools
+config = LiveServerless(
+    name="complex-fallback",
+    gpus=[
+        GpuType.NVIDIA_H100_80GB_HBM3,  # Try H100
+        GpuType.NVIDIA_A100_80GB_PCIe,  # Then A100 PCIe
+        GpuGroup.AMPERE_48,             # Then any 48GB Ampere
+        GpuGroup.ADA_24                  # Finally RTX 4090
+    ]
+)
+```
+
+## Checking GPU availability
+
+Check current GPU availability in the [Runpod Serverless console](https://www.runpod.io/console/serverless). The console shows:
+
+- Available GPU types.
+- Current capacity.
+- Pricing per GPU type.
+
+### Handling unavailability
+
+If your requested GPUs are unavailable, the job will stay in queue:
+
+```text
+Initial job status: IN_QUEUE
+[Waiting for capacity...]
+```
+
+**Solutions:**
+
+1. **Add fallback options**: Use multiple GPU types.
+
+   ```python
+   gpus=[GpuGroup.AMPERE_80, GpuGroup.AMPERE_48, GpuGroup.ADA_24]
+   ```
+
+2. **Use broader selection**: Switch to `GpuGroup.ANY`.
+
+   ```python
+   gpus=[GpuGroup.ANY]
+   ```
+
+3. **Check console**: Check GPU availability in the settings for an endpoint in the [Serverless console](https://www.runpod.io/console/serverless).
+
+4. **Contact support**: For capacity guarantees, contact [Runpod support](https://www.runpod.io/contact).
+
+## GPU selection best practices
+
+### For development
+
+```python
+# Fast provisioning, any hardware
+config = LiveServerless(
+    name="dev",
+    gpus=[GpuGroup.ANY]  # Fastest provisioning
+)
+```
+
+### For production
+
+```python
+# Predictable performance and cost
+config = LiveServerless(
+    name="prod-inference",
+    gpus=[GpuGroup.AMPERE_80]  # Specific GPU, predictable
+)
+```
+
+### For cost optimization
+
+```python
+# Use cheaper GPU options when sufficient
+config = LiveServerless(
+    name="cost-optimized",
+    gpus=[GpuGroup.ADA_24]  # RTX 4090, cost-effective
+)
+```
+
+### For maximum availability
+
+```python
+# Fallback strategy with broad options
+config = LiveServerless(
+    name="high-availability",
+    gpus=[
+        GpuGroup.AMPERE_80,
+        GpuGroup.AMPERE_48,
+        GpuGroup.ADA_24,
+        GpuGroup.AMPERE_24,
+        GpuGroup.ANY
+    ]  # Will almost always find capacity
+)
+```
