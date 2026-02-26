@@ -81,13 +81,17 @@ from runpod_flash import CpuLiveLoadBalancer, remote
 # CPU load balancer for general API routes
 api_config = CpuLiveLoadBalancer(
     name="text-api",
-    workersMin=1,      # Keep at least 1 worker ready
-    workersMax=10,     # Scale up to 10 workers under load
+    workersMin=0,      # Scale to zero when idle
+    workersMax=3,      # Scale up to 3 workers under load
     idleTimeout=10     # Keep workers active for 10 minutes
 )
 ```
 
 This configuration creates a CPU-only load balancing endpoint that can handle multiple HTTP routes.
+
+<Note>
+**Worker Quota Considerations**: The `workersMax` setting determines the maximum number of concurrent workers. Standard Runpod accounts have a total quota of 30 workers across all endpoints. If you have other endpoints running, you may need to reduce `workersMax` to 1-2. Check your quota in the [Runpod console](https://www.runpod.io/console/serverless).
+</Note>
 
 ## Step 4: Add API routes
 
@@ -147,9 +151,9 @@ from runpod_flash import LiveLoadBalancer, GpuGroup
 # GPU load balancer for ML inference
 gpu_api_config = LiveLoadBalancer(
     name="gpu-sentiment",
-    gpus=[GpuGroup.ADA_24],  # RTX 4090 for cost-effective inference
+    gpus=[GpuGroup.ANY],     # Use any available GPU for better availability
     workersMin=0,            # Scale to zero when idle
-    workersMax=3,            # Up to 3 workers under load
+    workersMax=1,            # Up to 1 worker under load
     idleTimeout=5
 )
 
@@ -189,6 +193,11 @@ This creates a second endpoint specifically for GPU-accelerated tasks.
 
 <Note>
 The sentiment analysis route uses a separate GPU configuration because it requires different hardware than the CPU routes. This is a common pattern: use CPU load balancers for lightweight API logic and GPU load balancers for ML inference.
+
+**GPU Availability**: Using `GpuGroup.ANY` provides better availability than specific GPU types like `GpuGroup.ADA_24`. First requests to GPU endpoints may take 1-3 minutes due to:
+- GPU provisioning
+- Dependency installation (transformers, torch)
+- Model downloads (distilbert is ~250MB)
 </Note>
 
 ## Step 6: Add the main execution block
@@ -220,8 +229,12 @@ async def main():
 
     # Test sentiment analysis (if GPU route is defined)
     print("4. Testing sentiment analysis...")
-    sentiment = await analyze_sentiment(sample_text)
-    print(f"   Result: {sentiment}\n")
+    try:
+        sentiment = await analyze_sentiment(sample_text)
+        print(f"   Result: {sentiment}\n")
+    except ModuleNotFoundError as e:
+        print(f"   Skipped (dependencies not installed locally): {e}")
+        print(f"   Note: This will work when deployed to Flash with dependencies=['transformers', 'torch']\n")
 
 if __name__ == "__main__":
     asyncio.run(main())
@@ -241,48 +254,105 @@ You should see output similar to:
 Testing Text Analysis API
 
 1. Testing health check...
-   Resource text-api already exists, reusing.
-   Registering RunPod endpoint: server_CpuLiveLoadBalancer_a1b2c3d4
    Result: {'status': 'healthy', 'service': 'text-api', 'version': '1.0.0'}
 
 2. Testing info endpoint...
    Result: {'name': 'Text Analysis API', 'version': '1.0.0', 'endpoints': [...]}
 
 3. Testing text analysis...
-   Result: {'text': '...', 'statistics': {'word_count': 10, ...}}
+   Result: {'text': '...', 'statistics': {'word_count': 11, ...}}
 
 4. Testing sentiment analysis...
-   Creating endpoint: server_LiveLoadBalancer_e5f6g7h8
-   Result: {'text': '...', 'sentiment': {'label': 'POSITIVE', 'score': 0.9998}}
+   Skipped (dependencies not installed locally): No module named 'transformers'
+   Note: This will work when deployed to Flash with dependencies=['transformers', 'torch']
 ```
 
-The first run will take longer as Flash provisions the endpoints and installs dependencies.
+The first three endpoints will run locally. The sentiment endpoint will be skipped unless you install transformers and torch locally, but it will work when deployed to Flash.
+
+<Note>
+**Local Testing Limitations**: The GPU sentiment endpoint requires `transformers` and `torch` to be installed locally for testing. For full testing of all endpoints including GPU routes, use `flash run` (covered in Step 9) instead of direct Python execution.
+</Note>
 
 ## Step 8: Build a Flash app for production
 
-To deploy your API to production, convert your script to a Flash app:
+To deploy your API to production, create a Flash app:
 
 ```bash
 flash init api-project
 cd api-project
 ```
 
-Move your API code to the project. Replace the contents of `lb_worker.py` with your `api.py` code:
+This creates a project structure with separate worker files. Now, split your API code into the appropriate worker files:
 
-```bash
-cp ../api.py lb_worker.py
+### Create `lb_worker.py` (CPU routes):
+
+Replace the contents of `lb_worker.py` with:
+
+```python
+from runpod_flash import CpuLiveLoadBalancer, remote
+
+# CPU load balancer for general API routes
+api_config = CpuLiveLoadBalancer(
+    name="text-api",
+    workersMin=0,      # Scale to zero when idle
+    workersMax=3,      # Scale up to 3 workers under load
+    idleTimeout=10     # Keep workers active for 10 minutes
+)
+
+@remote(resource_config=api_config, method="GET", path="/health")
+async def health_check() -> dict:
+    """Health check endpoint for monitoring."""
+    return {
+        "status": "healthy",
+        "service": "text-api",
+        "version": "1.0.0"
+    }
+
+@remote(resource_config=api_config, method="GET", path="/info")
+async def get_info() -> dict:
+    """API information endpoint."""
+    return {
+        "name": "Text Analysis API",
+        "version": "1.0.0",
+        "endpoints": [
+            {"method": "GET", "path": "/health", "description": "Health check"},
+            {"method": "GET", "path": "/info", "description": "API information"},
+            {"method": "POST", "path": "/analyze", "description": "Analyze text"}
+        ]
+    }
+
+@remote(resource_config=api_config, method="POST", path="/analyze")
+async def analyze_text(text: str) -> dict:
+    """Analyze text and return statistics."""
+    words = text.split()
+    word_count = len(words)
+    char_count = len(text)
+    avg_word_length = sum(len(word) for word in words) / word_count if word_count > 0 else 0
+
+    return {
+        "text": text,
+        "statistics": {
+            "word_count": word_count,
+            "character_count": char_count,
+            "average_word_length": round(avg_word_length, 2),
+            "sentence_count": text.count('.') + text.count('!') + text.count('?')
+        }
+    }
 ```
 
-If you added the GPU sentiment route, create a new file `gpu_worker.py`:
+### Create `gpu_worker.py` (GPU route):
+
+If you added the GPU sentiment route, replace the contents of `gpu_worker.py` with:
 
 ```python
 from runpod_flash import LiveLoadBalancer, GpuGroup, remote
 
+# GPU load balancer for ML inference
 gpu_api_config = LiveLoadBalancer(
     name="gpu-sentiment",
-    gpus=[GpuGroup.ADA_24],
-    workersMin=0,
-    workersMax=3,
+    gpus=[GpuGroup.ANY],     # Use any available GPU for better availability
+    workersMin=0,            # Scale to zero when idle
+    workersMax=1,            # Up to 1 worker under load
     idleTimeout=5
 )
 
@@ -293,9 +363,11 @@ gpu_api_config = LiveLoadBalancer(
     dependencies=["transformers", "torch"]
 )
 async def analyze_sentiment(text: str) -> dict:
+    """Analyze sentiment using a pretrained model."""
     from transformers import pipeline
     import torch
 
+    # Load sentiment analysis pipeline
     device = 0 if torch.cuda.is_available() else -1
     sentiment_analyzer = pipeline(
         "sentiment-analysis",
@@ -303,6 +375,7 @@ async def analyze_sentiment(text: str) -> dict:
         device=device
     )
 
+    # Analyze sentiment
     result = sentiment_analyzer(text)[0]
 
     return {
@@ -315,6 +388,15 @@ async def analyze_sentiment(text: str) -> dict:
     }
 ```
 
+### Configure environment:
+
+```bash
+cp .env.example .env
+echo "RUNPOD_API_KEY=YOUR_API_KEY" > .env
+```
+
+Replace `YOUR_API_KEY` with your actual Runpod API key.
+
 ## Step 9: Test with the development server
 
 Start the Flash development server:
@@ -323,24 +405,81 @@ Start the Flash development server:
 flash run
 ```
 
+You'll see output showing all available endpoints:
+
+```text
+Flash Dev Server  localhost:8888
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━┓
+┃ Local path                  ┃ Description                             ┃ Type ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━┩
+│ GET  /lb_worker/health      │ Health check endpoint for monitoring.   │ LB   │
+│ GET  /lb_worker/info        │ API information endpoint.               │ LB   │
+│ POST  /lb_worker/analyze    │ Analyze text and return statistics.     │ LB   │
+│ POST  /gpu_worker/sentiment │ Analyze sentiment using a pretrained    │ LB   │
+│                             │ model.                                  │      │
+└─────────────────────────────┴─────────────────────────────────────────┴──────┘
+```
+
+<Note>
+**Development Server Path Prefixes**: The `flash run` dev server adds worker file prefixes to routes (e.g., `/lb_worker/health`, `/gpu_worker/sentiment`). When deployed to production, endpoints use the paths as defined in the `@remote` decorator (e.g., `/health`, `/sentiment`) without the prefixes.
+</Note>
+
 Open http://localhost:8888/docs in your browser to see the interactive API documentation. You can test all your routes directly in the Swagger UI.
 
 Test with curl:
 
 ```bash
 # Test health check
-curl -X GET http://localhost:8888/health
+curl -X GET http://localhost:8888/lb_worker/health
 
 # Test text analysis
-curl -X POST http://localhost:8888/analyze \
+curl -X POST http://localhost:8888/lb_worker/analyze \
     -H "Content-Type: application/json" \
     -d '{"text": "Flash makes building APIs easy"}'
 
 # Test sentiment analysis (if you added the GPU route)
-curl -X POST http://localhost:8888/sentiment \
+# Note: First request may take 1-3 minutes for GPU provisioning and model download
+curl -X POST http://localhost:8888/gpu_worker/sentiment \
     -H "Content-Type: application/json" \
     -d '{"text": "I love using Flash for my APIs"}'
 ```
+
+Expected responses:
+
+```json
+// Health check
+{
+  "status": "healthy",
+  "service": "text-api",
+  "version": "1.0.0"
+}
+
+// Text analysis
+{
+  "text": "Flash makes building APIs easy",
+  "statistics": {
+    "word_count": 5,
+    "character_count": 30,
+    "average_word_length": 5.2,
+    "sentence_count": 0
+  }
+}
+
+// Sentiment analysis
+{
+  "text": "I love using Flash for my APIs",
+  "sentiment": {
+    "label": "POSITIVE",
+    "score": 0.9998
+  },
+  "device": "GPU"
+}
+```
+
+<Warning>
+**GPU Cold Starts**: The first request to a GPU endpoint may take 1-3 minutes due to GPU provisioning, dependency installation, and model downloads. Subsequent requests will be much faster. The default timeout is 60 seconds, which may be too short for the first request. If you encounter timeout errors, wait a moment and try again.
+</Warning>
 
 ## Step 10: Deploy to production
 
@@ -400,6 +539,10 @@ Expected response:
 }
 ```
 
+<Note>
+**Production Path Note**: In production, the endpoints use the exact paths defined in your `@remote` decorators (e.g., `/health`, `/sentiment`), without the worker file prefixes used in `flash run`.
+</Note>
+
 ## Understanding the deployment architecture
 
 Your deployed API creates two independent Serverless endpoints:
@@ -432,6 +575,50 @@ flowchart TB
 
 ## Troubleshooting
 
+### Worker quota exceeded
+
+**Issue**: `Max workers across all endpoints must not exceed your workers quota (30)`
+
+**Solution**:
+1. Check your current worker usage in the [Runpod console](https://www.runpod.io/console/serverless)
+2. Reduce `workersMax` in your configuration:
+   ```python
+   api_config = CpuLiveLoadBalancer(
+       name="text-api",
+       workersMin=0,
+       workersMax=1,  # Reduce this value
+       idleTimeout=10
+   )
+   ```
+3. Clean up unused endpoints before deploying new ones
+
+### GPU endpoint timeout
+
+**Issue**: Request times out after 60 seconds on first GPU endpoint call
+
+**Solutions**:
+1. This is normal for the first request - GPU provisioning takes time
+2. Wait 1-3 minutes and try again
+3. Use `GpuGroup.ANY` instead of specific GPU types for better availability
+4. Consider using CPU for development testing:
+   ```python
+   # For testing without GPU
+   gpu_api_config = CpuLiveLoadBalancer(name="sentiment-cpu")
+   ```
+
+### Port already in use
+
+**Issue**: `ERROR: [Errno 48] Address already in use` when running `flash run`
+
+**Solutions**:
+```bash
+# Use a different port
+flash run --port 8889
+
+# Or kill the process using port 8888
+lsof -ti:8888 | xargs kill -9
+```
+
 ### Import errors in sentiment analysis
 
 **Issue**: `ModuleNotFoundError: No module named 'transformers'`
@@ -445,6 +632,11 @@ flowchart TB
     path="/sentiment",
     dependencies=["transformers", "torch"]  # Must include these
 )
+```
+
+For local testing, install dependencies manually:
+```bash
+pip install transformers torch
 ```
 
 ### Method or path not specified error
@@ -479,13 +671,9 @@ flowchart TB
 1. Check [GPU availability](https://www.runpod.io/console/serverless) in console
 2. Add fallback GPU types:
    ```python
-   gpus=[GpuGroup.ADA_24, GpuGroup.AMPERE_24, GpuGroup.ANY]
+   gpus=[GpuGroup.ANY]  # Use any available GPU
    ```
-3. Use CPU for testing:
-   ```python
-   # For testing without GPU
-   gpu_api_config = CpuLiveLoadBalancer(name="sentiment-cpu")
-   ```
+3. Increase worker quota if at limit
 
 ## Next steps
 
