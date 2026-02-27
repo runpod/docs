@@ -1,17 +1,24 @@
 ---
-title: "Manage apps and environments"
-sidebarTitle: "Manage apps and environments"
-description: "Manage Flash apps and environments with the flash app and flash env commands."
+title: "Apps and environments"
+sidebarTitle: "Apps and environments"
+description: "Understanding Flash's two-level deployment structure for organizing projects and managing deployments."
 tag: "BETA"
 ---
 
-import { LoadBalancingEndpointsTooltip, QueueBasedEndpointsTooltip } from "/snippets/tooltips.jsx";
-
-This page covers practical commands and workflows for managing Flash apps and environments. For a conceptual overview of the deployment hierarchy, see the [development lifecycle guide](/flash/apps/overview).
+Flash uses a two-level organizational structure for deployments: **apps** and **environments**. Understanding this structure helps you organize projects, manage multiple deployment stages, and isolate resources effectively.
 
 ## Flash apps
 
-A **Flash app** is a namespace registered on Runpod's backend that groups all resources for a single project, including environments, builds, and configuration. The app itself is just metadata—actual cloud resources (endpoints, volumes) are created when you deploy to an environment.
+A **Flash app** is a namespace on Runpod's backend that groups all resources for a single project. The app itself is just metadata—actual cloud resources (endpoints, volumes) are created when you deploy to an environment.
+
+An app consists of:
+
+- **App registry entry**: Metadata in Runpod's system (namespace, project identifier).
+- **Environments**: Different deployment stages (dev, staging, production).
+- **Builds**: Versioned tarball artifacts containing your code and dependencies.
+- **Serverless endpoints**: Running infrastructure created per environment.
+
+Apps are created automatically when you first run `flash deploy`, or explicitly with `flash app create <name>`.
 
 ### App hierarchy
 
@@ -57,170 +64,96 @@ A **Flash app** is a namespace registered on Runpod's backend that groups all re
   </Tree.Folder>
 </Tree>
 
-### Creating apps
-
-Apps are created automatically when you first run `flash deploy`. You can also register them explicitly:
-
-```bash
-flash app create APP_NAME
-```
-
-This registers the app namespace on Runpod's backend but doesn't create any cloud resources or local files.
-
-### Managing apps
-
-Use `flash app` commands to manage your apps:
-
-```bash
-# List all apps
-flash app list
-
-# Get app details
-flash app get APP_NAME
-
-# Delete an app and all its resources
-flash app delete --app APP_NAME
-```
-
-<Warning>
-
-Deleting an app removes all environments, builds, endpoints, and volumes associated with it. This operation is irreversible.
-
-</Warning>
-
-## Understanding builds and deployments
-
-When you run `flash deploy`, three things happen on Runpod:
-
-<Steps>
-  <Step title="Build artifact is uploaded">
-    Flash creates a **tarball** (`.flash/artifact.tar.gz`) containing:
-    - Your Python code (worker files like `lb_worker.py`, `gpu_worker.py`, `cpu_worker.py`).
-    - Pre-installed dependencies (bundled during build).
-    - Deployment manifest (`flash_manifest.json`).
-    - Auto-generated handler code.
-    This tarball is uploaded to Runpod's storage and associated with your app as a "build."
-  </Step>
-
-  <Step title="Serverless endpoints are provisioned">
-    For each resource configuration in the manifest, Flash creates a Serverless endpoint. Each endpoint is independent with its own URL and runs on pre-built Flash Docker images.
-
-  - Execute `@remote` functions on GPUs or CPUs.
-  - Example: `gpu_worker` and `cpu_worker`
-  - Pre-built images: `runpod/flash:latest` (GPU) or `runpod/flash-cpu:latest` (CPU).
-  - Scale automatically based on load.
-  - Provide `/runsync` endpoint for job submission.
-
-  </Step>
-
-  <Step title="Environment is activated">
-    The environment is linked to:
-    - The uploaded build (specific version of your code).
-    - The provisioned endpoints (running infrastructure).
-    - Deployment state (health, status, metrics).
-
-    Each environment maintains its own set of endpoints and can be updated independently.
-
-  </Step>
-</Steps>
-
-It's important to remember that you're **not** building custom Docker images. The Flash images are pre-built and generic—they extract your tarball and run your code. This is why deployments are fast (no image build step) and limited to 500 MB (only code and dependencies).
 
 ## Environments
 
-An **environment** is an isolated deployment stage within a Flash app (e.g., `dev`, `staging`, `production`). Each environment has its own endpoints, build version, volumes, and deployment state. Environments are completely independent.
+An **environment** is an isolated deployment stage within a Flash app (e.g., `dev`, `staging`, `production`). Each environment has its own endpoints, build version, volumes, and deployment state. Environments are completely independent—deploying to `dev` has no effect on `production`.
 
-### Creating environments
+An environment contains:
 
-Environments are created automatically when you deploy with `--env`:
+- **Deployed endpoints**: Serverless workers for your `@remote` functions.
+- **Build version**: The specific code version running in this environment.
+- **Volumes**: Persistent storage attached to workers.
+- **State**: Current deployment status (deploying, deployed, failed).
 
-```bash
-# Creates 'staging' environment if it doesn't exist
-flash deploy --env staging
-```
-
-You can also create them explicitly:
-
-```bash
-flash env create staging
-```
-
-### Managing environments
-
-Use `flash env` commands to manage environments:
-
-```bash
-# List all environments
-flash env list
-
-# Get environment details
-flash env get production
-
-# Delete an environment
-flash env delete dev
-```
+Environments are created automatically when you deploy with `--env <name>` or explicitly with `flash env create <name>`.
 
 ### Environment states
 
+Environments can be in several states:
+
 | State | Description |
 |-------|-------------|
-| PENDING | Environment created but not deployed |
-| DEPLOYING | Deployment in progress |
-| DEPLOYED | Successfully deployed and running |
-| FAILED | Deployment or health check failed |
-| DELETING | Deletion in progress |
+| `deploying` | Deployment in progress (building artifacts, provisioning endpoints) |
+| `deployed` | Successfully deployed and running |
+| `failed` | Deployment failed (check logs with `flash app logs`) |
+| `updating` | Configuration update in progress |
 
-## Best practices
+## Builds and deployments
 
-### Naming conventions
+When you run `flash deploy`, Flash creates and uploads a build artifact, then provisions endpoints:
 
-Use clear, descriptive names:
+### Build process
+
+1. **Create tarball**: Flash packages your code into `.flash/artifact.tar.gz` containing:
+   - Worker Python files (`lb_worker.py`, `gpu_worker.py`, `cpu_worker.py`).
+   - Pre-installed dependencies (bundled during build).
+   - Deployment manifest (`flash_manifest.json`).
+   - Auto-generated handler code.
+
+2. **Upload artifact**: The tarball is uploaded to Runpod's storage and associated with your app as a versioned "build".
+
+3. **Provision endpoints**: For each resource configuration, Flash creates a Serverless endpoint that:
+   - Runs on pre-built Flash Docker images (`runpod/flash:latest` or `runpod/flash-cpu:latest`).
+   - Extracts your tarball and executes your code.
+   - Scales automatically based on load.
+
+4. **Activate environment**: The environment is linked to the build and endpoints.
+
+<Tip>
+You're **not** building custom Docker images. Flash uses pre-built images that extract your tarball and run your code. This is why deployments are fast (no image build step) and limited to 500 MB (code and dependencies only).
+</Tip>
+
+## Common environment patterns
+
+### Single environment (simple projects)
+
+For small projects or solo development, use a single environment:
 
 ```bash
-# Good
-flash env create dev
-flash env create staging
-flash env create production
-
-# Avoid
-flash env create env1
-flash env create test123
+flash deploy --env production
 ```
 
-### Environment strategy
+All deployments go to `production`. Simple, but no testing isolation.
 
-**Three-tier approach** (recommended for teams):
+### Multiple environments (team projects)
 
-| Environment | Purpose |
-|-------------|---------|
-| `dev` | Active development, frequent deploys |
-| `staging` | Pre-production testing, QA validation |
-| `production` | Live user-facing deployment |
+For team projects, use separate environments for development, testing, and production:
 
-**Simple approach** (small projects):
+```bash
+flash deploy --env dev        # Development and testing
+flash deploy --env staging    # QA and pre-production validation
+flash deploy --env production # Live user-facing deployment
+```
 
-| Environment | Purpose |
-|-------------|---------|
-| `dev` | Development and testing |
-| `production` | Live deployment |
+Each environment is completely isolated. Deploy to `dev` for testing, `staging` for QA approval, then `production` for users.
 
-### Workflow recommendations
+## Managing apps and environments
 
-1. **Develop locally**: Test with `flash run` before deploying.
-2. **Deploy to dev**: `flash deploy --env dev` for initial testing.
-3. **Deploy to staging**: `flash deploy --env staging` for QA.
-4. **Deploy to production**: `flash deploy --env production` after approval.
+Use the CLI to manage your apps and environments:
 
-### Resource management
+```bash
+# Apps
+flash app list              # List all apps
+flash app get <name>        # View app details
+flash app delete <name>     # Delete app and all environments
 
-- Monitor environments regularly with `flash env list`
-- Clean up unused environments to avoid resource accumulation.
-- Check resource usage with `flash env get <name>`
-- Delete environments carefully as deletion is irreversible.
+# Environments
+flash env list              # List environments in current app
+flash env get <name>        # View environment details
+flash env delete <name>     # Delete specific environment
+```
 
-## Next steps
-
-- [Deploy your first app](/flash/apps/deploy-apps) with `flash deploy`
-- [Learn about the CLI](/flash/cli/overview) for all available commands.
-- [View the env command reference](/flash/cli/env) for detailed options.
-- [View the app command reference](/flash/cli/app) for detailed options.
+<Warning>
+Deleting an app or environment is irreversible. All endpoints and configuration are permanently removed.
+</Warning>

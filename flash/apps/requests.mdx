@@ -1,0 +1,260 @@
+---
+title: "Send API requests to deployed endpoints"
+sidebarTitle: "Send API requests"
+description: "Call your deployed Flash endpoints using HTTP requests for queue-based and load-balanced configurations."
+tag: "BETA"
+---
+
+After deploying your Flash app with `flash deploy`, you can call your endpoints directly via HTTP. The request format depends on whether you're using queue-based or load-balanced configurations.
+
+## Authentication
+
+All deployed endpoints require authentication with your Runpod API key:
+
+```bash
+export RUNPOD_API_KEY="your_key_here"
+
+curl -X POST https://YOUR_ENDPOINT_URL/path \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"param": "value"}'
+```
+
+<Tip>
+Your endpoint URLs are displayed after running `flash deploy`. You can also view them with `flash env get <environment-name>`.
+</Tip>
+
+## Queue-based endpoints
+
+Queue-based endpoints (`LiveServerless`, `CpuLiveServerless`) provide two routes for job submission: `/run` (asynchronous) and `/runsync` (synchronous).
+
+### Asynchronous calls (`/run`)
+
+Submit a job and receive a job ID for later status checking:
+
+```bash
+curl -X POST https://api.runpod.ai/v2/abc123xyz/run \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"input": {"prompt": "Hello world"}}'
+```
+
+**Response:**
+```json
+{
+    "id": "job-abc-123",
+    "status": "IN_QUEUE"
+}
+```
+
+**Check status later:**
+```bash
+curl https://api.runpod.ai/v2/abc123xyz/status/job-abc-123 \
+    -H "Authorization: Bearer $RUNPOD_API_KEY"
+```
+
+**When job completes:**
+```json
+{
+    "id": "job-abc-123",
+    "status": "COMPLETED",
+    "output": {
+        "generated_text": "Hello world from GPU!"
+    }
+}
+```
+
+### Synchronous calls (`/runsync`)
+
+Wait for job completion and receive results directly (with timeout):
+
+```bash
+curl -X POST https://api.runpod.ai/v2/abc123xyz/runsync \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"input": {"prompt": "Hello world"}}'
+```
+
+**Response (after job completes):**
+```json
+{
+    "id": "job-abc-123",
+    "status": "COMPLETED",
+    "output": {
+        "generated_text": "Hello world from GPU!"
+    }
+}
+```
+
+<Tip>
+Use `/run` for long-running jobs that you'll check later. Use `/runsync` for quick jobs where you want immediate results (with timeout protection).
+</Tip>
+
+### Queue-based request format
+
+Queue-based endpoints expect input wrapped in an `{"input": {...}}` object:
+
+```bash
+curl -X POST https://api.runpod.ai/v2/abc123xyz/runsync \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+        "input": {
+            "param1": "value1",
+            "param2": "value2"
+        }
+    }'
+```
+
+The structure inside `"input"` depends on your `@remote` function signature.
+
+### Job status states
+
+| Status | Description |
+|--------|-------------|
+| `IN_QUEUE` | Waiting for an available worker |
+| `IN_PROGRESS` | Worker is executing your function |
+| `COMPLETED` | Function finished successfully |
+| `FAILED` | Execution encountered an error |
+
+## Load-balanced endpoints
+
+Load-balanced endpoints (`LiveLoadBalancer`, `CpuLiveLoadBalancer`) provide custom HTTP routes with direct request/response patterns.
+
+### Calling load-balanced routes
+
+All routes share the same base URL. Append the route path to call specific functions:
+
+```bash
+# POST route
+curl -X POST https://abc123xyz.api.runpod.ai/analyze \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"text": "Hello world from Flash"}'
+
+# GET route
+curl -X GET https://abc123xyz.api.runpod.ai/info \
+    -H "Authorization: Bearer $RUNPOD_API_KEY"
+
+# Another POST route (same endpoint URL)
+curl -X POST https://abc123xyz.api.runpod.ai/validate \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"name": "Alice", "email": "alice@example.com"}'
+```
+
+### Load-balanced request format
+
+Load-balanced endpoints accept direct JSON payloads (no `{"input": {...}}` wrapper):
+
+```bash
+curl -X POST https://abc123xyz.api.runpod.ai/process \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+        "param1": "value1",
+        "param2": "value2"
+    }'
+```
+
+The payload structure depends on your `@remote` function signature. Each route can accept different parameters.
+
+### Multiple routes, single endpoint
+
+A single load-balanced endpoint can serve multiple routes:
+
+```python
+# All these routes share one endpoint URL
+@remote(resource_config=api_config, method="POST", path="/generate")
+async def generate_text(prompt: str): ...
+
+@remote(resource_config=api_config, method="POST", path="/translate")
+async def translate_text(text: str): ...
+
+@remote(resource_config=api_config, method="GET", path="/health")
+async def health_check(): ...
+```
+
+```bash
+# All use the same base URL with different paths
+curl -X POST https://abc123xyz.api.runpod.ai/generate -H "..." -d '{...}'
+curl -X POST https://abc123xyz.api.runpod.ai/translate -H "..." -d '{...}'
+curl -X GET https://abc123xyz.api.runpod.ai/health -H "..."
+```
+
+## Quick reference
+
+| Endpoint Type | Routes | Request Format | Response |
+|--------------|--------|----------------|----------|
+| Queue-based | `/run`, `/runsync`, `/status/{id}` | `{"input": {...}}` | Job ID (async) or result (sync) |
+| Load-balanced | Custom paths (e.g., `/process`) | Direct JSON payload | Direct response |
+
+## Response status codes
+
+| Code | Meaning |
+|------|---------|
+| `200` | Success (load-balanced) or job accepted (queue-based) |
+| `400` | Bad request (invalid input format) |
+| `401` | Unauthorized (invalid or missing API key) |
+| `404` | Route not found |
+| `500` | Internal server error |
+
+## Error handling
+
+Queue-based errors appear in the job output:
+
+```json
+{
+    "id": "job-abc-123",
+    "status": "FAILED",
+    "error": "Error message from your function"
+}
+```
+
+Load-balanced errors return HTTP error codes with JSON body:
+
+```json
+{
+    "error": "Error message from your function",
+    "detail": "Additional error context"
+}
+```
+
+## Using SDKs
+
+For programmatic access, use the Runpod Python SDK:
+
+```python
+import runpod
+
+# Queue-based endpoint
+runpod.api_key = "your_api_key"
+endpoint = runpod.Endpoint("YOUR_ENDPOINT_ID")
+
+# Async call
+job = endpoint.run({"prompt": "Hello world"})
+status = endpoint.status(job)
+result = endpoint.result(job)
+
+# Sync call
+result = endpoint.run_sync({"prompt": "Hello world"})
+```
+
+See the [Runpod SDK documentation](/sdks/python/endpoints) for complete SDK usage.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Deploy apps" href="/flash/apps/deploy-apps" icon="rocket">
+    Deploy your Flash app to get endpoint URLs.
+  </Card>
+  <Card title="Queue-based configs" href="/flash/configuration/queue-based" icon="layer-group">
+    Configure queue-based endpoints.
+  </Card>
+  <Card title="Load balancing configs" href="/flash/configuration/load-balancing" icon="arrow-progress">
+    Configure load-balanced endpoints.
+  </Card>
+  <Card title="Runpod SDK" href="/sdks/python/endpoints" icon="code">
+    Use the Python SDK for programmatic access.
+  </Card>
+</CardGroup>

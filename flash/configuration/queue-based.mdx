@@ -42,86 +42,26 @@ async def run_inference(data: dict) -> dict:
     return {"result": "processed"}
 ```
 
-### Configuration parameters
+### Configuration
 
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| `name` | `string` | Name for your endpoint (required) | - |
-| `gpus` | `list[GpuGroup \| GpuType]` | GPU pools or specific GPU types | `[GpuGroup.ANY]` |
-| `gpuCount` | `int` | Number of GPUs per worker | 1 |
-| `workersMin` | `int` | Minimum number of workers | 0 |
-| `workersMax` | `int` | Maximum number of workers | 3 |
-| `idleTimeout` | `int` | Minutes before scaling down | 5 |
-| `env` | `dict` | Environment variables | `None` |
-| `networkVolumeId` | `string` | Persistent storage volume ID | `None` |
-| `executionTimeoutMs` | `int` | Max execution time in milliseconds | 0 (no limit) |
-| `scalerType` | `string` | Scaling strategy | `QUEUE_DELAY` |
-| `scalerValue` | `int` | Scaling parameter value | 4 |
-| `locations` | `string` | Preferred datacenter locations | `None` |
-| `template` | `PodTemplate` | Pod template overrides | `None` |
+Key parameters: `name` (required), `gpus`, `workersMax`, `idleTimeout`, `env`.
+
+See [Configuration parameters](/flash/configuration/parameters) for the complete parameter reference.
 
 ### GPU selection
 
-The `gpus` parameter accepts GPU pools (`GpuGroup`) or specific GPU types (`GpuType`), or a mix of both:
-
-**Using GPU pools (recommended):**
-
-```python
-# Single GPU pool
-config = LiveServerless(
-    name="specific-pool",
-    gpus=[GpuGroup.AMPERE_80]  # Any A100 80GB variant
-)
-
-# Multiple GPU pools (fallback strategy)
-config = LiveServerless(
-    name="fallback-pools",
-    gpus=[
-        GpuGroup.AMPERE_80,  # Try A100 80GB first
-        GpuGroup.AMPERE_48,  # Fall back to A40/A6000 48GB
-        GpuGroup.ADA_24      # Final fallback to RTX 4090 24GB
-    ]
-)
-
-# Any available GPU
-config = LiveServerless(
-    name="any-gpu",
-    gpus=[GpuGroup.ANY]  # Default, fastest provisioning
-)
-```
-
-**Using specific GPU types:**
+The `gpus` parameter accepts specific GPU types for precise hardware selection:
 
 ```python
 from runpod_flash import LiveServerless, GpuType
 
-# Target exact GPU models
 config = LiveServerless(
-    name="specific-gpus",
-    gpus=[
-        GpuType.NVIDIA_A100_80GB_PCIe,  # Only PCIe variant
-        GpuType.NVIDIA_A100_SXM4_80GB   # Then SXM4 variant
-    ]
+    name="ml-inference",
+    gpus=[GpuType.NVIDIA_A100_80GB_PCIe]
 )
 ```
 
-**Mixing pools and specific types:**
-
-```python
-from runpod_flash import LiveServerless, GpuGroup, GpuType
-
-# Combine for advanced fallback strategies
-config = LiveServerless(
-    name="hybrid",
-    gpus=[
-        GpuType.NVIDIA_H100_80GB_HBM3,  # Try H100 first
-        GpuGroup.AMPERE_80,             # Then any A100
-        GpuGroup.ANY                     # Ultimate fallback
-    ]
-)
-```
-
-See [GPU types reference](/flash/configuration/gpu-types) for all available GPU pools and specific types.
+See [GPU types](/flash/configuration/gpu-types) for all available GPU types, pools, and advanced selection patterns.
 
 ### Multi-GPU workers
 
@@ -195,22 +135,11 @@ async def process_csv(file_url: str) -> dict:
     return {"rows": len(df), "columns": list(df.columns)}
 ```
 
-### Configuration parameters
+### Configuration
 
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| `name` | `string` | Name for your endpoint (required) | - |
-| `instanceIds` | `list[CpuInstanceType]` | CPU instance types | Required |
-| `workersMin` | `int` | Minimum number of workers | 0 |
-| `workersMax` | `int` | Maximum number of workers | 3 |
-| `idleTimeout` | `int` | Minutes before scaling down | 5 |
-| `env` | `dict` | Environment variables | `None` |
-| `networkVolumeId` | `string` | Persistent storage volume ID | `None` |
-| `executionTimeoutMs` | `int` | Max execution time in milliseconds | 0 (no limit) |
-| `scalerType` | `string` | Scaling strategy | `QUEUE_DELAY` |
-| `scalerValue` | `int` | Scaling parameter value | 4 |
-| `locations` | `string` | Preferred datacenter locations | `None` |
-| `template` | `PodTemplate` | Pod template overrides | `None` |
+Key parameters: `name` (required), `instanceIds` (required), `workersMax`, `idleTimeout`, `env`.
+
+See [Configuration parameters](/flash/configuration/parameters) for the complete parameter reference.
 
 ### CPU instance selection
 
@@ -277,58 +206,7 @@ You can also use `LiveServerless` with `instanceIds` parameter for CPU configura
 
 ## Calling queue-based endpoints
 
-Queue-based endpoints provide two routes for job submission:
-
-### Asynchronous calls (`/run`)
-
-Submit a job and receive a job ID for later status checking:
-
-```bash
-curl -X POST https://api-abc123.runpod.net/run \
-    -H "Authorization: Bearer $RUNPOD_API_KEY" \
-    -H "Content-Type: application/json" \
-    -d '{"input": {"prompt": "Hello world"}}'
-```
-
-Response:
-```json
-{
-    "id": "job-abc-123",
-    "status": "IN_QUEUE"
-}
-```
-
-Check status later:
-```bash
-curl https://api-abc123.runpod.net/status/job-abc-123 \
-    -H "Authorization: Bearer $RUNPOD_API_KEY"
-```
-
-### Synchronous calls (`/runsync`)
-
-Wait for job completion and receive results directly:
-
-```bash
-curl -X POST https://api-abc123.runpod.net/runsync \
-    -H "Authorization: Bearer $RUNPOD_API_KEY" \
-    -H "Content-Type: application/json" \
-    -d '{"input": {"prompt": "Hello world"}}'
-```
-
-Response (after job completes):
-```json
-{
-    "id": "job-abc-123",
-    "status": "COMPLETED",
-    "output": {
-        "generated_text": "Hello world from GPU!"
-    }
-}
-```
-
-<Tip>
-Use `/run` for long-running jobs that you'll check later. Use `/runsync` for quick jobs where you want immediate results (with timeout protection).
-</Tip>
+After deploying with `flash deploy`, call your endpoints using `/run` (async) or `/runsync` (sync) routes. See [Send API requests](/flash/apps/requests#queue-based-endpoints) for complete details on request formats, authentication, and status checking.
 
 ## Handling GPU unavailability
 
@@ -348,110 +226,31 @@ Initial job status: IN_QUEUE
 
 ## Worker scaling
 
-Queue-based endpoints automatically scale workers based on queue depth and load.
+Queue-based endpoints scale workers based on queue depth. Set `workersMin=0` for cost optimization (scale to zero when idle) or `workersMin ≥ 1` for low-latency production workloads. Jobs can wait in queue during scaling, making queue-based endpoints ideal for batch processing where immediate response isn't critical.
 
-### Scaling parameters
-
-| Parameter | Description | Recommendation |
-|-----------|-------------|----------------|
-| `workersMin` | Always-running workers | Set to 0 for cost savings, 1+ for low latency |
-| `workersMax` | Maximum concurrent workers | Set based on expected peak load |
-| `idleTimeout` | Minutes before scaling down | 5-10 for variable traffic, 20-30 for consistent loads |
-| `scalerType` | Scaling strategy | Use default `QUEUE_DELAY` |
-| `scalerValue` | Jobs per worker threshold | Use default 4 |
-
-### Scaling strategies
-
-**Cost-optimized (scale to zero):**
 ```python
+# Cost-optimized: Scale to zero when idle
 config = LiveServerless(
     name="batch-job",
-    gpus=[GpuGroup.AMPERE_80],
-    workersMin=0,    # No minimum workers
-    workersMax=10,   # Scale up when needed
-    idleTimeout=5    # Quick scale-down
+    workersMin=0,
+    workersMax=10,
+    idleTimeout=5
 )
 ```
 
-**Latency-optimized (always-ready):**
-```python
-config = LiveServerless(
-    name="production-api",
-    gpus=[GpuGroup.ADA_24],
-    workersMin=2,    # Always keep 2 workers ready
-    workersMax=20,   # Scale up to 20 under load
-    idleTimeout=30   # Keep workers longer
-)
-```
-
-**Balanced:**
-```python
-config = LiveServerless(
-    name="ml-inference",
-    gpus=[GpuGroup.AMPERE_80],
-    workersMin=1,    # One worker always ready
-    workersMax=5,    # Moderate scaling
-    idleTimeout=10   # Medium retention
-)
-```
+See [Configuration parameters](/flash/configuration/parameters) for detailed scaling parameter behavior.
 
 ## Persistent storage
 
-Queue-based endpoints support persistent storage via network volumes. Attach a volume using the `networkVolumeId` parameter to share models, datasets, and files across workers:
-
-```python
-config = LiveServerless(
-    name="model-server",
-    gpus=[GpuGroup.AMPERE_80],
-    networkVolumeId="vol_abc123"  # Network volumes mount at /runpod-volume/
-)
-```
-
-See the [storage guide](/flash/configuration/storage) for complete details on using network volumes, including setup, access patterns, and best practices.
+For persistent storage, set `networkVolumeId` to your volume ID. Network volumes mount at `/runpod-volume/` and persist across workers. See the [storage guide](/flash/configuration/storage) for setup instructions and best practices.
 
 ## Environment variables
 
-Pass configuration and secrets to workers using environment variables:
-
-```python
-config = LiveServerless(
-    name="api-worker",
-    gpus=[GpuGroup.ADA_24],
-    env={
-        "HF_TOKEN": "your_huggingface_token",
-        "MODEL_ID": "gpt2",
-        "API_KEY": "your_api_key"
-    }
-)
-```
-
-<Note>
-You can change environment variables without recreating workers. This makes it easy to rotate API keys or allow different developers to use their own .env files.
-</Note>
+Pass configuration and secrets to workers via the `env` parameter. See [Environment variables](/flash/remote-functions#environment-variables) for how to access them in your remote functions.
 
 ## Best practices
 
-### For production workloads
-
-- Pin specific GPU types instead of using `GpuGroup.ANY`.
-- Set `workersMin ≥ 1` to avoid cold starts on first request.
-- Use network volumes for large models to avoid downloading on each worker.
-- Set appropriate `executionTimeoutMs` to prevent runaway jobs.
-- Use environment variables for configuration, not hardcoded values.
-
-### For development
-
-- Use `GpuGroup.ANY` for fastest provisioning.
-- Set `workersMin=0` to minimize costs during testing.
-- Keep `workersMax` low (1-3) to control expenses.
-- Use shorter `idleTimeout` (5 minutes) to scale down quickly.
-
-### For cost optimization
-
-- Set `workersMin=0` to scale to zero when idle.
-- Use smaller GPU types when possible (e.g., `ADA_24` instead of `AMPERE_80`).
-- Reduce `idleTimeout` for infrequent workloads.
-- Batch multiple operations into single job submissions.
+See [Best practices](/flash/configuration/best-practices) for recommended configurations for production, development, and cost optimization scenarios.
 
 ## Next steps
 

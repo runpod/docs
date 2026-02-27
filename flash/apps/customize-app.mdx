@@ -18,7 +18,7 @@ The relationship between resource configurations and deployed Serverless endpoin
 **Queue-based endpoints** follow a strict 1:1:1 rule:
 - 1 resource configuration : 1 `@remote` function : 1 Serverless endpoint.
 - Each function must have its own unique resource configuration.
-- Each endpoint gets its own URL (e.g., `https://api-abc123.runpod.net`)
+- Each endpoint gets its own URL (e.g., `https://api.runpod.ai/v2/abc123xyz`)
 - Called via `/run` or `/runsync` routes.
 
 **Load-balanced endpoints** allow multiple routes on one endpoint:
@@ -40,9 +40,9 @@ The following sections demonstrate progressively complex scenarios:
 **Your code:**
 
 ```python title="gpu_worker.py"
-from runpod_flash import LiveServerless, GpuGroup, remote
+from runpod_flash import LiveServerless, GpuType, remote
 
-gpu_config = LiveServerless(name="gpu-inference", gpus=[GpuGroup.AMPERE_80])
+gpu_config = LiveServerless(name="gpu-inference", gpus=[GpuType.NVIDIA_A100_80GB_PCIe])
 
 @remote(resource_config=gpu_config, dependencies=["torch"])
 async def process_data(input: dict) -> dict:
@@ -53,7 +53,7 @@ async def process_data(input: dict) -> dict:
 
 **What gets deployed:**
 
-- **1 Serverless endpoint**: `https://api-abc123.runpod.net`
+- **1 Serverless endpoint**: `https://api.runpod.ai/v2/abc123xyz`
   - Named: `gpu-inference`
   - Hardware: Ampere 80GB GPUs.
   - When you call the endpoint: A worker runs the `process_data` remote function using the input data you provide.
@@ -62,12 +62,12 @@ async def process_data(input: dict) -> dict:
 
 ```bash
 # Synchronous call:
-curl -X POST https://api-abc123.runpod.net/runsync \
+curl -X POST https://api.runpod.ai/v2/abc123xyz/runsync \
     -H "Authorization: Bearer $RUNPOD_API_KEY" \
     -d '{"input": {"your": "data"}}'
 
 # Asynchronous call:
-curl -X POST https://api-abc123.runpod.net/run \
+curl -X POST https://api.runpod.ai/v2/abc123xyz/run \
     -H "Authorization: Bearer $RUNPOD_API_KEY" \
     -d '{"input": {"your": "data"}}'
 ```
@@ -80,11 +80,11 @@ curl -X POST https://api-abc123.runpod.net/run \
 **Your code:**
 
 ```python title="gpu_worker.py"
-from runpod_flash import LiveServerless, GpuGroup, remote
+from runpod_flash import LiveServerless, GpuType, remote
 
 # Each remote function needs its own resource config
-preprocess_config = LiveServerless(name="preprocess", gpus=[GpuGroup.AMPERE_80])
-inference_config = LiveServerless(name="inference", gpus=[GpuGroup.AMPERE_80])
+preprocess_config = LiveServerless(name="preprocess", gpus=[GpuType.NVIDIA_A100_80GB_PCIe])
+inference_config = LiveServerless(name="inference", gpus=[GpuType.NVIDIA_A100_80GB_PCIe])
 
 @remote(resource_config=preprocess_config, dependencies=["torch"])
 async def preprocess(data: dict) -> dict:
@@ -98,19 +98,19 @@ async def run_model(input: dict) -> dict:
 **What gets deployed:**
 
 - **2 Serverless endpoints**:
-  1. `https://api-abc123.runpod.net` (Named: `preprocess` in the console)
-  2. `https://api-def456.runpod.net` (Named: `inference` in the console)
+  1. `https://api.runpod.ai/v2/abc123xyz` (Named: `preprocess` in the console)
+  2. `https://api.runpod.ai/v2/def456xyz` (Named: `inference` in the console)
 
 **How to call them:**
 
 ```bash
 # Call preprocess endpoint:
-curl -X POST https://api-abc123.runpod.net/runsync \
+curl -X POST https://api.runpod.ai/v2/abc123xyz/runsync \
     -H "Authorization: Bearer $RUNPOD_API_KEY" \
     -d '{"input": {"your": "data"}}'
 
 # Call inference endpoint:
-curl -X POST https://api-def456.runpod.net/runsync \
+curl -X POST https://api.runpod.ai/v2/def456xyz/runsync \
     -H "Authorization: Bearer $RUNPOD_API_KEY" \
     -d '{"input": {"your": "data"}}'
 ```
@@ -143,19 +143,19 @@ async def health_check() -> dict:
 
 **What gets deployed:**
 
-- **1 Serverless endpoint**: `https://api-abc123.runpod.net` (Named: `api-server`)
+- **1 Serverless endpoint**: `https://abc123xyz.api.runpod.ai` (Named: `api-server`)
 - **3 HTTP routes**: `POST /generate`, `POST /translate`, `GET /health` (Defined by the `@remote` decorators in `lb_worker.py`)
 
  **How to call them:**
 
 ```bash
 # Call /generate route:
-curl -X POST https://api-abc123.runpod.net/generate \
+curl -X POST https://abc123xyz.api.runpod.ai/generate \
     -H "Authorization: Bearer $RUNPOD_API_KEY" \
     -d '{"prompt": "hello"}'
 
 # Call /health route (same endpoint URL):
-curl -X GET https://api-abc123.runpod.net/health \
+curl -X GET https://abc123xyz.api.runpod.ai/health \
     -H "Authorization: Bearer $RUNPOD_API_KEY"
 ```
 
@@ -168,7 +168,7 @@ curl -X GET https://api-abc123.runpod.net/health \
 **Your code:**
 
 ```python title="mixed_api_worker.py"
-from runpod_flash import CpuLiveLoadBalancer, LiveServerless, GpuGroup, remote
+from runpod_flash import CpuLiveLoadBalancer, LiveServerless, GpuType, remote
 
 # Public-facing API (load-balanced)
 api_config = CpuLiveLoadBalancer(name="public-api")
@@ -180,7 +180,7 @@ async def handle_request(data: dict) -> dict:
     return {"result": result}
 
 # Internal GPU worker (queue-based)
-gpu_config = LiveServerless(name="gpu-backend", gpus=[GpuGroup.AMPERE_80])
+gpu_config = LiveServerless(name="gpu-backend", gpus=[GpuType.NVIDIA_A100_80GB_PCIe])
 
 @remote(resource_config=gpu_config, dependencies=["torch"])
 async def run_gpu_inference(input: dict) -> dict:
@@ -192,8 +192,8 @@ async def run_gpu_inference(input: dict) -> dict:
 **What gets deployed:**
 
 - **2 Serverless endpoints**:
-  1. `https://api-abc123.runpod.net` (public-api, load-balanced)
-  2. `https://api-def456.runpod.net` (gpu-backend, queue-based)
+  1. `https://abc123xyz.api.runpod.ai` (public-api, load-balanced)
+  2. `https://api.runpod.ai/v2/def456xyz` (gpu-backend, queue-based)
 
 **Key takeaway:** You can mix endpoint types. Load-balanced endpoints can call queue-based endpoints internally.
 
@@ -288,12 +288,12 @@ All routes share the same `lb_worker` Serverless endpoint. Each route is accessi
 To add a new queue-based endpoint, create a new resource configuration with a unique name:
 
 ```python title="gpu_worker.py"
-from runpod_flash import LiveServerless, GpuGroup, remote
+from runpod_flash import LiveServerless, GpuType, remote
 
 # Existing endpoint
 gpu_inference_config = LiveServerless(
     name="gpu-inference",
-    gpus=[GpuGroup.AMPERE_80],
+    gpus=[GpuType.NVIDIA_A100_80GB_PCIe],
     workersMax=3
 )
 
@@ -306,7 +306,7 @@ async def run_inference(input: dict) -> dict:
 # New endpoint for a different workload
 gpu_training_config = LiveServerless(
     name="gpu-training",
-    gpus=[GpuGroup.AMPERE_80],
+    gpus=[GpuType.NVIDIA_A100_80GB_PCIe],
     workersMax=1
 )
 
@@ -326,75 +326,26 @@ This creates two separate Serverless endpoints, each with its own URL and scalin
 
 ## Modify resource configurations
 
-You can adjust resource configurations to optimize for your workload:
-
-### Change GPU types
+Customize resource configurations for each worker function in your app. Each `@remote` function can have its own GPU type, scaling parameters, and timeouts optimized for its specific workload.
 
 ```python
-# For large models requiring 80GB VRAM
-gpu_config = LiveServerless(
-    name="large-model",
-    gpus=[GpuGroup.AMPERE_80]  # A100 80GB
+# Example: Different configs for different workloads
+preprocess_config = LiveServerless(
+    name="preprocess",
+    gpus=[GpuType.NVIDIA_RTX_4090],  # Cost-effective for preprocessing
+    workersMin=0,
+    workersMax=5
 )
 
-# For cost-effective inference on smaller models
-gpu_config = LiveServerless(
-    name="small-model",
-    gpus=[GpuGroup.ADA_24]  # RTX 4090 24GB
-)
-
-# For maximum availability with fallback options
-gpu_config = LiveServerless(
-    name="flexible-gpu",
-    gpus=[
-        GpuGroup.AMPERE_80,  # Try A100 80GB first
-        GpuGroup.AMPERE_48,  # Fall back to A40/A6000 48GB
-        GpuGroup.ADA_24      # Final fallback to RTX 4090 24GB
-    ]
-)
-```
-
-### Adjust worker scaling
-
-```python
-# High-traffic endpoint with minimum workers
-config = LiveServerless(
-    name="production-api",
-    gpus=[GpuGroup.AMPERE_80],
-    workersMin=2,    # Always keep 2 workers ready
-    workersMax=10    # Scale up to 10 workers under load
-)
-
-# Low-traffic batch processing
-config = LiveServerless(
-    name="batch-job",
-    gpus=[GpuGroup.AMPERE_80],
-    workersMin=0,    # No minimum workers (scale to zero)
-    workersMax=3     # Scale up to 3 workers when needed
-)
-```
-
-### Configure timeouts
-
-```python
-# Long-running training jobs
-config = LiveServerless(
-    name="training",
-    gpus=[GpuGroup.AMPERE_80],
-    idleTimeout=30,           # Keep workers active for 30 minutes
-    executionTimeoutMs=600000  # 10-minute execution timeout
-)
-
-# Quick inference requests
-config = LiveServerless(
+inference_config = LiveServerless(
     name="inference",
-    gpus=[GpuGroup.ADA_24],
-    idleTimeout=5,            # Scale down after 5 minutes idle
-    executionTimeoutMs=60000  # 1-minute execution timeout
+    gpus=[GpuType.NVIDIA_A100_80GB_PCIe],  # High VRAM for large models
+    workersMin=1,  # Keep one worker ready
+    workersMax=10
 )
 ```
 
-See the [complete resource configuration reference](/flash/configuration/overview) for all available options.
+See [Configuration parameters](/flash/configuration/parameters) for all available options, [GPU types](/flash/configuration/gpu-types) for selecting hardware, and [Best practices](/flash/configuration/best-practices) for optimization guidance.
 
 ## Manage dependencies
 

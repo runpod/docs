@@ -1,0 +1,184 @@
+---
+title: "Configuration best practices"
+sidebarTitle: "Best practices"
+description: "Recommended configurations for production, development, and cost optimization."
+tag: "BETA"
+---
+
+This guide provides best practices for configuring Flash endpoints based on your use case. Recommendations are organized by workload type and optimization goal.
+
+## Production workloads
+
+For production deployments requiring reliability and consistent performance:
+
+### General recommendations
+
+- **Pin specific GPU types** instead of using `GpuGroup.ANY` for predictable performance and costs.
+- **Use network volumes** for large models to avoid downloading on each worker startup.
+- **Set appropriate `executionTimeoutMs`** to prevent runaway jobs and control costs.
+- **Use environment variables** for configuration and secrets, not hardcoded values.
+
+### Queue-based endpoints
+
+Queue-based endpoints (LiveServerless, CpuLiveServerless) handle asynchronous batch processing where jobs can wait in queue:
+
+```python
+from runpod_flash import LiveServerless, GpuType
+
+config = LiveServerless(
+    name="production-batch",
+    gpus=[GpuType.NVIDIA_A100_80GB_PCIe],  # Specific GPU for predictable performance
+    workersMin=1,           # At least 1 worker to reduce latency
+    workersMax=10,          # Scale for peak load
+    idleTimeout=20,         # Keep workers longer for variable traffic
+    executionTimeoutMs=600000,  # 10 minute timeout
+    networkVolumeId="vol_abc123",
+    env={"MODEL_PATH": "/runpod-volume/models"}
+)
+```
+
+**Key settings**:
+- `workersMin ≥ 1`: Avoid cold starts for first job in queue.
+- `workersMax`: Set based on expected peak concurrent jobs.
+- `idleTimeout`: 15-30 minutes for production workloads.
+
+### Load balancing endpoints
+
+Load balancing endpoints (LiveLoadBalancer, CpuLiveLoadBalancer) handle synchronous HTTP requests where immediate response is critical:
+
+```python
+from runpod_flash import LiveLoadBalancer, GpuType
+
+config = LiveLoadBalancer(
+    name="production-api",
+    gpus=[GpuType.NVIDIA_RTX_4090],  # Specific GPU for consistent performance
+    workersMin=3,           # Always keep workers ready
+    workersMax=20,          # Scale for traffic spikes
+    idleTimeout=30,         # Keep workers active longer
+    executionTimeoutMs=60000,  # 60 second timeout per request
+    networkVolumeId="vol_abc123"
+)
+```
+
+**Key settings**:
+- `workersMin ≥ 1`: **Required** for production APIs to avoid cold starts. Unlike queue-based endpoints where jobs can wait, API clients expect immediate responses.
+- `workersMax`: Set based on expected peak concurrent requests.
+- `idleTimeout`: 20-30 minutes to keep workers ready.
+- Include health check routes (e.g., `GET /health`) for monitoring.
+
+## Development
+
+For development and testing environments prioritizing fast iteration:
+
+### General recommendations
+
+- **Use `GpuGroup.ANY`** for fastest GPU provisioning during development.
+- **Set `workersMin=0`** to minimize costs when not actively testing.
+- **Keep `workersMax` low** (1-3) to control development expenses.
+- **Use short `idleTimeout`** (5 minutes) to scale down quickly between test runs.
+- **Test locally** with `flash run` before deploying to production.
+
+### Example configuration
+
+```python
+from runpod_flash import LiveServerless, GpuGroup
+
+config = LiveServerless(
+    name="dev-testing",
+    gpus=[GpuGroup.ANY],    # Fast provisioning
+    workersMin=0,           # Scale to zero when idle
+    workersMax=2,           # Limit concurrent workers
+    idleTimeout=5           # Quick scale-down
+)
+```
+
+## Cost optimization
+
+For minimizing costs on infrequent or batch workloads:
+
+### General recommendations
+
+- **Set `workersMin=0`** to scale to zero when idle (no usage = no cost).
+- **Use smaller GPU types** when workload allows (e.g., `GpuType.NVIDIA_RTX_4090` instead of `GpuType.NVIDIA_A100_80GB_PCIe`).
+- **Use CPU endpoints** when GPU acceleration isn't needed.
+- **Reduce `idleTimeout`** for sporadic workloads (5-10 minutes).
+- **Batch operations** into fewer job submissions when possible.
+
+### Cost-optimized queue-based endpoint
+
+```python
+from runpod_flash import LiveServerless, GpuType
+
+config = LiveServerless(
+    name="batch-job",
+    gpus=[GpuType.NVIDIA_RTX_4090],  # Cost-effective GPU
+    workersMin=0,           # Scale to zero
+    workersMax=5,           # Controlled scaling
+    idleTimeout=5,          # Fast scale-down
+    networkVolumeId="vol_abc123"  # Avoid re-downloading models
+)
+```
+
+### Cost-optimized CPU endpoint
+
+For workloads that don't require GPU acceleration:
+
+```python
+from runpod_flash import CpuLiveServerless, CpuInstanceType
+
+config = CpuLiveServerless(
+    name="cpu-batch",
+    instanceIds=[CpuInstanceType.CPU5C_4_8],  # 4 vCPU, 8GB RAM
+    workersMin=0,
+    workersMax=3,
+    idleTimeout=5
+)
+```
+
+## Configuration trade-offs
+
+Understanding the trade-offs helps you balance cost, latency, and performance:
+
+| Configuration | Cost | Cold Start Latency | Best For |
+|--------------|------|-------------------|----------|
+| `workersMin=0` | Lowest | 20-90 seconds first run | Batch jobs, development, infrequent workloads |
+| `workersMin=1` | Medium | \<1 second for queued jobs | Production batch, variable traffic |
+| `workersMin ≥ 3` | Highest | Always ready | Production APIs, high-traffic endpoints |
+
+| GPU Choice | Cost | Availability | Best For |
+|-----------|------|--------------|----------|
+| `GpuGroup.ANY` | Variable | Highest | Development, fastest provisioning |
+| Specific pool (e.g., `GpuGroup.ADA_24`) | Medium | High | Production with fallback options |
+| Specific type (e.g., `GpuType.NVIDIA_A100_80GB_PCIe`) | Predictable | Lower | Production requiring specific hardware |
+
+## Configuration checklist
+
+Before deploying to production, verify:
+
+- [ ] **GPU selection**: Using specific GPU types (not `GpuGroup.ANY`) for predictable performance
+- [ ] **Worker scaling**: `workersMin ≥ 1` for load balancers and latency-sensitive workloads
+- [ ] **Timeouts**: `executionTimeoutMs` set appropriately for your workload
+- [ ] **Storage**: Network volume attached if using large models or datasets
+- [ ] **Environment variables**: All configuration and secrets passed via `env` parameter
+- [ ] **Monitoring**: Health check routes implemented (load balancers)
+- [ ] **Testing**: Tested locally with `flash run` before production deployment
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration parameters" href="/flash/configuration/parameters" icon="sliders">
+    Complete parameter reference with detailed explanations.
+  </Card>
+  <Card title="Queue-based configurations" href="/flash/configuration/queue-based" icon="layer-group">
+    LiveServerless and CpuLiveServerless for batch processing.
+  </Card>
+  <Card title="Load balancing configurations" href="/flash/configuration/load-balancing" icon="arrow-progress">
+    LiveLoadBalancer and CpuLiveLoadBalancer for HTTP APIs.
+  </Card>
+  <Card title="GPU types" href="/flash/configuration/gpu-types" icon="microchip">
+    Available GPU pools and specific GPU types.
+  </Card>
+  <Card title="Storage" href="/flash/configuration/storage" icon="hard-drive">
+    Using network volumes for persistent storage.
+  </Card>
+</CardGroup>

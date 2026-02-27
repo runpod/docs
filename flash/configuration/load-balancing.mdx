@@ -45,24 +45,13 @@ async def health_check() -> dict:
     return {"status": "healthy", "service": "api-server"}
 ```
 
-Both routes deploy to a single Serverless endpoint with URL like `https://api-abc123.runpod.net`.
+Both routes deploy to a single Serverless endpoint with URL like `https://abc123xyz.api.runpod.ai`.
 
-### Configuration parameters
+### Configuration
 
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| `name` | `string` | Name for your endpoint (required) | - |
-| `instanceIds` | `list[CpuInstanceType]` | CPU instance types | Default CPU instances |
-| `workersMin` | `int` | Minimum number of workers | 0 |
-| `workersMax` | `int` | Maximum number of workers | 3 |
-| `idleTimeout` | `int` | Minutes before scaling down | 5 |
-| `env` | `dict` | Environment variables | `None` |
-| `networkVolumeId` | `string` | Persistent storage volume ID | `None` |
-| `executionTimeoutMs` | `int` | Max execution time in milliseconds | 0 (no limit) |
-| `scalerType` | `string` | Scaling strategy | `QUEUE_DELAY` |
-| `scalerValue` | `int` | Scaling parameter value | 4 |
-| `locations` | `string` | Preferred datacenter locations | `None` |
-| `template` | `PodTemplate` | Pod template overrides | `None` |
+Key parameters: `name` (required), `instanceIds`, `workersMin`, `workersMax`, `env`.
+
+See [Configuration parameters](/flash/configuration/parameters) for the complete parameter reference.
 
 ### Complete example
 
@@ -105,27 +94,7 @@ async def get_info() -> dict:
     }
 ```
 
-### Calling CPU load balanced endpoints
-
-All routes share the same base URL:
-
-```bash
-# Call /analyze route
-curl -X POST https://api-abc123.runpod.net/analyze \
-    -H "Authorization: Bearer $RUNPOD_API_KEY" \
-    -H "Content-Type: application/json" \
-    -d '{"text": "Hello world from Flash"}'
-
-# Call /validate route
-curl -X POST https://api-abc123.runpod.net/validate \
-    -H "Authorization: Bearer $RUNPOD_API_KEY" \
-    -H "Content-Type: application/json" \
-    -d '{"name": "Alice", "email": "alice@example.com"}'
-
-# Call /info route
-curl -X GET https://api-abc123.runpod.net/info \
-    -H "Authorization: Bearer $RUNPOD_API_KEY"
-```
+See [Send API requests](/flash/apps/requests#load-balanced-endpoints) for details on calling load-balanced endpoints after deployment.
 
 ## LiveLoadBalancer
 
@@ -160,23 +129,11 @@ async def get_model_info() -> dict:
     }
 ```
 
-### Configuration parameters
+### Configuration
 
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| `name` | `string` | Name for your endpoint (required) | - |
-| `gpus` | `list[GpuGroup \| GpuType]` | GPU pools or specific GPU types | `[GpuGroup.ANY]` |
-| `gpuCount` | `int` | Number of GPUs per worker | 1 |
-| `workersMin` | `int` | Minimum number of workers | 0 |
-| `workersMax` | `int` | Maximum number of workers | 3 |
-| `idleTimeout` | `int` | Minutes before scaling down | 5 |
-| `env` | `dict` | Environment variables | `None` |
-| `networkVolumeId` | `string` | Persistent storage volume ID | `None` |
-| `executionTimeoutMs` | `int` | Max execution time in milliseconds | 0 (no limit) |
-| `scalerType` | `string` | Scaling strategy | `QUEUE_DELAY` |
-| `scalerValue` | `int` | Scaling parameter value | 4 |
-| `locations` | `string` | Preferred datacenter locations | `None` |
-| `template` | `PodTemplate` | Pod template overrides | `None` |
+Key parameters: `name` (required), `gpus`, `gpuCount`, `workersMin`, `workersMax`, `env`.
+
+See [Configuration parameters](/flash/configuration/parameters) for the complete parameter reference.
 
 ### Complete example
 
@@ -257,81 +214,19 @@ async def health_check() -> dict:
 
 ### GPU selection for load balancers
 
-Like queue-based configurations, load balancers support both GPU pools and specific GPU types:
-
-**Using GPU pools:**
-
-```python
-# Single pool
-config = LiveLoadBalancer(
-    name="gpu-api",
-    gpus=[GpuGroup.ADA_24]  # Any RTX 4090
-)
-
-# Multiple pools (fallback)
-config = LiveLoadBalancer(
-    name="flexible-api",
-    gpus=[
-        GpuGroup.AMPERE_80,  # Try A100 first
-        GpuGroup.ADA_24      # Fall back to RTX 4090
-    ]
-)
-```
-
-**Using specific GPU types:**
+The `gpus` parameter accepts specific GPU types for precise hardware selection:
 
 ```python
 from runpod_flash import LiveLoadBalancer, GpuType
 
 config = LiveLoadBalancer(
-    name="specific-gpu-api",
-    gpus=[
-        GpuType.NVIDIA_A100_80GB_PCIe,  # PCIe variant only
-        GpuType.NVIDIA_A40               # Fallback to A40
-    ]
+    name="ml-api",
+    gpus=[GpuType.NVIDIA_A100_80GB_PCIe]
 )
 ```
 
-**Mixing pools and types:**
+See [GPU types](/flash/configuration/gpu-types) for all available GPU types, pools, and advanced selection patterns.
 
-```python
-from runpod_flash import LiveLoadBalancer, GpuGroup, GpuType
-
-config = LiveLoadBalancer(
-    name="hybrid-api",
-    gpus=[
-        GpuType.NVIDIA_H100_80GB_HBM3,  # Try H100 specifically
-        GpuGroup.AMPERE_80,             # Then any A100
-        GpuGroup.ANY                     # Ultimate fallback
-    ]
-)
-```
-
-See [GPU types](/flash/configuration/gpu-types) for all available options.
-
-### Calling GPU load balanced endpoints
-
-All routes share the same base URL:
-
-```bash
-# Call /classify route
-curl -X POST https://api-abc123.runpod.net/classify \
-    -H "Authorization: Bearer $RUNPOD_API_KEY" \
-    -H "Content-Type: application/json" \
-    -d '{"image_url": "https://example.com/image.jpg"}'
-
-# Call /generate route
-curl -X POST https://api-abc123.runpod.net/generate \
-    -H "Authorization: Bearer $RUNPOD_API_KEY" \
-    -H "Content-Type: application/json" \
-    -d '{"prompt": "Once upon a time", "max_length": 50}'
-
-# Call /health route
-curl -X GET https://api-abc123.runpod.net/health \
-    -H "Authorization: Bearer $RUNPOD_API_KEY"
-```
-
-The required input data format depends on your remote function.
 
 ## Route requirements
 
@@ -385,116 +280,39 @@ Supported HTTP methods: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`.
 
 ## Worker scaling for load balancers
 
-Load balanced endpoints scale based on concurrent request volume:
-
-### Production API (always-ready workers)
+Load balanced endpoints scale based on concurrent request volume. Unlike queue-based endpoints where jobs can wait, API clients expect immediate responses. Set `workersMin ≥ 1` for production APIs to avoid cold starts on first request.
 
 ```python
+# Production: Always-ready workers
 api_config = CpuLiveLoadBalancer(
     name="production-api",
-    workersMin=3,    # Always keep 3 workers ready
-    workersMax=20,   # Scale up to 20 under load
-    idleTimeout=30   # Keep workers active longer
+    workersMin=3,
+    workersMax=20,
+    idleTimeout=30
 )
-```
 
-**Best for**: High-traffic APIs requiring low latency.
-
-### Development API (cost-optimized)
-
-```python
+# Development: Cost-optimized
 api_config = CpuLiveLoadBalancer(
     name="dev-api",
-    workersMin=0,    # Scale to zero when idle
-    workersMax=5,    # Limited scaling
-    idleTimeout=5    # Quick scale-down
+    workersMin=0,
+    workersMax=5,
+    idleTimeout=5
 )
 ```
 
-**Best for**: Development, testing, low-traffic APIs
-
-### GPU inference API (balanced)
-
-```python
-gpu_api_config = LiveLoadBalancer(
-    name="gpu-inference",
-    gpus=[GpuGroup.ADA_24],
-    workersMin=1,    # One worker always ready
-    workersMax=10,   # Scale up for burst traffic
-    idleTimeout=15   # Moderate retention
-)
-```
-
-**Best for**: Production ML inference with variable traffic.
-
-<Tip>
-**Load balancer best practice**: Set `workersMin ≥ 1` for production APIs to avoid cold starts on first request. Unlike queue-based endpoints where jobs can wait, API clients expect immediate responses.
-</Tip>
+See [Configuration parameters](/flash/configuration/parameters) for detailed scaling parameter behavior.
 
 ## Persistent storage
 
-Load balancing endpoints support persistent storage via network volumes. Attach a volume using the `networkVolumeId` parameter to share models, datasets, and files across workers:
-
-```python
-config = LiveLoadBalancer(
-    name="model-api",
-    gpus=[GpuGroup.AMPERE_80],
-    networkVolumeId="vol_abc123"  # Network volumes mount at /runpod-volume/
-)
-```
-
-See the [storage guide](/flash/configuration/storage) for complete details on using network volumes, including setup, access patterns, and best practices.
+For persistent storage, set `networkVolumeId` to your volume ID. Network volumes mount at `/runpod-volume/` and persist across workers. See the [storage guide](/flash/configuration/storage) for setup instructions and best practices.
 
 ## Environment variables
 
-Pass configuration to all routes using environment variables:
-
-```python
-api_config = CpuLiveLoadBalancer(
-    name="api-server",
-    env={
-        "API_VERSION": "v2",
-        "LOG_LEVEL": "INFO",
-        "FEATURE_FLAGS": "new_ui,async_processing"
-    }
-)
-
-@remote(resource_config=api_config, method="GET", path="/config")
-async def get_config() -> dict:
-    import os
-    return {
-        "version": os.getenv("API_VERSION"),
-        "log_level": os.getenv("LOG_LEVEL")
-    }
-```
-
-<Note>
-You can change environment variables without recreating workers. This makes it easy to rotate API keys or allow different developers to use their own .env files.
-</Note>
+Pass configuration to all routes via the `env` parameter. See [Environment variables](/flash/remote-functions#environment-variables) for how to access them in your remote functions.
 
 ## Best practices
 
-### For production APIs
-
-- Set `workersMin ≥ 1` to avoid cold starts on first request.
-- Use specific GPU types instead of `GpuGroup.ANY` for predictable performance.
-- Set appropriate `executionTimeoutMs` for your routes.
-- Use network volumes for large models to avoid downloading on each worker.
-- Include health check routes (e.g., `GET /health`) for monitoring.
-
-### For development
-
-- Set `workersMin=0` to minimize costs during development.
-- Use `GpuGroup.ANY` for fastest provisioning (GPU endpoints).
-- Keep `idleTimeout` short (5 minutes) to scale down quickly.
-- Test locally with `flash run` before deploying.
-
-### For cost optimization
-
-- Set `workersMin=0` for APIs with infrequent traffic.
-- Use CPU load balancers when GPU acceleration isn't needed.
-- Reduce `idleTimeout` for sporadic workloads.
-- Use smaller GPU types when possible (e.g., `ADA_24` vs. `AMPERE_80`).
+See [Best practices](/flash/configuration/best-practices) for recommended configurations for production, development, and cost optimization scenarios.
 
 ## Next steps
 

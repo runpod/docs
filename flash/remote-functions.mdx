@@ -23,97 +23,31 @@ When you call a remote function from a local Python script or [Flash app](/flash
 
 ## Resource configuration
 
-Every remote function requires a resource configuration that specifies the compute resources to use. Flash provides six resource types:
+Every remote function requires a resource configuration specifying compute resources. Flash provides six configuration types:
 
-- **Queue-based** (`LiveServerless`, `CpuLiveServerless`) - For batch processing with `/run` or `/runsync` routes
-- **Load balancing** (`LiveLoadBalancer`, `CpuLiveLoadBalancer`) - For HTTP APIs with custom routes
-- **Custom Docker** (`ServerlessEndpoint`, `CpuServerlessEndpoint`) - For custom Docker images
+- **Queue-based** (`LiveServerless`, `CpuLiveServerless`) - Batch processing with `/run` or `/runsync` routes
+- **Load balancing** (`LiveLoadBalancer`, `CpuLiveLoadBalancer`) - HTTP APIs with custom routes
+- **Custom Docker** (`ServerlessEndpoint`, `CpuServerlessEndpoint`) - Custom Docker images
 
-### Quick start with GPU configuration
-
-For GPU workloads, create a `LiveServerless` configuration and specify the [GPU pool(s)](/flash/configuration/gpu-types#gpu-pools) your workers will use:
+**Quick example:**
 
 ```python
-from runpod_flash import LiveServerless, GpuGroup, remote
+from runpod_flash import LiveServerless, GpuType, remote
 
-gpu_config = LiveServerless(
+config = LiveServerless(
     name="ml-inference",
-    gpus=[GpuGroup.AMPERE_80],  # A100 80GB
-    workersMax=5,
-    idleTimeout=10
+    gpus=[GpuType.NVIDIA_A100_80GB_PCIe],
+    workersMax=5
 )
 
-@remote(resource_config=gpu_config, dependencies=["torch"])
-async def run_inference(data):
+@remote(resource_config=config, dependencies=["torch"])
+async def process(data):
     import torch
-    # Your inference code here
+    # Your code here
     return result
 ```
 
-### Quick start with CPU configuration
-
-For CPU-only workloads, use `CpuLiveServerless`:
-
-```python
-from runpod_flash import CpuLiveServerless, CpuInstanceType, remote
-
-cpu_config = CpuLiveServerless(
-    name="data-processor",
-    instanceIds=[CpuInstanceType.CPU5C_4_8],  # 4 vCPU, 8GB RAM
-    workersMax=3
-)
-
-@remote(resource_config=cpu_config, dependencies=["pandas"])
-async def process_data(data):
-    import pandas as pd
-    df = pd.DataFrame(data)
-    return df.describe().to_dict()
-```
-
-### Quick start with load balancing
-
-For HTTP APIs with custom routes, use load balancing configurations:
-
-```python
-from runpod_flash import CpuLiveLoadBalancer, remote
-
-api_config = CpuLiveLoadBalancer(
-    name="api-server",
-    workersMin=1,
-    workersMax=10
-)
-
-@remote(resource_config=api_config, method="POST", path="/process")
-async def process_request(data: dict) -> dict:
-    return {"processed": data, "status": "complete"}
-
-@remote(resource_config=api_config, method="GET", path="/status")
-async def get_status() -> dict:
-    return {"status": "healthy"}
-```
-
-Load balancer routes require both `method=` and `path=` parameters.
-
-<CardGroup cols={2}>
-  <Card title="Configuration overview" href="/flash/configuration/overview" icon="book-open">
-    Choose the right configuration type for your workload.
-  </Card>
-  <Card title="Queue-based configs" href="/flash/configuration/queue-based" icon="layer-group">
-    Complete guide to LiveServerless and CpuLiveServerless.
-  </Card>
-  <Card title="Load balancing configs" href="/flash/configuration/load-balancing" icon="arrow-progress">
-    Build HTTP APIs with LiveLoadBalancer and CpuLiveLoadBalancer.
-  </Card>
-  <Card title="Configuration parameters" href="/flash/configuration/parameters" icon="sliders">
-    Complete parameter reference for all options.
-  </Card>
-</CardGroup>
-
-### Custom Docker images
-
-For specialized environments requiring pre-built Docker images (vLLM, TensorRT, custom system dependencies), use `ServerlessEndpoint` or `CpuServerlessEndpoint`.
-
-See [Custom Docker images](/flash/configuration/custom-docker-images) for details.
+See [Configuration overview](/flash/configuration/overview) to choose the right configuration type for your workload, or jump directly to [Queue-based](/flash/configuration/queue-based), [Load balancing](/flash/configuration/load-balancing), or [Custom Docker](/flash/configuration/custom-docker-images) guides.
 
 
 ## Dependency management
@@ -229,48 +163,7 @@ if __name__ == "__main__":
 
 ## Using persistent storage
 
-Attach [network volumes](/storage/network-volumes) for persistent storage across workers and endpoints. This is useful for sharing large models or datasets between workers without downloading them each time.
-
-```python
-config = LiveServerless(
-    name="model-server",
-    networkVolumeId="vol_abc123",  # Your network volume ID
-    template=PodTemplate(containerDiskInGb=100)
-)
-```
-
-To find your network volume ID:
-
-1. Go to the [Storage page](https://www.runpod.io/console/storage) in the Runpod console.
-2. Click on your network volume.
-3. Copy the volume ID from the URL or volume details.
-
-### Example: Using a network volume for model storage
-
-```python
-from runpod_flash import LiveServerless, GpuGroup, PodTemplate
-
-config = LiveServerless(
-    name="model-inference",
-    gpus=[GpuGroup.AMPERE_80],
-    networkVolumeId="vol_abc123",
-    template=PodTemplate(containerDiskInGb=100)
-)
-
-@remote(resource_config=config, dependencies=["torch", "transformers"])
-def run_inference(prompt):
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-    
-    # Load model from network volume
-    model_path = "/runpod-volume/models/llama-7b"
-    model = AutoModelForCausalLM.from_pretrained(model_path)
-    tokenizer = AutoTokenizer.from_pretrained(model_path)
-    
-    # Run inference
-    inputs = tokenizer(prompt, return_tensors="pt")
-    outputs = model.generate(**inputs)
-    return tokenizer.decode(outputs[0])
-```
+Attach network volumes to share models, datasets, and files across workers using the `networkVolumeId` parameter. Volumes mount at `/runpod-volume/` and persist across worker restarts. See the [storage guide](/flash/configuration/storage) for setup instructions, access patterns, and best practices.
 
 ## Environment variables
 
