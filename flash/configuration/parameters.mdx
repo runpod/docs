@@ -14,9 +14,9 @@ These parameters are available on all configuration classes (`LiveServerless`, `
 |-----------|------|-------------|---------|
 | `name` | `string` | Name for your endpoint (required, visible in console) | - |
 | `workersMin` | `int` | Minimum number of workers (always running) | 0 |
-| `workersMax` | `int` | Maximum number of workers (scaling limit) | 3 |
-| `idleTimeout` | `int` | Minutes before scaling down idle workers | 5 |
-| `env` | `dict` | Environment variables as key-value pairs | `None` |
+| `workersMax` | `int` | Maximum number of workers (scaling limit) | 1 |
+| `idleTimeout` | `int` | Seconds before scaling down idle workers | 60 |
+| `env` | `dict` | Environment variables as key-value pairs | Loads from `.env` file |
 | `networkVolumeId` | `string` | Persistent storage [network volume](/storage/network-volumes) ID | `None` |
 | `executionTimeoutMs` | `int` | Maximum execution time in milliseconds (0 = no limit) | 0 |
 | `scalerType` | `string` | Scaling strategy algorithm | `QUEUE_DELAY` |
@@ -95,6 +95,84 @@ config = CpuLiveServerless(
 
 See [CPU types reference](/flash/configuration/cpu-types) for all available CPU instance types.
 
+## Advanced parameters
+
+These parameters provide additional control over worker behavior and are available on GPU configurations (`LiveServerless`, `LiveLoadBalancer`, `ServerlessEndpoint`):
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `flashboot` | `bool` | Enable Flashboot for faster cold starts | `True` |
+| `datacenter` | `DataCenter` | Preferred datacenter for worker deployment | `DataCenter.EU_RO_1` |
+| `cudaVersions` | `list[CudaVersion]` | Allowed CUDA versions for workers | `[]` (all versions) |
+| `networkVolume` | `NetworkVolume` | Network volume configuration object | `None` |
+
+### flashboot
+
+Flashboot reduces cold start times by pre-loading container images. It's enabled by default:
+
+```python
+config = LiveServerless(
+    name="fast-inference",
+    flashboot=True  # Default, enables faster cold starts
+)
+```
+
+Set to `False` if you need to disable Flashboot for debugging or compatibility reasons.
+
+### datacenter
+
+Specify a preferred datacenter for worker deployment:
+
+```python
+from runpod_flash import LiveServerless, DataCenter
+
+config = LiveServerless(
+    name="eu-workers",
+    datacenter=DataCenter.EU_RO_1
+)
+```
+
+<Note>
+The `datacenter` parameter is used when creating new endpoints. The `locations` parameter provides a similar capability as a comma-separated string and is used for API compatibility.
+</Note>
+
+### cudaVersions
+
+Restrict workers to specific CUDA versions:
+
+```python
+from runpod_flash import LiveServerless, CudaVersion
+
+config = LiveServerless(
+    name="cuda-12-only",
+    cudaVersions=[CudaVersion.CUDA_12_1, CudaVersion.CUDA_12_2]
+)
+```
+
+Leave empty (default) to allow any CUDA version.
+
+### networkVolume
+
+Instead of using `networkVolumeId` with an existing volume ID, you can configure a `NetworkVolume` object that Flash will create and manage:
+
+```python
+from runpod_flash import LiveServerless, NetworkVolume, DataCenter
+
+config = LiveServerless(
+    name="with-storage",
+    datacenter=DataCenter.EU_RO_1,
+    networkVolume=NetworkVolume(
+        name="my-volume",
+        dataCenterId=DataCenter.EU_RO_1,
+        size=100  # GB
+    )
+)
+```
+
+<Warning>
+The `networkVolume.dataCenterId` must match the endpoint's `datacenter` setting.
+</Warning>
+
 ## Load balancing parameters
 
 Load balancing configurations support all common parameters. The key difference is that `@remote` functions require `method=` and `path=` parameters:
@@ -164,7 +242,7 @@ config = LiveServerless(name="api", workersMin=2)
 ### workersMax
 
 **Type**: `int`
-**Default**: `3`
+**Default**: `1`
 
 Maximum number of workers that can run concurrently. This caps your scaling and controls maximum costs.
 
@@ -183,29 +261,29 @@ config = LiveServerless(
 ### idleTimeout
 
 **Type**: `int`
-**Default**: `5`
+**Default**: `60`
 
-Minutes workers stay active with no traffic before scaling down (to `workersMin`).
+Seconds workers stay active with no traffic before scaling down (to `workersMin`).
 
 ```python
 # Quick scale-down for cost savings
-config = LiveServerless(name="batch", idleTimeout=5)
+config = LiveServerless(name="batch", idleTimeout=30)
 
 # Keep workers longer for variable traffic
-config = LiveServerless(name="api", idleTimeout=30)
+config = LiveServerless(name="api", idleTimeout=120)
 ```
 
 **Recommendations**:
-- `5-10 minutes`: Cost-optimized, infrequent traffic.
-- `15-30 minutes`: Balanced, variable traffic patterns.
-- `30-60 minutes`: Latency-optimized, consistent traffic.
+- `30-60 seconds`: Cost-optimized, infrequent traffic.
+- `60-120 seconds`: Balanced, variable traffic patterns.
+- `120-300 seconds`: Latency-optimized, consistent traffic.
 
 ### env
 
 **Type**: `dict`
-**Default**: `None`
+**Default**: Loads from `.env` file
 
-Environment variables passed to all workers. Useful for configuration, API keys, and feature flags.
+Environment variables passed to all workers. Useful for configuration, API keys, and feature flags. By default, Flash automatically loads environment variables from your project's `.env` file.
 
 ```python
 config = LiveServerless(
@@ -301,19 +379,19 @@ config = LiveServerless(
 ### scalerType
 
 **Type**: `string`
-**Default**: `"QUEUE_DELAY"`
+**Default**: `"QUEUE_DELAY"` (queue-based) or `"REQUEST_COUNT"` (load-balanced)
 
-Scaling algorithm strategy. The default `QUEUE_DELAY` scales based on queue depth and delay.
+Scaling algorithm strategy. Queue-based endpoints default to `QUEUE_DELAY` which scales based on queue depth and delay. Load-balanced endpoints default to `REQUEST_COUNT` which scales based on the number of active requests.
 
 ```python
 config = LiveServerless(
     name="auto-scaler",
-    scalerType="QUEUE_DELAY"  # Default, recommended
+    scalerType="QUEUE_DELAY"  # Default for queue-based
 )
 ```
 
 <Note>
-For most use cases, use the default `QUEUE_DELAY`. Other scaler types are advanced configurations.
+For queue-based endpoints (LiveServerless, CpuLiveServerless), use the default `QUEUE_DELAY`. For load-balanced endpoints (LiveLoadBalancer, CpuLiveLoadBalancer), the default is automatically set to `REQUEST_COUNT`.
 </Note>
 
 ### scalerValue
@@ -383,7 +461,7 @@ config = LiveServerless(
 
 | Parameter | Type | Description | Default |
 |-----------|------|-------------|---------|
-| `containerDiskInGb` | `int` | Container disk size in GB | 20 |
+| `containerDiskInGb` | `int` | Container disk size in GB | 64 |
 | `env` | `list[dict]` | Environment variables as list of `{"key": "...", "value": "..."}` | `None` |
 
 ### Example
@@ -410,7 +488,7 @@ For simple environment variables, use the `env` parameter on the configuration c
 ### containerDiskInGb
 
 **Type**: `int`
-**Default**: `20`
+**Default**: `64`
 
 Container disk size in GB. Increase this if your workload requires more disk space for temporary files, model downloads, or processing.
 
@@ -419,12 +497,12 @@ Container disk size in GB. Increase this if your workload requires more disk spa
 template = PodTemplate(containerDiskInGb=100)
 
 # Default disk size
-template = PodTemplate(containerDiskInGb=20)
+template = PodTemplate(containerDiskInGb=64)
 ```
 
 **Recommendations**:
-- Default (20GB): Sufficient for most workloads.
-- 50-100GB: Large model downloads or intermediate files.
+- Default (64GB): Sufficient for most workloads.
+- 100GB: Large model downloads or intermediate files.
 - 100GB+: Video processing, large datasets.
 
 ## How configuration changes affect your endpoint

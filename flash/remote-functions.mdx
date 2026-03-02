@@ -48,7 +48,6 @@ async def process(data):
 
 See [Configuration overview](/flash/configuration/overview) to choose the right configuration type for your workload, or jump directly to [Queue-based](/flash/configuration/queue-based), [Load balancing](/flash/configuration/load-balancing), or [Custom Docker](/flash/configuration/custom-docker-images) guides.
 
-
 ## Dependency management
 
 Specify Python packages in the `dependencies` parameter of the `@remote` decorator. Flash installs these packages on the remote worker before executing your function.
@@ -102,7 +101,7 @@ dependencies=["transformers==4.36.0", "torch>=2.0.0"]
 
 ## Parallel execution
 
-Flash functions are asynchronous by default. Use Python's `asyncio` to run multiple functions in parallel:
+Remote functions can be written as `def` or `async def`. In both cases, calling them returns an awaitable that must be used with `await`. Use Python's `asyncio` to run multiple functions in parallel:
 
 ```python
 import asyncio
@@ -221,17 +220,89 @@ def process_data(data):
 You can change environment variables without recreating your endpoint. This makes it easy to rotate API keys or allow different developers to use their own .env files.
 </Note>
 
-## Authentication
+## Decorator parameters
 
-Flash uses your `RUNPOD_API_KEY` for all communication with Runpod's infrastructure:
+The `@remote` decorator accepts the following parameters:
 
-- **Local development**: Flash reads `RUNPOD_API_KEY` from your environment to create and manage endpoints.
-- **Deployed endpoints**: When you deploy, Flash automatically injects your API key into worker environments so they can authenticate with Runpod's API.
-- **Nested remote calls**: If your `@remote` function calls another `@remote` function, Flash automatically propagates authentication between endpoints.
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `resource_config` | `ServerlessResource` | Configuration object specifying compute resources (required) | - |
+| `dependencies` | `list[str]` | Python packages to install (pip syntax) | `None` |
+| `system_dependencies` | `list[str]` | System packages to install (apt packages) | `None` |
+| `accelerate_downloads` | `bool` | Enable download acceleration for dependencies and models | `True` |
+| `local` | `bool` | Execute function locally instead of on remote workers | `False` |
+| `method` | `str` | HTTP method for load-balanced endpoints | `None` |
+| `path` | `str` | HTTP path for load-balanced endpoints | `None` |
+
+### System dependencies
+
+Use `system_dependencies` to install system-level packages (via apt) before your function runs:
+
+```python
+@remote(
+    resource_config=config,
+    dependencies=["opencv-python"],
+    system_dependencies=["libgl1-mesa-glx", "libglib2.0-0"]  # Required by OpenCV
+)
+async def process_image(image_data):
+    import cv2
+    # OpenCV processing
+    return {"processed": True}
+```
+
+### Download acceleration
+
+The `accelerate_downloads` parameter (default: `True`) enables faster downloads for dependencies, models, and large files. Disable it if you encounter compatibility issues:
+
+```python
+@remote(
+    resource_config=config,
+    dependencies=["transformers"],
+    accelerate_downloads=False  # Disable if needed
+)
+async def load_model():
+    from transformers import AutoModel
+    return AutoModel.from_pretrained("bert-base-uncased")
+```
+
+### Local execution mode
+
+Use `local=True` to run a function locally instead of on remote workers. This is useful for testing and development without incurring cloud costs:
+
+```python
+@remote(
+    resource_config=config,
+    dependencies=["numpy"],
+    local=True  # Execute locally for testing
+)
+async def test_function(data):
+    import numpy as np
+    return {"sum": np.sum(data)}
+```
 
 <Warning>
-Your API key provides full access to your Runpod account. Keep it secure by storing it in environment variables or `.env` files, and never commit it to version control.
+When using `local=True`, you must have all dependencies installed in your local environment. Flash does not install them for you.
 </Warning>
+
+### HTTP routing (load balancers only)
+
+For load-balanced endpoints, `method` and `path` are required to define HTTP routes:
+
+```python
+from runpod_flash import LiveLoadBalancer, remote
+
+config = LiveLoadBalancer(name="api-server")
+
+@remote(resource_config=config, method="POST", path="/api/process")
+async def process_data(data: dict) -> dict:
+    return {"result": "processed"}
+
+@remote(resource_config=config, method="GET", path="/health")
+async def health_check() -> dict:
+    return {"status": "healthy"}
+```
+
+See [Load balancing configurations](/flash/configuration/load-balancing) for complete details.
 
 ## Next steps
 

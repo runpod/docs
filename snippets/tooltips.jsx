@@ -93,6 +93,12 @@ export const EndpointTooltip = () => {
   );
 };
 
+export const EndpointsTooltip = () => {
+  return (
+  <Tooltip headline="Endpoint" tip="The access point for your Serverless application. Endpoints provide a URL where users or applications can send requests to run your code." cta="Learn more about endpoints" href="/serverless/endpoints/overview">endpoints</Tooltip>
+  );
+};
+
 export const QueueBasedEndpointTooltip = () => {
   return (
   <Tooltip headline="Queue-based endpoint" tip="A Serverless endpoint that processes requests sequentially through a managed queue, providing guaranteed execution and automatic retries. Uses handler functions and standard operations like /run and /runsync." cta="Learn more about queue-based endpoints" href="/serverless/endpoints/overview#queue-based-endpoints">queue-based endpoint</Tooltip>
