@@ -1,12 +1,12 @@
 ---
-title: "Configuration parameter reference"
-sidebarTitle: "Parameter reference"
-description: "Complete reference for all Flash configuration parameters."
+title: "Resource configuration parameters"
+sidebarTitle: "Parameters"
+description: "Complete reference for all resource configuration parameters."
 ---
 
 This page provides a complete reference for all parameters available across Flash configuration classes.
 
-## Common parameters
+## Basic parameters
 
 These parameters are available on all configuration classes (`LiveServerless`, `CpuLiveServerless`, `LiveLoadBalancer`, `CpuLiveLoadBalancer`, `ServerlessEndpoint`, `CpuServerlessEndpoint`):
 
@@ -23,6 +23,11 @@ These parameters are available on all configuration classes (`LiveServerless`, `
 | `scalerValue` | `int` | Scaling parameter value (jobs per worker threshold) | 4 |
 | `locations` | `string` | Preferred datacenter locations (comma-separated) | `None` |
 | `template` | `PodTemplate` | Pod template overrides for advanced configuration | `None` |
+| `flashboot` | `bool` | Enable Flashboot for faster cold starts | `True` |
+| `datacenter` | `DataCenter` | Preferred datacenter for worker deployment | `DataCenter.EU_RO_1` |
+| `cudaVersions` | `list[CudaVersion]` | Allowed CUDA versions for workers | `[]` (all versions) |
+| `networkVolume` | `NetworkVolume` | Network volume configuration object | `None` |
+
 
 ## GPU-specific parameters
 
@@ -33,170 +38,18 @@ These parameters are available on GPU configurations (`LiveServerless`, `LiveLoa
 | `gpus` | `list[GpuGroup \| GpuType]` | GPU pools or specific GPU types that can be used by workers | `[GpuGroup.ANY]` |
 | `gpuCount` | `int` | Number of GPUs per worker | 1 |
 
-### GPU selection
-
-The `gpus` parameter accepts specific GPU types for precise hardware selection:
-
-```python
-from runpod_flash import LiveServerless, GpuType
-
-config = LiveServerless(
-    name="ml-inference",
-    gpus=[GpuType.NVIDIA_A100_80GB_PCIe]
-)
-```
-
 See [GPU types](/flash/configuration/gpu-types) for all available GPU types, pools, and advanced selection patterns including fallback strategies.
-
-### Multi-GPU workers
-
-Use `gpuCount` to request multiple GPUs per worker:
-
-```python
-config = LiveServerless(
-    name="multi-gpu-training",
-    gpus=[GpuGroup.AMPERE_80],
-    gpuCount=4,  # Each worker gets 4 GPUs
-    workersMax=2  # Maximum 2 workers = 8 GPUs total
-)
-```
 
 ## CPU-specific parameters
 
-These parameters are available on CPU configurations (`CpuLiveServerless`, `CpuLiveLoadBalancer`, `CpuServerlessEndpoint`):
+The `instanceIds` parameter is available on CPU configurations (`CpuLiveServerless`, `CpuLiveLoadBalancer`, `CpuServerlessEndpoint`):
 
 | Parameter | Type | Description | Default |
 |-----------|------|-------------|---------|
 | `instanceIds` | `list[CpuInstanceType]` | CPU instance types (forces CPU endpoint) | Default instances |
 
-### CPU instance selection
 
-The `instanceIds` parameter accepts a list of `CpuInstanceType` enums:
-
-```python
-from runpod_flash import CpuLiveServerless, CpuInstanceType
-
-# Single instance type
-config = CpuLiveServerless(
-    name="cpu-worker",
-    instanceIds=[CpuInstanceType.CPU5C_4_8]  # 4 vCPU, 8GB RAM
-)
-
-# Fallback strategy
-config = CpuLiveServerless(
-    name="flexible-cpu",
-    instanceIds=[
-        CpuInstanceType.CPU5C_8_16,  # Try first: 8 vCPU, 16GB
-        CpuInstanceType.CPU5C_4_8,   # Then: 4 vCPU, 8GB
-        CpuInstanceType.CPU3G_4_16   # Finally: 3rd gen, 4 vCPU, 16GB
-    ]
-)
-```
-
-See [CPU types reference](/flash/configuration/cpu-types) for all available CPU instance types.
-
-## Advanced parameters
-
-These parameters provide additional control over worker behavior and are available on GPU configurations (`LiveServerless`, `LiveLoadBalancer`, `ServerlessEndpoint`):
-
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| `flashboot` | `bool` | Enable Flashboot for faster cold starts | `True` |
-| `datacenter` | `DataCenter` | Preferred datacenter for worker deployment | `DataCenter.EU_RO_1` |
-| `cudaVersions` | `list[CudaVersion]` | Allowed CUDA versions for workers | `[]` (all versions) |
-| `networkVolume` | `NetworkVolume` | Network volume configuration object | `None` |
-
-### flashboot
-
-Flashboot reduces cold start times by pre-loading container images. It's enabled by default:
-
-```python
-config = LiveServerless(
-    name="fast-inference",
-    flashboot=True  # Default, enables faster cold starts
-)
-```
-
-Set to `False` if you need to disable Flashboot for debugging or compatibility reasons.
-
-### datacenter
-
-Specify a preferred datacenter for worker deployment:
-
-```python
-from runpod_flash import LiveServerless, DataCenter
-
-config = LiveServerless(
-    name="eu-workers",
-    datacenter=DataCenter.EU_RO_1
-)
-```
-
-<Note>
-The `datacenter` parameter is used when creating new endpoints. The `locations` parameter provides a similar capability as a comma-separated string and is used for API compatibility.
-</Note>
-
-### cudaVersions
-
-Restrict workers to specific CUDA versions:
-
-```python
-from runpod_flash import LiveServerless, CudaVersion
-
-config = LiveServerless(
-    name="cuda-12-only",
-    cudaVersions=[CudaVersion.CUDA_12_1, CudaVersion.CUDA_12_2]
-)
-```
-
-Leave empty (default) to allow any CUDA version.
-
-### networkVolume
-
-Instead of using `networkVolumeId` with an existing volume ID, you can configure a `NetworkVolume` object that Flash will create and manage:
-
-```python
-from runpod_flash import LiveServerless, NetworkVolume, DataCenter
-
-config = LiveServerless(
-    name="with-storage",
-    datacenter=DataCenter.EU_RO_1,
-    networkVolume=NetworkVolume(
-        name="my-volume",
-        dataCenterId=DataCenter.EU_RO_1,
-        size=100  # GB
-    )
-)
-```
-
-<Warning>
-The `networkVolume.dataCenterId` must match the endpoint's `datacenter` setting.
-</Warning>
-
-## Load balancing parameters
-
-Load balancing configurations support all common parameters. The key difference is that `@remote` functions require `method=` and `path=` parameters:
-
-```python
-from runpod_flash import CpuLiveLoadBalancer, remote
-
-config = CpuLiveLoadBalancer(
-    name="api-server",
-    workersMin=1,
-    workersMax=10
-)
-
-# method= and path= are required for load balancer routes
-@remote(resource_config=config, method="POST", path="/process")
-async def process_data(data: dict) -> dict:
-    return {"result": "processed"}
-
-@remote(resource_config=config, method="GET", path="/health")
-async def health() -> dict:
-    return {"status": "healthy"}
-```
-
-See [load balancing configurations](/flash/configuration/load-balancing) for complete usage guide.
+See [CPU types](/flash/configuration/cpu-types) for all available CPU instance types.
 
 ## Parameter details
 
@@ -205,7 +58,7 @@ See [load balancing configurations](/flash/configuration/load-balancing) for com
 **Type**: `string`
 **Required**: Yes
 
-The endpoint name visible in the Runpod console. While the name helps you identify endpoints, it doesn't determine endpoint identity - configuration hashing does.
+The endpoint name visible in the Runpod console. While the name helps you identify endpoints, the endpoint ID must be used to make API requests.
 
 ```python
 config = LiveServerless(
@@ -453,6 +306,123 @@ config = LiveServerless(
 )
 ```
 
+### flashboot
+
+Flashboot reduces cold start times by pre-loading container images. It's enabled by default:
+
+```python
+config = LiveServerless(
+    name="fast-inference",
+    flashboot=True  # Default, enables faster cold starts
+)
+```
+
+Set to `False` if you need to disable Flashboot for debugging or compatibility reasons.
+
+### datacenter
+
+Specify a preferred datacenter for worker deployment:
+
+```python
+from runpod_flash import LiveServerless, DataCenter
+
+config = LiveServerless(
+    name="eu-workers",
+    datacenter=DataCenter.EU_RO_1
+)
+```
+
+<Note>
+The `datacenter` parameter is used when creating new endpoints. The `locations` parameter provides a similar capability as a comma-separated string and is used for API compatibility.
+</Note>
+
+### cudaVersions
+
+Restrict workers to specific CUDA versions:
+
+```python
+from runpod_flash import LiveServerless, CudaVersion
+
+config = LiveServerless(
+    name="cuda-12-only",
+    cudaVersions=[CudaVersion.CUDA_12_1, CudaVersion.CUDA_12_2]
+)
+```
+
+Leave empty (default) to allow any CUDA version.
+
+### networkVolume
+
+Instead of using `networkVolumeId` with an existing volume ID, you can configure a `NetworkVolume` object that Flash will create and manage:
+
+```python
+from runpod_flash import LiveServerless, NetworkVolume, DataCenter
+
+config = LiveServerless(
+    name="with-storage",
+    datacenter=DataCenter.EU_RO_1,
+    networkVolume=NetworkVolume(
+        name="my-volume",
+        dataCenterId=DataCenter.EU_RO_1,
+        size=100  # GB
+    )
+)
+```
+
+<Warning>
+The `networkVolume.dataCenterId` must match the endpoint's `datacenter` setting.
+</Warning>
+
+### gpus (GPU-only)
+
+The `gpus` parameter accepts specific GPU types for precise hardware selection:
+
+```python
+from runpod_flash import LiveServerless, GpuType
+
+config = LiveServerless(
+    name="ml-inference",
+    gpus=[GpuType.NVIDIA_A100_80GB_PCIe]
+)
+```
+
+### gpuCount (GPU-only)
+
+Use `gpuCount` to request multiple GPUs per worker:
+
+```python
+config = LiveServerless(
+    name="multi-gpu-training",
+    gpus=[GpuGroup.AMPERE_80],
+    gpuCount=4,  # Each worker gets 4 GPUs
+    workersMax=2  # Maximum 2 workers = 8 GPUs total
+)
+```
+
+### instanceIds (CPU-only)
+
+The `instanceIds` parameter accepts a list of `CpuInstanceType` enums:
+
+```python
+from runpod_flash import CpuLiveServerless, CpuInstanceType
+
+# Single instance type
+config = CpuLiveServerless(
+    name="cpu-worker",
+    instanceIds=[CpuInstanceType.CPU5C_4_8]  # 4 vCPU, 8GB RAM
+)
+
+# Fallback strategy
+config = CpuLiveServerless(
+    name="flexible-cpu",
+    instanceIds=[
+        CpuInstanceType.CPU5C_8_16,  # Try first: 8 vCPU, 16GB
+        CpuInstanceType.CPU5C_4_8,   # Then: 4 vCPU, 8GB
+        CpuInstanceType.CPU3G_4_16   # Finally: 3rd gen, 4 vCPU, 16GB
+    ]
+)
+```
+
 ## PodTemplate
 
 `PodTemplate` provides advanced pod configuration options:
@@ -504,6 +474,7 @@ template = PodTemplate(containerDiskInGb=64)
 - Default (64GB): Sufficient for most workloads.
 - 100GB: Large model downloads or intermediate files.
 - 100GB+: Video processing, large datasets.
+
 
 ## How configuration changes affect your endpoint
 

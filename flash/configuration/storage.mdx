@@ -6,87 +6,34 @@ description: "Understand container disk and network volume storage for Flash wor
 
 import { NetworkVolumesTooltip, WorkerContainerDiskTooltip } from "/snippets/tooltips.jsx"
 
-Flash workers have access to two types of storage: <WorkerContainerDiskTooltip /> for temporary data and <NetworkVolumesTooltip /> for persistent data.
-
-## Storage types comparison
-
-| Feature | Container disk | Network volumes |
-|---------|---------------|-----------------|
-| **Persistence** | Temporary - lost when worker stops | Persistent - survives worker restarts |
-| **Scope** | Per-worker (isolated) | Shared across all workers |
-| **Location** | Worker's ephemeral filesystem | `/runpod-volume/` |
-| **Size** | 64GB default for GPU endpoints, auto-sized for CPU (10-120GB based on instance type), configurable via <WorkerContainerDiskTooltip /> | Up to 4TB, configurable when creating volume |
-| **Speed** | Faster (local SSD) | Slower (network-attached) |
-| **Best for** | Temporary files, job artifacts, model downloads | Models, datasets, shared state |
-| **Cost** | Included in worker cost | Billed separately per GB-hour |
+Flash workers have access to two types of storage: <WorkerContainerDiskTooltip /> for temporary data and <NetworkVolumesTooltip /> for persistent, sharable data.
 
 ## Container disk
 
-Container disk provides temporary storage that exists only while a worker is running. Each worker gets its own isolated container disk, with a default size of 64GB for GPU endpoints. CPU endpoints automatically size the container disk based on the instance type (typically 10-120GB depending on vCPU count).
+A container disk provides temporary storage that exists only while a worker is running. Each worker gets its own isolated container disk, with a default size of 64GB for GPU endpoints.
 
-### When to use container disk
+You can read and write temporary files to the container disk using standard filesystem operations from within `@remote` functions.
 
-- Temporary processing files that don't need to persist.
-- Intermediate artifacts during job execution.
-- Downloaded files that will be re-downloaded on next job.
-- Model weights when you want to download them fresh each time.
+Any file that is *not* written to a network volume (at `/runpod-volume/`) is written to the container disk, and will be erased when the worker stops.
 
-### Accessing container disk files
+### Configuring container disk size (GPU-only)
 
-Write temporary files to the container disk using standard filesystem operations:
+Configure container disk size for GPU endpoints using the`PodTemplate` parameter (default: 64GB).
 
 ```python
-from runpod_flash import LiveServerless, GpuGroup, remote
-
-config = LiveServerless(
-    name="temp-storage",
-    gpus=[GpuGroup.ADA_24]
-)
-
-@remote(resource_config=config, dependencies=["pillow"])
-async def process_image(image_url: str) -> dict:
-    import requests
-    from PIL import Image
-
-    # Download to container disk
-    response = requests.get(image_url)
-    temp_path = "./input.jpg"
-    with open(temp_path, "wb") as f:
-        f.write(response.content)
-
-    # Process from container disk
-    img = Image.open(temp_path)
-    img = img.resize((512, 512))
-
-    # Save to container disk
-    output_path = "./output.jpg"
-    img.save(output_path)
-
-    # File will be lost when worker stops
-    return {"processed": True}
-```
-
-### Configuring container disk size
-
-Configure container disk size using `PodTemplate`. GPU endpoints default to 64GB, while CPU endpoints automatically size based on instance type:
-
-```python
-from runpod_flash import LiveServerless, GpuGroup, PodTemplate, remote
+from runpod_flash import LiveServerless, GpuGroup, PodTemplate
 
 # GPU endpoint with custom disk size
 config = LiveServerless(
     name="large-temp-storage",
     gpus=[GpuGroup.AMPERE_80],
-    template=PodTemplate(containerDiskInGb=100)  # Custom size
+    template=PodTemplate(containerDiskInGb=100)  # Set custom size
 )
-
-@remote(resource_config=config, dependencies=["torch"])
-async def process_large_files(data_url: str) -> dict:
-    # Now have 100GB of container disk for temporary files
-    return {"status": "processed"}
 ```
 
-**CPU auto-sizing**: CPU endpoints automatically adjust container disk size based on instance limits:
+### CPU auto-sizing
+
+CPU endpoints automatically adjust container disk size based on instance limits:
 - `CPU3G` and `CPU3C` instances: vCPU count × 10GB (e.g., 2 vCPU = 20GB)
 - `CPU5C` instances: vCPU count × 15GB (e.g., 4 vCPU = 60GB)
 
@@ -94,14 +41,7 @@ If you specify a custom size that exceeds the instance limit, deployment will fa
 
 ## Network volumes
 
-Network volumes provide persistent storage that survives worker restarts and is shared across all workers. They mount at `/runpod-volume/`.
-
-### When to use network volumes
-
-- Pre-loaded model weights shared across workers.
-- Large datasets accessed by multiple jobs.
-- Persistent state or databases.
-- Output files that must survive worker termination.
+Network volumes provide persistent storage that survives worker restarts. You can use this to share data between `@remote` functions with the same network volume attached, or to persist data between runs.
 
 ### Attaching network volumes
 
@@ -110,17 +50,24 @@ Attach a network volume using the `networkVolumeId` parameter:
 ```python
 from runpod_flash import LiveServerless, GpuGroup, remote
 
-config = LiveServerless(
+config_with_volume = LiveServerless(
     name="persistent-storage",
     gpus=[GpuGroup.AMPERE_80],
     networkVolumeId="vol_abc123"  # Your network volume ID
 )
+```
 
-@remote(resource_config=config, dependencies=["torch", "transformers"])
+### Accessing network volume files
+
+Network volumes mount at `/runpod-volume/` and can be accessed like a regular filesystem:
+
+```python
+@remote(resource_config=config_with_volume, dependencies=["torch", "transformers"])
 async def run_inference(prompt: str) -> dict:
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    # Load model from network volume (persists across workers)
+    # Load model from network volume; persists across worker restarts
+    # and shared between all workers with the same network volume attached
     model_path = "/runpod-volume/models/llama-7b"
     model = AutoModelForCausalLM.from_pretrained(model_path)
     tokenizer = AutoTokenizer.from_pretrained(model_path)
@@ -133,90 +80,6 @@ async def run_inference(prompt: str) -> dict:
     return {"generated_text": text}
 ```
 
-### Accessing network volume files
-
-Network volumes mount at `/runpod-volume/` and behave like a regular filesystem:
-
-```python
-from runpod_flash import LiveServerless, GpuGroup, remote
-
-config = LiveServerless(
-    name="data-processor",
-    gpus=[GpuGroup.ADA_24],
-    networkVolumeId="vol_abc123"
-)
-
-@remote(resource_config=config, dependencies=["pandas"])
-async def process_dataset(dataset_name: str) -> dict:
-    import pandas as pd
-
-    # Read from network volume
-    input_path = f"/runpod-volume/datasets/{dataset_name}.csv"
-    df = pd.read_csv(input_path)
-
-    # Process data
-    df["processed"] = df["value"] * 2
-
-    # Write back to network volume (available to all workers)
-    output_path = f"/runpod-volume/results/{dataset_name}_processed.csv"
-    df.to_csv(output_path, index=False)
-
-    return {"rows": len(df), "output": output_path}
-```
-
 ### Creating and managing network volumes
 
-Network volumes must be created before attaching them to Flash configurations. See the [network volumes documentation](/storage/network-volumes) for complete details on:
-
-- Creating network volumes.
-- Managing volume size and capacity.
-- Data transfer and initialization.
-- Performance considerations.
-- Pricing and billing.
-
-## Choosing storage type
-
-**Use container disk when:**
-- Data is temporary and job-specific.
-- Speed is critical (local SSD).
-- Workers don't need to share data.
-- You want to minimize costs.
-
-**Use network volumes when:**
-- Data must persist across worker restarts.
-- Workers need to share models or datasets.
-- You want to avoid re-downloading large files.
-- Multiple configurations access the same data.
-
-**Common pattern**: Use network volumes for models/datasets, container disk for temporary processing:
-
-```python
-from runpod_flash import LiveServerless, GpuGroup, PodTemplate, remote
-
-config = LiveServerless(
-    name="hybrid-storage",
-    gpus=[GpuGroup.AMPERE_80],
-    networkVolumeId="vol_abc123",  # Persistent models
-    template=PodTemplate(containerDiskInGb=50)  # Large temp space
-)
-
-@remote(resource_config=config, dependencies=["torch"])
-async def process_video(video_url: str) -> dict:
-    import requests
-
-    # Download video to container disk (temporary)
-    response = requests.get(video_url)
-    temp_video = "./input.mp4"
-    with open(temp_video, "wb") as f:
-        f.write(response.content)
-
-    # Load model from network volume (persistent)
-    model_path = "/runpod-volume/models/video-model"
-    # ... load and process ...
-
-    # Save result to network volume (persistent)
-    output_path = "/runpod-volume/outputs/result.mp4"
-    # ... save output ...
-
-    return {"output": output_path}
-```
+Network volumes must be created before attaching them to a Flash configuration. See [Network volumes](/storage/network-volumes) for detailed instructions.

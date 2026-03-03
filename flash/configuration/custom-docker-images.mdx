@@ -4,7 +4,9 @@ sidebarTitle: "Custom Docker images"
 description: "Deploy pre-built Docker images with Flash using ServerlessEndpoint."
 ---
 
-Flash's `LiveServerless` configuration handles most use cases by automatically managing dependencies and executing arbitrary Python code. However, for specialized environments that require custom Docker images—such as pre-built ML frameworks, specific CUDA versions, or system-level dependencies—you can use `ServerlessEndpoint` or `CpuServerlessEndpoint`.
+Flash's `LiveServerless` and `LiveLoadBalancer` configurations handle most use cases, allowing you to execute arbitrary Python code remotely without managing Docker images yourself. 
+
+However, for specialized environments that require custom Docker images (such as pre-built ML frameworks, or workers that require specific CUDA versions) you can use `ServerlessEndpoint` or `CpuServerlessEndpoint` to deploy your own custom Docker images.
 
 ## When to use custom Docker images
 
@@ -19,23 +21,30 @@ Use custom Docker images when you need:
 For most use cases, you should use `LiveServerless` and [remote functions](/flash/remote-functions). It's simpler, faster, and lets you execute arbitrary Python code remotely.
 </Tip>
 
-## How it works
+## Available Docker images
 
-Unlike `LiveServerless` (which delivers your Python code to pre-built Flash workers), you can use `ServerlessEndpoint` to create a traditional [Runpod Serverless endpoint](/serverless/overview) using any Docker image you specify.
+### Official Runpod workers
 
+Runpod provides pre-built worker images for common frameworks:
 
+| Framework | Image name | Image link |
+|-----------|-------|---------------|
+| vLLM | `runpod/worker-vllm` | [Link](https://hub.docker.com/r/runpod/worker-vllm) |
+| Automatic1111 | `runpod/worker-a1111:stable` | [A1111 docs](/serverless/workers/sdxl-a1111) |
+| ComfyUI | `runpod/worker-comfy` | [Link](https://hub.docker.com/r/runpod/worker-comfyui) |
 
-Here are the key differences between `ServerlessEndpoint` and `LiveServerless` resources:
+### Custom images
 
-| Aspect | LiveServerless | ServerlessEndpoint |
-|--------|---------------|-------------------|
-| **Code execution** | Delivers Python code with each request | Uses the [handler function](/serverless/workers/handler-functions) in your Docker image |
-| **Input format** | Any Python arguments | Dictionary: `{"input": {...}}` |
-| **Docker image** | Pre-built Flash images | Your custom image |
-| **Dependencies** | Specified in decorator | Baked into Docker image |
-| **Use case** | Dynamic Python functions | Pre-built inference servers |
+To create a custom Docker image:
 
-## Basic usage
+1. [Build a handler function](/serverless/workers/handler-functions) that will be used to process requests.
+2. [Create a Dockerfile](/serverless/workers/create-dockerfile) that will be used to build the Docker image.
+3. [Push the Docker image to a registry](/serverless/workers/deploy).
+4. Reference the image in `imageName` when creating the `ServerlessEndpoint` or `CpuServerlessEndpoint` configuration.
+
+## Deploy a custom image
+
+After you've created a custom image using the steps above, you can use the `ServerlessEndpoint` or `CpuServerlessEndpoint` configuration to deploy it and make requests to the endpoint using the `ResourceManager` class:
 
 <Steps>
 <Step title="Create a ServerlessEndpoint configuration">
@@ -86,9 +95,13 @@ if __name__ == "__main__":
 
 ## Complete example: vLLM inference
 
-This example uses Runpod's official [vLLM worker](/serverless/vllm/overview) to deploy the `microsoft/Phi-3.5-mini-instruct` language model:
+Expand the section below to see a complete example of deploying a vLLM endpoint using a custom Docker image:
 
-```python title="vllm_example.py"
+<Accordion title="vLLM inference example">
+
+This script uses Runpod's official [vLLM worker](/serverless/vllm/overview) to deploy the `microsoft/Phi-3.5-mini-instruct` language model:
+
+```python"
 import asyncio
 from runpod_flash import ServerlessEndpoint, GpuType, ResourceManager
 
@@ -138,28 +151,7 @@ Here's what happens when you run this code:
 3. **Request**: The input is sent as a dictionary via `.run()` to the deployed vLLM endpoint, matching the worker's expected input format.
 4. **Response**: The results are extracted from the nested response structure.
 
-## Available Docker images
-
-### Official Runpod workers
-
-Runpod provides pre-built worker images for common frameworks:
-
-| Framework | Image | Image link |
-|-----------|-------|---------------|
-| vLLM | `runpod/worker-vllm` | [Link](https://hub.docker.com/r/runpod/worker-vllm) |
-| Automatic1111 | `runpod/worker-a1111:stable` | [A1111 docs](/serverless/workers/sdxl-a1111) |
-| ComfyUI | `runpod/worker-comfy` | [Link](https://hub.docker.com/r/runpod/worker-comfyui) |
-
-### Custom images
-
-To use your own Docker image:
-
-1. **Build a handler**: Follow the [Serverless handler guide](/serverless/workers/handler-functions).
-2. **Create a Dockerfile**: Package your handler with dependencies.
-3. **Push to registry**: Upload to Docker Hub, GitHub Container Registry, or Runpod's registry.
-4. **Use in Flash**: Reference the image in `imageName`.
-
-See [Deploy custom workers](/serverless/workers/deploy) for details.
+</Accordion>
 
 ## Configuration options
 
@@ -184,7 +176,7 @@ config = ServerlessEndpoint(
 
 See the [resource configuration reference](/flash/configuration/parameters) for all available options.
 
-## CPU endpoints
+### CPU endpoints
 
 For CPU workloads, use `CpuServerlessEndpoint`:
 
@@ -198,7 +190,7 @@ config = CpuServerlessEndpoint(
 )
 ```
 
-## Environment variables
+### Environment variables
 
 Pass configuration to your Docker image via the `env` parameter:
 
@@ -212,7 +204,7 @@ config = ServerlessEndpoint(
 
 See [Configuration parameters](/flash/configuration/parameters#env) for details on how environment variables work with Flash configurations.
 
-## Explicit provisioning
+## Provision the endpoint
 
 If it doesn't already exist, you'll need to provision the endpoint before you can make requests. For example:
 

@@ -24,14 +24,17 @@ Flash is a Python SDK for developing and deploying AI workflows on [Runpod Serve
 
 ## Why use Flash?
 
-- **No Docker images required:** Unlike traditional Runpod <ServerlessTooltip />, Flash handles all infrastructure automatically using Python decorators—no Docker builds, no manual configuration.
-- **Control everything from local code:** Define [remote functions](#remote-functions), specify [exact hardware](#resource-configuration) (RTX 4090s to A100 80GB GPUs), and configure scaling—all from your Python scripts. Flash provisions <EndpointsTooltip />, installs dependencies, and manages <WorkersTooltip /> automatically.
-- **Instant updates:** Code changes deploy instantly without rebuilding images. Pay only for compute time using [Runpod Serverless pricing](/serverless/pricing).
+- **No Docker images required:** Flash deploys infrastructure automatically when you run your code—no container builds, no UI steps.
+- **Control everything from local code:** Define [remote functions](#remote-functions), specify [exact hardware](#resource-configuration), and configure scaling, all from Python scripts that you write and run locally.
+- **Instant updates:** Update your code and run it again—it deploys instantly without rebuilding the container image.
+- **Pay only for compute time:** Flash uses the same per-second pricing model as [Runpod Serverless](/serverless/pricing).
 
-## Install Flash
+## Setup
+
+### Install Flash
 
 <Note>
-Flash is currently available for macOS and Linux. Windows support is in development.
+Flash requires [Python 3.10+](https://www.python.org/downloads/), and is currently available for macOS and Linux. Windows support is in development.
 </Note>
 
 Create a Python virtual environment and use `pip` to install Flash:
@@ -42,37 +45,33 @@ source venv/bin/activate
 pip install runpod-flash
 ```
 
-Flash requires [Python 3.10+](https://www.python.org/downloads/).
 
-Authenticate with your Runpod account:
+
+### Authentication
+
+Before you can use Flash, you need to authenticate with your Runpod account:
 
 ```bash
 flash login
 ```
 
-This opens your browser to authorize Flash and saves your API key securely. Your credentials work for all Flash operations, including CLI commands and standalone `@remote` scripts.
+This saves your API key securely and allows you to use the Flash CLI and run `@remote` functions.
 
-<Tip>
-Alternatively, you can set the `RUNPOD_API_KEY` environment variable or add it to a `.env` file in your project directory. See [`flash login`](/flash/cli/login) for details.
-</Tip>
+### Coding agent integration (optional)
 
-### Coding agent integration
-
-Flash provides a skill package for AI coding agents like Claude Code, Cline, and Cursor. The skill gives these agents detailed context about the Flash SDK, CLI, best practices, and common patterns.
-
-Install the Flash skill by running the following command in your terminal:
+We've created a skill package for AI coding agents like Claude Code, Cline, and Cursor, providing detailed context about the Flash SDK, CLI, best practices, and common patterns. Install it with with this command:
 
 ```bash
 npx skills add runpod/skills
 ```
 
-This allows your coding agent to provide more accurate Flash code suggestions and troubleshooting help. You can find the Flash `SKILL.md` file in the [runpod/skills repository](https://github.com/runpod/skills/blob/main/flash/SKILL.md).
+You can review the Flash `SKILL.md` file in the [runpod/skills repository](https://github.com/runpod/skills/blob/main/flash/SKILL.md).
 
 ## Core concepts
 
 ### Resource configuration
 
-Flash provides fine-grained control over hardware allocation through configuration objects. Choose from GPU or CPU configurations, queue-based or load-balanced endpoints, and customize worker counts, scaling behavior, and more.
+Flash provides fine-grained control over hardware allocation through configuration objects. Choose from GPU or CPU configurations, and customize worker counts, scaling behavior, and more.
 
 ```python
 from runpod_flash import LiveServerless, GpuGroup
@@ -85,29 +84,24 @@ gpu_config = LiveServerless(
 )
 ```
 
-Flash currently offers six resource types:
-- **Queue-based endpoints** (`LiveServerless`, `CpuLiveServerless`) - For batch processing.
-- **Load balancing endpoints** (`LiveLoadBalancer`, `CpuLiveLoadBalancer`) - For HTTP APIs.
-- **Custom Docker endpoints** (`ServerlessEndpoint`, `CpuServerlessEndpoint`) - For pre-built Docker images.
-
-[View the complete configuration guide](/flash/configuration/overview).
+[Learn more about resource configuration](/flash/configuration/overview).
 
 ### Remote functions
 
 The `@remote` decorator marks functions for execution on Runpod's infrastructure. Code inside the decorated function runs remotely on a Serverless worker, while code outside the function runs locally on your machine.
 
 ```python
-@remote(resource_config=gpu_config, dependencies=["pandas"])
-async def process_data(data):
-    # This code runs remotely on Runpod
-    import pandas as pd
-    df = pd.DataFrame(data)
-    return df.describe().to_dict()
+# Runs remotely using the resource configuration above
+@remote(resource_config=gpu_config, dependencies=["torch"])
+async def get_gpu_name():
+    import torch  # Import packages inside the function body
+    device_name = torch.cuda.get_device_name(0)  # Get GPU name
+    return {"gpu": device_name}
 
 async def main():
-    # This code runs locally
-    result = await process_data(data)
-    print(result)
+    print("Running on Runpod...")  # Runs locally
+    result = await get_gpu_name()  # Calls the remote function
+    print(result["gpu"])  # Runs locally
 ```
 
 When you call a remote function, Flash:
@@ -118,79 +112,13 @@ When you call a remote function, Flash:
 
 [Learn more about remote functions](/flash/remote-functions).
 
-### Dependency management
+## Scripts vs. apps
 
-Specify Python packages in the decorator, and Flash installs them automatically on the remote worker:
+Flash supports two primary workflows for running workloads on Runpod: scripts and apps.
 
-```python
-@remote(
-    resource_config=gpu_config,
-    dependencies=["transformers==4.36.0", "torch", "pillow"]
-)
-def generate_image(prompt):
-    # Import inside the function
-    from transformers import pipeline
-    # ...
-```
+### Flash scripts
 
-Imports should be placed inside the function body because they need to happen on the remote worker, not in your local environment.
-
-[Learn more about dependency management](/flash/remote-functions#dependency-management).
-
-### Parallel execution
-
-Run multiple remote functions concurrently using Python's async capabilities:
-
-```python
-results = await asyncio.gather(
-    process_item(item1),
-    process_item(item2),
-    process_item(item3)
-)
-```
-
-## Development workflows
-
-Flash supports two primary workflows for running workloads on Runpod: standalone scripts and Flash apps.
-
-### Standalone scripts
-
-This is the fastest way to get started with Flash. Just write a Python script with `@remote` decorated functions and run it locally with `python script.py`.
-
-```python
-import asyncio
-from runpod_flash import remote, LiveServerless, GpuGroup
-
-config = LiveServerless(
-    name="gpu-inference",
-    gpus=[GpuGroup.ADA_24],
-)
-
-@remote(resource_config=config, dependencies=["torch"])
-def process_on_gpu(data):
-    import torch
-    # Your GPU workload here
-    return {"result": "processed"}
-
-async def main():
-    result = await process_on_gpu({"input": "data"})
-    print(result)
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
-
-Run the script locally, and Flash executes the `@remote` function on Runpod's infrastructure:
-
-```bash
-python script.py
-```
-
-**Use this approach for:**
-- Quick prototypes and experiments.
-- Batch processing jobs.
-- One-off data processing tasks.
-- Local development and testing.
+This is the fastest way to get started with Flash. Just write a Python script with a resource configuration and a `@remote` decorated function, and run it locally with `python script.py`.
 
 [Follow the quickstart](/flash/quickstart) to create your first Flash script.
 
@@ -198,48 +126,11 @@ python script.py
 
 When you're ready to build a production-ready API, you can create a [Flash app](/flash/apps/overview) with FastAPI and deploy it to Runpod. Flash apps provide a complete development and deployment workflow with local testing and production deployment.
 
-To get started, initialize a new Flash app project in your current directory:
-
-```bash
-flash init
-```
-
-This creates a new project with example <LoadBalancingEndpointsTooltip /> and <QueueBasedEndpointsTooltip /> (`lb_worker.py`, `gpu_worker.py`, `cpu_worker.py`).
-
-Start a local development server to test your app:
-
-```bash
-flash run
-```
-
-Deploy your app to production when ready:
-
-```bash
-flash deploy
-```
-
-**Use this approach for:**
-
-- Production HTTP APIs.
-- Persistent endpoints.
-- Long-running services.
-- Team collaboration with staging/production environments.
-
 [Follow this tutorial](/flash/apps/build-app) to build your first Flash app.
-
-## Use cases
-
-Flash is well-suited for a range of AI and data processing workloads:
-
-- **Multi-modal AI pipelines**: Orchestrate unified workflows combining text, image, and audio models with GPU acceleration.
-- **Distributed model training**: Scale training operations across multiple GPU workers for faster model development.
-- **AI research experimentation**: Rapidly prototype and test complex model combinations without infrastructure overhead.
-- **Production inference systems**: Deploy multi-stage inference pipelines for real-world applications.
-- **Data processing workflows**: Process large datasets using CPU workers for general computation and GPU workers for accelerated tasks.
-- **Hybrid GPU/CPU workflows**: Optimize cost and performance by combining CPU preprocessing with GPU inference.
 
 ## Limitations
 
+- Flash is currently only available for macOS and Linux. Windows support is in development.
 - Serverless deployments using Flash are currently restricted to the `EU-RO-1` datacenter.
 - Be aware of your account's maximum worker capacity limits. Flash can rapidly scale workers across multiple endpoints, and you may hit capacity constraints. Contact [Runpod support](https://www.runpod.io/contact) to increase your account's capacity allocation if needed.
 
@@ -273,7 +164,3 @@ Flash is well-suited for a range of AI and data processing workloads:
     Create HTTP endpoints with load balancing.
   </Card>
 </CardGroup>
-
-## Getting help
-
-Join the [Runpod community on Discord](https://discord.gg/cUpRmau42V) for support and discussion.

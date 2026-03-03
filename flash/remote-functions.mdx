@@ -4,7 +4,25 @@ sidebarTitle: "Create remote functions"
 description: "Learn how to create and configure remote functions with Flash."
 ---
 
-Remote functions are the core building blocks of Flash. The `@remote` decorator marks Python functions for execution on Runpod's Serverless infrastructure, handling resource provisioning, dependency installation, and data transfer automatically.
+import { WorkerTooltip, ServerlessTooltip, NetworkVolumesTooltip } from "/snippets/tooltips.jsx";
+
+Remote functions are the core building blocks of Flash. The `@remote` decorator marks Python functions for execution on Runpod's <ServerlessTooltip /> infrastructure, handling resource provisioning, dependency installation, and data transfer automatically.
+
+## Resource configuration
+
+Every remote function requires a resource configuration specifying the hardware that will be used to run the function:
+
+```python
+from runpod_flash import LiveServerless, GpuType, remote
+
+config = LiveServerless(
+    name="ml-inference",
+    gpus=[GpuType.NVIDIA_A100_80GB_PCIe],
+    workersMax=5
+)
+```
+
+See [Choose a resource type](/flash/configuration/overview) to select the right configuration for your workload.
 
 ## How remote functions work
 
@@ -18,35 +36,7 @@ def run_inference(data):
     return result
 ```
 
-When you call a remote function from a local Python script or [Flash app](/flash/apps/overview), the function code is sent to a Runpod worker. The worker executes the function code and returns the result to your local environment.
-
-## Resource configuration
-
-Every remote function requires a resource configuration specifying compute resources. Flash provides six configuration types:
-
-- **Queue-based** (`LiveServerless`, `CpuLiveServerless`) - Batch processing with `/run` or `/runsync` routes
-- **Load balancing** (`LiveLoadBalancer`, `CpuLiveLoadBalancer`) - HTTP APIs with custom routes
-- **Custom Docker** (`ServerlessEndpoint`, `CpuServerlessEndpoint`) - Custom Docker images
-
-**Quick example:**
-
-```python
-from runpod_flash import LiveServerless, GpuType, remote
-
-config = LiveServerless(
-    name="ml-inference",
-    gpus=[GpuType.NVIDIA_A100_80GB_PCIe],
-    workersMax=5
-)
-
-@remote(resource_config=config, dependencies=["torch"])
-async def process(data):
-    import torch
-    # Your code here
-    return result
-```
-
-See [Configuration overview](/flash/configuration/overview) to choose the right configuration type for your workload, or jump directly to [Queue-based](/flash/configuration/queue-based), [Load balancing](/flash/configuration/load-balancing), or [Custom Docker](/flash/configuration/custom-docker-images) guides.
+When you call a remote function from a local Python script or [Flash app](/flash/apps/overview), the function code is sent to a <WorkerTooltip />, running on the hardware specified in your resource configuration.
 
 ## Dependency management
 
@@ -68,20 +58,27 @@ def generate_image(prompt):
 Some packages (like PyTorch) are pre-installed on GPU workers, but including them in dependencies ensures the correct version is available.
 </Tip>
 
+### Version pinning
+
+You can pin specific versions using standard pip syntax:
+
+```python
+dependencies=["transformers==4.36.0", "torch>=2.0.0"]
+```
 
 ### Import packages inside the function body
 
 You must import packages **inside the decorated function body,** not at the top of your file. This will ensure the imports happen on the remote worker, not in your local environment.
 
 
-**Correct:** imports inside the function.
+✅ **Correct:** imports inside the function.
 ```python
 @remote(resource_config=config, dependencies=["numpy"])
 def compute(data):
     import numpy as np  # Import here
     return np.sum(data)
 ```
-**Incorrect:** imports at top of file won't work.
+❌ **Incorrect:** imports at top of file won't work.
 
 ```python
 import numpy as np  # This import happens locally, not on the worker
@@ -91,17 +88,9 @@ def compute(data):
     return np.sum(data)  # numpy not available on the remote worker
 ```
 
-### Version pinning
-
-You can pin specific versions using standard pip syntax:
-
-```python
-dependencies=["transformers==4.36.0", "torch>=2.0.0"]
-```
-
 ## Parallel execution
 
-Remote functions can be written as `def` or `async def`. In both cases, calling them returns an awaitable that must be used with `await`. Use Python's `asyncio` to run multiple functions in parallel:
+Remote functions can be written using `def` or `async def`. In both cases, calling them returns an awaitable that must be used with `await`. Use Python's `asyncio` to run multiple functions in parallel:
 
 ```python
 import asyncio
@@ -122,46 +111,11 @@ This is particularly useful for:
 - Running different models on the same data.
 - Parallelizing independent pipeline stages.
 
-### Example: Parallel batch processing
+## Add persistent, sharable storage
 
-```python
-import asyncio
-from runpod_flash import remote, LiveServerless, GpuGroup
+By default, any files written inside a `@remote` function will be erased when the worker stops. To persist data between remote function calls, and share data between multiple remote functions, you can attach a <NetworkVolumesTooltip /> to your resource configuration using the `networkVolumeId` parameter.
 
-config = LiveServerless(
-    name="batch-processor",
-    gpus=[GpuGroup.ADA_24],
-    workersMax=5  # Allow up to 5 parallel workers
-)
-
-@remote(resource_config=config, dependencies=["torch"])
-def process_batch(batch_id, data):
-    import torch
-    # Process batch
-    return {"batch_id": batch_id, "result": len(data)}
-
-async def main():
-    batches = [
-        (1, [1, 2, 3]),
-        (2, [4, 5, 6]),
-        (3, [7, 8, 9])
-    ]
-    
-    # Process all batches in parallel
-    results = await asyncio.gather(*[
-        process_batch(batch_id, data) 
-        for batch_id, data in batches
-    ])
-    
-    print(results)
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
-
-## Using persistent storage
-
-Attach network volumes to share models, datasets, and files across workers using the `networkVolumeId` parameter. Volumes mount at `/runpod-volume/` and persist across worker restarts. See the [storage guide](/flash/configuration/storage) for setup instructions, access patterns, and best practices.
+See [Flash storage](/flash/configuration/storage) for setup instructions and access patterns.
 
 ## Environment variables
 
@@ -180,7 +134,7 @@ config = LiveServerless(
 
 ### Accessing environment variables in remote functions
 
-Access environment variables inside your remote functions using Python's `os.getenv()`:
+Access environment variables inside your remote functions using `os.getenv()`
 
 ```python
 @remote(resource_config=config, dependencies=["transformers"])
@@ -217,7 +171,7 @@ def process_data(data):
 ```
 
 <Note>
-You can change environment variables without recreating your endpoint. This makes it easy to rotate API keys or allow different developers to use their own .env files.
+You can change environment variables without recreating your endpoint. This makes it easy to rotate API keys or allow different developers to use their own `.env` files.
 </Note>
 
 ## Decorator parameters
@@ -302,7 +256,7 @@ async def health_check() -> dict:
     return {"status": "healthy"}
 ```
 
-See [Load balancing configurations](/flash/configuration/load-balancing) for complete details.
+See [Load balancing endpoints](/flash/configuration/overview#load-balancing-endpoints) for complete details.
 
 ## Next steps
 
