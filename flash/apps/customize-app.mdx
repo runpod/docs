@@ -206,54 +206,6 @@ async def run_gpu_inference(input: dict) -> dict:
 | Load-balanced | 1 config : 1 or more remote functions | 1 Serverless endpoint with >= 1 paths |
 | Mixed | Different config names : Different remote functions | Separate Serverless endpoints |
 
-## Working with the `flash init` template structure
-
-### Understanding the worker files
-
-The `flash init` template includes three worker files:
-
-**`lb_worker.py`** (load-balanced HTTP API)
-- Use for user-facing API routes.
-- Multiple routes share one Serverless endpoint.
-- Define custom HTTP methods and paths using the `method` and `path` parameters.
-- Best for real-time request/response patterns.
-
-**`gpu_worker.py`** (GPU queue-based compute)
-- Use for GPU-intensive workloads.
-- Each function needs its own resource configuration.
-- Accessed via `/run` or `/runsync` routes.
-- Best for model inference, training, batch processing.
-
-**`cpu_worker.py`** (CPU queue-based compute)
-- Use for non-GPU workloads.
-- Each function needs its own resource configuration.
-- Accessed via `/run` or `/runsync` routes.
-- Best for data preprocessing, file processing, API calls.
-
-### When to create new files vs. modify existing
-
-**Modify existing files when:**
-- Adding routes to the load-balancing API.
-- Adding functionality to existing endpoints.
-- Customizing the example functions.
-
-**Create new files when:**
-- Adding new queue-based endpoints with different purposes.
-- Organizing code by domain (e.g., `image_worker.py`, `text_worker.py`).
-- Separating concerns across multiple endpoints.
-
-**Example structure for a larger Flash app:**
-
-```bash
-my-flash-app/
-├── lb_worker.py              # Public API routes
-├── image_inference.py         # Image processing endpoint
-├── text_inference.py          # Text processing endpoint
-└── batch_processing.py        # Background batch jobs
-```
-
-Each file with `@remote` functions gets discovered during `flash deploy`, which creates the appropriate endpoints.
-
 ## Add load balancing routes
 
 To add routes to an existing load balancing endpoint, use the `@remote` decorator with the `method` and `path` parameters:
@@ -345,39 +297,6 @@ inference_config = LiveServerless(
 ```
 
 See [Configuration parameters](/flash/configuration/parameters) for all available options, [GPU types](/flash/configuration/gpu-types) for selecting hardware, and [Best practices](/flash/configuration/best-practices) for optimization guidance.
-
-## Manage dependencies
-
-Specify Python packages in the `dependencies` parameter of the `@remote` decorator:
-
-```python
-@remote(
-    resource_config=gpu_config,
-    dependencies=[
-        "transformers==4.36.0",  # Pin specific versions
-        "torch",                 # Or use latest
-        "pillow",
-        "requests"
-    ]
-)
-async def process_with_deps(input: dict) -> dict:
-    # Import inside the function
-    from transformers import pipeline
-    import torch
-    from PIL import Image
-    import requests
-
-    # Your processing logic
-    return {"result": "processed"}
-```
-
-**Best practices:**
-- Pin versions for production deployments (e.g., `transformers==4.36.0`)
-- Import packages inside the function body, not at the top of the file
-- Only include packages you actually use to reduce cold start time
-- For large packages already in base images (like `torch`), consider using `--exclude` during deployment
-
-See [dependency management](/flash/remote-functions#dependency-management) for more details.
 
 ## Test your customizations
 
