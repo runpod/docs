@@ -299,12 +299,12 @@ export const ServingTooltip = () => {
 
 export const ResourceConfigurationTooltip = () => {
   return (
-  <Tooltip headline="Resource configuration" tip="A Python object that defines compute resources, scaling behavior, and infrastructure settings for Flash functions. Examples include LiveServerless for GPU batch processing and LiveLoadBalancer for HTTP APIs." cta="Learn more about resource configurations" href="/flash/endpoint-functions">resource configuration</Tooltip>
+  <Tooltip headline="Resource configuration" tip="A Python object that defines compute resources, scaling behavior, and infrastructure settings for Flash functions. Examples include LiveServerless for GPU batch processing and LiveLoadBalancer for HTTP APIs." cta="Learn more about resource configurations" href="/flash/create-endpoints">resource configuration</Tooltip>
   );
 };
 
 export const ResourceConfigurationsTooltip = () => {
   return (
-  <Tooltip headline="Resource configurations" tip="Python objects that define compute resources, scaling behavior, and infrastructure settings for Flash functions. Examples include LiveServerless for GPU batch processing and LiveLoadBalancer for HTTP APIs." cta="Learn more about resource configurations" href="/flash/endpoint-functions">resource configurations</Tooltip>
+  <Tooltip headline="Resource configurations" tip="Python objects that define compute resources, scaling behavior, and infrastructure settings for Flash functions. Examples include LiveServerless for GPU batch processing and LiveLoadBalancer for HTTP APIs." cta="Learn more about resource configurations" href="/flash/create-endpoints">resource configurations</Tooltip>
   );
 };
