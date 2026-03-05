@@ -4,10 +4,10 @@ sidebarTitle: "Build a Flash app"
 description: "Create a Flash app, test it locally, and deploy it to production."
 ---
 
-Flash apps let you build FastAPI apps to serve AI/ML workloads on Runpod Serverless. This guide walks you through the process of building a Flash app from scratch, from project initialization and local testing to production deployment.
+Flash apps let you build APIs to serve AI/ML workloads on Runpod Serverless. This guide walks you through the process of building a Flash app from scratch, from project initialization and local testing to production deployment.
 
 <Tip>
-If you haven't already, we recommend starting with the [Quickstart](/flash/quickstart) guide to get a feel for how Flash `@remote` functions work.
+If you haven't already, we recommend starting with the [Quickstart](/flash/quickstart) guide to get a feel for how Flash `@Endpoint` functions work.
 </Tip>
 
 ## Requirements:
@@ -31,7 +31,7 @@ source .venv/bin/activate
 uv pip install runpod-flash
 ```
 
-Use the `flash init` command to generate a structured project template with a preconfigured FastAPI application entry point:
+Use the `flash init` command to generate a structured project template with a preconfigured application entry point:
 
 ```bash
 flash init
@@ -69,12 +69,11 @@ This is the structure of the project template created by `flash init`:
 
 This template includes:
 
-- Example worker files with `@remote` decorated functions for load-balanced and queue-based endpoints.
+- Example worker files with `@Endpoint` decorated functions for load-balanced and queue-based endpoints.
 - Templates for `requirements.txt`, `.env.example`, `.gitignore`, etc.
-- Pre-configured resource configurations using `LiveServerless` and `CpuLiveLoadBalancer` objects.
-  - A `@remote` decorated function that returns a response from a worker.
+- Pre-configured endpoint configurations for GPU and CPU workers.
 
-When you start the FastAPI server, it creates API endpoints at `/gpu/hello` and `/cpu/hello`, which call the remote function described in their respective `endpoint.py` files.
+When you start the server, it creates API endpoints at `/gpu/hello` and `/cpu/hello`, which call the endpoint functions described in their respective worker files.
 
 ## Step 3: Install Python dependencies
 
@@ -142,7 +141,7 @@ This eliminates cold-start delays by provisioning all serverless endpoints upfro
 
 Besides starting the API server, `flash run` also starts an interactive API explorer. Point your web browser at [http://localhost:8888/docs](http://localhost:8888/docs) to explore the API.
 
-To run remote functions in the explorer:
+To run endpoint functions in the explorer:
 
 1. Expand one of the functions under **GPU Workers** or **CPU Workers**.
 2. Click **Try it out** and then **Execute**.
@@ -153,27 +152,22 @@ You'll get a response from your workers right in the explorer.
 
 To customize your endpoints:
 
-1. Edit the `@remote` functions in your worker files (`lb_worker.py`, `gpu_worker.py`, `cpu_worker.py`).
+1. Edit the `@Endpoint` functions in your worker files (`lb_worker.py`, `gpu_worker.py`, `cpu_worker.py`).
 2. Add new worker files for new endpoints.
 3. Test individual workers by running them as scripts (e.g., `python gpu_worker.py`).
 4. Restart the development server to pick up changes.
 
 ### Example: Adding a custom GPU endpoint
 
-To add a new GPU endpoint for image generation, create a new worker file or modify an existing one. For deployed apps, each queue-based function needs its own unique resource configuration:
+To add a new GPU endpoint for image generation, create a new worker file or modify an existing one. For deployed apps, each queue-based function needs its own unique endpoint configuration:
 
 ```python
-from runpod_flash import remote, LiveServerless, GpuGroup
+from runpod_flash import Endpoint, GpuType
 
-# Separate configuration for image generation endpoint
-image_gen_config = LiveServerless(
+@Endpoint(
     name="image_generator",
-    gpus=[GpuGroup.ADA_24],  # RTX 4090 for efficient inference
-    workersMax=2
-)
-
-@remote(
-    resource_config=image_gen_config,
+    gpu=GpuType.NVIDIA_GEFORCE_RTX_4090,
+    workers=2,
     dependencies=["diffusers", "torch", "transformers", "pillow"]
 )
 async def generate_image(prompt: str, width: int = 512, height: int = 512) -> dict:
@@ -210,10 +204,10 @@ This command:
 
 1. Builds your application into a deployment artifact.
 2. Uploads it to Runpod's storage.
-3. Provisions independent Serverless endpoints for each resource configuration.
+3. Provisions independent Serverless endpoints for each endpoint configuration.
 4. Configures service discovery for inter-endpoint communication.
 
-After deployment, you'll receive URLs for all deployed endpoints, grouped by resource configuration type:
+After deployment, you'll receive URLs for all deployed endpoints, grouped by configuration type:
 
 ```text
 ✓ Deployment Complete
@@ -249,5 +243,5 @@ For detailed deployment options including environment management, see [Deploy Fl
 ## Next steps
 
 - [Deploy Flash applications](/flash/apps/deploy-apps) for production use.
-- [Configure hardware resources](/flash/configuration/overview) for your endpoints.
+- [Configure hardware resources](/flash/configuration/parameters) for your endpoints.
 - [Monitor and troubleshoot](/flash/troubleshooting) your endpoints.

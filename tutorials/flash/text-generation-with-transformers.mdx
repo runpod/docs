@@ -86,38 +86,22 @@ Add the necessary imports and Flash configuration:
 ```python
 import asyncio
 from dotenv import load_dotenv
-from runpod_flash import remote, LiveServerless, GpuGroup
+from runpod_flash import Endpoint, GpuGroup
 
 # Load environment variables from .env file
 load_dotenv()
-
-# Configuration for GPU workers
-gpu_config = LiveServerless(
-    name="text-generation",
-    gpus=[GpuGroup.AMPERE_24, GpuGroup.ADA_24],  # 24GB GPUs
-    workersMax=3,
-    idleTimeout=10
-)
 ```
-
-**Configuration breakdown**:
-
-- **`name="text-generation"`**: Identifies your endpoint in the Runpod console
-- **`gpus=[GpuGroup.AMPERE_24, GpuGroup.ADA_24]`**: Allows workers to use L4, A5000, RTX 3090, or RTX 4090 GPUs (all have 24GB VRAM)
-- **`workersMax=3`**: Allows up to 3 parallel workers for concurrent requests
-- **`idleTimeout=10`**: Keeps workers active for 10 minutes after last use (reduces cold starts)
-
-<Tip>
-GPT-2 only requires about 2GB of VRAM, so 24GB GPUs are more than sufficient. For larger models like LLaMA or GPT-J, you might need 48GB or 80GB GPUs.
-</Tip>
 
 ## Step 5: Define the text generation function
 
-Add the remote function that will run on the GPU worker:
+Add the endpoint function that will run on the GPU worker:
 
 ```python
-@remote(
-    resource_config=gpu_config,
+@Endpoint(
+    name="text-generation",
+    gpu=[GpuGroup.AMPERE_24, GpuGroup.ADA_24],  # 24GB GPUs
+    workers=3,
+    idle_timeout=10,
     dependencies=["transformers", "torch", "accelerate"]
 )
 def generate_text(prompt, max_length=50):
@@ -161,6 +145,17 @@ def generate_text(prompt, max_length=50):
         "max_length": max_length
     }
 ```
+
+**Configuration breakdown**:
+
+- **`name="text-generation"`**: Identifies your endpoint in the Runpod console
+- **`gpu=[GpuGroup.AMPERE_24, GpuGroup.ADA_24]`**: Allows workers to use L4, A5000, RTX 3090, or RTX 4090 GPUs (all have 24GB VRAM)
+- **`workers=3`**: Allows up to 3 parallel workers for concurrent requests
+- **`idle_timeout=10`**: Keeps workers active for 10 minutes after last use (reduces cold starts)
+
+<Tip>
+GPT-2 only requires about 2GB of VRAM, so 24GB GPUs are more than sufficient. For larger models like LLaMA or GPT-J, you might need 48GB or 80GB GPUs.
+</Tip>
 
 This function:
 - Loads the GPT-2 model from Hugging Face.
@@ -262,7 +257,7 @@ python text_generation.py
 
 ```text
 Starting text generation on Runpod GPU...
-Creating endpoint: server_LiveServerless_a1b2c3d4
+Creating endpoint: server_Endpoint_a1b2c3d4
 Provisioning Serverless endpoint...
 Endpoint ready
 Registering RunPod endpoint at https://api.runpod.ai/xvf32dan8rcilp
@@ -293,7 +288,7 @@ Max length: 100 tokens
 
 ```text
 Starting text generation on Runpod GPU...
-Resource LiveServerless_a1b2c3d4 already exists, reusing.
+Resource Endpoint_a1b2c3d4 already exists, reusing.
 Registering RunPod endpoint at https://api.runpod.ai/xvf32dan8rcilp
 Executing function on RunPod endpoint ID: xvf32dan8rcilp
 Initial job status: IN_QUEUE
@@ -350,9 +345,10 @@ You'll see three different completions generated sequentially on the same GPU wo
 2. Try a different model that might be available faster.
 3. Increase execution timeout in configuration:
    ```python
-   gpu_config = LiveServerless(
+   @Endpoint(
        name="text-generation",
-       executionTimeoutMs=300000  # 5 minutes
+       gpu=GpuGroup.ADA_24,
+       execution_timeout_ms=300000  # 5 minutes
    )
    ```
 
@@ -365,7 +361,7 @@ You'll see three different completions generated sequentially on the same GPU wo
 2. Reduce `max_length` parameter.
 3. Use larger GPUs:
    ```python
-   gpus=[GpuGroup.AMPERE_48]  # 48GB GPUs
+   gpu=GpuGroup.AMPERE_48  # 48GB GPUs
    ```
 
 ### Slow generation
@@ -378,11 +374,11 @@ You'll see three different completions generated sequentially on the same GPU wo
 3. Large `max_length` value.
 
 **Solutions**:
-1. Increase `idleTimeout` to keep workers active:
+1. Increase `idle_timeout` to keep workers active:
    ```python
-   idleTimeout=30  # Keep active for 30 minutes
+   idle_timeout=30  # Keep active for 30 minutes
    ```
-2. Set `workersMin=1` to always have a warm worker ready.
+2. Set `workers=(1, 3)` to always have a warm worker ready.
 3. Reduce `max_length` to generate fewer tokens.
 
 ### Generation quality is poor
@@ -428,7 +424,11 @@ model_name = "microsoft/DialoGPT-medium"
 Extend your app to handle multi-turn conversations:
 
 ```python
-@remote(resource_config=gpu_config, dependencies=["transformers", "torch"])
+@Endpoint(
+    name="chat",
+    gpu=GpuGroup.ADA_24,
+    dependencies=["transformers", "torch"]
+)
 def chat(conversation_history):
     """Multi-turn chat with context."""
     # Concatenate conversation history
@@ -449,19 +449,19 @@ flash deploy
 ```
 
 <Note>
-When deploying queue-based functions with `flash deploy`, each function must have its own unique resource configuration. If your script has multiple functions sharing the same config (like `generate_text` and `chat` in this tutorial), create separate configs for each function when converting to a Flash app. See [understanding endpoint architecture](/flash/apps/deploy-apps#understanding-endpoint-architecture) for details.
+When deploying queue-based functions with `flash deploy`, each function must have its own unique endpoint configuration. If your script has multiple functions sharing the same config (like `generate_text` and `chat` in this tutorial), create separate endpoints for each function when converting to a Flash app. See [understanding endpoint architecture](/flash/apps/deploy-apps#understanding-endpoint-architecture) for details.
 </Note>
 
 ### Optimize performance
 
-- Use [network volumes](/storage/network-volumes) to cache models across workers.
-- Implement [request batching](/flash/remote-functions#parallel-execution) for higher throughput.
+- Use [network volumes](/flash/configuration/storage) to cache models across workers.
+- Implement [request batching](/flash/endpoint-functions#parallel-execution) for higher throughput.
 - Try [quantized models](https://huggingface.co/docs/transformers/main_classes/quantization) for faster inference.
 
 ## Related resources
 
-- [Flash remote functions guide](/flash/remote-functions).
-- [Flash resource configuration](/flash/configuration/overview).
+- [Endpoint functions guide](/flash/endpoint-functions).
+- [Configuration reference](/flash/configuration/parameters).
 - [Managing Flash endpoints](/flash/managing-endpoints).
 - [Hugging Face transformers documentation](https://huggingface.co/docs/transformers/index).
 - [Hugging Face model hub](https://huggingface.co/models).

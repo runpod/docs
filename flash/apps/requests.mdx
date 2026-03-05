@@ -25,7 +25,7 @@ Your endpoint URLs are displayed after running `flash deploy`. You can also view
 
 ## Queue-based endpoints
 
-Queue-based endpoints (`LiveServerless`, `CpuLiveServerless`) provide two routes for job submission: `/run` (asynchronous) and `/runsync` (synchronous).
+Queue-based endpoints (using `@Endpoint(name=..., gpu=...)` decorator) provide two routes for job submission: `/run` (asynchronous) and `/runsync` (synchronous).
 
 ### Asynchronous calls (`/run`)
 
@@ -105,7 +105,7 @@ curl -X POST https://api.runpod.ai/v2/abc123xyz/runsync \
     }'
 ```
 
-The structure inside `"input"` depends on your `@remote` function signature.
+The structure inside `"input"` depends on your `@Endpoint` function signature.
 
 ### Job status states
 
@@ -118,7 +118,7 @@ The structure inside `"input"` depends on your `@remote` function signature.
 
 ## Load-balanced endpoints
 
-Load-balanced endpoints (`LiveLoadBalancer`, `CpuLiveLoadBalancer`) provide custom HTTP routes with direct request/response patterns.
+Load-balanced endpoints (using `api = Endpoint(...); @api.post("/path")` pattern) provide custom HTTP routes with direct request/response patterns.
 
 ### Calling load-balanced routes
 
@@ -156,21 +156,25 @@ curl -X POST https://abc123xyz.api.runpod.ai/process \
     }'
 ```
 
-The payload structure depends on your `@remote` function signature. Each route can accept different parameters.
+The payload structure depends on your function signature. Each route can accept different parameters.
 
 ### Multiple routes, single endpoint
 
 A single load-balanced endpoint can serve multiple routes:
 
 ```python
+from runpod_flash import Endpoint
+
+api = Endpoint(name="api-server", cpu="cpu5c-4-8", workers=(1, 5))
+
 # All these routes share one endpoint URL
-@remote(resource_config=api_config, method="POST", path="/generate")
+@api.post("/generate")
 async def generate_text(prompt: str): ...
 
-@remote(resource_config=api_config, method="POST", path="/translate")
+@api.post("/translate")
 async def translate_text(text: str): ...
 
-@remote(resource_config=api_config, method="GET", path="/health")
+@api.get("/health")
 async def health_check(): ...
 ```
 
@@ -226,16 +230,18 @@ For programmatic access, use the Runpod Python SDK:
 ```python
 import runpod
 
-# Queue-based endpoint
+# Set API key
 runpod.api_key = "your_api_key"
+
+# Connect to endpoint
 endpoint = runpod.Endpoint("YOUR_ENDPOINT_ID")
 
-# Async call
-job = endpoint.run({"prompt": "Hello world"})
-status = endpoint.status(job)
-result = endpoint.result(job)
+# Async call (returns job object immediately)
+run_request = endpoint.run({"prompt": "Hello world"})
+status = run_request.status()  # Check status
+output = run_request.output()  # Get result once complete
 
-# Sync call
+# Sync call (blocks until complete)
 result = endpoint.run_sync({"prompt": "Hello world"})
 ```
 
@@ -247,8 +253,8 @@ See the [Runpod SDK documentation](/sdks/python/endpoints) for complete SDK usag
   <Card title="Deploy apps" href="/flash/apps/deploy-apps" icon="rocket" horizontal>
     Deploy your Flash app to get endpoint URLs.
   </Card>
-  <Card title="Resource types" href="/flash/configuration/overview" icon="layer-group" horizontal>
-    Choose and configure resource types for your workload.
+  <Card title="Configuration reference" href="/flash/configuration/parameters" icon="layer-group" horizontal>
+    View all endpoint configuration parameters.
   </Card>
   <Card title="Runpod SDK" href="/sdks/python/endpoints" icon="code" horizontal>
     Use the Python SDK for programmatic access.

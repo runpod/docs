@@ -1,19 +1,19 @@
 ---
-title: "Build a REST API with Flash load balancers"
+title: "Build a REST API with Flash"
 sidebarTitle: "Build a REST API"
-description: "Learn how to build a production-ready REST API using Flash load balancing endpoints with custom HTTP routes."
+description: "Learn how to build a production-ready REST API using Flash load-balanced endpoints with custom HTTP routes."
 tag: "BETA"
 ---
 
-This tutorial shows you how to build a REST API using Flash load balancing configurations. You'll create a multi-route API that handles text processing, demonstrates both CPU and GPU endpoints, and deploys to production.
+This tutorial shows you how to build a REST API using Flash load-balanced endpoints. You'll create a multi-route API that handles text processing, demonstrates both CPU and GPU endpoints, and deploys to production.
 
 ## What you'll learn
 
 In this tutorial you'll learn how to:
 
-- Use `CpuLiveLoadBalancer` to create HTTP APIs with custom routes
-- Define multiple routes on a single endpoint with `method=` and `path=` parameters
-- Add GPU-accelerated routes with `LiveLoadBalancer`
+- Create load-balanced endpoints with the `Endpoint` class
+- Define multiple routes on a single endpoint with `.get()`, `.post()`, and other HTTP method decorators
+- Add GPU-accelerated routes for ML inference
 - Test your API locally with `flash run`
 - Deploy your API to production with `flash deploy`
 - Call your deployed endpoints with proper authentication
@@ -71,26 +71,26 @@ Create a new file called `api.py`:
 touch api.py
 ```
 
-## Step 3: Define the CPU load balancer configuration
+## Step 3: Define the load-balanced endpoint
 
 Add the following code to `api.py`:
 
 ```python
-from runpod_flash import CpuLiveLoadBalancer, remote
+from runpod_flash import Endpoint
 
-# CPU load balancer for general API routes
-api_config = CpuLiveLoadBalancer(
+# CPU load-balanced endpoint for general API routes
+api = Endpoint(
     name="text-api",
-    workersMin=0,      # Scale to zero when idle
-    workersMax=3,      # Scale up to 3 workers under load
-    idleTimeout=10     # Keep workers active for 10 minutes
+    cpu="cpu5c-4-8",   # 4 vCPU, 8GB RAM
+    workers=(0, 3),    # Scale from 0 to 3 workers
+    idle_timeout=10    # Keep workers active for 10 minutes
 )
 ```
 
-This configuration creates a CPU-only load balancing endpoint that can handle multiple HTTP routes.
+This configuration creates a CPU load-balanced endpoint that can handle multiple HTTP routes.
 
 <Note>
-**Worker Quota Considerations**: The `workersMax` setting determines the maximum number of concurrent workers. Standard Runpod accounts have a total quota of 30 workers across all endpoints. If you have other endpoints running, you may need to reduce `workersMax` to 1-2. Check your quota in the [Runpod console](https://www.runpod.io/console/serverless).
+**Worker Quota Considerations**: The `workers` setting determines the maximum number of concurrent workers. Standard Runpod accounts have a total quota of 30 workers across all endpoints. If you have other endpoints running, you may need to reduce `workers` to `(0, 1)`. Check your quota in the [Runpod console](https://www.runpod.io/console/serverless).
 </Note>
 
 ## Step 4: Add API routes
@@ -98,7 +98,7 @@ This configuration creates a CPU-only load balancing endpoint that can handle mu
 Add three routes to your API - health check, info, and text analysis:
 
 ```python
-@remote(resource_config=api_config, method="GET", path="/health")
+@api.get("/health")
 async def health_check() -> dict:
     """Health check endpoint for monitoring."""
     return {
@@ -107,7 +107,7 @@ async def health_check() -> dict:
         "version": "1.0.0"
     }
 
-@remote(resource_config=api_config, method="GET", path="/info")
+@api.get("/info")
 async def get_info() -> dict:
     """API information endpoint."""
     return {
@@ -120,7 +120,7 @@ async def get_info() -> dict:
         ]
     }
 
-@remote(resource_config=api_config, method="POST", path="/analyze")
+@api.post("/analyze")
 async def analyze_text(text: str) -> dict:
     """Analyze text and return statistics."""
     words = text.split()
@@ -139,30 +139,25 @@ async def analyze_text(text: str) -> dict:
     }
 ```
 
-All three routes share the same `api_config` load balancer, meaning they deploy to a single Serverless endpoint.
+All three routes share the same `api` endpoint, meaning they deploy to a single Serverless endpoint.
 
 ## Step 5: Add a GPU-accelerated route (optional)
 
-For GPU-accelerated sentiment analysis, add a separate load balancer configuration:
+For GPU-accelerated sentiment analysis, add a separate endpoint:
 
 ```python
-from runpod_flash import LiveLoadBalancer, GpuGroup
+from runpod_flash import Endpoint, GpuGroup
 
-# GPU load balancer for ML inference
-gpu_api_config = LiveLoadBalancer(
+# GPU endpoint for ML inference
+gpu_api = Endpoint(
     name="gpu-sentiment",
-    gpus=[GpuGroup.ANY],     # Use any available GPU for better availability
-    workersMin=0,            # Scale to zero when idle
-    workersMax=1,            # Up to 1 worker under load
-    idleTimeout=5
-)
-
-@remote(
-    resource_config=gpu_api_config,
-    method="POST",
-    path="/sentiment",
+    gpu=GpuGroup.ANY,   # Use any available GPU for better availability
+    workers=(0, 1),     # Scale from 0 to 1 worker
+    idle_timeout=5,
     dependencies=["transformers", "torch"]
 )
+
+@gpu_api.post("/sentiment")
 async def analyze_sentiment(text: str) -> dict:
     """Analyze sentiment using a pretrained model."""
     from transformers import pipeline
@@ -192,7 +187,7 @@ async def analyze_sentiment(text: str) -> dict:
 This creates a second endpoint specifically for GPU-accelerated tasks.
 
 <Note>
-The sentiment analysis route uses a separate GPU configuration because it requires different hardware than the CPU routes. This is a common pattern: use CPU load balancers for lightweight API logic and GPU load balancers for ML inference.
+The sentiment analysis route uses a separate GPU endpoint because it requires different hardware than the CPU routes. This is a common pattern: use CPU endpoints for lightweight API logic and GPU endpoints for ML inference.
 
 **GPU Availability**: Using `GpuGroup.ANY` provides better availability than specific GPU types like `GpuGroup.ADA_24`. First requests to GPU endpoints may take 1-3 minutes due to:
 - GPU provisioning
@@ -289,17 +284,17 @@ This creates a project structure with separate worker files. Now, split your API
 Replace the contents of `lb_worker.py` with:
 
 ```python
-from runpod_flash import CpuLiveLoadBalancer, remote
+from runpod_flash import Endpoint
 
-# CPU load balancer for general API routes
-api_config = CpuLiveLoadBalancer(
+# CPU load-balanced endpoint for general API routes
+api = Endpoint(
     name="text-api",
-    workersMin=0,      # Scale to zero when idle
-    workersMax=3,      # Scale up to 3 workers under load
-    idleTimeout=10     # Keep workers active for 10 minutes
+    cpu="cpu5c-4-8",   # 4 vCPU, 8GB RAM
+    workers=(0, 3),    # Scale from 0 to 3 workers
+    idle_timeout=10    # Keep workers active for 10 minutes
 )
 
-@remote(resource_config=api_config, method="GET", path="/health")
+@api.get("/health")
 async def health_check() -> dict:
     """Health check endpoint for monitoring."""
     return {
@@ -308,7 +303,7 @@ async def health_check() -> dict:
         "version": "1.0.0"
     }
 
-@remote(resource_config=api_config, method="GET", path="/info")
+@api.get("/info")
 async def get_info() -> dict:
     """API information endpoint."""
     return {
@@ -321,7 +316,7 @@ async def get_info() -> dict:
         ]
     }
 
-@remote(resource_config=api_config, method="POST", path="/analyze")
+@api.post("/analyze")
 async def analyze_text(text: str) -> dict:
     """Analyze text and return statistics."""
     words = text.split()
@@ -345,23 +340,18 @@ async def analyze_text(text: str) -> dict:
 If you added the GPU sentiment route, replace the contents of `gpu_worker.py` with:
 
 ```python
-from runpod_flash import LiveLoadBalancer, GpuGroup, remote
+from runpod_flash import Endpoint, GpuGroup
 
-# GPU load balancer for ML inference
-gpu_api_config = LiveLoadBalancer(
+# GPU endpoint for ML inference
+gpu_api = Endpoint(
     name="gpu-sentiment",
-    gpus=[GpuGroup.ANY],     # Use any available GPU for better availability
-    workersMin=0,            # Scale to zero when idle
-    workersMax=1,            # Up to 1 worker under load
-    idleTimeout=5
-)
-
-@remote(
-    resource_config=gpu_api_config,
-    method="POST",
-    path="/sentiment",
+    gpu=GpuGroup.ANY,   # Use any available GPU for better availability
+    workers=(0, 1),     # Scale from 0 to 1 worker
+    idle_timeout=5,
     dependencies=["transformers", "torch"]
 )
+
+@gpu_api.post("/sentiment")
 async def analyze_sentiment(text: str) -> dict:
     """Analyze sentiment using a pretrained model."""
     from transformers import pipeline
@@ -422,7 +412,7 @@ Flash Dev Server  localhost:8888
 ```
 
 <Note>
-**Development Server Path Prefixes**: The `flash run` dev server adds worker file prefixes to routes (e.g., `/lb_worker/health`, `/gpu_worker/sentiment`). When deployed to production, endpoints use the paths as defined in the `@remote` decorator (e.g., `/health`, `/sentiment`) without the prefixes.
+**Development Server Path Prefixes**: The `flash run` dev server adds worker file prefixes to routes (e.g., `/lb_worker/health`, `/gpu_worker/sentiment`). When deployed to production, endpoints use the paths as defined in the route decorators (e.g., `/health`, `/sentiment`) without the prefixes.
 </Note>
 
 Open http://localhost:8888/docs in your browser to see the interactive API documentation. You can test all your routes directly in the Swagger UI.
@@ -540,7 +530,7 @@ Expected response:
 ```
 
 <Note>
-**Production Path Note**: In production, the endpoints use the exact paths defined in your `@remote` decorators (e.g., `/health`, `/sentiment`), without the worker file prefixes used in `flash run`.
+**Production Path Note**: In production, the endpoints use the exact paths defined in your route decorators (e.g., `/health`, `/sentiment`), without the worker file prefixes used in `flash run`.
 </Note>
 
 ## Understanding the deployment architecture
@@ -581,13 +571,12 @@ flowchart TB
 
 **Solution**:
 1. Check your current worker usage in the [Runpod console](https://www.runpod.io/console/serverless)
-2. Reduce `workersMax` in your configuration:
+2. Reduce `workers` in your configuration:
    ```python
-   api_config = CpuLiveLoadBalancer(
+   api = Endpoint(
        name="text-api",
-       workersMin=0,
-       workersMax=1,  # Reduce this value
-       idleTimeout=10
+       cpu="cpu5c-4-8",
+       workers=(0, 1)  # Reduce this value
    )
    ```
 3. Clean up unused endpoints before deploying new ones
@@ -603,7 +592,7 @@ flowchart TB
 4. Consider using CPU for development testing:
    ```python
    # For testing without GPU
-   gpu_api_config = CpuLiveLoadBalancer(name="sentiment-cpu")
+   api = Endpoint(name="sentiment-cpu", cpu="cpu5c-4-8")
    ```
 
 ### Port already in use
@@ -623,13 +612,12 @@ lsof -ti:8888 | xargs kill -9
 
 **Issue**: `ModuleNotFoundError: No module named 'transformers'`
 
-**Solution**: Ensure dependencies are specified in the `@remote` decorator:
+**Solution**: Ensure dependencies are specified on the endpoint:
 
 ```python
-@remote(
-    resource_config=gpu_api_config,
-    method="POST",
-    path="/sentiment",
+gpu_api = Endpoint(
+    name="gpu-sentiment",
+    gpu=GpuGroup.ANY,
     dependencies=["transformers", "torch"]  # Must include these
 )
 ```
@@ -639,39 +627,15 @@ For local testing, install dependencies manually:
 pip install transformers torch
 ```
 
-### Method or path not specified error
-
-**Issue**: `ValueError: LoadBalancerSlsResource requires both 'method' and 'path' parameters`
-
-**Solution**: Load balancer routes require both parameters:
-
-```python
-@remote(
-    resource_config=api_config,
-    method="POST",    # Must specify
-    path="/analyze"   # Must specify
-)
-```
-
-### Path validation error
-
-**Issue**: `ValueError: path must start with '/'. Got: analyze`
-
-**Solution**: Paths must start with a forward slash:
-
-```python
-@remote(resource_config=api_config, method="POST", path="/analyze")  # Correct
-```
-
 ### Endpoint stays in queue
 
 **Issue**: GPU sentiment route stays in `IN_QUEUE` status
 
 **Solutions**:
 1. Check [GPU availability](https://www.runpod.io/console/serverless) in console
-2. Add fallback GPU types:
+2. Use flexible GPU selection:
    ```python
-   gpus=[GpuGroup.ANY]  # Use any available GPU
+   gpu=GpuGroup.ANY  # Use any available GPU
    ```
 3. Increase worker quota if at limit
 
@@ -684,13 +648,13 @@ Now that you've built a REST API with Flash, you can:
 Expand your API with additional functionality:
 
 ```python
-@remote(resource_config=api_config, method="POST", path="/summarize")
+@api.post("/summarize")
 async def summarize_text(text: str, max_length: int = 100) -> dict:
     """Summarize long text."""
     # Summarization logic
     return {"summary": text[:max_length]}
 
-@remote(resource_config=api_config, method="POST", path="/translate")
+@api.post("/translate")
 async def translate_text(text: str, target_lang: str) -> dict:
     """Translate text to another language."""
     # Translation logic
@@ -702,7 +666,7 @@ async def translate_text(text: str, target_lang: str) -> dict:
 Implement custom authentication for your API:
 
 ```python
-@remote(resource_config=api_config, method="POST", path="/protected")
+@api.post("/protected")
 async def protected_route(text: str, api_key: str) -> dict:
     """Route with custom authentication."""
     if api_key != "your-secret-key":
@@ -714,7 +678,7 @@ async def protected_route(text: str, api_key: str) -> dict:
 
 - Track endpoint health in the [Runpod console](https://www.runpod.io/console/serverless)
 - Monitor request counts and error rates
-- Adjust `workersMin` and `workersMax` based on traffic patterns
+- Adjust `workers` based on traffic patterns
 
 ### Use multiple environments
 
@@ -728,7 +692,7 @@ flash deploy --env production # Production
 
 ## Related resources
 
-- [Resource types reference](/flash/configuration/overview)
-- [Create remote functions guide](/flash/remote-functions)
+- [Configuration reference](/flash/configuration/parameters)
+- [Endpoint functions guide](/flash/endpoint-functions)
 - [Deploy Flash apps](/flash/apps/deploy-apps)
 - [Managing endpoints](/flash/managing-endpoints)

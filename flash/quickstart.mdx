@@ -60,17 +60,14 @@ Create a file called `gpu_demo.py` and paste this code into it:
 
 ```python
 import asyncio
-from runpod_flash import remote, LiveServerless, GpuGroup
+from runpod_flash import Endpoint, GpuType
 
-# Configure GPU resources
-config = LiveServerless(
+@Endpoint(
     name="flash-quickstart",
-    gpus=[GpuGroup.ADA_24],  # RTX 4090
-    workersMax=3
+    gpu=GpuType.NVIDIA_GEFORCE_RTX_4090,
+    workers=3,
+    dependencies=["numpy", "torch"]
 )
-
-# Define a function that runs on GPU
-@remote(resource_config=config, dependencies=["numpy", "torch"])
 def gpu_matrix_multiply(size):
     # IMPORTANT: Import packages INSIDE the function
     import numpy as np
@@ -117,7 +114,7 @@ You'll see Flash provision a GPU worker and execute your function:
 
 ```text
 Running matrix multiplication on Runpod GPU...
-Creating endpoint: server_LiveServerless_a1b2c3d4
+Creating endpoint: flash-quickstart
 Provisioning Serverless endpoint...
 Endpoint ready
 Executing function on RunPod endpoint ID: xvf32dan8rcilp
@@ -143,40 +140,28 @@ Let's break down the code you just ran:
 
 ```python
 import asyncio
-from runpod_flash import remote, LiveServerless, GpuGroup
+from runpod_flash import Endpoint, GpuType
 ```
 
-- **`asyncio`**: Enables asynchronous execution (Flash functions run async).
-- **`remote`, `LiveServerless`, `GpuGroup`**: Core Flash components.
+- **`asyncio`**: Enables asynchronous execution (endpoint functions run async).
+- **`Endpoint`**: The class that marks functions for remote execution.
+- **`GpuType`**: Enum for selecting specific GPU types.
 
 Flash automatically loads your credentials from `flash login` or the `RUNPOD_API_KEY` environment variable.
 
-### Resource configuration
+### The `@Endpoint` decorator
 
 ```python
-config = LiveServerless(
+@Endpoint(
     name="flash-quickstart",
-    gpus=[GpuGroup.ADA_24],
-    workersMax=3
+    gpu=GpuType.NVIDIA_GEFORCE_RTX_4090,
+    workers=3,
+    dependencies=["numpy", "torch"]
 )
-```
-
-This tells Flash what hardware to use:
-
-- **`name`**: Identifies your endpoint in the [Runpod console](https://www.runpod.io/console/serverless).
-- **`gpus`**: Which GPU types to use (here: RTX 4090 with 24GB VRAM).
-- **`workersMax`**: Maximum parallel workers (allows 3 concurrent executions).
-
-See [GPU types](/flash/configuration/gpu-types) for a list of available GPUs or [resource configuration](/flash/configuration/overview) for more configuration options.
-
-### Remote function
-
-```python
-@remote(resource_config=config, dependencies=["numpy", "torch"])
 def gpu_matrix_multiply(size):
     import numpy as np
     import torch
-    
+
     # Get GPU name
     device_name = torch.cuda.get_device_name(0)
 
@@ -194,12 +179,16 @@ def gpu_matrix_multiply(size):
     }
 ```
 
-The `@remote` decorator marks the function to run on Runpod's infrastructure:
+The `@Endpoint` decorator configures everything in one place:
 
-- **`resource_config=config`**: Uses the GPU configuration you defined.
-- **`dependencies=["numpy", "torch"]`**: Packages to install on the worker.
+- **`name`**: Identifies your endpoint in the [Runpod console](https://www.runpod.io/console/serverless).
+- **`gpu`**: Which GPU type to use (here: RTX 4090 with 24GB VRAM).
+- **`workers`**: Maximum parallel workers (allows 3 concurrent executions).
+- **`dependencies`**: Python packages to install on the worker.
 - **Function body**: The matrix multiplication code runs on the remote GPU, not your local machine.
 - **Return value**: The result is returned to your local machine as a Python dictionary.
+
+See [GPU types](/flash/configuration/gpu-types) for available GPUs or [endpoint functions](/flash/endpoint-functions) for all configuration options.
 
 <Warning>
 You must import packages **inside the function body**, not at the top of your file. These imports need to happen on the remote worker.
@@ -220,16 +209,16 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Here's what happens when you run the `@remote` decorated function:
+Here's what happens when you call an `@Endpoint` decorated function:
 
-1. Flash checks if the endpoint specified in your `LiveServerless` configuration already exists.
+1. Flash checks if the endpoint specified in your decorator already exists.
    - If yes: It updates the endpoint if the configuration has changed.
    - If no: It creates a new endpoint, initializes a worker, and installs your dependencies.
 2. Flash sends your code to the GPU worker
 3. The GPU worker executes the function with the provided inputs.
 4. The result is returned to your local machine as a Python dictionary, where it's printed in your terminal.
 
-Everything outside the `@remote` function (all the `print` statements, etc.) runs **locally on your machine**. Only the decorated function runs remotely.
+Everything outside the `@Endpoint` function (all the `print` statements, etc.) runs **locally on your machine**. Only the decorated function runs remotely.
 
 ## Step 6: Run multiple operations in parallel
 
@@ -309,12 +298,9 @@ You've successfully run GPU code on Runpod! Now you're ready to learn more about
   <Card title="Generate text with Flash" href="/tutorials/flash/text-generation-with-transformers" icon="message-bot" horizontal>
     Use Hugging Face transformers to generate text with GPT-2.
   </Card>
-  <Card title="Create remote functions" href="/flash/remote-functions" icon="function" horizontal>
-    Learn how to configure and optimize remote functions.
+  <Card title="Endpoint functions" href="/flash/endpoint-functions" icon="function" horizontal>
+    Learn how to configure and optimize endpoint functions.
   </Card>
-  {/* <Card title="Configure resources" href="/flash/configuration/overview" icon="sliders" horizontal>
-    Choose GPUs, adjust workers, set timeouts.
-  </Card> */}
   <Card title="Build Flash apps" href="/flash/apps/overview" icon="code" horizontal>
     Deploy production APIs.
   </Card>
@@ -350,10 +336,17 @@ Initial job status: IN_QUEUE
 **Solution**: No GPUs available. Add more GPU types for fallback:
 
 ```python
-config = LiveServerless(
+@Endpoint(
     name="flash-quickstart",
-    gpus=[GpuGroup.ADA_24, GpuGroup.AMPERE_24, GpuGroup.AMPERE_48]
+    gpu=[
+        GpuType.NVIDIA_GEFORCE_RTX_4090,
+        GpuType.NVIDIA_RTX_A5000,
+        GpuType.NVIDIA_RTX_A6000
+    ],
+    dependencies=["numpy", "torch"]
 )
+def gpu_matrix_multiply(size):
+    ...
 ```
 
 Or check [GPU availability](https://www.runpod.io/console/serverless) in the console.
@@ -364,10 +357,10 @@ Or check [GPU availability](https://www.runpod.io/console/serverless) in the con
 ModuleNotFoundError: No module named 'numpy'
 ```
 
-**Solution**: Move imports inside the `@remote` function:
+**Solution**: Move imports inside the `@Endpoint` function:
 
 ```python
-@remote(resource_config=config, dependencies=["numpy"])
+@Endpoint(name="compute", gpu=GpuGroup.ANY, dependencies=["numpy"])
 def my_function():
     import numpy as np  # Import here, not at top of file
     # ...

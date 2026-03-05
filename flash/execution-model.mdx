@@ -6,19 +6,17 @@ description: "Understand how Flash executes your code on Runpod's infrastructure
 
 import { MachineTooltip } from "/snippets/tooltips.jsx";
 
-Flash runs your Python functions on remote GPU/CPU workers while you maintain local control flow. This page explains what happens when you call a `@remote` function.
+Flash runs your Python functions on remote GPU/CPU workers while you maintain local control flow. This page explains what happens when you call an `@Endpoint` function.
 
 ## What runs where
 
-The `@remote` decorator marks functions for remote execution. Everything else runs locally.
+The `@Endpoint` decorator marks functions for remote execution. Everything else runs locally.
 
 ```python
 import asyncio
-from runpod_flash import remote, LiveServerless, GpuGroup
+from runpod_flash import Endpoint, GpuType
 
-config = LiveServerless(name="demo", gpus=[GpuGroup.ADA_24])
-
-@remote(resource_config=config)
+@Endpoint(name="demo", gpu=GpuType.NVIDIA_GEFORCE_RTX_4090)
 def process_on_gpu(data):
     # This runs on Runpod worker
     import torch
@@ -35,7 +33,7 @@ if __name__ == "__main__":
 
 | Code | Location |
 |------|----------|
-| `@remote` decorator | Your machine (marks function) |
+| `@Endpoint` decorator | Your machine (marks function) |
 | Inside `process_on_gpu` | Runpod worker |
 | Everything else | Your machine |
 
@@ -45,15 +43,15 @@ When you build a [Flash app](/flash/apps/overview):
 
 **Development (`flash run`)**:
 - FastAPI server runs **locally**.
-- `@remote` functions run on **Runpod workers**.
+- `@Endpoint` functions run on **Runpod workers**.
 
 **Production (`flash deploy`)**:
-- Each resource configuration becomes a **separate Serverless endpoint**.
+- Each endpoint configuration becomes a **separate Serverless endpoint**.
 - All endpoints run on **Runpod**.
 
 ## Execution flow
 
-Here's what happens when you call a `@remote` function:
+Here's what happens when you call an `@Endpoint` function:
 
 ```mermaid
 %%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#9289FE','primaryTextColor':'#fff','primaryBorderColor':'#9289FE','lineColor':'#5F4CFE','secondaryColor':'#AE6DFF','tertiaryColor':'#FCB1FF','edgeLabelBackground':'#5F4CFE', 'fontSize':'14px','fontFamily':'font-inter'}}}%%
@@ -91,18 +89,19 @@ sequenceDiagram
 Flash identifies endpoints by their `name` parameter:
 
 ```python
-config = LiveServerless(
+@Endpoint(
     name="inference",  # This identifies the endpoint
-    gpus=[GpuGroup.AMPERE_80],
-    workersMax=3
+    gpu=GpuType.NVIDIA_A100_80GB_PCIe,
+    workers=3
 )
+def run_inference(data): ...
 ```
 
 - **Same name, same config**: Reuses the existing endpoint.
 - **Same name, different config**: Updates the endpoint automatically.
 - **New name**: Creates a new endpoint.
 
-This means you can change parameters like `workersMax` without creating a new endpoint—Flash detects the change and updates it.
+This means you can change parameters like `workers` without creating a new endpoint—Flash detects the change and updates it.
 
 ## Worker lifecycle
 
@@ -125,19 +124,20 @@ Workers scale up and down based on demand and your configuration.
 ### Scaling behavior
 
 ```python
-config = LiveServerless(
+@Endpoint(
     name="demo",
-    workersMin=0,   # No workers when idle (scale to zero)
-    workersMax=5,   # Maximum concurrent workers
-    idleTimeout=60  # Seconds before idle workers scale down
+    gpu=GpuGroup.ANY,
+    workers=(0, 5),   # (min, max) - Scale to zero when idle, up to 5 workers
+    idle_timeout=60   # Seconds before idle workers scale down
 )
+def process(data): ...
 ```
 
 **Example**:
 1. First job arrives → Scale to 1 worker (cold start).
-2. More jobs arrive while worker busy → Scale up to `workersMax`.
-3. Jobs complete → Workers stay idle for `idleTimeout`.
-4. No new jobs → Scale down to `workersMin`.
+2. More jobs arrive while worker busy → Scale up to max workers.
+3. Jobs complete → Workers stay idle for `idle_timeout`.
+4. No new jobs → Scale down to min workers.
 
 ## Cold starts and warm starts
 
@@ -148,7 +148,7 @@ Understanding cold and warm starts helps you predict latency and set expectation
 A cold start occurs when no workers are available to handle your job:
 
 - You're calling an endpoint for the first time.
-- All workers scaled down after being idle beyond `idleTimeout`.
+- All workers scaled down after being idle beyond `idle_timeout`.
 - All active workers are busy and a new one must spin up.
 
 **What happens during a cold start**:
@@ -159,7 +159,7 @@ A cold start occurs when no workers are available to handle your job:
 **Typical timing**: 10-60 seconds total, depending on GPU availability and image size.
 
 <Note>
-When using `flash build` or `flash deploy`, dependencies are pre-installed in the worker image, eliminating pip installation at request time. When running standalone scripts with `@remote` functions outside of a Flash app, dependencies may be installed on the worker at request time.
+When using `flash build` or `flash deploy`, dependencies are pre-installed in the worker image, eliminating pip installation at request time. When running standalone scripts with `@Endpoint` functions outside of a Flash app, dependencies may be installed on the worker at request time.
 </Note>
 
 ### Warm start
@@ -167,7 +167,7 @@ When using `flash build` or `flash deploy`, dependencies are pre-installed in th
 A warm start occurs when a worker is already running and idle:
 
 - Worker completed a previous job and is waiting for more work.
-- Worker is within its `idleTimeout` period.
+- Worker is within its `idle_timeout` period.
 
 **What happens during a warm start**:
 1. Job is routed immediately to the idle worker.
@@ -177,10 +177,10 @@ A warm start occurs when a worker is already running and idle:
 
 ### The relationship between configuration and starts
 
-Your `workersMin` and `idleTimeout` settings directly affect cold start frequency:
+Your `workers` and `idle_timeout` settings directly affect cold start frequency:
 
-- `workersMin=0`: Workers scale to zero when idle. Every request after idle period triggers a cold start.
-- `workersMin=1`: At least one worker stays ready. First concurrent request is warm, additional requests may cold start.
-- Higher `idleTimeout`: Workers stay idle longer before scaling down, reducing cold starts for sporadic traffic.
+- `workers=(0, n)`: Workers scale to zero when idle. Every request after idle period triggers a cold start.
+- `workers=(1, n)`: At least one worker stays ready. First concurrent request is warm, additional requests may cold start.
+- Higher `idle_timeout`: Workers stay idle longer before scaling down, reducing cold starts for sporadic traffic.
 
 See [configuration best practices](/flash/configuration/best-practices) for specific recommendations based on your workload.
