@@ -28,7 +28,7 @@ from runpod_flash import Endpoint, GpuType, NetworkVolume
     name="production-batch",
     gpu=GpuType.NVIDIA_A100_80GB_PCIe,  # Specific GPU for predictable performance
     workers=(1, 10),        # At least 1 worker, scale up to 10
-    idle_timeout=20,        # Keep workers longer for variable traffic
+    idle_timeout=1200,      # 20 minutes - keep workers longer for variable traffic
     execution_timeout_ms=600000,  # 10 minute timeout
     volume=NetworkVolume(name="my-volume"),
     env={"MODEL_PATH": "/runpod-volume/models"}
@@ -39,7 +39,7 @@ def process_batch(data): ...
 **Key settings**:
 - `workers=(1, n)`: Set min to 1 to avoid cold starts for first job in queue.
 - `workers=(n, max)`: Set max based on expected peak concurrent jobs.
-- `idle_timeout`: 15-30 minutes for production workloads.
+- `idle_timeout`: 900-1800 seconds (15-30 minutes) for production workloads.
 
 ### Load-balanced endpoints
 
@@ -52,7 +52,7 @@ api = Endpoint(
     name="production-api",
     gpu=GpuType.NVIDIA_GEFORCE_RTX_4090,  # Specific GPU for consistent performance
     workers=(3, 20),        # Always keep 3 workers ready, scale to 20
-    idle_timeout=30,        # Keep workers active longer
+    idle_timeout=1800,      # 30 minutes - keep workers active longer
     execution_timeout_ms=60000,  # 60 second timeout per request
     volume=NetworkVolume(name="my-volume")
 )
@@ -69,7 +69,7 @@ async def health_check() -> dict:
 **Key settings**:
 - `workers=(n, max)`: Set min ≥ 1 for production APIs to avoid cold starts. Unlike queue-based endpoints where jobs can wait, API clients expect immediate responses.
 - `workers=(min, n)`: Set max based on expected peak concurrent requests.
-- `idle_timeout`: 20-30 minutes to keep workers ready.
+- `idle_timeout`: 1200-1800 seconds (20-30 minutes) to keep workers ready.
 - Include health check routes (e.g., `GET /health`) for monitoring.
 
 ## Development
@@ -81,7 +81,7 @@ Here are some best practices for development and testing environments prioritizi
 - **Use `GpuGroup.ANY`** for fastest GPU provisioning during development.
 - **Set `workers=(0, n)`** to minimize costs when not actively testing.
 - **Keep max workers low** (1-3) to control development expenses.
-- **Use short `idle_timeout`** (5 minutes) to scale down quickly between test runs.
+- **Use short `idle_timeout`** (300 seconds / 5 minutes) to scale down quickly between test runs.
 - **Test locally** with `flash run` before deploying to production.
 
 ### Example configuration
@@ -93,7 +93,7 @@ from runpod_flash import Endpoint, GpuGroup
     name="dev-testing",
     gpu=GpuGroup.ANY,       # Fast provisioning
     workers=(0, 2),         # Scale to zero, limit to 2 concurrent
-    idle_timeout=5          # Quick scale-down
+    idle_timeout=300        # 5 minutes - quick scale-down
 )
 def test_function(data): ...
 ```
@@ -107,7 +107,7 @@ Here are some best practices for minimizing costs on infrequent or batch workloa
 - **Set `workers=(0, n)`** to scale to zero when idle (no usage = no cost).
 - **Use smaller GPU types** when workload allows (e.g., `GpuType.NVIDIA_GEFORCE_RTX_4090` instead of `GpuType.NVIDIA_A100_80GB_PCIe`).
 - **Use CPU endpoints** when GPU acceleration isn't needed.
-- **Reduce `idle_timeout`** for sporadic workloads (5-10 minutes).
+- **Reduce `idle_timeout`** for sporadic workloads (300-600 seconds / 5-10 minutes).
 - **Batch operations** into fewer job submissions when possible.
 
 ### Cost-optimized queue-based endpoint
@@ -119,7 +119,7 @@ from runpod_flash import Endpoint, GpuType, NetworkVolume
     name="batch-job",
     gpu=GpuType.NVIDIA_GEFORCE_RTX_4090,  # Cost-effective GPU
     workers=(0, 5),         # Scale to zero, controlled max
-    idle_timeout=5,         # Fast scale-down
+    idle_timeout=300,       # 5 minutes - fast scale-down
     volume=NetworkVolume(name="my-volume")  # Avoid re-downloading models
 )
 def batch_process(data): ...
@@ -136,7 +136,7 @@ from runpod_flash import Endpoint
     name="cpu-batch",
     cpu="cpu5c-4-8",        # 4 vCPU, 8GB RAM
     workers=(0, 3),         # Scale to zero, limit to 3
-    idle_timeout=5
+    idle_timeout=300        # 5 minutes - fast scale-down
 )
 def cpu_process(data): ...
 ```
