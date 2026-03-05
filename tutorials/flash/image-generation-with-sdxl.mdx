@@ -51,7 +51,7 @@ Install Flash using [uv](https://docs.astral.sh/uv/):
 ```bash
 uv venv
 source .venv/bin/activate
-uv pip install runpod-flash
+uv pip install runpod-flash python-dotenv
 ```
 
 Create a `.env` file with your Runpod API key:
@@ -97,38 +97,22 @@ import asyncio
 import base64
 from pathlib import Path
 from dotenv import load_dotenv
-from runpod_flash import remote, LiveServerless, GpuGroup
+from runpod_flash import Endpoint, GpuGroup
 
 # Load environment variables from .env file
 load_dotenv()
-
-# Configuration for GPU workers
-gpu_config = LiveServerless(
-    name="image-generation",
-    gpus=[GpuGroup.ADA_24, GpuGroup.AMPERE_24],  # 24GB GPUs
-    workersMax=2,
-    idleTimeout=15
-)
 ```
-
-**Configuration breakdown**:
-
-- **`name="image-generation"`**: Identifies your endpoint in the Runpod console.
-- **`gpus=[GpuGroup.ADA_24, GpuGroup.AMPERE_24]`**: Uses RTX 4090 or L4/A5000 GPUs (both have 24GB VRAM, sufficient for SDXL).
-- **`workersMax=2`**: Allows up to 2 parallel workers.
-- **`idleTimeout=15`**: Keeps workers active for 15 minutes (SDXL models are large, so we want longer caching).
-
-<Note>
-SDXL requires at least 16GB VRAM. Using 24GB GPUs provides comfortable headroom and faster generation.
-</Note>
 
 ## Step 5: Define the image generation function
 
-Add the remote function that will run on the GPU worker:
+Add the endpoint function that will run on the GPU worker:
 
 ```python
-@remote(
-    resource_config=gpu_config,
+@Endpoint(
+    name="image-generation",
+    gpu=[GpuGroup.ADA_24, GpuGroup.AMPERE_24],  # 24GB GPUs
+    workers=2,
+    idle_timeout=15,
     dependencies=["diffusers", "torch", "transformers", "accelerate"]
 )
 def generate_image(prompt, negative_prompt="", num_steps=30, guidance_scale=7.5):
@@ -176,6 +160,17 @@ def generate_image(prompt, negative_prompt="", num_steps=30, guidance_scale=7.5)
         "resolution": "1024x1024"
     }
 ```
+
+**Configuration breakdown**:
+
+- **`name="image-generation"`**: Identifies your endpoint in the Runpod console.
+- **`gpu=[GpuGroup.ADA_24, GpuGroup.AMPERE_24]`**: Uses RTX 4090 or L4/A5000 GPUs (both have 24GB VRAM, sufficient for SDXL).
+- **`workers=2`**: Allows up to 2 parallel workers.
+- **`idle_timeout=15`**: Keeps workers active for 15 minutes (SDXL models are large, so we want longer caching).
+
+<Note>
+SDXL requires at least 16GB VRAM. Using 24GB GPUs provides comfortable headroom and faster generation.
+</Note>
 
 This function:
 - Loads the SDXL model from Hugging Face.
@@ -322,7 +317,7 @@ python image_generation.py
 Generating image with Stable Diffusion XL on Runpod GPU...
 This may take 1-2 minutes on first run (downloading model)...
 
-Creating endpoint: server_LiveServerless_a1b2c3d4
+Creating endpoint: server_Endpoint_a1b2c3d4
 Provisioning Serverless endpoint...
 Endpoint ready
 Executing function on RunPod endpoint ID: xvf32dan8rcilp
@@ -349,7 +344,7 @@ Device: cuda
 ```text
 Generating image with Stable Diffusion XL on Runpod GPU...
 
-Resource LiveServerless_a1b2c3d4 already exists, reusing.
+Resource Endpoint_a1b2c3d4 already exists, reusing.
 Executing function on RunPod endpoint ID: xvf32dan8rcilp
 Initial job status: IN_QUEUE
 Job completed, output received
@@ -494,7 +489,7 @@ Use negative prompts to:
 **Solutions**:
 1. Verify you're using 24GB GPUs:
    ```python
-   gpus=[GpuGroup.ADA_24, GpuGroup.AMPERE_24]  # 24GB GPUs
+   gpu=[GpuGroup.ADA_24, GpuGroup.AMPERE_24]  # 24GB GPUs
    ```
 
 2. Use half-precision (already in the example):
@@ -504,7 +499,7 @@ Use negative prompts to:
 
 3. If still failing, use 48GB GPUs:
    ```python
-   gpus=[GpuGroup.AMPERE_48]  # A40/A6000 with 48GB
+   gpu=GpuGroup.AMPERE_48  # A40/A6000 with 48GB
    ```
 
 ### Model download fails
@@ -514,9 +509,10 @@ Use negative prompts to:
 **Solutions**:
 1. Increase execution timeout for first run:
    ```python
-   gpu_config = LiveServerless(
+   @Endpoint(
        name="image-generation",
-       executionTimeoutMs=600000  # 10 minutes for first download
+       gpu=GpuGroup.ADA_24,
+       execution_timeout_ms=600000  # 10 minutes for first download
    )
    ```
 
@@ -564,9 +560,9 @@ Use negative prompts to:
 3. Too many inference steps.
 
 **Solutions**:
-1. Increase `idleTimeout` to keep workers active:
+1. Increase `idle_timeout` to keep workers active:
    ```python
-   idleTimeout=30  # Keep active for 30 minutes
+   idle_timeout=30  # Keep active for 30 minutes
    ```
 
 2. Reduce inference steps:
@@ -574,7 +570,7 @@ Use negative prompts to:
    num_steps=20  # Faster but slightly lower quality
    ```
 
-3. Set `workersMin=1` to always have a warm worker ready.
+3. Set `workers=(1, 2)` to always have a warm worker ready.
 
 ### Images look distorted or have artifacts
 
@@ -642,14 +638,22 @@ flash deploy
 
 ### Optimize with network volumes
 
-Use [network volumes](/flash/managing-endpoints) to cache models across workers:
+Use [network volumes](/flash/configuration/storage) to cache models across workers:
 
 ```python
-config = LiveServerless(
+from runpod_flash import Endpoint, GpuGroup, NetworkVolume
+
+vol = NetworkVolume(name="model-cache")  # Finds existing or creates new
+
+@Endpoint(
     name="image-generation",
-    networkVolumeId="vol_abc123",  # Pre-loaded SDXL model
-    template=PodTemplate(containerDiskInGb=100)
+    gpu=GpuGroup.ADA_24,
+    volume=vol,
+    dependencies=["diffusers", "torch", "transformers", "accelerate"]
 )
+def generate_image(prompt, ...):
+    # Models at /runpod-volume/ persist across workers
+    ...
 ```
 
 ### Explore advanced features
@@ -661,8 +665,8 @@ config = LiveServerless(
 
 ## Related resources
 
-- [Flash remote functions guide](/flash/remote-functions).
-- [Flash resource configuration](/flash/configuration/overview).
+- [Endpoint functions guide](/flash/endpoint-functions).
+- [Configuration reference](/flash/configuration/parameters).
 - [Managing Flash endpoints](/flash/managing-endpoints).
 - [Hugging Face diffusers documentation](https://huggingface.co/docs/diffusers/index).
 - [Stable Diffusion XL model card](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0).

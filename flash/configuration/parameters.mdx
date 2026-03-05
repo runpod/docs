@@ -1,535 +1,533 @@
 ---
-title: "Resource configuration parameters"
+title: "Endpoint parameters"
 sidebarTitle: "Parameters"
-description: "Complete reference for all resource configuration parameters."
+description: "Complete reference for all Endpoint class parameters."
 ---
 
-This page provides a complete reference for all parameters available across Flash configuration classes.
+This page provides a complete reference for all parameters available on the `Endpoint` class.
 
-## Basic parameters
-
-These parameters are available on all configuration classes (`LiveServerless`, `CpuLiveServerless`, `LiveLoadBalancer`, `CpuLiveLoadBalancer`, `ServerlessEndpoint`, `CpuServerlessEndpoint`):
+## Parameter overview
 
 | Parameter | Type | Description | Default |
 |-----------|------|-------------|---------|
-| `name` | `string` | Name for your endpoint (required, visible in console) | - |
-| `workersMin` | `int` | Minimum number of workers (always running) | 0 |
-| `workersMax` | `int` | Maximum number of workers (scaling limit) | 1 |
-| `idleTimeout` | `int` | Seconds before scaling down idle workers | 60 |
-| `env` | `dict` | Environment variables as key-value pairs | Loads from `.env` file |
-| `networkVolumeId` | `string` | Persistent storage [network volume](/storage/network-volumes) ID | `None` |
-| `executionTimeoutMs` | `int` | Maximum execution time in milliseconds (0 = no limit) | 0 |
-| `scalerType` | `string` | Scaling strategy algorithm | `QUEUE_DELAY` |
-| `scalerValue` | `int` | Scaling parameter value (jobs per worker threshold) | 4 |
-| `locations` | `string` | Preferred datacenter locations (comma-separated) | `None` |
-| `template` | `PodTemplate` | Pod template overrides for advanced configuration | `None` |
-| `flashboot` | `bool` | Enable Flashboot for faster cold starts | `True` |
-| `datacenter` | `DataCenter` | Preferred datacenter for worker deployment | `DataCenter.EU_RO_1` |
-| `cudaVersions` | `list[CudaVersion]` | Allowed CUDA versions for workers | `[]` (all versions) |
-| `networkVolume` | `NetworkVolume` | Network volume configuration object | `None` |
-
-
-## GPU-specific parameters
-
-These parameters are available on GPU configurations (`LiveServerless`, `LiveLoadBalancer`, `ServerlessEndpoint`):
-
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| `gpus` | `list[GpuGroup \| GpuType]` | GPU pools or specific GPU types that can be used by workers | `[GpuGroup.ANY]` |
-| `gpuCount` | `int` | Number of GPUs per worker | 1 |
-
-See [GPU types](/flash/configuration/gpu-types) for all available GPU types, pools, and advanced selection patterns including fallback strategies.
-
-## CPU-specific parameters
-
-The `instanceIds` parameter is available on CPU configurations (`CpuLiveServerless`, `CpuLiveLoadBalancer`, `CpuServerlessEndpoint`):
-
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| `instanceIds` | `list[CpuInstanceType]` | CPU instance types (forces CPU endpoint) | Default instances |
-
-
-See [CPU types](/flash/configuration/cpu-types) for all available CPU instance types.
+| `name` | `str` | Endpoint name (required unless `id=` is used) | - |
+| `id` | `str` | Connect to existing endpoint by ID | `None` |
+| `gpu` | `GpuGroup`, `GpuType`, or list | GPU type(s) for the endpoint | `GpuGroup.ANY` |
+| `cpu` | `str` or `CpuInstanceType` | CPU instance type (mutually exclusive with `gpu`) | `None` |
+| `workers` | `int` or `(min, max)` | Worker scaling configuration | `(0, 1)` |
+| `idle_timeout` | `int` | Seconds before scaling down idle workers | `60` |
+| `dependencies` | `list[str]` | Python packages to install | `None` |
+| `system_dependencies` | `list[str]` | System packages to install (apt) | `None` |
+| `accelerate_downloads` | `bool` | Enable download acceleration | `True` |
+| `volume` | `NetworkVolume` | Network volume for persistent storage | `None` |
+| `datacenter` | `DataCenter` | Preferred datacenter | `EU_RO_1` |
+| `env` | `dict[str, str]` | Environment variables | `None` |
+| `gpu_count` | `int` | GPUs per worker | `1` |
+| `execution_timeout_ms` | `int` | Max execution time in milliseconds | `0` (no limit) |
+| `flashboot` | `bool` | Enable Flashboot fast startup | `True` |
+| `image` | `str` | Custom Docker image to deploy | `None` |
+| `scaler_type` | `ServerlessScalerType` | Scaling strategy | auto |
+| `scaler_value` | `int` | Scaling threshold | `4` |
+| `template` | `PodTemplate` | Pod template overrides | `None` |
 
 ## Parameter details
 
 ### name
 
-**Type**: `string`
-**Required**: Yes
+**Type**: `str`
+**Required**: Yes (unless `id=` is specified)
 
-The endpoint name visible in the Runpod console. While the name helps you identify endpoints, the endpoint ID must be used to make API requests.
+The endpoint name visible in the [Runpod console](https://www.runpod.io/console/serverless). Use descriptive names to easily identify endpoints.
 
 ```python
-config = LiveServerless(
-    name="ml-inference-prod"  # Appears in console
-)
+@Endpoint(name="ml-inference-prod", gpu=GpuGroup.ANY)
+async def infer(data): ...
 ```
-
-In the console, endpoints appear with auto-generated identifiers like `server_LiveServerless_[id]`.
 
 <Tip>
-Use descriptive names like `image-generation-prod` or `batch-processor-dev` to easily identify endpoints in the [Runpod console](https://www.runpod.io/console/serverless).
+Use naming conventions like `image-generation-prod` or `batch-processor-dev` to organize your endpoints.
 </Tip>
 
-### workersMin
+### id
 
-**Type**: `int`
-**Default**: `0`
+**Type**: `str`
+**Default**: `None`
 
-Minimum number of workers that remain active. Workers above this minimum will scale down after `idleTimeout`.
+Connect to an existing deployed endpoint by its ID. When `id` is specified, `name` is not required.
 
 ```python
-# Cost-optimized: scale to zero when idle
-config = LiveServerless(name="batch-job", workersMin=0)
+# Connect to existing endpoint
+ep = Endpoint(id="abc123xyz")
 
-# Latency-optimized: always keep workers ready
-config = LiveServerless(name="api", workersMin=2)
+# Make requests
+job = await ep.run({"prompt": "hello"})
+result = await ep.post("/inference", {"data": "..."})
+```
+
+### gpu
+
+**Type**: `GpuGroup`, `GpuType`, or `list[GpuGroup | GpuType]`
+**Default**: `GpuGroup.ANY` (if neither `gpu` nor `cpu` is specified)
+
+Specifies GPU hardware for the endpoint. Accepts a single GPU type/group or a list for fallback strategies.
+
+```python
+from runpod_flash import Endpoint, GpuType, GpuGroup
+
+# Specific GPU type
+@Endpoint(name="inference", gpu=GpuType.NVIDIA_A100_80GB_PCIe)
+async def infer(data): ...
+
+# Another specific GPU type
+@Endpoint(name="rtx-worker", gpu=GpuType.NVIDIA_GEFORCE_RTX_4090)
+async def process(data): ...
+
+# Multiple types for fallback
+@Endpoint(name="flexible", gpu=[GpuType.NVIDIA_A100_80GB_PCIe, GpuType.NVIDIA_RTX_A6000, GpuType.NVIDIA_GEFORCE_RTX_4090])
+async def flexible_infer(data): ...
+```
+
+See [GPU types](/flash/configuration/gpu-types) for all available options.
+
+### cpu
+
+**Type**: `str` or `CpuInstanceType`
+**Default**: `None`
+
+Specifies a CPU instance type. Mutually exclusive with `gpu`.
+
+```python
+from runpod_flash import Endpoint, CpuInstanceType
+
+# String shorthand
+@Endpoint(name="data-processor", cpu="cpu5c-4-8")
+async def process(data): ...
+
+# Using enum
+@Endpoint(name="data-processor", cpu=CpuInstanceType.CPU5C_4_8)
+async def process(data): ...
+```
+
+See [CPU types](/flash/configuration/cpu-types) for all available options.
+
+### workers
+
+**Type**: `int` or `tuple[int, int]`
+**Default**: `(0, 1)`
+
+Controls worker scaling. Accepts either a single integer (max workers with min=0) or a tuple of (min, max).
+
+```python
+# Just max: scales from 0 to 5
+@Endpoint(name="elastic", gpu=GpuGroup.ANY, workers=5)
+
+# Min and max: always keep 2 warm, scale up to 10
+@Endpoint(name="always-on", gpu=GpuGroup.ANY, workers=(2, 10))
+
+# Default: (0, 1)
+@Endpoint(name="default", gpu=GpuGroup.ANY)
 ```
 
 **Recommendations**:
-- Set to `0` for cost optimization (allows scale to zero).
-- Set to `1+` for low latency (avoids cold starts).
-- For load balancers, set `≥ 1` to ensure immediate API response.
+- `workers=N` or `workers=(0, N)`: Cost-optimized, allows scale to zero
+- `workers=(1, N)`: Avoid cold starts by keeping at least one worker warm
+- `workers=(N, N)`: Fixed worker count for consistent performance
 
-### workersMax
-
-**Type**: `int`
-**Default**: `1`
-
-Maximum number of workers that can run concurrently. This caps your scaling and controls maximum costs.
-
-```python
-config = LiveServerless(
-    name="production-api",
-    workersMax=20  # Handle up to 20 concurrent jobs
-)
-```
-
-**Recommendations**:
-- Set based on expected peak load.
-- Consider cost implications (max workers × cost per worker).
-- For development, use low values (1-3) to limit expenses.
-
-### idleTimeout
+### idle_timeout
 
 **Type**: `int`
 **Default**: `60`
 
-Seconds workers stay active with no traffic before scaling down (to `workersMin`).
+Seconds workers stay active with no traffic before scaling down (to minimum workers).
 
 ```python
 # Quick scale-down for cost savings
-config = LiveServerless(name="batch", idleTimeout=30)
+@Endpoint(name="batch", gpu=GpuGroup.ANY, idle_timeout=30)
 
 # Keep workers longer for variable traffic
-config = LiveServerless(name="api", idleTimeout=120)
+@Endpoint(name="api", gpu=GpuGroup.ANY, idle_timeout=120)
 ```
 
 **Recommendations**:
-- `30-60 seconds`: Cost-optimized, infrequent traffic.
-- `60-120 seconds`: Balanced, variable traffic patterns.
-- `120-300 seconds`: Latency-optimized, consistent traffic.
+- `30-60 seconds`: Cost-optimized, infrequent traffic
+- `60-120 seconds`: Balanced, variable traffic patterns
+- `120-300 seconds`: Latency-optimized, consistent traffic
 
-### env
+### dependencies
 
-**Type**: `dict`
-**Default**: Loads from `.env` file
-
-Environment variables passed to all workers. Useful for configuration, API keys, and feature flags. By default, Flash automatically loads environment variables from your project's `.env` file.
-
-```python
-config = LiveServerless(
-    name="ml-worker",
-    env={
-        "HF_TOKEN": "your_huggingface_token",
-        "MODEL_ID": "gpt2",
-        "LOG_LEVEL": "INFO",
-        "FEATURE_FLAG_NEW_MODEL": "true"
-    }
-)
-```
-
-<Note>
-You can change environment variables without recreating workers. This makes it easy to rotate API keys or allow different developers to use their own .env files.
-</Note>
-
-Access environment variables in your remote functions:
-
-```python
-@remote(resource_config=config)
-async def my_function():
-    import os
-    token = os.getenv("HF_TOKEN")
-    model_id = os.getenv("MODEL_ID")
-    # Use in your logic
-```
-
-### networkVolumeId
-
-**Type**: `string`
+**Type**: `list[str]`
 **Default**: `None`
 
-ID of a [network volume](/storage/network-volumes) to attach to workers. Volumes are mounted at `/runpod-volume/` and persist across workers.
+Python packages to install on the remote worker before executing your function. Supports standard pip syntax.
 
 ```python
-config = LiveServerless(
-    name="model-server",
-    networkVolumeId="vol_abc123"
+@Endpoint(
+    name="ml-worker",
+    gpu=GpuGroup.ANY,
+    dependencies=["torch>=2.0.0", "transformers==4.36.0", "pillow"]
 )
+async def process(data): ...
+```
+
+<Warning>
+Packages must be imported **inside** the function body, not at the top of your file.
+</Warning>
+
+### system_dependencies
+
+**Type**: `list[str]`
+**Default**: `None`
+
+System-level packages to install via apt before your function runs.
+
+```python
+@Endpoint(
+    name="video-processor",
+    gpu=GpuGroup.ANY,
+    dependencies=["opencv-python"],
+    system_dependencies=["libgl1-mesa-glx", "libglib2.0-0"]
+)
+async def process_video(data): ...
+```
+
+### accelerate_downloads
+
+**Type**: `bool`
+**Default**: `True`
+
+Enables faster downloads for dependencies, models, and large files. Disable if you encounter compatibility issues.
+
+```python
+@Endpoint(
+    name="standard-downloads",
+    gpu=GpuGroup.ANY,
+    accelerate_downloads=False
+)
+async def process(data): ...
+```
+
+### volume
+
+**Type**: `NetworkVolume`
+**Default**: `None`
+
+Attaches a network volume for persistent storage. Volumes are mounted at `/runpod-volume/`. Flash uses the volume `name` to find an existing volume or create a new one.
+
+```python
+from runpod_flash import Endpoint, GpuGroup, NetworkVolume
+
+vol = NetworkVolume(name="model-cache")  # Finds existing or creates new
+
+@Endpoint(
+    name="model-server",
+    gpu=GpuGroup.ANY,
+    volume=vol
+)
+async def serve(data):
+    # Access files at /runpod-volume/
+    model = load_model("/runpod-volume/models/bert")
+    ...
 ```
 
 **Use cases**:
-- Share large models across workers (avoid downloading each time).
-- Persist data between runs.
-- Share datasets across multiple endpoints.
+- Share large models across workers
+- Persist data between runs
+- Share datasets across endpoints
+
+See [Storage](/flash/configuration/storage) for setup instructions.
+
+### datacenter
+
+**Type**: `DataCenter`
+**Default**: `DataCenter.EU_RO_1`
+
+Preferred datacenter for worker deployment.
 
 ```python
-@remote(resource_config=config, dependencies=["transformers"])
-async def load_model():
-    from transformers import AutoModel
+from runpod_flash import Endpoint, DataCenter
 
-    # Model loaded from persistent storage
-    model = AutoModel.from_pretrained("/runpod-volume/models/bert-base")
-    return {"status": "loaded"}
-```
-
-See the [storage guide](/flash/configuration/storage) for complete setup instructions and best practices.
-
-### executionTimeoutMs
-
-**Type**: `int`
-**Default**: `0`
-
-Maximum execution time for a single job or request in milliseconds. `0` means no limit. Jobs exceeding this timeout are terminated.
-
-```python
-# 5 minute timeout
-config = LiveServerless(
-    name="training",
-    executionTimeoutMs=300000  # 5 * 60 * 1000
+@Endpoint(
+    name="eu-workers",
+    gpu=GpuGroup.ANY,
+    datacenter=DataCenter.EU_RO_1
 )
-
-# 30 second timeout
-config = LiveServerless(
-    name="quick-inference",
-    executionTimeoutMs=30000
-)
-
-# No timeout
-config = LiveServerless(
-    name="long-job",
-    executionTimeoutMs=0  # Default
-)
-```
-
-**Recommendations**:
-- Set reasonable timeouts to prevent runaway jobs.
-- For APIs, use shorter timeouts (30-60 seconds).
-- For batch jobs, use longer timeouts or no limit.
-- Monitor execution times and adjust accordingly.
-
-### scalerType
-
-**Type**: `string`
-**Default**: `"QUEUE_DELAY"` (queue-based) or `"REQUEST_COUNT"` (load-balanced)
-
-Scaling algorithm strategy. Queue-based endpoints default to `QUEUE_DELAY` which scales based on queue depth and delay. Load-balanced endpoints default to `REQUEST_COUNT` which scales based on the number of active requests.
-
-```python
-config = LiveServerless(
-    name="auto-scaler",
-    scalerType="QUEUE_DELAY"  # Default for queue-based
-)
+async def process(data): ...
 ```
 
 <Note>
-For queue-based endpoints (LiveServerless, CpuLiveServerless), use the default `QUEUE_DELAY`. For load-balanced endpoints (LiveLoadBalancer, CpuLiveLoadBalancer), the default is automatically set to `REQUEST_COUNT`.
+Flash Serverless deployments are currently restricted to `EU-RO-1`.
 </Note>
 
-### scalerValue
+### env
+
+**Type**: `dict[str, str]`
+**Default**: `None`
+
+Environment variables passed to all workers. Useful for API keys, configuration, and feature flags.
+
+```python
+@Endpoint(
+    name="ml-worker",
+    gpu=GpuGroup.ANY,
+    env={
+        "HF_TOKEN": "your_huggingface_token",
+        "MODEL_ID": "gpt2",
+        "LOG_LEVEL": "INFO"
+    }
+)
+async def load_model():
+    import os
+    token = os.getenv("HF_TOKEN")
+    model_id = os.getenv("MODEL_ID")
+    ...
+```
+
+<Note>
+Environment variables are excluded from configuration hashing. Changing environment values won't trigger endpoint recreation, making it easy to rotate API keys.
+</Note>
+
+### gpu_count
+
+**Type**: `int`
+**Default**: `1`
+
+Number of GPUs per worker. Use for multi-GPU workloads.
+
+```python
+@Endpoint(
+    name="multi-gpu-training",
+    gpu=GpuType.NVIDIA_A100_80GB_PCIe,
+    gpu_count=4,  # Each worker gets 4 GPUs
+    workers=2     # Maximum 2 workers = 8 GPUs total
+)
+async def train(data): ...
+```
+
+### execution_timeout_ms
+
+**Type**: `int`
+**Default**: `0` (no limit)
+
+Maximum execution time for a single job in milliseconds. Jobs exceeding this timeout are terminated.
+
+```python
+# 5 minute timeout
+@Endpoint(
+    name="training",
+    gpu=GpuGroup.ANY,
+    execution_timeout_ms=300000  # 5 * 60 * 1000
+)
+async def train(data): ...
+
+# 30 second timeout for quick inference
+@Endpoint(
+    name="quick-inference",
+    gpu=GpuGroup.ANY,
+    execution_timeout_ms=30000
+)
+async def infer(data): ...
+```
+
+### flashboot
+
+**Type**: `bool`
+**Default**: `True`
+
+Enables Flashboot for faster cold starts by pre-loading container images.
+
+```python
+@Endpoint(
+    name="fast-startup",
+    gpu=GpuGroup.ANY,
+    flashboot=True  # Default
+)
+async def process(data): ...
+```
+
+Set to `False` for debugging or compatibility reasons.
+
+### image
+
+**Type**: `str`
+**Default**: `None`
+
+Custom Docker image to deploy. When specified, the endpoint runs your Docker image instead of Flash's managed workers.
+
+```python
+from runpod_flash import Endpoint, GpuType
+
+vllm = Endpoint(
+    name="vllm-server",
+    image="runpod/worker-vllm:stable-cuda12.1.0",
+    gpu=GpuType.NVIDIA_A100_80GB_PCIe,
+    env={"MODEL_NAME": "meta-llama/Llama-3.2-3B-Instruct"}
+)
+
+# Make HTTP calls to the deployed image
+result = await vllm.post("/v1/completions", {"prompt": "Hello"})
+```
+
+See [Custom Docker images](/flash/custom-docker-images) for complete documentation.
+
+### scaler_type
+
+**Type**: `ServerlessScalerType`
+**Default**: Auto-selected based on endpoint type
+
+Scaling algorithm strategy. Defaults are automatically set:
+- Queue-based: `QUEUE_DELAY` (scales based on queue depth)
+- Load-balanced: `REQUEST_COUNT` (scales based on active requests)
+
+```python
+from runpod_flash import Endpoint, ServerlessScalerType
+
+@Endpoint(
+    name="custom-scaler",
+    gpu=GpuGroup.ANY,
+    scaler_type=ServerlessScalerType.QUEUE_DELAY
+)
+async def process(data): ...
+```
+
+### scaler_value
 
 **Type**: `int`
 **Default**: `4`
 
-Parameter value for the scaling algorithm. With `QUEUE_DELAY`, this represents the target number of jobs per worker before scaling up.
+Parameter value for the scaling algorithm. With `QUEUE_DELAY`, represents target jobs per worker before scaling up.
 
 ```python
-# Scale up when > 4 jobs per worker in queue
-config = LiveServerless(
-    name="default-scaler",
-    scalerType="QUEUE_DELAY",
-    scalerValue=4  # Default
+# Scale up when > 2 jobs per worker (more aggressive)
+@Endpoint(
+    name="responsive",
+    gpu=GpuGroup.ANY,
+    scaler_value=2
 )
-
-# More aggressive scaling (scale up sooner)
-config = LiveServerless(
-    name="responsive-scaler",
-    scalerValue=2  # Scale when > 2 jobs per worker
-)
+async def process(data): ...
 ```
-
-### locations
-
-**Type**: `string`
-**Default**: `None`
-
-Preferred datacenter locations for workers (comma-separated). Use location codes like `US-CA-1`, `EU-RO-1`.
-
-```python
-config = LiveServerless(
-    name="us-workers",
-    locations="US-CA-1,US-OR-1"  # Prefer US West locations
-)
-```
-
-<Note>
-This parameter hints at preferred locations but doesn't guarantee workers will run there. Availability depends on capacity.
-</Note>
 
 ### template
 
 **Type**: `PodTemplate`
 **Default**: `None`
 
-Advanced pod configuration overrides using `PodTemplate` class. See [PodTemplate reference](#podtemplate) below.
+Advanced pod configuration overrides.
 
 ```python
-from runpod_flash import LiveServerless, PodTemplate
+from runpod_flash import Endpoint, GpuGroup, PodTemplate
 
-config = LiveServerless(
-    name="custom-template",
+@Endpoint(
+    name="custom-pod",
+    gpu=GpuGroup.ANY,
     template=PodTemplate(
         containerDiskInGb=100,
         env=[{"key": "PYTHONPATH", "value": "/workspace"}]
     )
 )
-```
-
-### flashboot
-
-Flashboot reduces cold start times by pre-loading container images. It's enabled by default:
-
-```python
-config = LiveServerless(
-    name="fast-inference",
-    flashboot=True  # Default, enables faster cold starts
-)
-```
-
-Set to `False` if you need to disable Flashboot for debugging or compatibility reasons.
-
-### datacenter
-
-Specify a preferred datacenter for worker deployment:
-
-```python
-from runpod_flash import LiveServerless, DataCenter
-
-config = LiveServerless(
-    name="eu-workers",
-    datacenter=DataCenter.EU_RO_1
-)
-```
-
-<Note>
-The `datacenter` parameter is used when creating new endpoints. The `locations` parameter provides a similar capability as a comma-separated string and is used for API compatibility.
-</Note>
-
-### cudaVersions
-
-Restrict workers to specific CUDA versions:
-
-```python
-from runpod_flash import LiveServerless, CudaVersion
-
-config = LiveServerless(
-    name="cuda-12-only",
-    cudaVersions=[CudaVersion.CUDA_12_1, CudaVersion.CUDA_12_2]
-)
-```
-
-Leave empty (default) to allow any CUDA version.
-
-### networkVolume
-
-Instead of using `networkVolumeId` with an existing volume ID, you can configure a `NetworkVolume` object that Flash will create and manage:
-
-```python
-from runpod_flash import LiveServerless, NetworkVolume, DataCenter
-
-config = LiveServerless(
-    name="with-storage",
-    datacenter=DataCenter.EU_RO_1,
-    networkVolume=NetworkVolume(
-        name="my-volume",
-        dataCenterId=DataCenter.EU_RO_1,
-        size=100  # GB
-    )
-)
-```
-
-<Warning>
-The `networkVolume.dataCenterId` must match the endpoint's `datacenter` setting.
-</Warning>
-
-### gpus (GPU-only)
-
-The `gpus` parameter accepts specific GPU types for precise hardware selection:
-
-```python
-from runpod_flash import LiveServerless, GpuType
-
-config = LiveServerless(
-    name="ml-inference",
-    gpus=[GpuType.NVIDIA_A100_80GB_PCIe]
-)
-```
-
-### gpuCount (GPU-only)
-
-Use `gpuCount` to request multiple GPUs per worker:
-
-```python
-config = LiveServerless(
-    name="multi-gpu-training",
-    gpus=[GpuGroup.AMPERE_80],
-    gpuCount=4,  # Each worker gets 4 GPUs
-    workersMax=2  # Maximum 2 workers = 8 GPUs total
-)
-```
-
-### instanceIds (CPU-only)
-
-The `instanceIds` parameter accepts a list of `CpuInstanceType` enums:
-
-```python
-from runpod_flash import CpuLiveServerless, CpuInstanceType
-
-# Single instance type
-config = CpuLiveServerless(
-    name="cpu-worker",
-    instanceIds=[CpuInstanceType.CPU5C_4_8]  # 4 vCPU, 8GB RAM
-)
-
-# Fallback strategy
-config = CpuLiveServerless(
-    name="flexible-cpu",
-    instanceIds=[
-        CpuInstanceType.CPU5C_8_16,  # Try first: 8 vCPU, 16GB
-        CpuInstanceType.CPU5C_4_8,   # Then: 4 vCPU, 8GB
-        CpuInstanceType.CPU3G_4_16   # Finally: 3rd gen, 4 vCPU, 16GB
-    ]
-)
+async def process(data): ...
 ```
 
 ## PodTemplate
 
 `PodTemplate` provides advanced pod configuration options:
 
-### Parameters
-
 | Parameter | Type | Description | Default |
 |-----------|------|-------------|---------|
 | `containerDiskInGb` | `int` | Container disk size in GB | 64 |
 | `env` | `list[dict]` | Environment variables as list of `{"key": "...", "value": "..."}` | `None` |
 
-### Example
-
 ```python
-from runpod_flash import LiveServerless, PodTemplate
+from runpod_flash import PodTemplate
 
-config = LiveServerless(
-    name="custom-pod",
-    template=PodTemplate(
-        containerDiskInGb=100,  # 100GB container disk
-        env=[
-            {"key": "PYTHONPATH", "value": "/workspace"},
-            {"key": "CUDA_VISIBLE_DEVICES", "value": "0"}
-        ]
-    )
+template = PodTemplate(
+    containerDiskInGb=100,
+    env=[
+        {"key": "PYTHONPATH", "value": "/workspace"},
+        {"key": "CUDA_VISIBLE_DEVICES", "value": "0"}
+    ]
 )
 ```
 
 <Tip>
-For simple environment variables, use the `env` parameter on the configuration class instead of `PodTemplate.env`. The `template.env` format is for advanced use cases requiring list-based configuration.
+For simple environment variables, use the `env` parameter on `Endpoint` instead of `PodTemplate.env`.
 </Tip>
 
-### containerDiskInGb
+## EndpointJob
 
-**Type**: `int`
-**Default**: `64`
-
-Container disk size in GB. Increase this if your workload requires more disk space for temporary files, model downloads, or processing.
+When using `Endpoint(id=...)` or `Endpoint(image=...)`, the `.run()` method returns an `EndpointJob` object for async operations:
 
 ```python
-# Large disk for model downloads
-template = PodTemplate(containerDiskInGb=100)
+ep = Endpoint(id="abc123")
 
-# Default disk size
-template = PodTemplate(containerDiskInGb=64)
+# Submit a job
+job = await ep.run({"prompt": "hello"})
+
+# Check status
+status = await job.status()  # "IN_PROGRESS", "COMPLETED", etc.
+
+# Wait for completion
+await job.wait(timeout=60)  # Optional timeout in seconds
+
+# Access results
+print(job.id)      # Job ID
+print(job.output)  # Result payload
+print(job.error)   # Error message if failed
+print(job.done)    # True if completed/failed
+
+# Cancel a job
+await job.cancel()
 ```
 
-**Recommendations**:
-- Default (64GB): Sufficient for most workloads.
-- 100GB: Large model downloads or intermediate files.
-- 100GB+: Video processing, large datasets.
+## Configuration change behavior
 
-
-## How configuration changes affect your endpoint
-
-When you change your configuration and redeploy, Flash automatically updates your existing endpoint. Understanding which changes require worker recreation helps you predict downtime and optimize deployments.
+When you change configuration and redeploy, Flash automatically updates your endpoint.
 
 ### Changes that recreate workers
 
-These changes update your endpoint and restart all workers with the new configuration:
+These changes restart all workers:
+- GPU configuration (`gpu`, `gpu_count`)
+- CPU instance type (`cpu`)
+- Docker image (`image`)
+- Storage (`volume`)
+- Datacenter (`datacenter`)
+- Flashboot setting (`flashboot`)
 
-- **GPU configuration**: Changing GPU types (`gpus`), GPU count (`gpuCount`), or instance types (`instanceIds`).
-- **Docker image**: Updating the container image (`imageName`).
-- **Storage**: Adding or changing network volumes (`networkVolumeId`).
-- **Hardware placement**: Modifying datacenter locations (`locations`).
-- **Boot configuration**: Toggling Flashboot (`flashboot`).
-
-Workers will be temporarily unavailable during recreation (typically 30-90 seconds).
+Workers are temporarily unavailable during recreation (typically 30-90 seconds).
 
 ### Changes that update settings only
 
-These changes update your endpoint settings without recreating workers:
-
-- **Scaling limits**: Changing `workersMin` or `workersMax`.
-- **Scaling behavior**: Modifying `scalerType` or `scalerValue`.
-- **Timeouts**: Updating `idleTimeout` or `executionTimeoutMs`.
-- **Environment variables**: Changing any values in `env`.
-- **Display name**: Updating the `name` parameter.
-
-These updates apply immediately with no downtime.
-
-### Example
+These changes apply immediately with no downtime:
+- Worker scaling (`workers`)
+- Timeouts (`idle_timeout`, `execution_timeout_ms`)
+- Scaler settings (`scaler_type`, `scaler_value`)
+- Environment variables (`env`)
+- Endpoint name (`name`)
 
 ```python
-# First deployment - creates endpoint
-config = LiveServerless(
+# First deployment
+@Endpoint(
     name="inference-api",
-    gpus=[GpuGroup.AMPERE_80],
-    workersMax=5,
+    gpu=GpuType.NVIDIA_A100_80GB_PCIe,
+    workers=5,
     env={"MODEL": "v1"}
 )
+async def infer(data): ...
 
 # Update scaling - no worker recreation
-config = LiveServerless(
+@Endpoint(
     name="inference-api",
-    gpus=[GpuGroup.AMPERE_80],  # Same GPU
-    workersMax=10,  # Changed - updates settings only
-    env={"MODEL": "v2"}  # Changed - updates settings only
+    gpu=GpuType.NVIDIA_A100_80GB_PCIe,  # Same GPU
+    workers=10,                          # Changed - updates settings only
+    env={"MODEL": "v2"}                  # Changed - updates settings only
 )
-# Result: Endpoint updated, existing workers continue running
+async def infer(data): ...
 
 # Change GPU type - workers recreated
-config = LiveServerless(
+@Endpoint(
     name="inference-api",
-    gpus=[GpuGroup.ADA_24],  # Changed GPU type
-    workersMax=10,
+    gpu=GpuType.NVIDIA_GEFORCE_RTX_4090,  # Changed - triggers recreation
+    workers=10,
     env={"MODEL": "v2"}
 )
-# Result: Endpoint updated, all workers recreated with new GPU type
+async def infer(data): ...
 ```

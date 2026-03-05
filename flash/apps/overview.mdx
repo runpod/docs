@@ -10,7 +10,7 @@ A Flash app is a collection of <ServerlessTooltip /> endpoints deployed to Runpo
 
 1. Packages your code, dependencies, and deployment manifest into a tarball (max 500 MB).
 2. Uploads the tarball to Runpod.
-3. Provisions independent Serverless endpoints based on your [resource configurations](/flash/configuration/overview).
+3. Provisions independent Serverless endpoints based on your [endpoint configurations](/flash/endpoint-functions).
 
 This page explains the key concepts and processes you'll use when building Flash apps.
 
@@ -29,7 +29,7 @@ Building a Flash application follows a clear progression from initialization to 
 
 flowchart TB
     Init["flash init<br/>Create project"]
-    Code["Define endpoints with<br/>@remote functions"]
+    Code["Define endpoints with<br/>@Endpoint functions"]
     Run["Test locally with<br/>flash run"]
     Deploy["Deploy to Runpod with<br/>flash deploy"]
     Manage["Manage apps and<br/>environments with<br/>flash app and flash env"]
@@ -50,7 +50,7 @@ flowchart TB
 
 <Steps>
   <Step title="Initialize">
-    Use `flash init` to create a new project with a FastAPI server and example workers:
+    Use `flash init` to create a new project with example workers:
 
     ```bash
     flash init PROJECT_NAME
@@ -62,25 +62,24 @@ flowchart TB
   </Step>
 
   <Step title="Develop">
-    Write your application code by defining `@remote` functions that execute on Runpod workers:
+    Write your application code by defining `Endpoint` functions that execute on Runpod workers:
 
     ```python
-    from runpod_flash import remote, LiveServerless, GpuGroup
+    from runpod_flash import Endpoint, GpuType
 
-    config = LiveServerless(
+    @Endpoint(
         name="inference-worker",
-        gpus=[GpuGroup.ADA_24],
-        workersMax=3,
+        gpu=GpuType.NVIDIA_GEFORCE_RTX_4090,
+        workers=3,
+        dependencies=["torch"]
     )
-
-    @remote(resource_config=config, dependencies=["torch"])
     def run_inference(prompt: str) -> dict:
         import torch
         # Your inference logic here
         return {"result": "..."}
     ```
 
-    [Learn more about remote functions](/flash/remote-functions).
+    [Learn more about endpoint functions](/flash/endpoint-functions).
   </Step>
 
   <Step title="Test locally">
@@ -90,7 +89,7 @@ flowchart TB
     flash run
     ```
 
-    Your FastAPI app runs locally and updates automatically. When you call a `@remote` function, Flash sends the latest code to Runpod workers. This hybrid architecture lets you iterate quickly without redeploying. [Learn more about local testing](/flash/apps/local-testing).
+    Your app runs locally and updates automatically. When you call an `@Endpoint` function, Flash sends the latest code to Runpod workers. This hybrid architecture lets you iterate quickly without redeploying. [Learn more about local testing](/flash/apps/local-testing).
   </Step>
 
   <Step title="Deploy">
@@ -100,7 +99,7 @@ flowchart TB
     flash deploy
     ```
 
-    Your entire application—including the FastAPI server and all worker functions—runs on Runpod infrastructure. [Learn more about deployment](/flash/apps/deploy-apps).
+    Your entire application—including all worker functions—runs on Runpod infrastructure. [Learn more about deployment](/flash/apps/deploy-apps).
   </Step>
 
   <Step title="Manage">
@@ -147,7 +146,7 @@ flowchart TB
 **How it works:**
 
 - Development server runs on your machine and updates automatically.
-- `@remote` functions deploy to Runpod endpoints (one for each resource configuration).
+- `@Endpoint` functions deploy to Runpod endpoints (one for each endpoint configuration).
 - Endpoints are prefixed with `live-` for easy identification.
 - No authentication required for local testing.
 - Fast iteration on application logic.
@@ -162,9 +161,9 @@ flowchart TB
     StateManager["Runpod GraphQL API<br/>• Service discovery<br/>• Manifest registry"]
 
     subgraph Runpod ["RUNPOD SERVERLESS"]
-        LB["lb_worker<br/>(load-balanced)<br/>• POST /process<br/>• GET /health"]
-        GPU["gpu_worker<br/>(queue-based)<br/>• POST /runsync"]
-        CPU["cpu_worker<br/>(queue-based)<br/>• POST /runsync"]
+        LB["lb_worker ENDPOINT<br/>(load-balanced)<br/>• POST /process<br/>• GET /health"]
+        GPU["gpu_worker ENDPOINT<br/>(queue-based)<br/>• POST /runsync"]
+        CPU["cpu_worker ENDPOINT<br/>(queue-based)<br/>• POST /runsync"]
 
         LB <-.->|"inter-endpoint calls"| GPU
         LB <-.->|"inter-endpoint calls"| CPU
@@ -188,61 +187,62 @@ flowchart TB
 
 **How it works:**
 
-- All endpoints run independently on Runpod Serverless (one for each resource configuration).
+- All endpoints run independently on Runpod Serverless (one for each endpoint configuration).
 - Each endpoint has its own public HTTPS URL.
 - API key authentication is required for all requests.
 - Automatic scaling based on load.
 - Production-grade reliability and performance.
 
-### Remote functions vs. Serverless endpoints
+### Endpoint functions vs. Serverless endpoints
 
-Understanding the relationship between your code (remote functions) and deployed infrastructure (Serverless endpoints) is crucial for building Flash apps.
+Understanding the relationship between your code (endpoint functions) and deployed infrastructure (Serverless endpoints) is crucial for building Flash apps.
 
-**Serverless endpoints** are the underlying infrastructure Flash creates on Runpod. Each unique resource configuration (defined by its `name` parameter) creates one Serverless endpoint with specific hardware (GPU type, worker count, etc.). Each Serverless endpoint gets its own public HTTPS URL (e.g., `https://abc123xyz.api.runpod.ai` for load-balanced or `https://api.runpod.ai/v2/abc123xyz` for queue-based).
+**Serverless endpoints** are the underlying infrastructure Flash creates on Runpod. Each unique endpoint configuration (defined by its `name` parameter) creates one Serverless endpoint with specific hardware (GPU type, worker count, etc.). Each Serverless endpoint gets its own public HTTPS URL (e.g., `https://abc123xyz.api.runpod.ai` for load-balanced or `https://api.runpod.ai/v2/abc123xyz` for queue-based).
 
-You call these endpoints to execute your `@remote` functions. The resource configuration type determines the behavior and HTTPS URL of the endpoint:
+You call these endpoints to execute your functions. The endpoint configuration type determines the behavior and HTTPS URL of the endpoint:
 
-- **For queue-based endpoints**: You can only have one function per resource configuration, which will be executed when you call `/runsync` or `/run` on the endpoint.
-- **For load-balanced endpoints**: You can have multiple remote functions with different HTTP routes per resource configuration, which will be executed when you call the endpoint with the appropriate HTTP method and path.
+- **For queue-based endpoints**: You can only have one function per endpoint, which will be executed when you call `/runsync` or `/run` on the endpoint.
+- **For load-balanced endpoints**: You can have multiple functions with different HTTP routes per endpoint, which will be executed when you call the endpoint with the appropriate HTTP method and path.
 
 #### Queue-based example
 
-Queue-based endpoints must have exactly one remote function defined per resource configuration, which will be executed when you call the `/runsync` or `/run` route on the endpoint.
+Queue-based endpoints must have exactly one function defined per endpoint configuration, which will be executed when you call the `/runsync` or `/run` route on the endpoint.
 
 ```python
-# Each queue-based function needs its own resource config
-preprocess_config = LiveServerless(name="preprocess", gpus=[GpuGroup.AMPERE_80])
-inference_config = LiveServerless(name="inference", gpus=[GpuGroup.AMPERE_80])
+from runpod_flash import Endpoint, GpuType
 
-@remote(resource_config=preprocess_config)
+# Each queue-based function needs its own endpoint configuration
+@Endpoint(name="preprocess", gpu=GpuType.NVIDIA_A100_80GB_PCIe)
 def preprocess(data): ...
 
-@remote(resource_config=inference_config)
+@Endpoint(name="inference", gpu=GpuType.NVIDIA_A100_80GB_PCIe)
 def run_model(input): ...
 ```
 
-This creates two separate Serverless endpoints, each with its own public HTTPS URL and `/run` or `/runsync` route. 
+This creates two separate Serverless endpoints, each with its own public HTTPS URL and `/run` or `/runsync` route.
 
 The URL depends on your endpoint ID, which is randomly generated when you deploy your app. For example, if your endpoint ID is `fexh32emkg3az7`, the `/runsync` URL will be `https://api.runpod.ai/v2/fexh32emkg3az7/runsync`.
 
 #### Load-balancing example
 
-Load-balancing endpoints can have multiple routes on a single Serverless endpoint. The `method` and `path` parameters determine each route:
+Load-balancing endpoints can have multiple routes on a single Serverless endpoint. Use the route decorator pattern:
 
 ```python
-# One config can host multiple HTTP routes
-api_config = CpuLiveLoadBalancer(name="api-server", workersMin=1)
+from runpod_flash import Endpoint
 
-@remote(resource_config=api_config, method="POST", path="/generate")
+# One endpoint can host multiple HTTP routes
+api = Endpoint(name="api-server", cpu="cpu5c-4-8", workers=(1, 5))
+
+@api.post("/generate")
 def generate_text(prompt: str): ...
 
-@remote(resource_config=api_config, method="GET", path="/health")
+@api.get("/health")
 def health_check(): ...
 ```
 
 This creates one Serverless endpoint with multiple routes: `POST /generate` and `GET /health`, which will be executed when you call the endpoint with the appropriate HTTP method and path.
 
-The final endpoint URL depends on your endpoint ID, which is randomly generated when you deploy your app, and the HTTP routes defined in your `@remote` decorators. For example, if your endpoint ID is `l66m1rhm9dhbjd`, the `/generate` route will be available at `https://l66m1rhm9dhbjd.api.runpod.ai/generate`.
+The final endpoint URL depends on your endpoint ID, which is randomly generated when you deploy your app, and the HTTP routes defined in your decorators. For example, if your endpoint ID is `l66m1rhm9dhbjd`, the `/generate` route will be available at `https://l66m1rhm9dhbjd.api.runpod.ai/generate`.
 
 [Learn more about endpoint mapping](/flash/apps/customize-app#understanding-endpoint-architecture).
 

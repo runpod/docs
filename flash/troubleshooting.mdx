@@ -14,8 +14,8 @@ When running Flash functions, logs are displayed in your terminal:
 
 ```text
 2025-11-19 12:35:15,109 | INFO  | Created endpoint: rb50waqznmn2kg - flash-quickstart-fb
-2025-11-19 12:35:15,114 | INFO  | LiveServerless:rb50waqznmn2kg | API /run
-2025-11-19 12:35:15,655 | INFO  | LiveServerless:rb50waqznmn2kg | Started Job:b0b341e7-...
+2025-11-19 12:35:15,114 | INFO  | Endpoint:rb50waqznmn2kg | API /run
+2025-11-19 12:35:15,655 | INFO  | Endpoint:rb50waqznmn2kg | Started Job:b0b341e7-...
 2025-11-19 12:35:15,762 | INFO  | Job:b0b341e7-... | Status: IN_QUEUE
 2025-11-19 12:36:09,983 | INFO  | Job:b0b341e7-... | Status: COMPLETED
 2025-11-19 12:36:10,068 | INFO  | Worker:icmkdgnrmdf8gz | Delay Time: 51842 ms
@@ -54,10 +54,10 @@ Logs include dependency installation output, function execution output (print st
 
 ### Add logging to functions
 
-Include print statements in your remote functions for debugging:
+Include print statements in your endpoint functions for debugging:
 
 ```python
-@remote(resource_config=config)
+@Endpoint(name="processor", gpu=GpuGroup.ANY)
 async def process(data: dict) -> dict:
     print(f"Received data: {data}")  # Visible in worker logs
 
@@ -104,23 +104,26 @@ RUNPOD_API_KEY environment variable is required but not set
 
 **Error:**
 ```
-LoadBalancerSlsResource requires both 'method' and 'path' parameters
+Load-balanced endpoints require route decorators
 ```
 
-**Cause:** Load balancer configurations require HTTP method and path for each route.
+**Cause:** Load-balanced endpoints require HTTP method decorators for each route.
 
-**Solution:** Ensure all `@remote` functions using load balancer configs specify both `method` and `path`:
+**Solution:** Ensure all routes use the correct decorator pattern:
 
 ```python
-# Correct
-@remote(resource_config=lb_config, method="POST", path="/process")
+from runpod_flash import Endpoint
+
+api = Endpoint(name="api", cpu="cpu5c-4-8", workers=(1, 5))
+
+# Correct - using route decorators
+@api.post("/process")
 async def process_data(data: dict) -> dict:
     return {"result": "processed"}
 
-# Incorrect - missing method and path
-@remote(resource_config=lb_config)
-async def process_data(data: dict) -> dict:
-    return {"result": "processed"}
+@api.get("/health")
+async def health_check() -> dict:
+    return {"status": "healthy"}
 ```
 
 ### Invalid HTTP method
@@ -147,22 +150,22 @@ path must start with '/'
 
 ```python
 # Correct
-@remote(resource_config=config, method="GET", path="/health")
+@api.get("/health")
 
 # Incorrect
-@remote(resource_config=config, method="GET", path="health")
+@api.get("health")
 ```
 
 ### Duplicate routes
 
 **Error:**
 ```
-Duplicate route 'POST /process' in resource 'my-api'
+Duplicate route 'POST /process' in endpoint 'my-api'
 ```
 
 **Cause:** Two functions define the same HTTP method and path combination.
 
-**Solution:** Ensure each route is unique within a resource configuration. Either change the path or method of one function.
+**Solution:** Ensure each route is unique within an endpoint. Either change the path or method of one function.
 
 ## Deployment errors
 
@@ -210,12 +213,12 @@ Failed to provision resources: [error details]
 
 1. **Check GPU availability**: The requested GPU types may not be available. Add fallback options:
    ```python
-   gpus=[GpuGroup.AMPERE_80, GpuGroup.AMPERE_48, GpuGroup.ADA_24]
+   gpu=[GpuType.NVIDIA_A100_80GB_PCIe, GpuType.NVIDIA_RTX_A6000, GpuType.NVIDIA_GEFORCE_RTX_4090]
    ```
 
 2. **Check account limits**: You may have hit worker capacity limits. Contact [Runpod support](https://www.runpod.io/contact) to increase limits.
 
-3. **Check network volume**: If using `networkVolumeId`, verify the volume exists and is in a compatible datacenter.
+3. **Check network volume**: If using `volume=`, verify the volume exists and is in a compatible datacenter.
 
 ## Runtime errors
 
@@ -226,7 +229,7 @@ Failed to provision resources: [error details]
 Endpoint URL not available - endpoint may not be deployed
 ```
 
-**Cause:** The remote function was called before the endpoint finished provisioning.
+**Cause:** The endpoint function was called before the endpoint finished provisioning.
 
 **Solutions:**
 
@@ -243,22 +246,22 @@ Endpoint URL not available - endpoint may not be deployed
 Execution timeout on [endpoint] after [N]s
 ```
 
-**Cause:** The remote function took longer than the configured timeout.
+**Cause:** The endpoint function took longer than the configured timeout.
 
 **Solutions:**
 
-1. **Increase timeout**: Set `executionTimeoutMs` in your configuration:
+1. **Increase timeout**: Set `execution_timeout_ms` in your configuration:
    ```python
-   config = LiveServerless(
+   @Endpoint(
        name="long-running",
-       gpus=[GpuGroup.AMPERE_80],
-       executionTimeoutMs=600000  # 10 minutes
+       gpu=GpuType.NVIDIA_A100_80GB_PCIe,
+       execution_timeout_ms=600000  # 10 minutes
    )
    ```
 
 2. **Optimize function**: Profile your function to identify bottlenecks.
 
-3. **Use queue-based endpoints**: For long-running tasks, use `LiveServerless` instead of `LiveLoadBalancer`. Queue-based endpoints are designed for longer operations.
+3. **Use queue-based endpoints**: For long-running tasks, use the `@Endpoint` decorator pattern. Queue-based endpoints are designed for longer operations.
 
 ### Connection failed
 
@@ -282,7 +285,7 @@ Failed to connect to endpoint [name] ([url])
 HTTP error from endpoint [name]: 500 - Internal Server Error
 ```
 
-**Cause:** The remote function raised an exception during execution.
+**Cause:** The endpoint function raised an exception during execution.
 
 **Solutions:**
 
@@ -292,7 +295,7 @@ HTTP error from endpoint [name]: 500 - Internal Server Error
 
 3. **Add error handling**: Wrap your function logic in try/except to provide better error messages:
    ```python
-   @remote(resource_config=config)
+   @Endpoint(name="processor", gpu=GpuGroup.ANY)
    async def process(data: dict) -> dict:
        try:
            # Your logic here
@@ -352,21 +355,21 @@ Circuit breaker is open. Retry in [N] seconds
 
 **Solutions:**
 
-1. **Add fallback GPUs**: Expand your `gpus` list with additional options:
+1. **Add fallback GPUs**: Expand your `gpu` list with additional options:
    ```python
-   config = LiveServerless(
+   @Endpoint(
        name="flexible",
-       gpus=[
-           GpuGroup.AMPERE_80,  # First choice
-           GpuGroup.AMPERE_48,  # Fallback
-           GpuGroup.ADA_24      # Second fallback
+       gpu=[
+           GpuType.NVIDIA_A100_80GB_PCIe,    # First choice
+           GpuType.NVIDIA_RTX_A6000,         # Fallback
+           GpuType.NVIDIA_GEFORCE_RTX_4090   # Second fallback
        ]
    )
    ```
 
 2. **Use GpuGroup.ANY**: For development, accept any available GPU:
    ```python
-   gpus=[GpuGroup.ANY]
+   gpu=GpuGroup.ANY
    ```
 
 3. **Check availability**: View GPU availability in the [Serverless console](https://www.runpod.io/console/serverless).
@@ -382,13 +385,14 @@ Circuit breaker is open. Retry in [N] seconds
 ModuleNotFoundError: No module named 'transformers'
 ```
 
-**Cause:** A required dependency was not specified in the `@remote` decorator.
+**Cause:** A required dependency was not specified in the `@Endpoint` decorator.
 
 **Solution:** Add all required packages to the `dependencies` parameter:
 
 ```python
-@remote(
-    resource_config=config,
+@Endpoint(
+    name="processor",
+    gpu=GpuGroup.ANY,
     dependencies=["transformers", "torch", "pillow"]
 )
 async def process(data: dict) -> dict:
@@ -405,8 +409,9 @@ async def process(data: dict) -> dict:
 **Solution:** Pin specific versions:
 
 ```python
-@remote(
-    resource_config=config,
+@Endpoint(
+    name="processor",
+    gpu=GpuGroup.ANY,
     dependencies=[
         "transformers==4.36.0",
         "torch==2.1.0",
