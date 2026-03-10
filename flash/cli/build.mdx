@@ -17,10 +17,10 @@ Build with all dependencies:
 flash build
 ```
 
-Build with excluded packages (for smaller deployment size):
+Build with additional excluded packages:
 
 ```bash
-flash build --exclude torch,torchvision,torchaudio
+flash build --exclude scipy,pandas
 ```
 
 Build with custom output name:
@@ -66,26 +66,42 @@ After running `flash build`:
 Flash automatically handles cross-platform builds:
 
 - **Automatic platform targeting**: Dependencies are installed for Linux x86_64, regardless of your build platform.
-- **Python version matching**: Uses your current Python version for package compatibility.
 - **Binary wheel enforcement**: Only pre-built wheels are used, preventing compilation issues.
 
-You can build on macOS, Windows, or Linux, and the deployment will work on Runpod.
+### Python version in deployed workers
+
+Your local Python version does not affect what runs in the cloud. `flash build` downloads wheels for the container's Python version automatically.
+
+| Worker type | Python version | Notes |
+|-------------|----------------|-------|
+| GPU | 3.12 only | The GPU base image includes multiple interpreters (3.9–3.14) for interactive pod use, but torch and CUDA libraries are installed only for 3.12. |
+| CPU | 3.10, 3.11, or 3.12 | Configurable via the `PYTHON_VERSION` build arg. |
+
+Image tags follow the pattern `py{version}-{tag}` (for example, `runpod/flash:py3.12-latest`).
 
 ## Managing deployment size
 
-Runpod Serverless has a **500MB deployment limit**. Use `--exclude` to skip packages already in your base image:
+Runpod Serverless has a **500MB deployment limit**. Flash automatically excludes packages that are pre-installed in the base image:
+
+- `torch`, `torchvision`, `torchaudio`
+- `numpy`, `triton`
+
+These packages are excluded at archive time, so you don't need to specify them manually.
+
+### Manual exclusions
+
+Use `--exclude` to skip additional packages that are already in a custom base image or not needed:
 
 ```bash
-# For GPU deployments (PyTorch pre-installed)
-flash build --exclude torch,torchvision,torchaudio
+flash build --exclude scipy,pandas
 ```
 
 ### Base image reference
 
-| Resource type | Base image | Safe to exclude |
-|--------------|------------|-----------------|
-| GPU | PyTorch base | `torch`, `torchvision`, `torchaudio` |
-| CPU | Python slim | Do not exclude ML packages |
+| Resource type | Base image | Auto-excluded packages |
+|--------------|------------|------------------------|
+| GPU | PyTorch base | `torch`, `torchvision`, `torchaudio`, `numpy`, `triton` |
+| CPU | Python slim | `torch`, `torchvision`, `torchaudio`, `numpy`, `triton` |
 
 <Tip>
 
@@ -109,10 +125,10 @@ def my_function(data):
 
 ### Archive is too large
 
-Use `--exclude` or `--no-deps`:
+Base image packages (`torch`, `numpy`, `triton`, etc.) are auto-excluded. If the archive is still too large, use `--exclude` to skip additional packages or `--no-deps` to skip transitive dependencies:
 
 ```bash
-flash build --exclude torch,torchvision,torchaudio
+flash build --exclude scipy,pandas
 ```
 
 ### Dependency installation fails
