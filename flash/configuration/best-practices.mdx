@@ -1,0 +1,170 @@
+---
+title: "Configuration best practices"
+sidebarTitle: "Best practices"
+description: "Recommended configurations for production, development, and cost optimization."
+---
+
+This guide provides best practices for configuring Flash endpoints based on your use case. Recommendations are organized by workload type and optimization goal.
+
+## Production workloads
+
+Here are some best practices for production deployments requiring reliability and consistent performance:
+
+### General recommendations
+
+- **Pin specific GPU types** instead of using `GpuGroup.ANY` for predictable performance and costs.
+- **Use network volumes** for large models to avoid downloading on each worker startup.
+- **Set appropriate `execution_timeout_ms`** to prevent runaway jobs and control costs.
+- **Use environment variables** for configuration and secrets, not hardcoded values.
+
+### Queue-based endpoints
+
+Queue-based endpoints handle asynchronous batch processing where jobs can wait in queue:
+
+```python
+from runpod_flash import Endpoint, GpuType, NetworkVolume
+
+@Endpoint(
+    name="production-batch",
+    gpu=GpuType.NVIDIA_A100_80GB_PCIe,  # Specific GPU for predictable performance
+    workers=(1, 10),        # At least 1 worker, scale up to 10
+    idle_timeout=1200,      # 20 minutes - keep workers longer for variable traffic
+    execution_timeout_ms=600000,  # 10 minute timeout
+    volume=NetworkVolume(name="my-volume"),
+    env={"MODEL_PATH": "/runpod-volume/models"}
+)
+def process_batch(data): ...
+```
+
+**Key settings**:
+- `workers=(1, n)`: Set min to 1 to avoid cold starts for first job in queue.
+- `workers=(n, max)`: Set max based on expected peak concurrent jobs.
+- `idle_timeout`: 900-1800 seconds (15-30 minutes) for production workloads.
+
+### Load-balanced endpoints
+
+Load-balanced endpoints handle synchronous HTTP requests where immediate response is critical:
+
+```python
+from runpod_flash import Endpoint, GpuType, NetworkVolume
+
+api = Endpoint(
+    name="production-api",
+    gpu=GpuType.NVIDIA_GEFORCE_RTX_4090,  # Specific GPU for consistent performance
+    workers=(3, 20),        # Always keep 3 workers ready, scale to 20
+    idle_timeout=1800,      # 30 minutes - keep workers active longer
+    execution_timeout_ms=60000,  # 60 second timeout per request
+    volume=NetworkVolume(name="my-volume")
+)
+
+@api.post("/process")
+async def process_request(data: dict) -> dict:
+    return {"result": "processed"}
+
+@api.get("/health")
+async def health_check() -> dict:
+    return {"status": "healthy"}
+```
+
+**Key settings**:
+- `workers=(n, max)`: Set min ≥ 1 for production APIs to avoid cold starts. Unlike queue-based endpoints where jobs can wait, API clients expect immediate responses.
+- `workers=(min, n)`: Set max based on expected peak concurrent requests.
+- `idle_timeout`: 1200-1800 seconds (20-30 minutes) to keep workers ready.
+- Include health check routes (e.g., `GET /health`) for monitoring.
+
+## Development
+
+Here are some best practices for development and testing environments prioritizing fast iteration:
+
+### General recommendations
+
+- **Use `GpuGroup.ANY`** for fastest GPU provisioning during development.
+- **Set `workers=(0, n)`** to minimize costs when not actively testing.
+- **Keep max workers low** (1-3) to control development expenses.
+- **Use short `idle_timeout`** (300 seconds / 5 minutes) to scale down quickly between test runs.
+- **Test locally** with `flash run` before deploying to production.
+
+### Example configuration
+
+```python
+from runpod_flash import Endpoint, GpuGroup
+
+@Endpoint(
+    name="dev-testing",
+    gpu=GpuGroup.ANY,       # Fast provisioning
+    workers=(0, 2),         # Scale to zero, limit to 2 concurrent
+    idle_timeout=300        # 5 minutes - quick scale-down
+)
+def test_function(data): ...
+```
+
+## Cost optimization
+
+Here are some best practices for minimizing costs on infrequent or batch workloads:
+
+### General recommendations
+
+- **Set `workers=(0, n)`** to scale to zero when idle (no usage = no cost).
+- **Use smaller GPU types** when workload allows (e.g., `GpuType.NVIDIA_GEFORCE_RTX_4090` instead of `GpuType.NVIDIA_A100_80GB_PCIe`).
+- **Use CPU endpoints** when GPU acceleration isn't needed.
+- **Reduce `idle_timeout`** for sporadic workloads (300-600 seconds / 5-10 minutes).
+- **Batch operations** into fewer job submissions when possible.
+
+### Cost-optimized queue-based endpoint
+
+```python
+from runpod_flash import Endpoint, GpuType, NetworkVolume
+
+@Endpoint(
+    name="batch-job",
+    gpu=GpuType.NVIDIA_GEFORCE_RTX_4090,  # Cost-effective GPU
+    workers=(0, 5),         # Scale to zero, controlled max
+    idle_timeout=300,       # 5 minutes - fast scale-down
+    volume=NetworkVolume(name="my-volume")  # Avoid re-downloading models
+)
+def batch_process(data): ...
+```
+
+### Cost-optimized CPU endpoint
+
+For workloads that don't require GPU acceleration:
+
+```python
+from runpod_flash import Endpoint
+
+@Endpoint(
+    name="cpu-batch",
+    cpu="cpu5c-4-8",        # 4 vCPU, 8GB RAM
+    workers=(0, 3),         # Scale to zero, limit to 3
+    idle_timeout=300        # 5 minutes - fast scale-down
+)
+def cpu_process(data): ...
+```
+
+## Configuration trade-offs
+
+Understanding the trade-offs helps you balance cost, latency, and performance:
+
+| Configuration | Cost | Cold Start Latency | Best For |
+|--------------|------|-------------------|----------|
+| `workers=(0, n)` | Lowest | 20-90 seconds first run | Batch jobs, development, infrequent workloads |
+| `workers=(1, n)` | Medium | \<1 second for queued jobs | Production batch, variable traffic |
+| `workers=(3, n)` | Highest | Always ready | Production APIs, high-traffic endpoints |
+
+| GPU Choice | Cost | Availability | Best For |
+|-----------|------|--------------|----------|
+| `GpuGroup.ANY` | Variable | Highest | Development, fastest provisioning |
+| Specific type (e.g., `GpuType.NVIDIA_GEFORCE_RTX_4090`) | Predictable | Medium | Production with specific hardware |
+| Specific type (e.g., `GpuType.NVIDIA_A100_80GB_PCIe`) | Predictable | Lower | Production requiring specific hardware |
+
+## Configuration checklist
+
+Before deploying to production, verify:
+
+- **GPU selection**: Using specific GPU types (not `GpuGroup.ANY`) for predictable performance
+- **Worker scaling**: `workers=(1, n)` or higher min for load balancers and latency-sensitive workloads
+- **Timeouts**: `execution_timeout_ms` set appropriately for your workload
+- **Storage**: Network volume attached if using large models or datasets
+- **Environment variables**: All configuration and secrets passed via `env` parameter
+- **Monitoring**: Health check routes implemented (load balancers)
+- **Testing**: Tested locally with `flash run` before production deployment

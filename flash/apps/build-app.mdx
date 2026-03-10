@@ -1,0 +1,247 @@
+---
+title: "Build a Flash app"
+sidebarTitle: "Build a Flash app"
+description: "Create a Flash app, test it locally, and deploy it to production."
+---
+
+Flash apps let you build APIs to serve AI/ML workloads on Runpod Serverless. This guide walks you through the process of building a Flash app from scratch, from project initialization and local testing to production deployment.
+
+<Tip>
+If you haven't already, we recommend starting with the [Quickstart](/flash/quickstart) guide to get a feel for how Flash `@Endpoint` functions work.
+</Tip>
+
+## Requirements:
+
+- You've [created a Runpod account](/get-started/manage-accounts).
+- You've [created a Runpod API key](/get-started/api-keys).
+- You've installed [Python 3.10 (or higher)](https://www.python.org/downloads/).
+
+## Step 1: Initialize a new project
+
+Create a new directory and install Flash using [uv](https://docs.astral.sh/uv/):
+
+```bash
+# Create the project directory and navigate into it:
+mkdir flash_app
+cd flash_app
+
+# Install Flash:
+uv venv
+source .venv/bin/activate
+uv pip install runpod-flash
+```
+
+Use the `flash init` command to generate a structured project template with a preconfigured application entry point:
+
+```bash
+flash init
+```
+
+Make sure your API key is set in the environment, either by creating a `.env` file or exporting the `RUNPOD_API_KEY` environment variable:
+
+```bash
+# Set the API key as an environment variable:
+export RUNPOD_API_KEY=YOUR_API_KEY
+
+# Or create a `.env` file:
+touch .env && echo "RUNPOD_API_KEY=YOUR_API_KEY" > .env
+```
+
+Replace `YOUR_API_KEY` with your actual Runpod API key.
+
+## Step 2: Explore the project template
+
+This is the structure of the project template created by `flash init`:
+
+<Tree>
+  <Tree.Folder name="flash_app" defaultOpen>
+    <Tree.File name="lb_worker.py" />
+    <Tree.File name="gpu_worker.py" />
+    <Tree.File name="cpu_worker.py" />
+    <Tree.File name=".env.example" />
+    <Tree.File name=".flashignore" />
+    <Tree.File name=".gitignore" />
+    <Tree.File name="pyproject.toml" />
+    <Tree.File name="requirements.txt" />
+    <Tree.File name="README.md" />
+  </Tree.Folder>
+</Tree>
+
+This template includes:
+
+- Example worker files with `@Endpoint` decorated functions for load-balanced and queue-based endpoints.
+- Templates for `requirements.txt`, `.env.example`, `.gitignore`, etc.
+- Pre-configured endpoint configurations for GPU and CPU workers.
+
+When you start the server, it creates API endpoints at `/gpu/hello` and `/cpu/hello`, which call the endpoint functions described in their respective worker files.
+
+## Step 3: Install Python dependencies
+
+Install required dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+## Step 4: Configure your API key
+
+Open the `.env` template file in a text editor and add your [Runpod API key](/get-started/api-keys):
+
+```bash
+# Use your text editor of choice, e.g.
+cursor .env
+```
+
+Remove the `#` symbol from the beginning of the `RUNPOD_API_KEY` line and replace `your_api_key_here` with your actual Runpod API key:
+
+```text
+RUNPOD_API_KEY=your_api_key_here
+# FLASH_HOST=localhost
+# FLASH_PORT=8888
+# LOG_LEVEL=INFO
+```
+
+Save the file and close it.
+
+## Step 5: Start the local API server
+
+Use `flash run` to start the API server:
+
+```bash
+flash run
+```
+
+Open a new terminal tab or window and test your endpoints using cURL:
+
+```bash
+# Test the queue-based GPU endpoint
+curl -X POST http://localhost:8888/gpu_worker/runsync \
+    -H "Content-Type: application/json" \
+    -d '{"message": "Hello from the GPU!"}'
+
+# Test the load-balanced endpoint
+curl -X POST http://localhost:8888/lb_worker/process \
+    -H "Content-Type: application/json" \
+    -d '{"data": "test"}'
+```
+
+If you switch back to the terminal tab where you used `flash run`, you'll see the details of the job's progress.
+
+### Faster testing with auto-provisioning
+
+For development with multiple endpoints, use `--auto-provision` to deploy all resources before testing:
+
+```bash
+flash run --auto-provision
+```
+
+This eliminates cold-start delays by provisioning all serverless endpoints upfront. Endpoints are cached and reused across server restarts, making subsequent runs faster. Resources are identified by name, so the same endpoint won't be re-deployed if the configuration hasn't changed.
+
+## Step 6: Open the API explorer
+
+Besides starting the API server, `flash run` also starts an interactive API explorer. Point your web browser at [http://localhost:8888/docs](http://localhost:8888/docs) to explore the API.
+
+To run endpoint functions in the explorer:
+
+1. Expand one of the functions under **GPU Workers** or **CPU Workers**.
+2. Click **Try it out** and then **Execute**.
+
+You'll get a response from your workers right in the explorer.
+
+## Step 7: Customize your endpoints
+
+To customize your endpoints:
+
+1. Edit the `@Endpoint` functions in your worker files (`lb_worker.py`, `gpu_worker.py`, `cpu_worker.py`).
+2. Add new worker files for new endpoints.
+3. Test individual workers by running them as scripts (e.g., `python gpu_worker.py`).
+4. Restart the development server to pick up changes.
+
+### Example: Adding a custom GPU endpoint
+
+To add a new GPU endpoint for image generation, create a new worker file or modify an existing one. For deployed apps, each queue-based function needs its own unique endpoint configuration:
+
+```python
+from runpod_flash import Endpoint, GpuType
+
+@Endpoint(
+    name="image_generator",
+    gpu=GpuType.NVIDIA_GEFORCE_RTX_4090,
+    workers=2,
+    dependencies=["diffusers", "torch", "transformers", "pillow"]
+)
+async def generate_image(prompt: str, width: int = 512, height: int = 512) -> dict:
+    import torch
+    from diffusers import StableDiffusionPipeline
+    import base64
+    import io
+
+    pipeline = StableDiffusionPipeline.from_pretrained(
+        "runwayml/stable-diffusion-v1-5",
+        torch_dtype=torch.float16
+    ).to("cuda")
+
+    image = pipeline(prompt=prompt, width=width, height=height).images[0]
+
+    buffered = io.BytesIO()
+    image.save(buffered, format="PNG")
+    img_str = base64.b64encode(buffered.getvalue()).decode()
+
+    return {"image": img_str, "prompt": prompt}
+```
+
+This creates a new Serverless endpoint specifically for image generation. When deployed, it will be available at its own endpoint URL with its own `/run` or `/runsync` routes.
+
+## Step 8: Deploy to Runpod
+
+When you're ready to deploy your app to Runpod, use `flash deploy`:
+
+```bash
+flash deploy
+```
+
+This command:
+
+1. Builds your application into a deployment artifact.
+2. Uploads it to Runpod's storage.
+3. Provisions independent Serverless endpoints for each endpoint configuration.
+4. Configures service discovery for inter-endpoint communication.
+
+After deployment, you'll receive URLs for all deployed endpoints, grouped by configuration type:
+
+```text
+✓ Deployment Complete
+
+Load-balanced endpoints:
+  https://abc123xyz.api.runpod.ai  (lb_worker)
+    POST   /process
+    GET    /health
+
+Queue-based endpoints:
+  https://api.runpod.ai/v2/def456xyz  (gpu_worker)
+  https://api.runpod.ai/v2/ghi789xyz  (cpu_worker)
+```
+
+All requests to deployed endpoints require authentication with your Runpod API key. For example:
+
+```bash
+# Call a load-balanced endpoint
+curl -X POST https://abc123xyz.api.runpod.ai/process \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"input": {}}'
+
+# Call a queue-based endpoint
+curl -X POST https://api.runpod.ai/v2/def456xyz/runsync \
+    -H "Authorization: Bearer $RUNPOD_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"input": {}}'
+```
+
+For detailed deployment options including environment management, see [Deploy Flash apps](/flash/apps/deploy-apps).
+
+## Next steps
+
+- [Deploy Flash applications](/flash/apps/deploy-apps) for production use.
+- [Configure hardware resources](/flash/configuration/parameters) for your endpoints.
+- [Monitor and troubleshoot](/flash/troubleshooting) your endpoints.

@@ -1,0 +1,168 @@
+---
+title: "run"
+sidebarTitle: "run"
+---
+
+Start the Flash development server for local testing with automatic updates. A local development server provides a unified interface for testing while `@Endpoint` functions execute on Runpod Serverless.
+
+```bash
+flash run [OPTIONS]
+```
+
+## Example
+
+Start the development server with defaults:
+
+```bash
+flash run
+```
+
+Start with auto-provisioning to eliminate cold-start delays:
+
+```bash
+flash run --auto-provision
+```
+
+Start on a custom port:
+
+```bash
+flash run --port 3000
+```
+
+## Flags
+
+<ResponseField name="--host" type="string" default="localhost">
+Host address to bind the server to.
+</ResponseField>
+
+<ResponseField name="--port, -p" type="integer" default={8888}>
+Port number to bind the server to.
+</ResponseField>
+
+<ResponseField name="--reload/--no-reload" default="enabled">
+Enable or disable auto-reload on code changes. Enabled by default.
+</ResponseField>
+
+<ResponseField name="--auto-provision">
+Auto-provision all Serverless endpoints on startup instead of lazily on first call. Eliminates cold-start delays during development.
+</ResponseField>
+
+## Architecture
+
+With `flash run`, Flash starts a local development server alongside remote Serverless endpoints:
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#9289FE','primaryTextColor':'#fff','primaryBorderColor':'#9289FE','lineColor':'#5F4CFE','secondaryColor':'#AE6DFF','tertiaryColor':'#FCB1FF','edgeLabelBackground':'#5F4CFE', 'fontSize':'14px','fontFamily':'font-inter'}}}%%
+
+flowchart TB
+    Browser(["BROWSER/CURL"])
+
+    subgraph Local ["YOUR MACHINE (localhost:8888)"]
+        DevServer["Development Server<br/>• Auto-reload on changes<br/>• API explorer at /docs<br/>• Routes requests"]
+    end
+
+    subgraph Runpod ["RUNPOD SERVERLESS"]
+        LB["live-lb_worker"]
+        GPU["live-gpu_worker"]
+        CPU["live-cpu_worker"]
+    end
+
+    Browser -->|"HTTP"| DevServer
+    DevServer -->|"HTTPS"| LB
+    DevServer -->|"HTTPS"| GPU
+    DevServer -->|"HTTPS"| CPU
+
+    style Local fill:#1a1a2e,stroke:#5F4CFE,stroke-width:2px,color:#fff
+    style Runpod fill:#1a1a2e,stroke:#5F4CFE,stroke-width:2px,color:#fff
+    style Browser fill:#4D38F5,stroke:#4D38F5,color:#fff
+    style DevServer fill:#5F4CFE,stroke:#5F4CFE,color:#fff
+    style LB fill:#22C55E,stroke:#22C55E,color:#000
+    style GPU fill:#22C55E,stroke:#22C55E,color:#000
+    style CPU fill:#22C55E,stroke:#22C55E,color:#000
+```
+
+**Key points:**
+
+- A local development server provides a convenient testing interface at `localhost:8888`.
+- `@Endpoint` functions deploy to Runpod Serverless with `live-` prefix to distinguish from production.
+- Code changes are picked up automatically without restarting the server.
+- The development server routes requests to appropriate remote endpoints.
+
+This differs from `flash deploy`, where all endpoints run on Runpod without a local server.
+
+## Auto-provisioning
+
+By default, endpoints are provisioned lazily on first `@Endpoint` function call. Use `--auto-provision` to provision all endpoints at server startup:
+
+```bash
+flash run --auto-provision
+```
+
+### How it works
+
+1. **Discovery**: Scans your app for `@Endpoint` decorated functions.
+2. **Deployment**: Deploys resources concurrently (up to 3 at a time).
+3. **Confirmation**: Asks for confirmation if deploying more than 5 endpoints.
+4. **Caching**: Stores deployed resources in `.runpod/resources.pkl` for reuse.
+5. **Updates**: Recognizes existing endpoints and updates if configuration changed.
+
+### Benefits
+
+- **Zero cold start**: All endpoints ready before you test them.
+- **Faster development**: No waiting for deployment on first HTTP call.
+- **Resource reuse**: Cached endpoints are reused across server restarts.
+
+### When to use
+
+- Local development with multiple endpoints.
+- Testing workflows that call multiple remote functions.
+- Debugging where you want deployment separated from handler logic.
+
+## Provisioning modes
+
+| Mode | When endpoints are deployed |
+|------|----------------------------|
+| Default (lazy) | On first `@Endpoint` function call |
+| `--auto-provision` | At server startup |
+
+## Testing your API
+
+Once the server is running, test your endpoints:
+
+```bash
+# Health check
+curl http://localhost:8888/
+
+# Call a queue-based GPU endpoint (gpu_worker.py)
+curl -X POST http://localhost:8888/gpu_worker/runsync \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hello from GPU!"}'
+
+# Call a load-balanced endpoint (lb_worker.py)
+curl -X POST http://localhost:8888/lb_worker/process \
+  -H "Content-Type: application/json" \
+  -d '{"data": "test"}'
+```
+
+Open http://localhost:8888/docs for the interactive API explorer.
+
+## Requirements
+
+- `RUNPOD_API_KEY` must be set in your `.env` file or environment.
+- A valid Flash project structure (created by `flash init` or manually).
+
+## flash run vs flash deploy
+
+| Aspect | `flash run` | `flash deploy` |
+|--------|-------------|----------------|
+| Local development server | Yes (http://localhost:8888) | No |
+| `@Endpoint` functions run on | Runpod Serverless | Runpod Serverless |
+| Endpoint persistence | Temporary (`live-` prefix) | Persistent |
+| Code updates | Automatic reload | Manual redeploy |
+| Use case | Development | Production |
+
+## Related commands
+
+- [`flash init`](/flash/cli/init) - Create a new project
+- [`flash deploy`](/flash/cli/deploy) - Deploy to production
+- [`flash undeploy`](/flash/cli/undeploy) - Remove endpoints
