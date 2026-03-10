@@ -1,0 +1,186 @@
+---
+title: "Execution model"
+sidebarTitle: "Execution model"
+description: "Understand how Flash executes your code on Runpod's infrastructure."
+---
+
+import { MachineTooltip } from "/snippets/tooltips.jsx";
+
+Flash runs your Python functions on remote GPU/CPU workers while you maintain local control flow. This page explains what happens when you call an `@Endpoint` function.
+
+## What runs where
+
+The `@Endpoint` decorator marks functions for remote execution. Everything else runs locally.
+
+```python
+import asyncio
+from runpod_flash import Endpoint, GpuType
+
+@Endpoint(name="demo", gpu=GpuType.NVIDIA_GEFORCE_RTX_4090)
+def process_on_gpu(data):
+    # This runs on Runpod worker
+    import torch
+    return {"result": "processed"}
+
+async def main():
+    # This runs on your machine
+    result = await process_on_gpu({"input": "data"})
+    print(result)  # This runs on your machine
+
+if __name__ == "__main__":
+    asyncio.run(main())  # This runs on your machine
+```
+
+| Code | Location |
+|------|----------|
+| `@Endpoint` decorator | Your machine (marks function) |
+| Inside `process_on_gpu` | Runpod worker |
+| Everything else | Your machine |
+
+### Flash apps
+
+When you build a [Flash app](/flash/apps/overview):
+
+**Development (`flash run`)**:
+- FastAPI server runs **locally**.
+- `@Endpoint` functions run on **Runpod workers**.
+
+**Production (`flash deploy`)**:
+- Each endpoint configuration becomes a **separate Serverless endpoint**.
+- All endpoints run on **Runpod**.
+
+## Execution flow
+
+Here's what happens when you call an `@Endpoint` function:
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#9289FE','primaryTextColor':'#fff','primaryBorderColor':'#9289FE','lineColor':'#5F4CFE','secondaryColor':'#AE6DFF','tertiaryColor':'#FCB1FF','edgeLabelBackground':'#5F4CFE', 'fontSize':'14px','fontFamily':'font-inter'}}}%%
+
+sequenceDiagram
+    participant Local as Your Machine
+    participant Flash as Flash SDK
+    participant Runpod as Runpod API
+    participant Worker as Remote Worker
+
+    Local->>Flash: Call remote function
+    Flash->>Flash: Look up endpoint by name
+    Flash->>Runpod: Check for existing endpoint
+
+    alt Endpoint exists
+        Runpod-->>Flash: Return endpoint ID
+    else New endpoint needed
+        Flash->>Runpod: Create endpoint
+        Runpod-->>Flash: Return endpoint ID
+    end
+
+    Flash->>Flash: Serialize function + args
+    Flash->>Runpod: Submit job
+    Runpod->>Worker: Route to worker
+
+    Worker->>Worker: Execute function
+    Worker->>Runpod: Return result
+
+    Runpod-->>Flash: Return result
+    Flash-->>Local: Return Python object
+```
+
+## Endpoint naming
+
+Flash identifies endpoints by their `name` parameter:
+
+```python
+@Endpoint(
+    name="inference",  # This identifies the endpoint
+    gpu=GpuType.NVIDIA_A100_80GB_PCIe,
+    workers=3
+)
+def run_inference(data): ...
+```
+
+- **Same name, same config**: Reuses the existing endpoint.
+- **Same name, different config**: Updates the endpoint automatically.
+- **New name**: Creates a new endpoint.
+
+This means you can change parameters like `workers` without creating a new endpoint—Flash detects the change and updates it.
+
+## Worker lifecycle
+
+Workers scale up and down based on demand and your configuration.
+
+### Worker states
+
+**Initializing**: The worker is starting up and downloading dependencies.
+
+**Idle**: The worker is ready but not processing requests.
+
+**Running**: The worker actively processes requests.
+
+**Throttled**: The worker is temporarily unable to run due to host <MachineTooltip /> resource constraints.
+
+**Outdated**: The system marks the worker for replacement after endpoint updates. It continues processing current jobs during rolling updates (10% of max workers at a time).
+
+**Unhealthy**: The worker has crashed due to Docker image issues, incorrect start commands, or machine problems. The system automatically retries with exponential backoff for up to 7 days.
+
+### Scaling behavior
+
+```python
+@Endpoint(
+    name="demo",
+    gpu=GpuGroup.ANY,
+    workers=(0, 5),   # (min, max) - Scale to zero when idle, up to 5 workers
+    idle_timeout=60   # Seconds before idle workers scale down
+)
+def process(data): ...
+```
+
+**Example**:
+1. First job arrives → Scale to 1 worker (cold start).
+2. More jobs arrive while worker busy → Scale up to max workers.
+3. Jobs complete → Workers stay idle for `idle_timeout`.
+4. No new jobs → Scale down to min workers.
+
+## Cold starts and warm starts
+
+Understanding cold and warm starts helps you predict latency and set expectations.
+
+### Cold start
+
+A cold start occurs when no workers are available to handle your job:
+
+- You're calling an endpoint for the first time.
+- All workers scaled down after being idle beyond `idle_timeout`.
+- All active workers are busy and a new one must spin up.
+
+**What happens during a cold start**:
+1. Runpod provisions a new worker with your configured GPU/CPU.
+2. The worker image starts (dependencies are pre-installed during build).
+3. Your function executes.
+
+**Typical timing**: 10-60 seconds total, depending on GPU availability and image size.
+
+<Note>
+When using `flash build` or `flash deploy`, dependencies are pre-installed in the worker image, eliminating pip installation at request time. When running standalone scripts with `@Endpoint` functions outside of a Flash app, dependencies may be installed on the worker at request time.
+</Note>
+
+### Warm start
+
+A warm start occurs when a worker is already running and idle:
+
+- Worker completed a previous job and is waiting for more work.
+- Worker is within its `idle_timeout` period.
+
+**What happens during a warm start**:
+1. Job is routed immediately to the idle worker.
+2. Your function executes.
+
+**Typical timing**: ~1 second + your function's execution time.
+
+### The relationship between configuration and starts
+
+Your `workers` and `idle_timeout` settings directly affect cold start frequency:
+
+- `workers=(0, n)`: Workers scale to zero when idle. Every request after idle period triggers a cold start.
+- `workers=(1, n)`: At least one worker stays ready. First concurrent request is warm, additional requests may cold start.
+- Higher `idle_timeout`: Workers stay idle longer before scaling down, reducing cold starts for sporadic traffic.
+
+See [configuration best practices](/flash/configuration/best-practices) for specific recommendations based on your workload.

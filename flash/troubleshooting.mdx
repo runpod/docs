@@ -1,0 +1,429 @@
+---
+title: "Troubleshooting"
+sidebarTitle: "Troubleshooting"
+description: "Monitor, debug, and troubleshoot Flash deployments."
+---
+
+This guide covers how to monitor your Flash deployments, debug issues, and resolve common errors.
+
+## Monitoring and debugging
+
+### Viewing logs
+
+When running Flash functions, logs are displayed in your terminal:
+
+```text
+2025-11-19 12:35:15,109 | INFO  | Created endpoint: rb50waqznmn2kg - flash-quickstart-fb
+2025-11-19 12:35:15,114 | INFO  | Endpoint:rb50waqznmn2kg | API /run
+2025-11-19 12:35:15,655 | INFO  | Endpoint:rb50waqznmn2kg | Started Job:b0b341e7-...
+2025-11-19 12:35:15,762 | INFO  | Job:b0b341e7-... | Status: IN_QUEUE
+2025-11-19 12:36:09,983 | INFO  | Job:b0b341e7-... | Status: COMPLETED
+2025-11-19 12:36:10,068 | INFO  | Worker:icmkdgnrmdf8gz | Delay Time: 51842 ms
+2025-11-19 12:36:10,068 | INFO  | Worker:icmkdgnrmdf8gz | Execution Time: 1533 ms
+```
+
+Control log verbosity with the `LOG_LEVEL` environment variable:
+
+```bash
+LOG_LEVEL=DEBUG python your_script.py
+```
+
+Available levels: `DEBUG`, `INFO`, `WARNING`, `ERROR`.
+
+### Runpod console
+
+View detailed metrics and logs in the [Runpod console](https://www.runpod.io/console/serverless):
+
+1. Navigate to the **Serverless** section.
+2. Click on your endpoint to view:
+   - Active workers and queue depth.
+   - Request history and job status.
+   - Worker logs and execution details.
+
+The console provides metrics including request rate, queue depth, latency, worker count, and error rate.
+
+### View worker logs
+
+Access detailed logs for specific workers:
+
+1. Go to the [Serverless console](https://www.runpod.io/console/serverless).
+2. Select your endpoint.
+3. Click on a worker to view its logs.
+
+Logs include dependency installation output, function execution output (print statements, errors), and system-level messages.
+
+### Add logging to functions
+
+Include print statements in your endpoint functions for debugging:
+
+```python
+@Endpoint(name="processor", gpu=GpuGroup.ANY)
+async def process(data: dict) -> dict:
+    print(f"Received data: {data}")  # Visible in worker logs
+
+    result = do_processing(data)
+    print(f"Processing complete: {result}")
+
+    return result
+```
+
+## Configuration errors
+
+### API key not set
+
+**Error:**
+```
+RUNPOD_API_KEY environment variable is required but not set
+```
+
+**Cause:** Flash requires a valid Runpod API key to provision and manage endpoints.
+
+**Solution:**
+
+1. Generate an API key from [Settings > API Keys](https://www.runpod.io/console/user/settings) in the Runpod console. The key needs **All** access permissions.
+
+2. Set the key using one of these methods:
+
+   **Option 1: Environment variable**
+   ```bash
+   export RUNPOD_API_KEY=your_api_key
+   ```
+
+   **Option 2: .env file in your project root**
+   ```bash
+   echo "RUNPOD_API_KEY=your_api_key" > .env
+   ```
+
+   **Option 3: Shell profile (~/.bashrc or ~/.zshrc)**
+   ```bash
+   echo 'export RUNPOD_API_KEY=your_api_key' >> ~/.bashrc
+   source ~/.bashrc
+   ```
+
+### Invalid route configuration
+
+**Error:**
+```
+Load-balanced endpoints require route decorators
+```
+
+**Cause:** Load-balanced endpoints require HTTP method decorators for each route.
+
+**Solution:** Ensure all routes use the correct decorator pattern:
+
+```python
+from runpod_flash import Endpoint
+
+api = Endpoint(name="api", cpu="cpu5c-4-8", workers=(1, 5))
+
+# Correct - using route decorators
+@api.post("/process")
+async def process_data(data: dict) -> dict:
+    return {"result": "processed"}
+
+@api.get("/health")
+async def health_check() -> dict:
+    return {"status": "healthy"}
+```
+
+### Invalid HTTP method
+
+**Error:**
+```
+method must be one of {'GET', 'POST', 'PUT', 'DELETE', 'PATCH'}
+```
+
+**Cause:** The HTTP method specified is not supported.
+
+**Solution:** Use one of the supported HTTP methods: `GET`, `POST`, `PUT`, `DELETE`, or `PATCH`.
+
+### Invalid path format
+
+**Error:**
+```
+path must start with '/'
+```
+
+**Cause:** HTTP paths must begin with a forward slash.
+
+**Solution:** Ensure paths start with `/`:
+
+```python
+# Correct
+@api.get("/health")
+
+# Incorrect
+@api.get("health")
+```
+
+### Duplicate routes
+
+**Error:**
+```
+Duplicate route 'POST /process' in endpoint 'my-api'
+```
+
+**Cause:** Two functions define the same HTTP method and path combination.
+
+**Solution:** Ensure each route is unique within an endpoint. Either change the path or method of one function.
+
+## Deployment errors
+
+### Tarball too large
+
+**Error:**
+```
+Tarball exceeds maximum size. File size: 512.5MB, Max: 500MB
+```
+
+**Cause:** The deployment package exceeds the 500MB limit.
+
+**Solution:**
+
+1. Check for large files that shouldn't be included (datasets, model weights, logs).
+2. Add large files to `.flashignore` to exclude them from the build.
+3. Use [network volumes](/flash/configuration/storage) to store large models instead of bundling them.
+
+### Invalid tarball format
+
+**Error:**
+```
+File is not a valid gzip file. Expected magic bytes (31, 139)
+```
+
+**Cause:** The build artifact is corrupted or not a valid gzip file.
+
+**Solution:** Delete the `.flash` directory and rebuild:
+
+```bash
+rm -rf .flash
+flash build
+```
+
+### Resource provisioning failed
+
+**Error:**
+```
+Failed to provision resources: [error details]
+```
+
+**Cause:** Flash couldn't create the Serverless endpoint on Runpod.
+
+**Solutions:**
+
+1. **Check GPU availability**: The requested GPU types may not be available. Add fallback options:
+   ```python
+   gpu=[GpuType.NVIDIA_A100_80GB_PCIe, GpuType.NVIDIA_RTX_A6000, GpuType.NVIDIA_GEFORCE_RTX_4090]
+   ```
+
+2. **Check account limits**: You may have hit worker capacity limits. Contact [Runpod support](https://www.runpod.io/contact) to increase limits.
+
+3. **Check network volume**: If using `volume=`, verify the volume exists and is in a compatible datacenter.
+
+## Runtime errors
+
+### Endpoint not deployed
+
+**Error:**
+```
+Endpoint URL not available - endpoint may not be deployed
+```
+
+**Cause:** The endpoint function was called before the endpoint finished provisioning.
+
+**Solutions:**
+
+1. **For standalone scripts**: Ensure the endpoint has time to provision. Flash handles this automatically, but network issues can cause delays.
+
+2. **For Flash apps**: Deploy the app first with `flash deploy`, then call the endpoint.
+
+3. **Check endpoint status**: View your endpoints in the [Serverless console](https://www.runpod.io/console/serverless).
+
+### Execution timeout
+
+**Error:**
+```
+Execution timeout on [endpoint] after [N]s
+```
+
+**Cause:** The endpoint function took longer than the configured timeout.
+
+**Solutions:**
+
+1. **Increase timeout**: Set `execution_timeout_ms` in your configuration:
+   ```python
+   @Endpoint(
+       name="long-running",
+       gpu=GpuType.NVIDIA_A100_80GB_PCIe,
+       execution_timeout_ms=600000  # 10 minutes
+   )
+   ```
+
+2. **Optimize function**: Profile your function to identify bottlenecks.
+
+3. **Use queue-based endpoints**: For long-running tasks, use the `@Endpoint` decorator pattern. Queue-based endpoints are designed for longer operations.
+
+### Connection failed
+
+**Error:**
+```
+Failed to connect to endpoint [name] ([url])
+```
+
+**Cause:** Network connectivity issue between your local environment and the Runpod endpoint.
+
+**Solutions:**
+
+1. **Check internet connection**: Verify you have network access.
+2. **Retry**: Transient network issues often resolve on retry. Flash includes automatic retry logic.
+3. **Check endpoint status**: Verify the endpoint is running in the [Serverless console](https://www.runpod.io/console/serverless).
+
+### HTTP errors from endpoint
+
+**Error:**
+```
+HTTP error from endpoint [name]: 500 - Internal Server Error
+```
+
+**Cause:** The endpoint function raised an exception during execution.
+
+**Solutions:**
+
+1. **Check logs**: View worker logs in the [Serverless console](https://www.runpod.io/console/serverless) for detailed error messages.
+
+2. **Test locally**: Use `flash run` to test your function locally before deploying.
+
+3. **Add error handling**: Wrap your function logic in try/except to provide better error messages:
+   ```python
+   @Endpoint(name="processor", gpu=GpuGroup.ANY)
+   async def process(data: dict) -> dict:
+       try:
+           # Your logic here
+           return {"result": "success"}
+       except Exception as e:
+           return {"error": str(e)}
+   ```
+
+### Serialization errors
+
+**Error:**
+```
+Failed to deserialize result: [error]
+```
+
+**Cause:** The function's return value cannot be serialized/deserialized.
+
+**Solutions:**
+
+1. **Use simple types**: Return dictionaries, lists, strings, numbers, and other JSON-serializable types.
+
+2. **Avoid complex objects**: Don't return PyTorch tensors, NumPy arrays, or custom classes directly. Convert them first:
+   ```python
+   # Correct
+   return {"result": tensor.tolist()}
+
+   # Incorrect - tensor is not serializable
+   return {"result": tensor}
+   ```
+
+3. **Check argument types**: Input arguments must also be serializable.
+
+### Circuit breaker open
+
+**Error:**
+```
+Circuit breaker is open. Retry in [N] seconds
+```
+
+**Cause:** Too many consecutive failures to the endpoint triggered the circuit breaker protection.
+
+**Solutions:**
+
+1. **Wait and retry**: The circuit breaker will automatically attempt recovery after the timeout (typically 60 seconds).
+
+2. **Check endpoint health**: Multiple failures usually indicate an underlying issue. Check logs and endpoint status.
+
+3. **Fix the root cause**: Address whatever is causing the repeated failures before retrying.
+
+## GPU availability issues
+
+### Job stuck in queue
+
+**Symptom:** Job status shows `IN_QUEUE` for extended periods.
+
+**Cause:** The requested GPU types are not available.
+
+**Solutions:**
+
+1. **Add fallback GPUs**: Expand your `gpu` list with additional options:
+   ```python
+   @Endpoint(
+       name="flexible",
+       gpu=[
+           GpuType.NVIDIA_A100_80GB_PCIe,    # First choice
+           GpuType.NVIDIA_RTX_A6000,         # Fallback
+           GpuType.NVIDIA_GEFORCE_RTX_4090   # Second fallback
+       ]
+   )
+   ```
+
+2. **Use GpuGroup.ANY**: For development, accept any available GPU:
+   ```python
+   gpu=GpuGroup.ANY
+   ```
+
+3. **Check availability**: View GPU availability in the [Serverless console](https://www.runpod.io/console/serverless).
+
+4. **Contact support**: For guaranteed capacity, contact [Runpod support](https://www.runpod.io/contact).
+
+## Dependency errors
+
+### Module not found
+
+**Error (in worker logs):**
+```
+ModuleNotFoundError: No module named 'transformers'
+```
+
+**Cause:** A required dependency was not specified in the `@Endpoint` decorator.
+
+**Solution:** Add all required packages to the `dependencies` parameter:
+
+```python
+@Endpoint(
+    name="processor",
+    gpu=GpuGroup.ANY,
+    dependencies=["transformers", "torch", "pillow"]
+)
+async def process(data: dict) -> dict:
+    from transformers import pipeline
+    # ...
+```
+
+### Version conflicts
+
+**Symptom:** Function fails with import errors or unexpected behavior.
+
+**Cause:** Dependency version conflicts between packages.
+
+**Solution:** Pin specific versions:
+
+```python
+@Endpoint(
+    name="processor",
+    gpu=GpuGroup.ANY,
+    dependencies=[
+        "transformers==4.36.0",
+        "torch==2.1.0",
+        "accelerate>=0.25.0"
+    ]
+)
+```
+
+## Getting help
+
+If you're still stuck:
+
+1. **Discord**: Join the [Runpod Discord](https://discord.gg/cUpRmau42V) for community support.
+2. **GitHub Issues**: Report bugs or request features on the [Flash repository](https://github.com/runpod/flash).
+3. **Support**: Contact [Runpod support](https://www.runpod.io/contact) for account-specific issues.
