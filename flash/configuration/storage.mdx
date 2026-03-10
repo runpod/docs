@@ -1,0 +1,130 @@
+---
+title: "Storage"
+sidebarTitle: "Storage"
+description: "Understand container disk and network volume storage for Flash workloads."
+---
+
+import { NetworkVolumesTooltip, WorkerContainerDiskTooltip } from "/snippets/tooltips.jsx"
+
+Flash workers have access to two types of storage: <WorkerContainerDiskTooltip /> for temporary data and <NetworkVolumesTooltip /> for persistent, sharable data.
+
+## Container disk
+
+A container disk provides temporary storage that exists only while a worker is running. Each worker gets its own isolated container disk, with a default size of 64GB for GPU endpoints.
+
+You can read and write temporary files to the container disk using standard filesystem operations from within `@Endpoint` functions.
+
+Any file that is *not* written to a network volume (at `/runpod-volume/`) is written to the container disk, and will be erased when the worker stops.
+
+### Configuring container disk size (GPU-only)
+
+Configure container disk size for GPU endpoints using the `template` parameter (default: 64GB).
+
+```python
+from runpod_flash import Endpoint, GpuType, PodTemplate
+
+@Endpoint(
+    name="large-temp-storage",
+    gpu=GpuType.NVIDIA_A100_80GB_PCIe,
+    template=PodTemplate(containerDiskInGb=100)
+)
+async def process(data: dict) -> dict:
+    # 100GB container disk available
+    ...
+```
+
+### CPU auto-sizing
+
+CPU endpoints automatically adjust container disk size based on instance limits:
+- `CPU3G` and `CPU3C` instances: vCPU count × 10GB (e.g., 2 vCPU = 20GB)
+- `CPU5C` instances: vCPU count × 15GB (e.g., 4 vCPU = 60GB)
+
+If you specify a custom size that exceeds the instance limit, deployment will fail with a validation error.
+
+## Network volumes
+
+Network volumes provide persistent storage that survives worker restarts. Use this to share data between endpoint functions with the same network volume attached, or to persist data between runs.
+
+### Attaching network volumes
+
+Attach a network volume using the `volume` parameter. Flash uses the volume `name` to find an existing volume or create a new one:
+
+```python
+from runpod_flash import Endpoint, GpuType, NetworkVolume
+
+vol = NetworkVolume(name="model-cache")  # Finds existing or creates new
+
+@Endpoint(
+    name="persistent-storage",
+    gpu=GpuType.NVIDIA_A100_80GB_PCIe,
+    volume=vol
+)
+async def process(data: dict) -> dict:
+    # Access files at /runpod-volume/
+    ...
+```
+
+### Accessing network volume files
+
+Network volumes mount at `/runpod-volume/` and can be accessed like a regular filesystem:
+
+```python
+from runpod_flash import Endpoint, GpuType, NetworkVolume
+
+vol = NetworkVolume(name="model-storage")
+
+@Endpoint(
+    name="model-server",
+    gpu=GpuType.NVIDIA_A100_80GB_PCIe,
+    volume=vol,
+    dependencies=["torch", "transformers"]
+)
+async def run_inference(prompt: str) -> dict:
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    # Load model from network volume
+    # Persists across worker restarts and shared between workers
+    model_path = "/runpod-volume/models/llama-7b"
+    model = AutoModelForCausalLM.from_pretrained(model_path)
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+
+    # Run inference
+    inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+    outputs = model.generate(**inputs, max_length=100)
+    text = tokenizer.decode(outputs[0])
+
+    return {"generated_text": text}
+```
+
+### Load-balanced endpoints with storage
+
+```python
+from runpod_flash import Endpoint, GpuType, NetworkVolume
+
+vol = NetworkVolume(name="model-storage")
+
+api = Endpoint(
+    name="inference-api",
+    gpu=GpuType.NVIDIA_GEFORCE_RTX_4090,
+    volume=vol,
+    workers=(1, 5)
+)
+
+@api.post("/generate")
+async def generate(prompt: str) -> dict:
+    from transformers import AutoModelForCausalLM
+
+    model = AutoModelForCausalLM.from_pretrained("/runpod-volume/models/gpt2")
+    # Generate text
+    return {"text": "generated"}
+
+@api.get("/models")
+async def list_models() -> dict:
+    import os
+    models = os.listdir("/runpod-volume/models")
+    return {"models": models}
+```
+
+### Creating and managing network volumes
+
+Network volumes must be created before attaching them to an Endpoint. See [Network volumes](/storage/network-volumes) for detailed instructions.

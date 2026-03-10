@@ -1,0 +1,160 @@
+---
+title: "build"
+sidebarTitle: "build"
+---
+
+Build a deployment-ready artifact for your Flash application without deploying. Use this for more control over the build process or to inspect the artifact before deploying.
+
+```bash
+flash build [OPTIONS]
+```
+
+## Examples
+
+Build with all dependencies:
+
+```bash
+flash build
+```
+
+Build with additional excluded packages:
+
+```bash
+flash build --exclude scipy,pandas
+```
+
+Build with custom output name:
+
+```bash
+flash build -o my-app.tar.gz
+```
+
+## Flags
+
+<ResponseField name="--no-deps">
+Skip transitive dependencies during pip install. Only installs direct dependencies specified in `@Endpoint` decorators. Useful when the base image already includes dependencies.
+</ResponseField>
+
+<ResponseField name="--output, -o" type="string" default="artifact.tar.gz">
+Custom name for the output archive file.
+</ResponseField>
+
+<ResponseField name="--exclude" type="string">
+Comma-separated list of packages to exclude from the build (e.g., `torch,torchvision`). Use this to skip packages already in the base image.
+</ResponseField>
+
+## What happens during build
+
+1. **Function discovery**: Finds all `@Endpoint` decorated functions.
+2. **Grouping**: Groups functions by their endpoint configuration.
+3. **Manifest generation**: Creates `.flash/flash_manifest.json` with endpoint definitions.
+4. **Dependency installation**: Installs Python packages for Linux x86_64.
+5. **Packaging**: Bundles everything into `.flash/artifact.tar.gz`.
+
+## Build artifacts
+
+After running `flash build`:
+
+| File/Directory | Description |
+|----------------|-------------|
+| `.flash/artifact.tar.gz` | Deployment package ready for Runpod |
+| `.flash/flash_manifest.json` | Service discovery configuration |
+| `.flash/.build/` | Build directory (kept for inspection) |
+
+## Cross-platform builds
+
+Flash automatically handles cross-platform builds:
+
+- **Automatic platform targeting**: Dependencies are installed for Linux x86_64, regardless of your build platform.
+- **Binary wheel enforcement**: Only pre-built wheels are used, preventing compilation issues.
+
+### Python version in deployed workers
+
+Your local Python version does not affect what runs in the cloud. `flash build` downloads wheels for the container's Python version automatically.
+
+| Worker type | Python version | Notes |
+|-------------|----------------|-------|
+| GPU | 3.12 only | The GPU base image includes multiple interpreters (3.9–3.14) for interactive pod use, but torch and CUDA libraries are installed only for 3.12. |
+| CPU | 3.10, 3.11, or 3.12 | Configurable via the `PYTHON_VERSION` build arg. |
+
+Image tags follow the pattern `py{version}-{tag}` (for example, `runpod/flash:py3.12-latest`).
+
+## Managing deployment size
+
+Runpod Serverless has a **500MB deployment limit**. Flash automatically excludes packages that are pre-installed in the base image:
+
+- `torch`, `torchvision`, `torchaudio`
+- `numpy`, `triton`
+
+These packages are excluded at archive time, so you don't need to specify them manually.
+
+### Manual exclusions
+
+Use `--exclude` to skip additional packages that are already in a custom base image or not needed:
+
+```bash
+flash build --exclude scipy,pandas
+```
+
+### Base image reference
+
+| Resource type | Base image | Auto-excluded packages |
+|--------------|------------|------------------------|
+| GPU | PyTorch base | `torch`, `torchvision`, `torchaudio`, `numpy`, `triton` |
+| CPU | Python slim | `torch`, `torchvision`, `torchaudio`, `numpy`, `triton` |
+
+<Tip>
+
+Check the [worker-flash repository](https://github.com/runpod-workers/worker-flash) for current base images and pre-installed packages.
+
+</Tip>
+
+## Troubleshooting
+
+### Build fails with "functions not found"
+
+Ensure your project has `@Endpoint` decorated functions:
+
+```python
+from runpod_flash import Endpoint, GpuGroup
+
+@Endpoint(name="my-worker", gpu=GpuGroup.ANY)
+def my_function(data):
+    return {"result": data}
+```
+
+### Archive is too large
+
+Base image packages (`torch`, `numpy`, `triton`, etc.) are auto-excluded. If the archive is still too large, use `--exclude` to skip additional packages or `--no-deps` to skip transitive dependencies:
+
+```bash
+flash build --exclude scipy,pandas
+```
+
+### Dependency installation fails
+
+If a package doesn't have Linux x86_64 wheels:
+
+1. Ensure standard pip is installed: `python -m ensurepip --upgrade`
+2. Check PyPI for Linux wheel availability.
+3. For Python 3.13+, some packages may require newer manylinux versions.
+
+### Need to examine generated files
+
+The build directory is kept after building. Inspect it with:
+
+```bash
+ls .flash/.build/
+```
+
+## Related commands
+
+- [`flash deploy`](/flash/cli/deploy) - Build and deploy in one step (includes `--preview` option for local testing)
+- [`flash run`](/flash/cli/run) - Start development server
+- [`flash env`](/flash/cli/env) - Manage environments
+
+<Note>
+
+Most users should use `flash deploy` instead, which runs build and deploy in one step. Use `flash build` when you need more control or want to inspect the artifact.
+
+</Note>
