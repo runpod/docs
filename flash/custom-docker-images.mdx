@@ -1,0 +1,291 @@
+---
+title: "Use custom containers with Flash"
+sidebarTitle: "Custom containers"
+description: "Deploy pre-built Docker images with Flash using Endpoint."
+---
+
+The `@Endpoint` decorator handles most use cases, allowing you to execute arbitrary Python code remotely without managing Docker images.
+
+However, for specialized environments that require custom Docker images, you can use `Endpoint(image=...)` to deploy your own Docker images.
+
+## When to use custom Docker images
+
+Use custom Docker images when you need:
+
+- **Pre-built inference servers**: vLLM, TensorRT-LLM, or other specialized serving frameworks.
+- **System-level dependencies**: Custom CUDA versions, cuDNN, or system libraries not installable via `pip`.
+- **Baked-in models**: Large models pre-downloaded in the image to avoid runtime downloads.
+- **Existing Serverless workers**: You already have a working Runpod Serverless Docker image.
+
+<Tip>
+For most use cases, use `@Endpoint` with the `dependencies` parameter. It's simpler, faster, and lets you execute arbitrary Python code remotely.
+</Tip>
+
+## Available Docker images
+
+### Official Runpod workers
+
+Runpod provides pre-built worker images for common frameworks:
+
+| Framework | Image name | Documentation |
+|-----------|-------|---------------|
+| vLLM | `runpod/worker-vllm` | [vLLM docs](/serverless/vllm/overview) |
+| Automatic1111 | `runpod/worker-a1111:stable` | [A1111 docs](/serverless/workers/sdxl-a1111) |
+| ComfyUI | `runpod/worker-comfy` | [Docker Hub](https://hub.docker.com/r/runpod/worker-comfyui) |
+
+### Custom images
+
+To create a custom Docker image:
+
+1. [Build a handler function](/serverless/workers/handler-functions) to process requests.
+2. [Create a Dockerfile](/serverless/workers/create-dockerfile) to build the image.
+3. [Push the image to a registry](/serverless/workers/deploy).
+4. Reference the image with `Endpoint(image=...)`.
+
+## Deploy a custom image
+
+<Steps>
+<Step title="Create an Endpoint with your image">
+
+```python
+from runpod_flash import Endpoint, GpuType
+
+vllm = Endpoint(
+    name="my-vllm-server",
+    image="runpod/worker-vllm:stable-cuda12.1.0",
+    gpu=GpuType.NVIDIA_GEFORCE_RTX_4090,
+    workers=3,
+    env={
+        "MODEL_NAME": "microsoft/Phi-3.5-mini-instruct",
+        "MAX_MODEL_LEN": "4096"
+    }
+)
+```
+</Step>
+
+<Step title="Make requests">
+
+Use HTTP methods to call your deployed image:
+
+```python
+import asyncio
+
+async def main():
+    # POST request
+    result = await vllm.post("/v1/completions", {
+        "prompt": "Explain quantum computing:",
+        "max_tokens": 100
+    })
+    print(result)
+
+    # GET request
+    models = await vllm.get("/v1/models")
+    print(models)
+
+asyncio.run(main())
+```
+
+Or use queue-based calls:
+
+```python
+import asyncio
+
+async def main():
+    # Submit job to queue
+    job = await vllm.run({
+        "input": {
+            "prompt": "Explain quantum computing:",
+            "max_tokens": 100
+        }
+    })
+
+    # Wait for completion
+    await job.wait()
+    print(job.output)
+
+asyncio.run(main())
+```
+</Step>
+</Steps>
+
+## Complete example: vLLM inference
+
+This example deploys vLLM and makes inference requests:
+
+```python
+import asyncio
+from runpod_flash import Endpoint, GpuType
+
+# Configure vLLM endpoint
+vllm = Endpoint(
+    name="vllm-phi",
+    image="runpod/worker-vllm:stable-cuda12.1.0",
+    gpu=GpuType.NVIDIA_GEFORCE_RTX_4090,
+    workers=3,
+    env={
+        "MODEL_NAME": "microsoft/Phi-3.5-mini-instruct",
+        "MAX_MODEL_LEN": "4096",
+        "GPU_MEMORY_UTILIZATION": "0.9",
+        "MAX_CONCURRENCY": "30",
+    }
+)
+
+async def main():
+    # Generate text using queue-based call
+    job = await vllm.run({
+        "input": {
+            "prompt": "Explain quantum computing in simple terms:",
+            "max_tokens": 100,
+            "temperature": 0.7
+        }
+    })
+
+    await job.wait()
+
+    # Extract the generated text
+    text = job.output[0]['choices'][0]['tokens'][0]
+    print(f"Generated text: {text}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Configuration options
+
+All standard `Endpoint` parameters work with custom images:
+
+```python
+from runpod_flash import Endpoint, GpuType, NetworkVolume, PodTemplate
+
+vol = NetworkVolume(name="model-storage")
+
+vllm = Endpoint(
+    name="custom-vllm",
+    image="your-registry/image:tag",
+    gpu=GpuType.NVIDIA_A100_80GB_PCIe,
+    workers=(0, 5),
+    idle_timeout=600,  # 10 minutes
+    env={
+        "MODEL_PATH": "/models/llama",
+        "MAX_BATCH_SIZE": "32"
+    },
+    volume=vol,
+    execution_timeout_ms=300000,  # 5 minutes
+    template=PodTemplate(containerDiskInGb=100)
+)
+```
+
+### CPU endpoints
+
+For CPU workloads, use the `cpu` parameter:
+
+```python
+from runpod_flash import Endpoint
+
+cpu_worker = Endpoint(
+    name="cpu-worker",
+    image="your-registry/cpu-worker:latest",
+    cpu="cpu5c-4-8"  # 4 vCPU, 8GB RAM
+)
+```
+
+## Request/response format
+
+### Queue-based requests
+
+Use `.run()` with a dictionary payload in the format `{"input": {...}}`:
+
+```python
+job = await endpoint.run({
+    "input": {
+        "param1": "value1",
+        "param2": "value2"
+    }
+})
+
+await job.wait()
+print(job.output)  # Worker response
+print(job.error)   # Error message if failed
+```
+
+### HTTP requests
+
+Use `.get()`, `.post()`, `.put()`, `.delete()` for direct HTTP calls:
+
+```python
+# POST request
+result = await endpoint.post("/v1/completions", {"prompt": "Hello"})
+
+# GET request
+models = await endpoint.get("/v1/models")
+
+# With custom headers
+result = await endpoint.post(
+    "/v1/completions",
+    {"prompt": "Hello"},
+    headers={"X-Custom-Header": "value"}
+)
+```
+
+## EndpointJob reference
+
+The `.run()` method returns an `EndpointJob` for async operations:
+
+```python
+job = await endpoint.run({"input": {...}})
+
+# Properties
+job.id        # Job ID
+job.output    # Result payload (after completion)
+job.error     # Error message if failed
+job.done      # True if completed/failed
+
+# Methods
+await job.status()           # Get current status
+await job.wait(timeout=60)   # Wait for completion
+await job.cancel()           # Cancel the job
+```
+
+## Limitations
+
+- **Input format**: Queue-based calls require `{"input": {...}}` format.
+- **Code execution**: Cannot execute arbitrary Python code remotely. Your Docker image must include all logic.
+- **@Endpoint decorator**: The decorator pattern doesn't work with `image=`. Use the instance pattern instead.
+- **Handler required**: Your Docker image must implement a Runpod Serverless [handler function](/serverless/workers/handler-functions).
+
+## Troubleshooting
+
+### Endpoint fails to initialize
+
+**Problem**: Workers fail to start or crash immediately.
+
+**Solutions**:
+- Verify your Docker image is compatible with [Runpod Serverless](/serverless/overview).
+- Check environment variables are correct.
+- Ensure the image includes a valid handler function.
+- Check worker logs in the [Runpod console](https://www.runpod.io/console/serverless).
+
+### Out of memory errors
+
+**Problem**: Workers crash with CUDA OOM or RAM errors.
+
+**Solutions**:
+- Use a larger GPU: `gpu=GpuType.NVIDIA_A100_80GB_PCIe`
+- Reduce `GPU_MEMORY_UTILIZATION` for vLLM.
+- Lower `MAX_MODEL_LEN` or batch size.
+- Reduce `workers` to limit parallel execution.
+
+### Authentication errors
+
+**Problem**: Cannot download gated models or private images.
+
+**Solutions**:
+- Add `HF_TOKEN` to `env` for Hugging Face gated models.
+- Configure Docker registry authentication in [Runpod console](https://www.runpod.io/console/user/settings) for private images.
+
+## Next steps
+
+- [View all Endpoint parameters](/flash/configuration/parameters)
+- [Learn about vLLM deployment](/serverless/vllm/overview)
+- [Build custom Serverless workers](/serverless/workers/overview)
+- [Create Flash apps](/flash/apps/build-app)

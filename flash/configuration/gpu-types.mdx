@@ -1,0 +1,193 @@
+---
+title: "GPU types"
+sidebarTitle: "GPU types"
+description: "Available GPU pools and specific GPU types for Flash endpoints."
+---
+
+Flash provides access to a wide range of NVIDIA GPUs through both pool-based and specific GPU selection. This page lists all available GPU types and explains how to use them.
+
+## GPU selection methods
+
+Flash offers two ways to specify GPU hardware:
+
+1. [GPU pools](/flash/configuration/gpu-types#gpu-pools) (`GpuGroup`): Select from predefined pools of similar GPUs grouped by architecture and VRAM.
+2. [Specific GPU types](/flash/configuration/gpu-types#specific-gpu-types) (`GpuType`): Target exact GPU models when you need precise hardware characteristics.
+
+You can use either method or mix both for [advanced fallback strategies](/flash/configuration/gpu-types#advanced-fallback-strategies).
+
+## GPU pools
+
+The `GpuGroup` enum provides access to GPU pools. Each pool contains specific GPU models grouped by architecture and VRAM capacity.
+
+### Available GPU pools
+
+| GpuGroup | GPUs Included | VRAM | Best For |
+|----------|---------------|------|----------|
+| `GpuGroup.ANY` | Any available GPU | Varies | Fast provisioning, prototyping |
+| `GpuGroup.AMPERE_16` | RTX A4000, RTX 4000 Ada, RTX 2000 Ada | 16GB | Small models, basic inference |
+| `GpuGroup.AMPERE_24` | RTX A4500, RTX A5000, RTX 3090 | 20-24GB | General ML, mid-size models |
+| `GpuGroup.ADA_24` | L4, RTX 4090 | 24GB | Cost-effective inference |
+| `GpuGroup.ADA_32_PRO` | RTX 5090 | 32GB | Latest consumer flagship |
+| `GpuGroup.AMPERE_48` | A40, RTX A6000 | 48GB | Large models, fine-tuning |
+| `GpuGroup.ADA_48_PRO` | RTX 6000 Ada | 48GB | Professional inference |
+| `GpuGroup.AMPERE_80` | A100 80GB PCIe, A100-SXM4-80GB | 80GB | XL models, intensive training |
+| `GpuGroup.ADA_80_PRO` | H100 80GB HBM3 | 80GB | Cutting-edge inference |
+| `GpuGroup.HOPPER_141` | H200 | 141GB | Largest models, maximum VRAM |
+
+### Using GPU pools
+
+```python
+from runpod_flash import Endpoint, GpuGroup
+
+# Single GPU pool
+@Endpoint(name="inference", gpu=GpuGroup.AMPERE_80)
+async def infer(data: dict) -> dict:
+    ...
+
+# Multiple pools for fallback
+@Endpoint(
+    name="flexible",
+    gpu=[GpuGroup.AMPERE_80, GpuGroup.AMPERE_48, GpuGroup.ADA_24]
+)
+async def flexible_infer(data: dict) -> dict:
+    ...
+
+# Any available GPU (fastest provisioning)
+@Endpoint(name="development", gpu=GpuGroup.ANY)
+async def dev_infer(data: dict) -> dict:
+    ...
+```
+
+## Specific GPU types
+
+The `GpuType` enum provides access to specific GPU models. Use these when you need exact hardware characteristics.
+
+### Available GPU types
+
+| GpuType | GPU Model | VRAM | Architecture |
+|---------|-----------|------|--------------|
+| `GpuType.NVIDIA_RTX_A4000` | NVIDIA RTX A4000 | 16GB | Ampere |
+| `GpuType.NVIDIA_RTX_A4500` | NVIDIA RTX A4500 | 20GB | Ampere |
+| `GpuType.NVIDIA_RTX_4000_ADA_GENERATION` | NVIDIA RTX 4000 Ada | 16GB | Ada Lovelace |
+| `GpuType.NVIDIA_RTX_2000_ADA_GENERATION` | NVIDIA RTX 2000 Ada | 16GB | Ada Lovelace |
+| `GpuType.NVIDIA_RTX_A5000` | NVIDIA RTX A5000 | 24GB | Ampere |
+| `GpuType.NVIDIA_L4` | NVIDIA L4 | 24GB | Ada Lovelace |
+| `GpuType.NVIDIA_GEFORCE_RTX_3090` | NVIDIA GeForce RTX 3090 | 24GB | Ampere |
+| `GpuType.NVIDIA_GEFORCE_RTX_4090` | NVIDIA GeForce RTX 4090 | 24GB | Ada Lovelace |
+| `GpuType.NVIDIA_GEFORCE_RTX_5090` | NVIDIA GeForce RTX 5090 | 32GB | Blackwell |
+| `GpuType.NVIDIA_A40` | NVIDIA A40 | 48GB | Ampere |
+| `GpuType.NVIDIA_RTX_A6000` | NVIDIA RTX A6000 | 48GB | Ampere |
+| `GpuType.NVIDIA_RTX_6000_ADA_GENERATION` | NVIDIA RTX 6000 Ada | 48GB | Ada Lovelace |
+| `GpuType.NVIDIA_A100_80GB_PCIe` | NVIDIA A100 80GB PCIe | 80GB | Ampere |
+| `GpuType.NVIDIA_A100_SXM4_80GB` | NVIDIA A100-SXM4-80GB | 80GB | Ampere |
+| `GpuType.NVIDIA_H100_80GB_HBM3` | NVIDIA H100 80GB HBM3 | 80GB | Hopper |
+| `GpuType.NVIDIA_H200` | NVIDIA H200 | 141GB | Hopper |
+
+### Using specific GPU types
+
+```python
+from runpod_flash import Endpoint, GpuType
+
+# Single specific GPU
+@Endpoint(name="inference", gpu=GpuType.NVIDIA_A100_80GB_PCIe)
+async def infer(data: dict) -> dict:
+    ...
+
+# Multiple specific GPUs (fallback strategy)
+@Endpoint(
+    name="flexible",
+    gpu=[
+        GpuType.NVIDIA_A100_80GB_PCIe,  # Try A100 PCIe first
+        GpuType.NVIDIA_A100_SXM4_80GB,  # Fall back to A100 SXM4
+        GpuType.NVIDIA_A40              # Final fallback to A40
+    ]
+)
+async def flexible_infer(data: dict) -> dict:
+    ...
+```
+
+## Advanced fallback strategies
+
+Combine `GpuGroup` and `GpuType` for robust availability:
+
+```python
+from runpod_flash import Endpoint, GpuGroup, GpuType
+
+@Endpoint(
+    name="hybrid-selection",
+    gpu=[
+        GpuType.NVIDIA_A100_80GB_PCIe,  # Specific GPU first
+        GpuGroup.AMPERE_48,             # Pool fallback
+        GpuGroup.ANY                    # Ultimate fallback
+    ]
+)
+async def infer(data: dict) -> dict:
+    ...
+```
+
+## GPU selection behavior
+
+**Single GPU type:**
+Flash waits for this specific GPU to become available. Jobs stay in queue until capacity is available.
+
+```python
+gpu=GpuGroup.AMPERE_80  # Only A100 80GB
+```
+
+**Multiple GPU types (fallback):**
+Flash attempts to provision in the order specified.
+
+```python
+gpu=[GpuGroup.AMPERE_80, GpuGroup.AMPERE_48, GpuGroup.ADA_24]
+# Tries: A100 → A40/A6000 → RTX 4090
+```
+
+**GpuGroup.ANY:**
+Flash selects the first available GPU based on current capacity.
+
+```python
+gpu=GpuGroup.ANY  # Fastest provisioning, unpredictable GPU type
+```
+
+<Tip>
+**For production**: Use specific GPU types for predictable cost and performance.
+**For development**: Use `GpuGroup.ANY` for fastest iteration.
+</Tip>
+
+## Multi-GPU workers
+
+Request multiple GPUs per worker using `gpu_count`:
+
+```python
+@Endpoint(
+    name="multi-gpu-training",
+    gpu=GpuGroup.AMPERE_80,
+    gpu_count=4,  # Each worker gets 4 GPUs
+    workers=2     # Maximum 2 workers = 8 GPUs total
+)
+async def train(data: dict) -> dict:
+    ...
+```
+
+## Handling unavailability
+
+If requested GPUs are unavailable, jobs stay in queue:
+
+```text
+Initial job status: IN_QUEUE
+[Waiting for capacity...]
+```
+
+**Solutions:**
+
+1. **Add fallback options**: Use multiple GPU types.
+   ```python
+   gpu=[GpuGroup.AMPERE_80, GpuGroup.AMPERE_48, GpuGroup.ADA_24]
+   ```
+
+2. **Use broader selection**: Switch to `GpuGroup.ANY`.
+   ```python
+   gpu=GpuGroup.ANY
+   ```
+
+3. **Contact support**: For capacity guarantees, contact [Runpod support](https://www.runpod.io/contact).

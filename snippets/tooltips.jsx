@@ -83,13 +83,19 @@ export const WorkerTooltip = () => {
 
 export const WorkersTooltip = () => {
   return (
-  <Tooltip headline="Worker" tip="A container that runs your application code and processes requests to your Serverless endpoint. Workers are automatically started and stopped by Runpod to handle traffic spikes and ensure optimal resource utilization." cta="Learn more about workers" href="/serverless/workers/overview">worker</Tooltip>
+  <Tooltip headline="Worker" tip="A container that runs your application code and processes requests to your Serverless endpoint. Workers are automatically started and stopped by Runpod to handle traffic spikes and ensure optimal resource utilization." cta="Learn more about workers" href="/serverless/workers/overview">workers</Tooltip>
   );
 };
 
 export const EndpointTooltip = () => {
   return (
   <Tooltip headline="Endpoint" tip="The access point for your Serverless application. Endpoints provide a URL where users or applications can send requests to run your code." cta="Learn more about endpoints" href="/serverless/endpoints/overview">endpoint</Tooltip>
+  );
+};
+
+export const EndpointsTooltip = () => {
+  return (
+  <Tooltip headline="Endpoint" tip="The access point for your Serverless application. Endpoints provide a URL where users or applications can send requests to run your code." cta="Learn more about endpoints" href="/serverless/endpoints/overview">endpoints</Tooltip>
   );
 };
 
@@ -286,5 +292,19 @@ export const InferenceTooltip = () => {
 export const ServingTooltip = () => {
   return (
   <Tooltip headline="AI serving" tip="The process of deploying and managing a model for inference. When you deploy a model to a Serverless endpoint, that's serving.">serving</Tooltip>
+  );
+};
+
+// FLASH
+
+export const ResourceConfigurationTooltip = () => {
+  return (
+  <Tooltip headline="Resource configuration" tip="A Python object that defines compute resources, scaling behavior, and infrastructure settings for Flash functions. Examples include LiveServerless for GPU batch processing and LiveLoadBalancer for HTTP APIs." cta="Learn more about resource configurations" href="/flash/create-endpoints">resource configuration</Tooltip>
+  );
+};
+
+export const ResourceConfigurationsTooltip = () => {
+  return (
+  <Tooltip headline="Resource configurations" tip="Python objects that define compute resources, scaling behavior, and infrastructure settings for Flash functions. Examples include LiveServerless for GPU batch processing and LiveLoadBalancer for HTTP APIs." cta="Learn more about resource configurations" href="/flash/create-endpoints">resource configurations</Tooltip>
   );
 };
