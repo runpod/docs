@@ -1,112 +1,85 @@
 ---
 title: "Overview"
 description: "Package your handler function for deployment."
+mode: "wide"
 ---
 
 import { WorkerContainerDiskTooltip, MachineTooltip, NetworkVolumeTooltip } from "/snippets/tooltips.jsx";
 
-Workers are the containerized environments that run your code on Runpod Serverless. After creating and testing your [handler function](/serverless/workers/handler-functions), you need to package it into a Docker image and deploy it to an endpoint.
+<div className="overview-page-wrapper" />
 
-If you're new to containers and Docker, start with the [introduction to containers](/tutorials/introduction/containers) tutorial series to learn the fundamentals.
+Workers are containerized environments that run your code on Runpod Serverless.
 
-This page provides an overview of the worker deployment process.
+## Deployment workflow
 
-## [Create a Dockerfile](/serverless/workers/create-dockerfile)
+After creating your [handler function](/serverless/workers/handler-functions), package it into a Docker image and deploy it to an endpoint:
 
-To deploy your worker to Runpod, you need to [create a Dockerfile](/serverless/workers/create-dockerfile) that packages your handler function and all its dependencies. 
-
-## Package and deploy a worker
-
-Once you've created your Dockerfile, you can deploy the worker image to a Serverless endpoint using one of the following methods:
-
-### [Deploy from Docker Hub](/serverless/workers/deploy)
-
-Build your Docker image locally, push it to Docker Hub (or another container registry), and deploy it to Runpod. This gives you full control over the build process and allows you to test the image locally before deployment.
-
-### [Deploy from GitHub](/serverless/workers/github-integration)
-
-Connect your GitHub repository to Runpod and deploy directly from your code. Runpod automatically builds the Docker image from your repository and deploys it to an endpoint. This streamlines the deployment process and enables continuous deployment workflows.
-
-## Worker storage options
-
-Serverless offers two storage options for your workers to access and store data for requests:
-
-- <WorkerContainerDiskTooltip />: Temporary storage that exists only while a worker is running, and is completely lost when the worker is stopped or scaled down.
-- <NetworkVolumeTooltip />: Persistent storage that can be attached to different workers and even shared between multiple workers.
-
-See [Storage options](/serverless/storage/overview) for more details.
+<Steps>
+  <Step title="Create a Dockerfile">
+    Package your handler function and all its dependencies [into a Docker image](/serverless/workers/create-dockerfile).
+  </Step>
+  <Step title="Deploy to an endpoint">
+    Push your image and create an endpoint using one of two methods:
+    - [Deploy from Docker Hub](/serverless/workers/deploy): Build locally and push to a container registry.
+    - [Deploy from GitHub](/serverless/workers/github-integration): Auto-build and deploy directly from your repository.
+  </Step>
+</Steps>
 
 ## Model deployment
 
-To deploy your workers with AI/ML models, follow this order of preference:
+To deploy workers with AI/ML models, follow this order of preference:
 
-1. [Use cached models](/serverless/endpoints/model-caching): If your model is available on Hugging Face (public or gated), this is the recommended approach. Cached models provide the fastest cold starts, eliminate download costs, and persist across worker restarts.
+1. [**Use cached models**](/serverless/endpoints/model-caching): For models on Hugging Face (public or gated), this is the recommended approach. Cached models provide the fastest cold starts and persist across worker restarts.
 
-2. [Bake the model into your Docker image](/serverless/workers/create-dockerfile#including-models-and-files): If your model is private and not available on Hugging Face, embed it directly in your worker's container image using `COPY` or `RUN wget`. This ensures the model is always available, but it increases image size and build time.
+2. [**Bake the model into your Docker image**](/serverless/workers/create-dockerfile#including-models-and-files): For private models not on Hugging Face, embed them directly in your container image. This ensures the model is always available but increases image size.
 
-3. [Use network volumes](/storage/network-volumes): You can use network volumes to store models and other files that need to persist between workers. Models loaded from network storage are slower than cached or baked models, so you should only use this option when the preceeding approaches don't fit your needs.
+3. [**Use network volumes**](/storage/network-volumes): For development workflows or very large models (500GB+), store models on a network volume. This is slower than cached or baked models but offers flexibility for iteration.
 
-## Worker configuration
+## Worker types
 
-When deploying workers, you can configure:
+Workers can run in two modes depending on your latency and cost requirements:
 
-* **GPU/CPU types**: Select specific GPU models for your workload.
-* **GPU count**: Set the number of GPUs for each worker.
-* **Max workers**: Set the maximum number of workers for your endpoint.
-* **Container disk size**: Allocate temporary storage for your worker. See [Storage options](/serverless/storage/overview).
-* **Environment variables**: Pass configuration values to your worker. See [Environment variables](/serverless/development/environment-variables) for usage details.
-* **Model caching**: Pre-load models to reduce cold start times. See [Cached models](/serverless/endpoints/model-caching).
+- **Active workers** run continuously (24/7) and are always ready to process requests instantly. They eliminate cold starts entirely and receive a discounted rate, making them ideal for latency-sensitive or high-traffic applications.
 
-These settings are configured when you [create or edit an endpoint](/serverless/endpoints/overview#create-an-endpoint).
+- **Flex workers** scale dynamically based on demand, spinning down to zero when idle. They incur cold starts when scaling up but cost nothing when not in use, making them ideal for variable or sporadic workloads.
 
-## Active vs. flex workers
-
-You can deploy workers in two modes:
-
-* **Active workers**: "Always on" workers that eliminate cold start delays. They never scale down, so you are charged as long as they are active, but they receive a discount (up to 30%) compared to flex workers. (Default: `0`).
-* **Flex workers**: "Sometimes on" workers that scale during traffic surges. They transition to idle after completing jobs. (Default: `max_workers - active_workers = 3`).
-
-The system will also sometimes add additiona **extra workers** during traffic spikes when Docker images are cached on host servers. (Default: 2).
+The system may also spin up **extra workers** during traffic spikes when Docker images are cached on hosts (default: 2).
 
 ## Worker states
 
-Workers move through different states as they handle requests and respond to changes in traffic patterns. Understanding these states helps you monitor and troubleshoot your workers effectively.
+| State | Description | Billing |
+|-------|-------------|---------|
+| **Initializing** | Downloading image, loading code | Yes |
+| **Idle** | Ready, waiting for requests | No |
+| **Running** | Processing requests | Yes |
+| **Throttled** | Ready but host <MachineTooltip /> constrained | No |
+| **Outdated** | Marked for replacement after update | Yes (while processing) |
+| **Unhealthy** | Crashed; auto-retries for up to 7 days | No |
 
-* **Initializing**: The worker starts up while the system downloads and prepares the Docker image. The container starts and loads your code.
-* **Idle**: The worker is ready but not processing requests. No charges apply while idle.
-* **Running**: The worker actively processes requests. Billing occurs per second.
-* **Throttled**: The worker is ready but temporarily unable to run due to host <MachineTooltip /> resource constraints.
-* **Outdated**: The system marks the worker for replacement after endpoint updates. It continues processing current jobs during rolling updates (10% of max workers at a time).
-* **Unhealthy**: The worker has crashed due to Docker image issues, incorrect start commands, or machine problems. The system automatically retries with exponential backoff for up to 7 days.
+View worker states in the **Workers** tab of your endpoint in the [Runpod console](https://www.console.runpod.io/serverless).
 
-You can view the state of your workers using the **Workers** tab of the Serverless endpoint details page in the [Runpod console](https://www.console.runpod.io/serverless). This page provides real-time information about each worker's current state, resource utilization, and job processing history, allowing you to monitor performance and troubleshoot issues effectively.
+## Max worker limits
 
-## Max worker limit
+Account balance determines your maximum workers (flex + active combined):
 
-By default, each Runpod account can allocate a maximum of 5 workers (flex + active combined) across all endpoints. If your account balance exceeds a certain threshold, you can increase this limit:
+| Balance | Max workers |
+|---------|-------------|
+| Default | 5 |
+| \$100+ | 10 |
+| \$200+ | 20 |
+| \$300+ | 30 |
+| \$500+ | 40 |
+| \$700+ | 50 |
+| \$900+ | 60 |
 
-- \$100 balance: 10 max workers
-- \$200 balance: 20 max workers
-- \$300 balance: 30 max workers
-- \$500 balance: 40 max workers
-- \$700 balance: 50 max workers
-- \$900 balance: 60 max workers
-
-If your workload requires additional capacity beyond 60 workers, [contact our support team](https://www.runpod.io/contact).
+Need more capacity? [Contact support](https://www.runpod.io/contact).
 
 ## Best practices
 
-Follow these best practices when deploying workers:
-
-* **Optimize image size**: Smaller images download faster and reduce cold start times. See [Create a Dockerfile](/serverless/workers/create-dockerfile) for optimization techniques.
-* **Use model caching**: Pre-load models to avoid downloading them on every cold start. See [Cached models](/serverless/endpoints/model-caching).
-* **Test locally first**: Always test your handler locally before deploying. See [Local testing](/serverless/development/local-testing).
-* **Handle errors gracefully**: Implement proper error handling to prevent worker crashes. See [Error handling](/serverless/development/error-handling).
-* **Debug using logs and SSH**: Use logs and SSH to debug and optimize your workers. See [Monitor logs](/serverless/development/logs) and [SSH into workers](/serverless/development/ssh-into-workers).
-
-## Next steps
-
-* [Write a handler function](/serverless/workers/handler-functions) to define your worker's logic.
-* [Create a Dockerfile](/serverless/workers/create-dockerfile) to package your handler function and all its dependencies.
-* [Build and push](/serverless/workers/deploy) your worker image to Docker Hub (or another container registry).
-* [Deploy from GitHub](/serverless/workers/github-integration) to automatically build your worker image from your repository.
+| Practice | Benefit |
+|----------|---------|
+| [Optimize image size](/serverless/workers/create-dockerfile) | Faster downloads, reduced cold starts |
+| [Use model caching](/serverless/endpoints/model-caching) | Fastest cold starts |
+| [Test locally first](/serverless/development/local-testing) | Catch issues before deployment |
+| [Handle errors gracefully](/serverless/development/error-handling) | Prevent worker crashes |
+| [Use logs and SSH](/serverless/development/logs) | Debug and optimize effectively |

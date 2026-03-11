@@ -6,72 +6,93 @@ sidebar_position: 3
 
 import { CUDATooltip, InferenceTooltip, TrainingTooltip } from "/snippets/tooltips.jsx";
 
-Selecting the appropriate Pod configuration is a crucial step in maximizing performance and efficiency for your specific workloads. This guide will help you understand the key factors to consider when choosing a Pod that meets your requirements.
+Selecting the right Pod configuration maximizes performance and cost efficiency for your workload. This guide helps you match your requirements to the right GPU, VRAM, and storage configuration.
 
-## Understanding your workload needs
+## Quick selection by workload
 
-Before selecting a Pod, take time to analyze your specific project requirements. Different applications have varying demands for computing resources:
+Start by identifying your primary workload type:
 
-- Machine learning models require sufficient VRAM and powerful GPUs.
-- Data processing tasks benefit from higher CPU core counts and RAM.
-- Rendering workloads need both strong GPU capabilities and adequate storage.
+| Workload | Recommended GPU tier | Minimum VRAM | Notes |
+|----------|---------------------|--------------|-------|
+| **LLM inference** (7B–13B params) | Mid-range (RTX 4090, L4) | 24 GB | Sufficient for most quantized models |
+| **LLM inference** (30B–70B params) | High-end (A100, H100) | 48–80 GB | May require multi-GPU setup |
+| **LLM training/fine-tuning** | High-end (A100, H100) | 40–80 GB | Memory bandwidth critical |
+| **Image generation** (SDXL, Flux) | Mid-range (RTX 4090, L4) | 16–24 GB | Benefits from fast inference |
+| **Computer vision** | Entry to mid-range | 8–16 GB | Depends on model and batch size |
+| **3D rendering** | Mid-range with RT cores | 16–24 GB | RT cores accelerate ray tracing |
+| **Data processing** | CPU-focused or entry GPU | 8 GB+ | Prioritize CPU cores and RAM |
 
-For machine learning models, check the model's documentation on platforms like Hugging Face or review the `config.json` file to understand its resource requirements.
+For a full list of available GPUs and their specifications, see [GPU types](/references/gpu-types).
 
-## Resource assessment tools
+## Estimate VRAM requirements
 
-There are several online tools that can help you estimate your resource requirements:
+VRAM is the most common bottleneck. Use these guidelines:
 
-- [Hugging Face's Model Memory Usage Calculator](https://huggingface.co/spaces/hf-accelerate/model-memory-usage) provides memory estimates for transformer models.
-- [Vokturz's Can it run LLM calculator](https://huggingface.co/spaces/Vokturz/can-it-run-llm) helps determine if your hardware can run specific language models.
-- [Alexander Smirnov's VRAM Estimator](https://vram.asmirnov.xyz) offers GPU memory requirement approximations.
+**For LLMs:** Allocate approximately **2 GB of VRAM per billion parameters**. For example:
+- 7B model → ~14 GB VRAM
+- 13B model → ~26 GB VRAM
+- 70B model → ~140 GB VRAM (requires multi-GPU)
 
-## Key factors to consider
+<Tip>
+Quantization reduces VRAM requirements significantly. A 4-bit quantized 70B model can run on ~35 GB VRAM.
+</Tip>
 
-### GPU selection
+**For image models:** SDXL requires ~8 GB minimum, but 16–24 GB provides headroom for larger batch sizes and LoRA training.
 
-The GPU is the cornerstone of computational performance for many workloads. When selecting your GPU, consider the architecture that best suits your software requirements. NVIDIA GPUs with <CUDATooltip /> support are essential for most machine learning frameworks, while some applications might perform better on specific GPU generations. Evaluate both the raw computing power (CUDA cores, tensor cores) and the memory bandwidth to ensure optimal performance for your specific tasks.
+### Resource calculators
 
-For machine learning <InferenceTooltip />, a mid-range GPU might be sufficient, while <TrainingTooltip /> large models requires more powerful options. Check framework-specific recommendations, as PyTorch, TensorFlow, and other frameworks may perform differently across GPU types.
+Use these tools to estimate your specific requirements:
 
-For a full list of available GPUs, see [GPU types](/references/gpu-types).
+- [Hugging Face Model Memory Calculator](https://huggingface.co/spaces/hf-accelerate/model-memory-usage): Memory estimates for transformer models
+- [Can it run LLM?](https://huggingface.co/spaces/Vokturz/can-it-run-llm): Check if hardware can run specific language models
+- [VRAM Estimator](https://vram.asmirnov.xyz): GPU memory requirement approximations
 
-### VRAM requirements
+## Storage configuration
 
-VRAM (video RAM) is the dedicated memory on your GPU that stores data being processed. Insufficient VRAM can severely limit your ability to work with large models or datasets.
+Choose storage based on your data persistence needs:
 
-For machine learning models, VRAM requirements increase with model size, batch size, and input dimensions. When working with LLMs, a general guideline is to **allocate approximately 2GB of VRAM per billion parameters**. For example, running a 13-billion parameter model efficiently would require around 26GB of VRAM. Following this guideline helps ensure smooth model operation and prevents out-of-memory errors.
+| Storage type | Persists after stop? | Persists after delete? | Best for |
+|--------------|---------------------|------------------------|----------|
+| **Container disk** | No | No | OS, temporary files |
+| **Volume disk** | Yes | No | Working files, checkpoints |
+| **Network volume** | Yes | Yes | Datasets, model weights, long-term storage |
 
-### Storage configuration
+For data-intensive workloads, ensure sufficient volume disk or network volume capacity for your datasets, model weights, and output files.
 
-Your storage configuration affects both data access speeds and your ability to maintain persistent workspaces. Runpod offers both temporary and persistent [storage options](/pods/storage/types).
+## Optimize for cost
 
-When determining your storage needs, account for raw data size, intermediate files generated during processing, and space for output results. For data-intensive workloads, prioritize both capacity and speed to avoid bottlenecks.
+1. **Right-size your resources**: Start with the minimum viable configuration, then scale up based on actual usage. Development and testing often need less power than production.
 
-## Balancing performance and cost
+2. **Use spot instances**: For fault-tolerant workloads like batch processing or training with checkpoints, spot instances offer significant savings.
 
-When selecting a Pod, consider these strategies for balancing performance and cost:
-
-1. Use right-sized resources for your workload. For development and testing, a smaller Pod configuration may be sufficient, while production workloads might require more powerful options.
-
-2. Take advantage of spot instances for non-critical or fault-tolerant workloads to reduce costs. For consistent availability needs, on-demand or reserved Pods provide greater reliability.
-
-3. For extended usage, explore Runpod's [savings plans](/pods/pricing#savings-plans) to optimize your spending while ensuring access to the resources you need.
+3. **Consider savings plans**: For extended usage, Runpod's [savings plans](/pods/pricing#savings-plans) reduce costs for committed usage.
 
 ## Secure Cloud vs Community Cloud
 
-Secure Cloud operates in T3/T4 data centers with high reliability, redundancy, security, and fast response times to minimize downtime. It's designed for sensitive and enterprise workloads.
+| | Secure Cloud | Community Cloud |
+|---|--------------|-----------------|
+| **Infrastructure** | T3/T4 data centers | Peer-to-peer providers |
+| **Reliability** | High redundancy | Variable |
+| **Best for** | Production, sensitive data | Cost-sensitive workloads |
+| **Pricing** | Standard | Competitive |
 
-Community Cloud connects individual compute providers to users through a peer-to-peer GPU computing platform. Community Cloud offers competitive pricing with good server quality, though with less redundancy for power and networking compared to Secure Cloud.
-
-<Note>Runpod is no longer accepting new hosts for Community Cloud. Existing Community Cloud resources remain available to users.</Note>
+<Note>
+Runpod is no longer accepting new hosts for Community Cloud. Existing Community Cloud resources remain available.
+</Note>
 
 ## Next steps
 
-Once you've determined your resource requirements, you can learn how to:
-
-- [Deploy a Pod](/get-started).
-- [Manage your Pods](/pods/manage-pods).
-- [Connect to a Pod](/pods/connect-to-a-pod).
-
-Remember that you can always deploy a new Pod if your requirements evolve. Start with a configuration that meets your immediate needs, then scale up or down based on actual usage patterns and performance metrics.
+<CardGroup cols={2}>
+  <Card title="Deploy a Pod" href="/get-started" icon="rocket" horizontal>
+    Create your first Pod with your chosen configuration.
+  </Card>
+  <Card title="GPU types reference" href="/references/gpu-types" icon="microchip" horizontal>
+    Compare all available GPUs and specifications.
+  </Card>
+  <Card title="Storage options" href="/pods/storage/types" icon="hard-drive" horizontal>
+    Learn more about storage types and pricing.
+  </Card>
+  <Card title="Manage Pods" href="/pods/manage-pods" icon="server" horizontal>
+    Learn how to create, start, stop, and delete Pods.
+  </Card>
+</CardGroup>
