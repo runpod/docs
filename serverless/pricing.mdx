@@ -2,89 +2,65 @@
 title: "Pricing"
 sidebarTitle: "Pricing"
 description: "Learn how Serverless billing works to optimize your costs."
+mode: "wide"
 ---
 
 import GPUTable from '/snippets/serverless-gpu-pricing-table.mdx';
 
+<div className="overview-page-wrapper" />
+
 <Tip>
-
-Runpod offers custom pricing plans for large scale and enterprise workloads. If you're interested in learning more, [contact our sales team](https://ecykq.share.hsforms.com/2MZdZATC3Rb62Dgci7knjbA).
-
+Runpod offers custom pricing plans for large scale and enterprise workloads. [Contact our sales team](https://ecykq.share.hsforms.com/2MZdZATC3Rb62Dgci7knjbA) to learn more.
 </Tip>
 
-Runpod Serverless offers flexible, pay-per-second pricing with no upfront costs. This guide explains how pricing works and how to optimize your costs.
+Serverless offers pay-per-second pricing with no upfront costs. You're billed from when a worker starts until it fully stops, rounded up to the nearest second.
+
+## Worker types
+
+| | Flex workers | Active workers |
+|---|--------------|----------------|
+| **Behavior** | Scale to zero when idle | Always running (24/7) |
+| **Pricing** | Standard per-second rate | 20–30% discount |
+| **Best for** | Variable workloads, cost optimization | Consistent traffic, low-latency requirements |
 
 ## GPU pricing
 
-Serverless offers two pricing tiers:
-
-### Flex workers
-
-**On-demand workers** that scale to zero when not in use, so you only pay when processing requests. Flex workers are ideal for variable workloads, non-time-sensitive applications, and maximizing cost efficiency for sporadic usage.
-
-### Active workers
-
-**Always-on workers** that run 24/7. Active workers receive a 20-30% discount compared to flex workers, but you are charged continuously regardless of usage. Use active workers for consistent workloads, latency-sensitive applications, and high-volume processing.
-
-### Pricing table (per second)
-
-The price of flex/active workers depends on the GPU type and worker configuration:
-
 <GPUTable/>
 
-For the latest pricing information, visit the [Runpod pricing page](https://www.runpod.io/pricing).
+For the latest pricing, visit the [Runpod pricing page](https://www.runpod.io/pricing).
 
-## How billing works
+## What you're billed for
 
-Serverless billing operates on a precise pay-as-you-go model with specific timing mechanisms.
+Your total cost includes compute time and storage:
 
-Billing starts when the system signals a worker to wake up and ends when the worker is fully stopped. Runpod Serverless is charged by the second, with partial seconds rounded up to the next full second. For example, if your request takes 2.3 seconds to complete, you'll be billed for 3 seconds.
-
-### Compute and storage costs
-
-Your total Serverless costs include both compute time (GPU usage) and temporary storage:
-
-1. **Compute costs**: Charged per second based on the GPU type as shown in the pricing table above.
-2. **Storage costs**: The worker container disk incurs charges only while workers are running, calculated in 5-minute intervals. Even if your worker runs for less than 5 minutes, you'll be charged for the full 5-minute period. The storage cost is \$0.000011574 per GB per 5 minutes (equivalent to approximately \$0.10 per GB per month).
-
-If you have many workers continuously running with high storage costs, you can utilize [network volumes](/storage/network-volumes) to reduce expenses. Network volumes allow you to share data efficiently across multiple workers, reduce per-worker storage requirements by centralizing common files, and maintain persistent storage separate from worker lifecycles.
-
-Network volumes are billed hourly at a rate of \$0.07 per GB per month for the first 1TB, and \$0.05 per GB per month for additional storage beyond that.
+| Cost component | Description | Rate |
+|----------------|-------------|------|
+| **Compute** | GPU time while workers run | See pricing table above |
+| **Container disk** | Worker storage (5-min intervals) | ~\$0.10/GB/month |
+| **Network volume** | Shared persistent storage | \$0.07/GB/month (< 1TB), \$0.05/GB/month (> 1TB) |
 
 ### Compute cost breakdown
 
-Serverless workers incur charges during these periods:
+Workers incur charges during three phases:
 
-1. **Start time:** The time required to initialize a worker and load models into GPU memory.
-2. **Execution time:** The time spent actually processing the request.
-3. **Idle time:** The period in which the worker remains active after completing a request.
+1. **Start time**: Initializing the container and loading models into GPU memory. Minimize with [FlashBoot](/serverless/endpoints/endpoint-configurations#flashboot) or [model caching](/serverless/endpoints/model-caching).
 
-#### Start time
+2. **Execution time**: Processing requests. Set [execution timeouts](/serverless/endpoints/endpoint-configurations#execution-timeout) to prevent runaway jobs.
 
-A worker start occurs when a worker is initialized from a scaled-down state. This typically involves starting the container, loading models into GPU memory, and initializing runtime environments. Worker start time varies based on model size and complexity. Larger models take longer to load into GPU memory. 
+3. **Idle time**: Waiting for new requests before scaling down (default: 5 seconds). Configure in [endpoint settings](/serverless/endpoints/endpoint-configurations#idle-timeout).
 
-To optimize worker start times, you can use FlashBoot (included at no extra charge) or configure your [endpoint settings](/serverless/endpoints/endpoint-configurations#reducing-worker-startup-times).
+<Tip>
+For high-volume workloads with significant storage needs, use [network volumes](/storage/network-volumes) to share data across workers and reduce per-worker storage costs.
+</Tip>
 
-#### Execution time
+## Account limits
 
-This is the time your worker spends processing a request. Execution time depends on the complexity of your workload, the size of input data, and the performance of the GPUs you've selected.
-
-Set reasonable [execution timeout limits](/serverless/endpoints/endpoint-configurations#execution-timeout) to prevent runaway jobs from consuming excessive resources, and optimize your code to reduce processing time where possible.
-
-#### Idle time
-
-After completing a request, workers remain active for a specified period before scaling down. This reduces response times for subsequent requests but incurs additional charges. The default idle timeout is 5 seconds, but you can configure this in your [endpoint settings](/serverless/endpoints/endpoint-configurations#idle-timeout).
-
-## Account spend limits
-
-By default, Runpod accounts have a spend limit of \$80 per hour across all resources. This limit protects your account from unexpected charges. If your workload requires higher spending capacity, you can [contact support](https://www.runpod.io/contact) to increase it.
+**Spend limit**: Default limit of \$80/hour across all resources. [Contact support](https://www.runpod.io/contact) to increase.
 
 ## Billing support
 
-If you think you've been billed incorrectly, please [contact support](https://www.runpod.io/contact), and include this information in your request:
+If you believe you've been billed incorrectly, [contact support](https://www.runpod.io/contact), including the following information in your ticket:
 
-1. The Serverless endpoint ID where you experienced billing issues.
-2. Request ID for the specific request (if applicable).
-3. The approximate time when the billing issue occurred.
-
-Providing these details will help our support team resolve your issue more quickly.
+- Endpoint ID
+- Request ID (if applicable)
+- Approximate time of the issue

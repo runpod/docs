@@ -2,76 +2,62 @@
 title: "Overview"
 sidebarTitle: "Overview"
 description: "Deploy and manage Serverless endpoints using the Runpod console or REST API."
+mode: "wide"
 ---
 
+<div className="overview-page-wrapper" />
 
-Endpoints are the foundation of Runpod Serverless, serving as the gateway for deploying and managing your [Serverless workers](/serverless/workers/overview). They provide a consistent API interface that allows your applications to interact with powerful compute resources on demand.
+Endpoints are the foundation of Runpod Serverless, serving as the gateway for deploying and managing your [Serverless workers](/serverless/workers/overview). Each endpoint provides a unique URL that accepts [HTTP requests](/serverless/endpoints/send-requests), processes them using your [handler function](/serverless/workers/handler-functions), and returns results.
 
-Endpoints are RESTful APIs that accept [HTTP requests](/serverless/endpoints/send-requests), processing the input using your [handler function](/serverless/workers/handler-functions), and returning the result via HTTP response. Each endpoint provides a unique URL and abstracts away the complexity of managing individual GPUs/CPUs.
+<CardGroup cols={2}>
+  <Card title="Send requests" href="/serverless/endpoints/send-requests" icon="paper-plane" horizontal>
+    Learn how to send requests to your endpoints.
+  </Card>
+  <Card title="Endpoint settings" href="/serverless/endpoints/endpoint-configurations" icon="gear" horizontal>
+    Configure scaling, timeouts, and GPU selection.
+  </Card>
+  <Card title="Job states" href="/serverless/endpoints/job-states" icon="chart-line" horizontal>
+    Monitor job status and metrics.
+  </Card>
+  <Card title="Model caching" href="/serverless/endpoints/model-caching" icon="bolt" horizontal>
+    Reduce cold starts with cached models.
+  </Card>
+</CardGroup>
 
 ## Endpoint types
 
-### Queue-based endpoints
+| | Queue-based | Load balancing |
+|---|-------------|----------------|
+| **Processing** | Requests queued and processed sequentially | Direct HTTP access to workers |
+| **Execution modes** | Async (`/run`) or sync (`/runsync`) | Custom HTTP endpoints |
+| **Retries** | Automatic retries on failure | No automatic retries |
+| **Handler required?** | Yes | No (use any HTTP framework) |
+| **Best for** | Batch jobs, guaranteed execution | Real-time apps, streaming |
 
-Queue-based endpoints are the traditional type of endpoint that process requests sequentially in a queue (managed automatically by Runpod), providing guaranteed execution and automatic retries for failed requests.
-
-Queue-based endpoints offer two types execution modes:
-
-- **Asynchronous processing** via the `/run` endpoint operation, which lets you submit jobs that run in the background and check results later (with `/status`), making this ideal for long-running tasks.
-- **Synchronous operations** through the `/runsync` endpoint operation, allowing you to receive immediate results in the same request, which is perfect for interactive applications.
-
-To learn more about the available endpoint operations, see the [Send API requests](/serverless/endpoints/send-requests#operation-overview) page.
-
-### Load balancing endpoints
-
-Load balancing endpoints offer **direct HTTP access** to your worker's HTTP server, bypassing the queueing system. These are ideal for real-time applications and streaming, but provide no queuing mechanism for request backlog (similar to UDP's behavior in networking). 
-
-Load balancing endpoints don't require a handler function, allowing you to define your own custom API endpoints using any HTTP framework (like FastAPI or Flask).
-
-To learn more, see the [Load balancing endpoints](/serverless/load-balancing/overview) page.
-
-## Key features
-
-### Auto-scaling
-
-Runpod endpoints (both queue-based and load balancing) can automatically scale from zero to hundreds of workers based on demand. You can customize your endpoint configuration to adjust the minimum and maximum worker count, GPU allocation, and memory settings. The system also offers GPU prioritization, allowing you to specify preferred GPU types in order of priority.
-
-To learn more, see [Endpoint settings](/serverless/endpoints/endpoint-configurations).
-
-### Integration options
-
-Runpod endpoints support [webhook notifications](/serverless/endpoints/send-requests#webhook-notifications), allowing you to configure endpoints to call your webhook when jobs complete.
-
-It also includes [S3-compatible storage integration](/serverless/endpoints/send-requests#s3-compatible-storage-integration) for working with object storage for larger inputs and outputs.
+Learn more about [load balancing endpoints](/serverless/load-balancing/overview).
 
 ## Create an endpoint
 
-Before creating an endpoint make sure you have a working [handler function](/serverless/workers/handler-functions) and [Dockerfile](/serverless/workers/create-dockerfile).
+Before creating an endpoint, ensure you have a [handler function](/serverless/workers/handler-functions) and [Dockerfile](/serverless/workers/create-dockerfile).
 
 <Tabs>
 <Tab title="Web">
-To create a new Serverless endpoint through the Runpod web interface:
 
-1. Navigate to the [Serverless section](https://www.console.runpod.io/serverless) of the Runpod console.
-2. Click **New Endpoint**.
-3. On the **Deploy a New Serverless Endpoint** screen, choose your deployment source:
-   * **Import Git Repository** (if GitHub is connected). See [Deploy from GitHub](/serverless/workers/github-integration) for details.
-   * **Import from Docker Registry**. See [Deploy from Docker Hub](/serverless/workers/deploy) for details.
-   * Or select a preconfigured endpoint under **Ready-to-Deploy Repos**.
-4. Follow the UI steps to configure your selected source (Docker image, GitHub repo), then click **Next**.
-5. Configure your endpoint settings:
-   * **Endpoint Name**: The display name for your endpoint in the console.
-   * **Endpoint Type**: Select **Queue** for traditional queue-based processing or **Load balancer** for direct HTTP access. See [Load balancing endpoints](/serverless/load-balancing/overview) for details.
-   * **GPU Configuration**: Select the appropriate GPU types and configure worker settings.
-   * **Model**: (Optional) Enter a model URL from Hugging Face to optimize worker startup times. See [Cached models](/serverless/endpoints/model-caching) for details.
-   * **Container Configuration**: Edit the container start command, specify the [container disk size](/serverless/storage/overview), and expose HTTP/TCP ports.
-   * **Environment Variables**: Add [environment variables](/serverless/development/environment-variables) for your worker containers.
-6. Click **Deploy Endpoint** to deploy.
+1. Navigate to the [Serverless section](https://www.console.runpod.io/serverless) and click **New Endpoint**.
+2. Choose your deployment source:
+   - **Import Git Repository**: See [Deploy from GitHub](/serverless/workers/github-integration)
+   - **Import from Docker Registry**: See [Deploy from Docker Hub](/serverless/workers/deploy)
+   - **Ready-to-Deploy Repos**: Select a preconfigured endpoint
+3. Configure your endpoint:
+   - **Endpoint Name** and **Type** (Queue-based or Load balancer)
+   - **GPU Configuration** and worker settings
+   - **Model** (optional): Enter a Hugging Face URL for [cached models](/serverless/endpoints/model-caching)
+   - **Environment Variables**: See [environment variables](/serverless/development/environment-variables)
+4. Click **Deploy Endpoint**.
 
 </Tab>
 
 <Tab title="REST API">
-To create a Serverless endpoint using the REST API, send a POST request to the `/endpoints` endpoint:
 
 ```bash
 curl --request POST \
@@ -79,80 +65,40 @@ curl --request POST \
   --header 'Authorization: Bearer RUNPOD_API_KEY' \
   --header 'Content-Type: application/json' \
   --data '{
-  "allowedCudaVersions": [
-    "12.8"
-  ],
-  "computeType": "GPU",
-  "cpuFlavorIds": [
-    "cpu3c"
-  ],
-  "dataCenterIds": [
-    "EU-RO-1",
-    "CA-MTL-1"
-  ],
-  "executionTimeoutMs": 600000,
-  "flashboot": true,
-  "gpuCount": 1,
-  "gpuTypeIds": [
-    "NVIDIA GeForce RTX 4090"
-  ],
-  "idleTimeout": 5,
-  "name": "my-endpoint",
-  "scalerType": "QUEUE_DELAY",
-  "scalerValue": 4,
-  "templateId": "30zmvf89kd",
-  "vcpuCount": 2,
-  "workersMax": 3,
-  "workersMin": 0
-}'
+    "name": "my-endpoint",
+    "templateId": "30zmvf89kd",
+    "gpuTypeIds": ["NVIDIA GeForce RTX 4090"],
+    "workersMin": 0,
+    "workersMax": 3,
+    "idleTimeout": 5
+  }'
 ```
 
-For complete API documentation and parameter details, see the [Serverless endpoint API reference](/api-reference/endpoints/POST/endpoints).
+See the [Endpoint API reference](/api-reference/endpoints/POST/endpoints) for all parameters.
 
 </Tab>
-
 </Tabs>
 
 <Tip>
-You can optimize cost and availability by specifying GPU preferences in order of priority. Runpod attempts to allocate your first choice GPU. If unavailable, it automatically uses the next GPU in your priority list, ensuring your workloads run on the best available resources.
-
-You can enable or disable particular GPU types using the **Advanced > Enabled GPU Types** section.
+Optimize cost and availability by specifying multiple GPU types in priority order. Runpod allocates your first choice if available, otherwise uses the next in your list.
 </Tip>
 
-After deployment, your endpoint takes time to initialize before it is ready to process requests. You can monitor the deployment status on the endpoint details page, which shows worker status and initialization progress. Once active, your endpoint displays a unique API URL (`https://api.runpod.ai/v2/{endpoint_id}/`) that you can use to send requests.
+After deployment, your endpoint displays a unique API URL: `https://api.runpod.ai/v2/{endpoint_id}/`
 
 ## Edit an endpoint
 
-{/* <Frame alt="Endpoint configurations">
-  <img src="/images/endpoint-settings.png" />
-</Frame> */}
+1. Navigate to the [Serverless section](https://www.console.runpod.io/serverless).
+2. Click the three dots on your endpoint → **Edit Endpoint**.
+3. Update [endpoint settings](/serverless/endpoints/endpoint-configurations) and click **Save Endpoint**.
 
-You can modify your endpoint's configuration at any time:
-
-1. Navigate to the [Serverless section](https://www.console.runpod.io/serverless) in the Runpod console.
-2. Click the three dots in the top right corner of the endpoint you want to modify.
-3. Click **Edit Endpoint**.
-4. Update any [endpoint settings](/serverless/endpoints/endpoint-configurations) as needed.
-5. Click **Save Endpoint** to save your changes.
-
-Changes to some settings (like GPU types or worker counts) may require restarting active workers to take effect.
+Changes to GPU types or worker counts may require restarting active workers.
 
 ## Delete an endpoint
 
-To delete an endpoint:
-
-1. Navigate to the [Serverless section](https://www.console.runpod.io/serverless) in the Runpod console.
-2. Click the three dots in the top right corner of the endpoint you want to delete.
-3. Click **Delete Endpoint**.
-4. Type the name of the endpoint, then click **Confirm**.
+1. Navigate to the [Serverless section](https://www.console.runpod.io/serverless).
+2. Click the three dots on your endpoint → **Delete Endpoint**.
+3. Type the endpoint name to confirm.
 
 <Warning>
-Deleting an endpoint permanently removes all configuration, logs, and job history. This action cannot be undone.
+Deleting an endpoint permanently removes all configuration, logs, and job history.
 </Warning>
-
-## Next steps
-
-* [Send requests to your endpoint](/serverless/endpoints/send-requests)
-* [Configure endpoint settings](/serverless/endpoints/endpoint-configurations)
-* [Monitor job states and metrics](/serverless/endpoints/job-states)
-* [Optimize endpoint performance](/serverless/development/optimization)
