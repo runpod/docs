@@ -6,16 +6,6 @@ description: "Essential Docker CLI commands for building, running, managing, and
 
 This reference guide covers the most commonly used Docker commands for working with images and containers. Use this as a quick reference when building and deploying applications, especially for Runpod's bring-your-own-container (BYOC) workflows with [Serverless](/serverless/workers/overview) and [Pods](/pods/overview).
 
-## What you'll learn
-
-In this reference, you'll find:
-
-- Commands for building and managing Docker images.
-- Commands for running and controlling containers.
-- Commands for working with volumes and networks.
-- Common command workflows for development and deployment.
-- Runpod-specific guidance for container deployment.
-
 ## Building images
 
 These commands help you create and manage Docker images.
@@ -152,6 +142,17 @@ docker pull registry.example.com/myapp:latest
 ```
 
 If you don't specify a tag, Docker pulls the `latest` tag by default. Be aware that `latest` doesn't necessarily mean the most recent version—it's just a tag name that image maintainers choose to use or not.
+
+<Warning>
+**Avoid using `:latest` for production deployments.** The `:latest` tag changes every time someone pushes a new image without specifying a version. This can cause several problems:
+
+- **Unpredictable deployments**: You can't guarantee which version of your code is running.
+- **Debugging difficulties**: When problems occur, you can't easily determine which image version caused them.
+- **Caching conflicts**: Runpod caches images for faster startup. If you push a new `:latest` image, your workers or Pods may continue using the cached version.
+- **No rollback path**: Without version tags, you can't quickly revert to a previous working version.
+
+Instead, use semantic versioning (e.g., `myapp:v1.0.0`) or commit-based tags (e.g., `myapp:abc123`). This makes deployments predictable and debugging straightforward.
+</Warning>
 
 ## Running containers
 
@@ -396,18 +397,20 @@ Here are typical command sequences for common tasks.
 ### Build, tag, and push a custom image
 
 ```bash
-# Build for Runpod
-docker build --platform=linux/amd64 -t myapp:latest .
+# Build for Runpod with a version tag
+docker build --platform=linux/amd64 -t myapp:v1.0.0 .
 
 # Tag for Docker Hub
-docker tag myapp:latest username/myapp:v1.0
+docker tag myapp:v1.0.0 username/myapp:v1.0.0
 
 # Log in to Docker Hub
 docker login
 
 # Push to registry
-docker push username/myapp:v1.0
+docker push username/myapp:v1.0.0
 ```
+
+Use semantic versioning (e.g., `v1.0.0`) instead of `:latest` to ensure predictable deployments and easy rollbacks.
 
 ### Develop with live code reloading
 

@@ -1,24 +1,8 @@
 ---
 title: "Deploy Flash apps to Runpod"
 sidebarTitle: "Deploy to Runpod"
-description: "Build and deploy your FastAPI app to Runpod."
+description: "Build and deploy your Flash app for production serving."
 ---
-
-import { LoadBalancingEndpointsTooltip, QueueBasedEndpointsTooltip } from "/snippets/tooltips.jsx";
-
-Flash provides a complete deployment workflow for taking your local development project to production. Use `flash deploy` to build and deploy your application in a single command, or use `flash build` for more control over the build process.
-
-## Deployment workflow
-
-A typical deployment workflow looks like this:
-
-1. **Create a new project**: Use [`flash init`](/flash/cli/init) to create a new project.
-2. **Develop locally**: Use [`flash run`](/flash/cli/run) to test your application. Any functions decorated with `@Endpoint` will be run on Runpod Serverless workers.
-3. **Preview** (optional): Use [`flash deploy --preview`](/flash/cli/deploy) to test locally with Docker.
-4. **Deploy**: Use [`flash deploy`](/flash/cli/deploy) to push to Runpod Serverless.
-5. **Manage**: Use [`flash env`](/flash/cli/env) and [`flash app`](/flash/cli/app) to manage your deployments.
-
-## Deploy your application
 
 When you're satisfied with your endpoint functions and ready to move to production, use `flash deploy` to build and deploy your Flash application:
 
@@ -35,49 +19,17 @@ This command performs the following steps:
 
 ### Deployment architecture
 
-Flash deploys your application as multiple independent Serverless endpoints. Each endpoint configuration in your worker files becomes a separate endpoint:
-
-```mermaid
-%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#9289FE','primaryTextColor':'#fff','primaryBorderColor':'#9289FE','lineColor':'#5F4CFE','secondaryColor':'#AE6DFF','tertiaryColor':'#FCB1FF','edgeLabelBackground':'#5F4CFE', 'fontSize':'14px','fontFamily':'font-inter'}}}%%
-
-flowchart TB
-    Users(["USERS"])
-    StateManager["Runpod GraphQL API<br/>• Service discovery<br/>• Manifest registry"]
-
-    subgraph Runpod ["RUNPOD SERVERLESS"]
-        LB["lb_worker ENDPOINT<br/>(load-balanced)<br/>• POST /process<br/>• GET /health"]
-        GPU["gpu_worker ENDPOINT<br/>(queue-based)<br/>• POST /runsync"]
-        CPU["cpu_worker ENDPOINT<br/>(queue-based)<br/>• POST /runsync"]
-
-        LB <-.->|"inter-endpoint calls"| GPU
-        LB <-.->|"inter-endpoint calls"| CPU
-
-        LB -.->|"service discovery"| StateManager
-        GPU -.->|"service discovery"| StateManager
-        CPU -.->|"service discovery"| StateManager
-    end
-
-    Users -->|"call directly"| LB
-    Users -->|"call directly"| GPU
-    Users -->|"call directly"| CPU
-
-    style Runpod fill:#1a1a2e,stroke:#5F4CFE,stroke-width:2px,color:#fff
-    style Users fill:#4D38F5,stroke:#4D38F5,color:#fff
-    style LB fill:#5F4CFE,stroke:#5F4CFE,color:#fff
-    style GPU fill:#22C55E,stroke:#22C55E,color:#000
-    style CPU fill:#22C55E,stroke:#22C55E,color:#000
-    style StateManager fill:#AE6DFF,stroke:#AE6DFF,color:#fff
-```
+Flash deploys your application as multiple independent Serverless endpoints. Each endpoint configuration in your worker files becomes a separate endpoint.
 
 **How Flash deployments work:**
 
-- **One endpoint name = one endpoint**: Each unique endpoint configuration (defined by its `name` parameter) creates a separate Serverless endpoint with its own URL.
+- **One Endpoint class = one Serverless endpoint**: Each unique endpoint configuration (defined by its `name` parameter) creates a separate Serverless endpoint with its own URL.
 - **Call any endpoint**: After deployment, you can call whichever endpoint you need—`lb_worker` for API requests, `gpu_worker` for GPU tasks, `cpu_worker` for CPU tasks.
 - [Load balancing endpoints](/flash/create-endpoints#load-balanced-endpoints): Create HTTP APIs with custom routes using `.get()`, `.post()`, etc. decorators.
 - [Queue-based endpoints](/flash/create-endpoints#queue-based-endpoints): Run compute tasks using the `/runsync` or `/run` routes.
 - **Inter-endpoint communication**: Endpoints can call each other's functions when needed, using the Runpod GraphQL service for discovery.
 
-### Deploy to an environment
+### Deploy to a specific environment
 
 Flash organizes deployments using [apps and environments](/flash/apps/apps-and-environments). Deploy to a specific environment using the `--env` flag:
 
@@ -122,7 +74,7 @@ Queue-based endpoints:
 
 Each endpoint is independent with its own URL and authentication.
 
-## Understanding endpoint architecture
+<Accordion title="Understanding endpoint architecture">
 
 The relationship between endpoint configurations and deployed endpoints differs between load-balanced and queue-based endpoints:
 
@@ -170,7 +122,7 @@ curl -X POST https://api.runpod.ai/v2/abc123xyz/run \
 ```
 
 <Warning>
-**Important:** For deployed queue-based endpoints, you must use **one function per endpoint name**. Each function creates its own Serverless endpoint. Do not put multiple `@Endpoint` functions with the same name when building Flash apps.
+**Important:** For deployed queue-based endpoints, you must use **one function per endpoint name**. Each function creates its own Serverless endpoint. Do not create multiple `@Endpoint` functions with the same `name` when building Flash apps.
 </Warning>
 
 ### Load-balanced endpoints (multiple routes per endpoint)
@@ -211,14 +163,11 @@ curl -X GET https://abc123xyz.api.runpod.ai/health \
     -H "Authorization: Bearer $RUNPOD_API_KEY"
 ```
 
-### Key takeaway
-
-- **Queue-based**: 1 endpoint name = 1 function = 1 Serverless endpoint
-- **Load-balanced**: 1 endpoint instance = multiple routes = 1 Serverless endpoint
+</Accordion>
 
 ## Preview before deploying
 
-Test your deployment locally using Docker before pushing to production using the `--preview` flag:
+You can test your deployment locally using Docker before pushing to production using the `--preview` flag:
 
 ```bash
 flash deploy --preview
@@ -230,13 +179,6 @@ This command:
 2. Creates a Docker network for inter-container communication.
 3. Starts one container per endpoint configuration (`lb_worker`, `gpu_worker`, `cpu_worker`, etc.).
 4. Exposes all endpoints for local testing.
-
-Use preview mode to:
-
-- Validate your deployment configuration.
-- Test cross-endpoint function calls.
-- Debug resource provisioning issues.
-- Verify the manifest structure.
 
 Press `Ctrl+C` to stop the preview environment.
 
@@ -278,10 +220,6 @@ When you run `flash deploy` (or `flash build`), Flash:
 5. **Installs** dependencies with Linux x86_64 compatibility.
 6. **Packages** everything into `.flash/artifact.tar.gz`.
 
-### Cross-platform builds
-
-Flash automatically handles cross-platform builds. You can build on macOS, Windows, or Linux, and the resulting package will run correctly on Runpod's Linux x86_64 infrastructure.
-
 ### Build artifacts
 
 After building, these artifacts are created in the `.flash/` directory:
@@ -292,7 +230,7 @@ After building, these artifacts are created in the `.flash/` directory:
 | `.flash/flash_manifest.json` | Service discovery configuration |
 | `.flash/.build/` | Temporary build directory (removed by default) |
 
-## What gets deployed to Runpod
+## What gets deployed
 
 When you deploy a Flash app, you're deploying a **build artifact** (tarball) onto pre-built Flash Docker images. This architecture is similar to AWS Lambda layers: the base runtime is pre-built, and your code and dependencies are layered on top.
 
@@ -365,45 +303,16 @@ The `flash_manifest.json` file is the brain of your deployment. It tells each en
 
 ### What gets created on Runpod
 
-For each endpoint configuration in the manifest, Flash creates an independent Serverless endpoint. Each endpoint runs as its own service with its own URL.
-
-**load-balanced endpoints** ([load balancer](/serverless/load-balancing/overview))
-
-- **Purpose**: HTTP-facing services for custom API routes
-- **Image**: Pre-built `runpod/flash-lb-cpu:latest` or `runpod/flash-lb:latest`
-- **Use cases**: REST APIs, webhooks, public-facing services
-- **Example**: `lb_worker.py` with `@api.post("/process")`
-- **Routes**: Custom HTTP endpoints defined in your route decorators
-- **Startup process**:
-  1. Container extracts your tarball
-  2. Auto-generated handler imports your worker file (e.g., `lb_worker.py`)
-  3. Routes are registered from decorators
-  4. Uvicorn server starts on port 8000
-- **Service discovery**: Queries the state manager for cross-endpoint calls
-
-**queue-based endpoints** (serverless compute)
-
-- **Purpose**: Background compute for intensive `@Endpoint` functions
-- **Image**: Pre-built `runpod/flash:latest` (GPU) or `runpod/flash-cpu:latest` (CPU)
-- **Use cases**: GPU inference, batch processing, heavy computation
-- **Example**: `gpu_worker.py` with `@Endpoint(name="...", gpu=...)`
-- **Routes**: Automatic `/runsync` endpoint for job submission
-- **Startup process**:
-  1. Container extracts your tarball
-  2. Worker module is imported (e.g., `gpu_worker.py`)
-  3. Function registry maps function names to callables
-  4. Worker listens for jobs from job queue
-- **Execution**: Sequential job processing with automatic retry logic
-- **Service discovery**: Queries the state manager for cross-endpoint calls
+For each endpoint configuration in the manifest, Flash creates an independent Serverless endpoint, identified by its `name` parameter.
 
 ### Cross-endpoint communication
 
 When one endpoint needs to call a function on another endpoint:
 
-1. **Manifest lookup**: Calling endpoint checks `flash_manifest.json` for function-to-resource mapping
-2. **Service discovery**: Queries the state manager (Runpod GraphQL API) for target endpoint URL
-3. **Direct call**: Makes HTTP request directly to target endpoint
-4. **Response**: Target endpoint executes function and returns result
+1. **Manifest lookup**: The calling endpoint checks `flash_manifest.json` for function-to-resource mapping.
+2. **Service discovery**: It queries the state manager (Runpod GraphQL API) for target endpoint URL.
+3. **Direct call**: It makes an HTTP request directly to the target endpoint.
+4. **Response**: The target endpoint executes the function and returns the result.
 
 Each endpoint maintains its own connection to the state manager, querying for peer endpoint URLs as needed and caching results for 300 seconds to minimize API calls.
 
