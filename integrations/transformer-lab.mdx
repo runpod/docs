@@ -5,7 +5,7 @@ sidebarTitle: "Transformer Lab"
 
 [Transformer Lab](https://lab.cloud/) is an open-source research environment for AI researchers to train, evaluate, and scale models from local hardware to cloud GPUs. It provides a unified interface for managing experiments, downloading models, and running training jobs across different compute providers.
 
-This guide shows you how to configure Transformer Lab to run ML workloads on Runpod GPUs using SkyPilot as the orchestration layer.
+This guide shows you how to configure Transformer Lab to run ML workloads on Runpod GPUs.
 
 ## Requirements
 
@@ -117,66 +117,64 @@ Transformer Lab requires [WSL2 (Windows Subsystem for Linux)](https://docs.micro
 
 ## Run a task on Runpod
 
-Transformer Lab uses SkyPilot to orchestrate cloud workloads. You define tasks in YAML files that specify the resources, setup commands, and run commands.
+Transformer Lab uses task files to define cloud workloads. Tasks specify the resources, setup commands, and run commands for your job.
 
-### Create a task file
+### Create a task
 
-Create a file named `hello_runpod.yaml`:
+<Steps>
+  <Step title="Open the Tasks menu">
+    In the Transformer Lab sidebar, click **Tasks** to open the task management interface.
+  </Step>
 
-```yaml
-resources:
-  cloud: runpod
-  accelerators: A40:1
+  <Step title="Create a new task">
+    Click **New** to add a new task. Select **Start with a blank task template**, then click **Submit**.
+  </Step>
 
-setup: |
-  echo "Setting up environment..."
-  pip install torch
+  <Step title="Configure the task">
+    In the task editor, paste the following YAML configuration:
 
-run: |
-  echo "Hello from Runpod!"
-  python << 'EOF'
-  import torch
-  print(f"CUDA available: {torch.cuda.is_available()}")
-  if torch.cuda.is_available():
-      print(f"GPU: {torch.cuda.get_device_name(0)}")
-  else:
-      print("GPU: None")
-  EOF
-```
+    ```yaml
+    resources:
+      cloud: runpod
+      accelerators: A40:1
 
-### Launch the task
+    setup: |
+      echo "Setting up environment..."
+      pip install torch
 
-Launch your task on Runpod:
+    run: |
+      echo "Hello from Runpod!"
+      python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); print(f'GPU: {torch.cuda.get_device_name(0)}' if torch.cuda.is_available() else 'GPU: None')"
+    ```
 
-```bash
-sky launch -c my-cluster hello_runpod.yaml
-```
+    This configuration requests a single NVIDIA A40 GPU on Runpod, installs PyTorch, and runs a simple script to verify GPU access.
+  </Step>
 
-SkyPilot provisions a Pod on Runpod, runs your task, and streams the output to your terminal.
+  <Step title="Queue the task">
+    Click **Queue** to submit the task you just created. Select your Runpod compute provider and click **Submit** to start the job. Transformer Lab provisions a Pod on Runpod, runs your task, and displays the output in the task logs.
+  </Step>
+</Steps>
 
-### View and manage clusters
+### Monitor task progress
 
-List running clusters:
+Once queued, your task appears in the Tasks list with its current status. Click **Output** to view the task logs.
 
-```bash
-sky status
-```
+The output modal has two tabs:
 
-SSH into a cluster:
+- **Lab SDK Output**: Shows output from scripts that use the `transformerlab` Python package.
+- **Machine Logs**: Shows raw stdout/stderr from the Pod. Use this tab to see output from standard `print()` statements.
 
-```bash
-ssh my-cluster
-```
+For the examples in this guide, check the **Machine Logs** tab to see your task output.
 
-Stop a cluster when you're done:
+### Stop a running task
 
-```bash
-sky down my-cluster
-```
+To stop a task before it completes, click the stop button (square icon). This terminates the Runpod Pod and releases the resources.
+
+You can also verify that no Pods are running by checking the [Runpod console](https://www.console.runpod.io/pods).
 
 ## Run a training job
 
-Here's an example task file for fine-tuning a model on Runpod:
+Here's an example task configuration for fine-tuning a model on Runpod. Create a new task in the Tasks menu and use this YAML:
 
 ```yaml
 resources:
@@ -185,41 +183,24 @@ resources:
   disk_size: 100
 
 setup: |
-  pip install torch transformers datasets accelerate peft
+  pip install torch transformers peft
 
 run: |
-  python << 'EOF'
+  python -c "
   import torch
-  from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
+  from transformers import AutoModelForCausalLM, AutoTokenizer
   from peft import LoraConfig, get_peft_model
-
-  print(f"GPU: {torch.cuda.get_device_name(0)}")
-  print(f"Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
-
-  # Load model
-  model_name = "HuggingFaceTB/SmolLM-135M-Instruct"
-  model = AutoModelForCausalLM.from_pretrained(model_name)
-  tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-  # Configure LoRA
-  lora_config = LoraConfig(
-      r=8,
-      lora_alpha=32,
-      target_modules=["q_proj", "v_proj"],
-      lora_dropout=0.05,
-  )
+  print(f'GPU: {torch.cuda.get_device_name(0)}')
+  print(f'Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB')
+  model = AutoModelForCausalLM.from_pretrained('HuggingFaceTB/SmolLM-135M-Instruct')
+  lora_config = LoraConfig(r=8, lora_alpha=32, target_modules=['q_proj', 'v_proj'], lora_dropout=0.05)
   model = get_peft_model(model, lora_config)
-
-  print("Model ready for training!")
-  print(f"Trainable parameters: {model.print_trainable_parameters()}")
-  EOF
+  print('Model ready for training!')
+  model.print_trainable_parameters()
+  "
 ```
 
-Launch the training job:
-
-```bash
-sky launch -c training-cluster finetune.yaml
-```
+Select your Runpod compute provider and click **Queue** to start the training job.
 
 ## Available GPU types
 
@@ -238,4 +219,6 @@ For multiple GPUs, change the count: `A100:4` for 4x A100 GPUs.
 
 ## Clean up
 
-To avoid unexpected charges, stop your Pods using the [Runpod console](https://www.console.runpod.io/pods) when you're done.
+When your tasks complete, Transformer Lab automatically releases the Runpod resources. To manually stop a running task, select it from the Tasks list and click **Stop**.
+
+You can also verify that no Pods are running by checking the [Runpod console](https://www.console.runpod.io/pods).
