@@ -44,7 +44,7 @@ Transformer Lab requires [WSL2 (Windows Subsystem for Linux)](https://docs.micro
     ~/.transformerlab/src/install.sh multiuser_setup
     ```
 
-    This installs SkyPilot and enables the Team Settings features needed for cloud provider configuration.
+    This enables the Team Settings features needed for cloud provider configuration.
   </Step>
 
   <Step title="Launch Transformer Lab">
@@ -70,6 +70,16 @@ Transformer Lab requires [WSL2 (Windows Subsystem for Linux)](https://docs.micro
   </Step>
 </Steps>
 
+## Configure shared storage
+
+For remote task execution, Transformer Lab requires shared storage so your local instance can communicate with remote Pods. Configure one of the following:
+
+- **Amazon S3**: Create an S3 bucket and configure credentials
+- **Google Cloud Storage**: Create a GCS bucket and configure service account
+- **Azure Blob Storage**: Create a storage container and configure credentials
+
+Refer to the [Transformer Lab documentation](https://lab.cloud/for-teams/) for detailed shared storage setup instructions.
+
 ## Configure Runpod as a compute provider
 
 <Steps>
@@ -88,7 +98,7 @@ Transformer Lab requires [WSL2 (Windows Subsystem for Linux)](https://docs.micro
 
     In the modal that opens:
 
-    1. Enter a name for your provider (e.g., "Runpod GPUs").
+    1. Enter a name for your provider (e.g., "runpod-provider"). Remember this name—you'll use it in your task.yaml files.
     2. Select **Runpod (beta)** as the provider type.
     3. In the configuration JSON field, add your [Runpod API key](/get-started/api-keys):
 
@@ -99,18 +109,8 @@ Transformer Lab requires [WSL2 (Windows Subsystem for Linux)](https://docs.micro
     }
     ```
 
-    Leave the base URL as is. 
+    Leave the base URL as is.
     
-    You can also set optional defaults:
-
-    ```json
-    {
-      "api_key": "YOUR_RUNPOD_API_KEY",
-      "default_gpu_type": "NVIDIA GeForce RTX 4090",
-      "default_region": "US"
-    }
-    ```
-
     Click **Add Compute Provider** to save the provider.
   </Step>
 </Steps>
@@ -134,18 +134,21 @@ Transformer Lab uses task files to define cloud workloads. Tasks specify the res
     In the task editor, paste the following YAML configuration:
 
     ```yaml
+    name: hello-runpod
     resources:
-      cloud: runpod
-      accelerators: A40:1
-
+      compute_provider: runpod-provider
+      cpus: 4
+      memory: 16
+      accelerators: "A40:1"
     setup: |
       echo "Setting up environment..."
       pip install torch
-
     run: |
       echo "Hello from Runpod!"
       python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); print(f'GPU: {torch.cuda.get_device_name(0)}' if torch.cuda.is_available() else 'GPU: None')"
     ```
+
+    Replace `runpod-provider` with the name you gave your Runpod provider in Team Settings.
 
     This configuration requests a single NVIDIA A40 GPU on Runpod, installs PyTorch, and runs a simple script to verify GPU access.
   </Step>
@@ -172,50 +175,20 @@ To stop a task before it completes, click the stop button (square icon). This te
 
 You can also verify that no Pods are running by checking the [Runpod console](https://www.console.runpod.io/pods).
 
-## Run a training job
+## Specify GPU types
 
-Here's an example task configuration for fine-tuning a model on Runpod. Create a new task in the Tasks menu and use this YAML:
-
-```yaml
-resources:
-  cloud: runpod
-  accelerators: RTX4090:1
-  disk_size: 100
-
-setup: |
-  pip install torch transformers peft
-
-run: |
-  python -c "
-  import torch
-  from transformers import AutoModelForCausalLM, AutoTokenizer
-  from peft import LoraConfig, get_peft_model
-  print(f'GPU: {torch.cuda.get_device_name(0)}')
-  print(f'Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB')
-  model = AutoModelForCausalLM.from_pretrained('HuggingFaceTB/SmolLM-135M-Instruct')
-  lora_config = LoraConfig(r=8, lora_alpha=32, target_modules=['q_proj', 'v_proj'], lora_dropout=0.05)
-  model = get_peft_model(model, lora_config)
-  print('Model ready for training!')
-  model.print_trainable_parameters()
-  "
-```
-
-Select your Runpod compute provider and click **Queue** to start the training job.
-
-## Available GPU types
-
-Runpod offers a variety of GPUs. Use the `accelerators` field to specify the GPU type:
+Use the `accelerators` field to specify the GPU type:
 
 | Accelerator | Description |
 |-------------|-------------|
-| `RTX4090:1` | NVIDIA GeForce RTX 4090 (24GB) |
-| `A40:1` | NVIDIA A40 (48GB) |
-| `A100:1` | NVIDIA A100 (40GB or 80GB) |
-| `A100-80GB:1` | NVIDIA A100 80GB |
-| `H100:1` | NVIDIA H100 (80GB) |
-| `L40S:1` | NVIDIA L40S (48GB) |
+| `"RTX4090:1"` | NVIDIA GeForce RTX 4090 (24GB) |
+| `"A40:1"` | NVIDIA A40 (48GB) |
+| `"A100:1"` | NVIDIA A100 (40GB or 80GB) |
+| `"A100-80GB:1"` | NVIDIA A100 80GB |
+| `"H100:1"` | NVIDIA H100 (80GB) |
+| `"L40S:1"` | NVIDIA L40S (48GB) |
 
-For multiple GPUs, change the count: `A100:4` for 4x A100 GPUs.
+For multiple GPUs, change the count: `"A100:4"` for 4x A100 GPUs.
 
 ## Clean up
 
