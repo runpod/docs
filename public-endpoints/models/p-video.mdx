@@ -1,0 +1,201 @@
+---
+title: "Pruna Video"
+sidebarTitle: "Pruna Video"
+description: "Premium AI video generation from text, images, and audio with fast generation times."
+---
+
+Pruna Video is a premium AI video generation model that creates videos from text prompts, images, or audio in under 10 seconds. It supports multiple resolutions up to 1080p, various aspect ratios, and optional audio conditioning for synchronized video generation.
+
+<Card title="Try in playground" icon="play" href="https://console.runpod.io/hub/playground/video/p-video" horizontal>
+  Test Pruna Video in the Runpod Hub playground.
+</Card>
+
+| | |
+|---|---|
+| **Endpoint** | `https://api.runpod.ai/v2/p-video/runsync` |
+| **Pricing** | \$0.02/s (720p), \$0.04/s (1080p) |
+| **Type** | Video generation |
+
+## Request
+
+All parameters are passed within the `input` object in the request body.
+
+<ParamField body="input.prompt" type="string" required>
+  Text description of the desired video content.
+</ParamField>
+
+<ParamField body="input.image" type="string">
+  URL of an input image for image-to-video generation. Supports jpg, jpeg, png, webp. When provided, `aspect_ratio` is ignored.
+</ParamField>
+
+<ParamField body="input.audio" type="string">
+  URL of an audio file for audio-conditioned generation. Supports flac, mp3, wav. When provided, `duration` is ignored and the video matches audio length.
+</ParamField>
+
+<ParamField body="input.duration" type="integer" default="5">
+  Video duration in seconds (1-10). Ignored when audio is provided.
+</ParamField>
+
+<ParamField body="input.resolution" type="string" default="720p">
+  Video resolution. Options: `720p`, `1080p`.
+</ParamField>
+
+<ParamField body="input.fps" type="integer" default="24">
+  Frames per second. Options: `24`, `48`.
+</ParamField>
+
+<ParamField body="input.aspect_ratio" type="string" default="16:9">
+  Output aspect ratio. Options: `16:9`, `9:16`, `4:3`, `3:4`, `3:2`, `2:3`, `1:1`. Ignored when image is provided.
+</ParamField>
+
+<ParamField body="input.seed" type="integer">
+  Seed for reproducible generation.
+</ParamField>
+
+<ParamField body="input.draft" type="boolean" default="false">
+  Enable draft mode for faster, lower-quality preview. Reduces cost by 75%.
+</ParamField>
+
+<ParamField body="input.save_audio" type="boolean" default="true">
+  Include audio in the output video.
+</ParamField>
+
+<ParamField body="input.prompt_upsampling" type="boolean" default="true">
+  Automatically enhance the prompt for better results.
+</ParamField>
+
+<RequestExample>
+```bash cURL
+curl -X POST "https://api.runpod.ai/v2/p-video/runsync" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": {
+      "prompt": "A timelapse of clouds moving over a mountain range at sunset",
+      "duration": 5,
+      "resolution": "720p",
+      "aspect_ratio": "16:9"
+    }
+  }'
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    "https://api.runpod.ai/v2/p-video/runsync",
+    headers={
+        "Authorization": f"Bearer {RUNPOD_API_KEY}",
+        "Content-Type": "application/json",
+    },
+    json={
+        "input": {
+            "prompt": "A timelapse of clouds moving over a mountain range at sunset",
+            "duration": 5,
+            "resolution": "720p",
+            "aspect_ratio": "16:9",
+        }
+    },
+)
+
+result = response.json()
+print(result["output"]["video_url"])
+```
+
+```javascript JavaScript
+const response = await fetch(
+  "https://api.runpod.ai/v2/p-video/runsync",
+  {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${RUNPOD_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      input: {
+        prompt: "A timelapse of clouds moving over a mountain range at sunset",
+        duration: 5,
+        resolution: "720p",
+        aspect_ratio: "16:9",
+      },
+    }),
+  }
+);
+
+const result = await response.json();
+console.log(result.output.video_url);
+```
+</RequestExample>
+
+## Response
+
+<ResponseField name="id" type="string">
+  Unique identifier for the request.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Request status. Returns `COMPLETED` on success, `FAILED` on error.
+</ResponseField>
+
+<ResponseField name="delayTime" type="integer">
+  Time in milliseconds the request spent in queue before processing began.
+</ResponseField>
+
+<ResponseField name="executionTime" type="integer">
+  Time in milliseconds the model took to generate the video.
+</ResponseField>
+
+<ResponseField name="output" type="object">
+  The generation result containing the video URL and cost.
+
+  <ResponseField name="output.video_url" type="string">
+    URL of the generated video. This URL expires after 7 days.
+  </ResponseField>
+
+  <ResponseField name="output.cost" type="float">
+    Cost of the generation in USD.
+  </ResponseField>
+</ResponseField>
+
+<ResponseExample>
+```json 200
+{
+  "id": "sync-a1b2c3d4-e5f6-7890-abcd-ef1234567890-u1",
+  "status": "COMPLETED",
+  "delayTime": 15,
+  "executionTime": 8542,
+  "output": {
+    "video_url": "https://video.runpod.ai/abc123/output.mp4",
+    "cost": 0.10
+  }
+}
+```
+
+```json 400
+{
+  "id": "sync-a1b2c3d4-e5f6-7890-abcd-ef1234567890-u1",
+  "status": "FAILED",
+  "error": "Invalid audio format"
+}
+```
+</ResponseExample>
+
+<Warning>
+Video URLs expire after 7 days. Download and store generated videos immediately if you need to keep them.
+</Warning>
+
+## Cost calculation
+
+Pruna Video pricing varies by resolution and draft mode:
+
+| Resolution | Standard | Draft mode |
+|------------|----------|------------|
+| 720p | \$0.02 per second | \$0.005 per second |
+| 1080p | \$0.04 per second | \$0.01 per second |
+
+Example costs (standard mode):
+
+| Resolution | 5 seconds | 10 seconds |
+|------------|-----------|------------|
+| 720p | \$0.10 | \$0.20 |
+| 1080p | \$0.20 | \$0.40 |

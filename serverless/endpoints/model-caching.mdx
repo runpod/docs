@@ -2,20 +2,19 @@
 title: "Cached models"
 sidebarTitle: "Cached models"
 description: "Accelerate worker cold starts and reduce costs by using cached models."
-tag: "NEW"
 ---
 
 import { MachineTooltip, MachinesTooltip, ColdStartTooltip, WorkersTooltip, HandlerFunctionTooltip, InferenceTooltip } from "/snippets/tooltips.jsx";
 
 <Tip>
-For a step-by-step example showing how to integrate cached models with custom workers, see [Deploy a cached model](/tutorials/serverless/model-caching-text).
+To learn how to use cached models with the Hugging Face Transformers library, see [Use Hugging Face models](/serverless/development/huggingface-models#use-cached-models). For a complete end-to-end deployment walkthrough, see the [cached model tutorial](/tutorials/serverless/model-caching-text).
 </Tip>
 
 Enabling cached models on your endpoints can reduce <ColdStartTooltip /> times and dramatically reduce the cost for loading large models.
 
 ## Why use cached models?
 
-- **Faster cold starts:** A "cold start" refers to the delay between when a request is received by an endpoint with no running workers and when a worker is fully "warmed up" and ready to handle the request. Using cached models can reduce cold start times to just a few seconds, even for large models.
+- **Faster cold starts:** Using cached models can reduce <ColdStartTooltip /> times to just a few seconds, even for large models.
 - **Reduced costs:** You aren't billed for worker time while your model is being downloaded. This is especially impactful for large models that can take several minutes to load.
 - **Accelerated deployment:** You can deploy cached models instantly without waiting for external downloads or transfers.
 - **Smaller container images:** By decoupling models from your container image, you can create smaller, more focused images that contain only your application logic.
@@ -143,52 +142,38 @@ For example, here is how the model `gensyn/qwen2.5-0.5b-instruct` would be store
   </Tree.Folder>
 </Tree>
 
-### Programmatically locate cached models
+### Locate cached models in your handler
 
-To dynamically locate cached models without hardcoding paths, you can add this helper function to your <HandlerFunctionTooltip /> to scan the cache directory for the model you want to use:
+To use a cached model in your <HandlerFunctionTooltip />, you need to resolve the local path to the model files. The path follows a predictable pattern based on the model identifier:
 
-```python handler.py
-import os
-
-CACHE_DIR = "/runpod-volume/huggingface-cache/hub"
-
-def find_model_path(model_name):
-    """
-    Find the path to a cached model.
-    
-    Args:
-        model_name: The model name from Hugging Face
-        (e.g., 'Qwen/Qwen2.5-0.5B-Instruct')
-    
-    Returns:
-        The full path to the cached model, or None if not found
-    """
-    # Convert model name format: "Org/Model" -> "models--Org--Model"
-    cache_name = model_name.replace("/", "--")
-    snapshots_dir = os.path.join(CACHE_DIR, f"models--{cache_name}", "snapshots")
-    
-    # Check if the model exists in cache
-    if os.path.exists(snapshots_dir):
-        snapshots = os.listdir(snapshots_dir)
-        if snapshots:
-            # Return the path to the first (usually only) snapshot
-            return os.path.join(snapshots_dir, snapshots[0])
-    
-    return None
-
-# Example usage
-model_path = find_model_path("Qwen/Qwen2.5-0.5B-Instruct")
-if model_path:
-    print(f"Model found at: {model_path}")
-else:
-    print("Model not found in cache")
+```
+/runpod-volume/huggingface-cache/hub/models--{org}--{name}/snapshots/{hash}/
 ```
 
-### Custom worker examples
+For example, `Qwen/Qwen2.5-0.5B-Instruct` would be stored at:
 
-The following sample applications demonstrate how you can integrate cached models into your custom workers:
+```
+/runpod-volume/huggingface-cache/hub/models--Qwen--Qwen2.5-0.5B-Instruct/snapshots/abc123.../
+```
 
-- [Cached models + LLMs](https://github.com/runpod-workers/model-store-cache-example): A custom worker that uses cached models to serve LLMs.
+For complete implementation details including a helper function to resolve these paths dynamically, see [Use Hugging Face models](/serverless/development/huggingface-models#use-cached-models).
+
+### Examples and resources
+
+<CardGroup cols={2}>
+  <Card title="Hugging Face integration" icon="face-smile" href="/serverless/development/huggingface-models#use-cached-models">
+    Learn how to adapt your Transformers code to use cached models
+  </Card>
+  <Card title="Cached model tutorial" icon="graduation-cap" href="/tutorials/serverless/model-caching-text">
+    End-to-end walkthrough deploying Phi-3 with model caching
+  </Card>
+  <Card title="Example repository" icon="github" href="https://github.com/runpod-workers/model-store-cache-example">
+    Sample worker using cached models for LLM inference
+  </Card>
+  <Card title="vLLM workers" icon="bolt" href="/serverless/vllm/overview">
+    Pre-built workers with automatic cached model support
+  </Card>
+</CardGroup>
 
 ## Current limitations
 
