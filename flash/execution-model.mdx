@@ -109,17 +109,14 @@ Workers scale up and down based on demand and your configuration.
 
 ### Worker states
 
-**Initializing**: The worker is starting up and downloading dependencies.
-
-**Idle**: The worker is ready but not processing requests.
-
-**Running**: The worker actively processes requests.
-
-**Throttled**: The worker is temporarily unable to run due to host <MachineTooltip /> resource constraints.
-
-**Outdated**: The system marks the worker for replacement after endpoint updates. It continues processing current jobs during rolling updates (10% of max workers at a time).
-
-**Unhealthy**: The worker has crashed due to Docker image issues, incorrect start commands, or machine problems. The system automatically retries with exponential backoff for up to 7 days.
+| State | Description | Billing |
+|-------|-------------|---------|
+| **Initializing** | Downloading image, loading code | Yes |
+| **Idle** | Scaled down, waiting for requests | No |
+| **Running** | Processing requests | Yes |
+| **Throttled** | Temporarily unable to run due to host <MachineTooltip /> resource constraints | No |
+| **Outdated** | Marked for replacement after update | Yes (while processing) |
+| **Unhealthy** | Crashed; auto-retries for up to 7 days | No |
 
 ### Scaling behavior
 
@@ -128,7 +125,7 @@ Workers scale up and down based on demand and your configuration.
     name="demo",
     gpu=GpuGroup.ANY,
     workers=(0, 5),   # (min, max) - Scale to zero when idle, up to 5 workers
-    idle_timeout=60   # Seconds before idle workers scale down
+    idle_timeout=60   # Seconds before running workers scale down
 )
 def process(data): ...
 ```
@@ -136,7 +133,7 @@ def process(data): ...
 **Example**:
 1. First job arrives → Scale to 1 worker (cold start).
 2. More jobs arrive while worker busy → Scale up to max workers.
-3. Jobs complete → Workers stay idle for `idle_timeout`.
+3. Jobs complete → Workers stay running for `idle_timeout` seconds before scaling down to idle.
 4. No new jobs → Scale down to min workers.
 
 ## Cold starts and warm starts
@@ -145,11 +142,11 @@ Understanding cold and warm starts helps you predict latency and set expectation
 
 ### Cold start
 
-A cold start occurs when no workers are available to handle your job:
+A cold start occurs when no workers are available to handle your job, because:
 
 - You're calling an endpoint for the first time.
-- All workers scaled down after being idle beyond `idle_timeout`.
-- All active workers are busy and a new one must spin up.
+- All workers have been scaled down after not processing requests for `idle_timeout` seconds.
+- All running workers are busy processing requests.
 
 **What happens during a cold start**:
 1. Runpod provisions a new worker with your configured GPU/CPU.
@@ -179,8 +176,8 @@ A warm start occurs when a worker is already running and idle:
 
 Your `workers` and `idle_timeout` settings directly affect cold start frequency:
 
-- `workers=(0, n)`: Workers scale to zero when idle. Every request after idle period triggers a cold start.
+- `workers=(0, n)`: Workers scale to zero when not processing. Every request after the `idle_timeout` period triggers a cold start.
 - `workers=(1, n)`: At least one worker stays ready. First concurrent request is warm, additional requests may cold start.
-- Higher `idle_timeout`: Workers stay idle longer before scaling down, reducing cold starts for sporadic traffic.
+- Higher `idle_timeout`: Workers stay running longer before scaling down, reducing cold starts for sporadic traffic.
 
 See [configuration best practices](/flash/configuration/best-practices) for specific recommendations based on your workload.
