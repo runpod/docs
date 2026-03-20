@@ -8,12 +8,22 @@ Tests should be **hard to pass**. They simulate a user typing a simple request w
 
 ## Running Tests
 
-Use natural language:
+Use the `/test` command or natural language:
+
 ```
-Run the flash-quickstart test
-Run the vllm-deploy test using local docs
-Run all pods tests
+/test pods-quickstart-terminal        # Command form
+Run the flash-quickstart test         # Natural language
 ```
+
+Use the `/test` command to run tests:
+
+```
+/test pods-quickstart-terminal        # Run with published docs
+/test pods-quickstart-terminal local  # Run with local MDX files
+/test smoke                           # Run all smoke tests
+```
+
+The `/test` command loads the test definition and reminds you of the execution rules.
 
 ## Test Execution Rules
 
@@ -21,14 +31,108 @@ Run all pods tests
 2. **Do NOT use prior knowledge** - only use Runpod docs.
 3. Attempt to complete the goal using available tools.
 4. All created resources must use `doc_test_` prefix.
-5. Clean up resources after test.
-6. Write report to `tests/reports/{test-id}-{timestamp}.md`.
+5. Handle GPU availability issues (see GPU Fallback section below).
+6. Clean up resources after test (see Cleanup section below).
+7. Generate report using the helper script:
+   ```bash
+   python3 tests/scripts/report.py <test-id> <PASS|FAIL|PARTIAL> [--local]
+   ```
+8. Fill in the generated report template with actual results.
+
+## GPU Fallback Guidance
+
+GPU availability varies by type and time. When a test requires GPU resources:
+
+### Queue Timeout Thresholds
+
+| Wait Time | Action |
+|-----------|--------|
+| < 2 min | Normal, keep waiting |
+| 2-5 min | Consider trying fallback GPU |
+| > 5 min | Use fallback GPU or mark test blocked |
+
+### Fallback GPU Order
+
+If the documented GPU type is unavailable, try these in order:
+
+1. **First choice**: GPU specified in docs (tests the docs as-is)
+2. **Fallback 1**: NVIDIA L4 (good availability, cost-effective)
+3. **Fallback 2**: NVIDIA A4000 (broad availability)
+4. **Fallback 3**: RTX 3090 (community cloud)
+
+### When to Use Fallbacks
+
+- **Test the docs first**: Always try the GPU specified in documentation first.
+- **Document the issue**: If you must use a fallback, note it in the report as a documentation gap.
+- **Mark appropriately**:
+  - PASS: Test completed with documented GPU
+  - PARTIAL: Test completed with fallback GPU (doc improvement needed)
+  - FAIL: Test failed even with fallbacks
+
+### Cloud Type Fallbacks
+
+If Secure Cloud has no availability:
+1. Try Community Cloud for the same GPU type
+2. Note cloud type used in the test report
+
+### Example Report Note
+
+```markdown
+## Documentation Gaps
+GPU availability: Docs specify RTX 4090 but none available after 3 min wait.
+Used fallback: NVIDIA L4 on Community Cloud.
+Suggestion: Add note about GPU availability or use more available GPU in example.
+```
+
+## Cleanup
+
+All test resources use the `doc_test_` prefix. Clean up after each test to avoid orphaned resources.
+
+### During Tests (Claude Code)
+
+After completing a test, use the Runpod MCP tools to delete created resources:
+
+```
+# List and identify test resources
+mcp__runpod__list-pods (filter by name starting with "doc_test_")
+mcp__runpod__list-endpoints
+mcp__runpod__list-templates
+mcp__runpod__list-network-volumes
+
+# Delete matching resources
+mcp__runpod__delete-pod (podId)
+mcp__runpod__delete-endpoint (endpointId)
+mcp__runpod__delete-template (templateId)
+mcp__runpod__delete-network-volume (networkVolumeId)
+```
+
+### Manual Cleanup (Standalone Script)
+
+Run the cleanup script to find and delete orphaned test resources:
+
+```bash
+# Dry run - see what would be deleted
+python tests/scripts/cleanup.py
+
+# Actually delete resources
+python tests/scripts/cleanup.py --delete
+```
+
+### Cleanup Command
+
+Users can request cleanup directly:
+```
+Clean up test resources
+Delete all doc_test_ resources
+```
+
+When this is requested, list all resources matching `doc_test_*` and delete them after confirmation.
 
 ## Doc Source Modes
 
 ### Published Docs (default)
 
-Use the `mcp__runpod-dops__search_runpod_documentation` tool to search the live published documentation. This tests what real users see.
+Use the `mcp__runpod-docs__search_runpod_documentation` tool to search the live published documentation. This tests what real users see.
 
 ### Local Docs
 
@@ -40,25 +144,103 @@ When the user says "using local docs":
 
 This validates unpublished doc changes before they go live.
 
+## Test Tiers
+
+### Smoke Tests
+
+Fast tests that don't require GPU deployments. Run these for quick validation:
+
+```
+Run smoke tests
+Run all smoke tests using local docs
+```
+
+Smoke tests are listed in the "Smoke Tests" section of `tests/TESTS.md`. They include:
+- SDK/CLI installation tests
+- Read-only API tests (list templates, view metrics)
+- Public endpoint tests (FLUX, Qwen)
+- Account configuration tests (SSH keys, API keys)
+
+### Full Tests
+
+All tests including GPU deployments. Use for comprehensive validation:
+
+```
+Run all tests
+Run all serverless tests
+```
+
+Full tests may create billable resources. Always clean up after.
+
 ## Report Format
 
+Save reports to **both** locations:
+1. `tests/reports/{test-id}-{YYYYMMDD-HHMMSS}.md` (gitignored, in repo)
+2. `~/Dev/doc-tests/{test-id}-{YYYYMMDD-HHMMSS}.md` (persistent archive)
+
+Use this template:
+
 ```markdown
-# Test Report: {Test Name}
+# Test Report: {Test ID}
 
-**Date:** {timestamp}
-**Status:** PASS | FAIL | PARTIAL
+## Metadata
+| Field | Value |
+|-------|-------|
+| **Test ID** | {test-id} |
+| **Date** | {YYYY-MM-DD HH:MM:SS} |
+| **Git SHA** | {git rev-parse --short HEAD} |
+| **Git Branch** | {git branch --show-current} |
+| **Doc Source** | Published / Local |
+| **Status** | PASS / FAIL / PARTIAL |
 
-## What Happened
-Brief narrative of the attempt.
+## Goal
+{Copy the goal from TESTS.md}
 
-## Where I Got Stuck
-Specific points of confusion or failure.
+## Expected Outcome
+{Copy from TESTS.md}
+
+## Actual Result
+{What actually happened - be specific}
+
+## Steps Taken
+1. {First thing tried}
+2. {Second thing tried}
+...
 
 ## Documentation Gaps
-What was missing or unclear in the docs.
+{What was missing or unclear - be specific about which page/section}
 
 ## Suggestions
-Specific improvements to make tests pass.
+{Concrete improvements to make this test pass}
+```
+
+### Comparing Runs
+
+Reports in `~/Dev/doc-tests/` persist across git operations. To compare runs:
+```bash
+# List all runs for a test
+ls ~/Dev/doc-tests/flash-quickstart-*.md
+
+# Diff two runs
+diff ~/Dev/doc-tests/flash-quickstart-20240115-100000.md ~/Dev/doc-tests/flash-quickstart-20240120-140000.md
+```
+
+### Tracking Pass Rates
+
+Use the stats script to analyze historical results:
+
+```bash
+# Overall summary
+python3 tests/scripts/stats.py
+
+# Group by test
+python3 tests/scripts/stats.py --by-test
+
+# Recent runs
+python3 tests/scripts/stats.py --recent 10
+
+# Show failures
+python3 tests/scripts/stats.py --failures
 ```
 
 ## Test Categories

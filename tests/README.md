@@ -32,11 +32,20 @@ Run the vllm-deploy test using local docs
 All tests are defined in [TESTS.md](./TESTS.md) as a table with:
 - **ID**: Test identifier
 - **Goal**: What the user wants (one sentence)
-- **Cleanup**: Resource types to delete after test
+- **Expected Outcome**: What constitutes PASS
+
+**Smoke tests** are fast tests that don't require GPU deployments (SDK installs, read-only API calls, public endpoints).
+
+Cleanup rules are defined globally at the bottom of TESTS.md. All test resources use the `doc_test_` prefix.
 
 ## Reports
 
-Reports are saved to `reports/` (gitignored) and include:
-- What worked / what didn't
-- Where the agent got stuck
-- Documentation improvements needed
+Reports are saved to two locations:
+- `reports/` (gitignored, in repo)
+- `~/Dev/doc-tests/` (persistent local archive)
+
+Each report includes:
+- Git SHA and branch
+- Steps taken
+- Actual vs expected results
+- Documentation gaps and suggestions
