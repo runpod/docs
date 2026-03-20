@@ -92,3 +92,17 @@ The `handler` function receives a job dictionary containing the input from the A
 - Use backticks for file paths: `serverless/workers/handler.py`
 - Use backticks for environment variables: `RUNPOD_API_KEY`
 - Use backticks for API endpoints: `/v2/endpoint_id/run`
+
+## Next Steps and Learn More Sections
+
+Use `CardGroup` with horizontal cards instead of bullet lists for "Next steps" and "Learn more" sections:
+
+```mdx
+<CardGroup cols={2}>
+  <Card title="Card title" href="/path/to/page" icon="icon-name" horizontal>
+    Brief description of the linked content.
+  </Card>
+</CardGroup>
+```
+
+Choose icons that match the content (e.g., `github` for repos, `terminal` for CLI, `book` for docs).
