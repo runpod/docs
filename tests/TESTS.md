@@ -59,7 +59,7 @@ Each test has:
 
 ## Serverless Endpoints
 
-> **Important:** Do NOT use public endpoints for these tests. The goal is to test the full deployment workflow: create a template, deploy an endpoint, send requests, and verify the integration works. Public endpoints are a separate product and skip the deployment steps we need to validate.
+> **Important:** Do NOT use public endpoints for these tests. The goal is to test the full deployment workflow: deploy an endpoint, send requests, and verify the integration works. Public endpoints are a separate product and skip the deployment steps we need to validate.
 
 | ID | Goal | Difficulty |
 |----|------|------------|

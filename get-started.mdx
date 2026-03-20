@@ -26,6 +26,9 @@ Planning to share compute resources with your team? You can convert your persona
 
 Now that you've created your account, you're ready to deploy your first Pod:
 
+<Tabs>
+<Tab title="Web">
+
 1. Open the [Pods page](https://www.console.runpod.io/pods) in the web interface.
 2. Click the **Deploy** button.
 3. Select **A40** from the list of graphics cards (or any other GPU that's available).
@@ -34,36 +37,91 @@ Now that you've created your account, you're ready to deploy your first Pod:
 6. Click **Deploy On-Demand** to deploy and start your Pod. You'll be redirected back to the Pods page after a few seconds.
 
 <Note>
-
 If you haven't set up payments yet, you'll be prompted to add a payment method and purchase credits for your account.
-
 </Note>
 
-## Step 3: Explore the Pod detail pane
+</Tab>
 
-On the [Pods page](https://www.console.runpod.io/pods), click the Pod you just created to open the Pod detail pane. The pane opens onto the **Connect** tab, where you'll find options for connecting to your Pod so you can execute code on your GPU (after it's done initializing).
+<Tab title="Terminal">
 
-Take a minute to explore the other tabs: 
+First, [create an API key](/get-started/api-keys) if you haven't already. Then deploy your Pod:
 
-- **Details**: Information about your Pod, such as hardware specs, pricing, and storage.
-- **Telemetry**: Realtime utilization metrics for your Pod's CPU, memory, and storage.
-- **Logs**: Logs streamed from your container (including stdout from any applications inside) and the Pod management system.
-- **Template Readme**: Details about the <TemplateTooltip /> your Pod is running. Your Pod is configured with the latest official Runpod <PyTorchTooltip /> template.
+```bash
+curl --request POST \
+  --url https://rest.runpod.io/v1/pods \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "name": "quickstart-pod",
+    "imageName": "runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04",
+    "gpuTypeIds": ["NVIDIA A40"],
+    "gpuCount": 1
+  }'
+```
 
-## Step 4: Execute code on your Pod with JupyterLab
+The response includes your Pod ID. Save it for later:
 
-1. Go back to the **Connect** tab, and under **HTTP Services**, click **Jupyter Lab** to open a JupyterLab workspace on your Pod.
-2. Under **Notebook**, select **Python 3 (ipykernel)**.
-3. Type `print("Hello, world!")` in the first line of the notebook.
-4. Click the play button to run your code.
+```bash
+export RUNPOD_POD_ID="your-pod-id"
+```
+
+</Tab>
+</Tabs>
+
+## Step 3: Execute code on your Pod
+
+Once your Pod finishes initializing, connect and run some code:
+
+<Tabs>
+<Tab title="Web">
+
+1. On the [Pods page](https://www.console.runpod.io/pods), click your Pod to open the detail pane.
+2. Under **HTTP Services**, click **Jupyter Lab** to open a JupyterLab workspace.
+3. Under **Notebook**, select **Python 3 (ipykernel)**.
+4. Type `print("Hello, world!")` in the first cell and click the play button.
+
+</Tab>
+
+<Tab title="Terminal">
+
+Get your Pod's SSH connection details:
+
+```bash
+curl --request GET \
+  --url "https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID" \
+  --header "Authorization: Bearer $RUNPOD_API_KEY"
+```
+
+Extract the `ip` and `port` from the response's `runtime.ports` array (look for port 22), then connect:
+
+```bash
+ssh root@<ip> -p <port> -i ~/.ssh/your_key
+python3 -c "print('Hello, world!')"
+```
+
+<Note>
+You'll need an [SSH key added to your account](/pods/configuration/use-ssh) for this to work.
+</Note>
+
+</Tab>
+</Tabs>
 
 <Check>
 Congratulations! You just ran your first line of code on Runpod.
 </Check>
 
-## Step 5: Clean up
+## Step 4: Clean up
 
-To avoid incurring unnecessary charges, follow these steps to clean up your Pod resources:
+To avoid incurring unnecessary charges, clean up your Pod resources.
+
+<Danger>
+Terminating a Pod permanently deletes all data that isn't stored in a <NetworkVolumeTooltip />. Be sure that you've saved any data you might need to access again. To learn more about how storage works, see the [Pod storage overview](/pods/storage/types).
+</Danger>
+
+<Tabs>
+<Tab title="Web">
+
+To stop your Pod:
 
 1. Return to the [Pods page](https://www.console.runpod.io/pods) and click your running Pod.
 2. Click the **Stop** button (pause icon) to stop your Pod.
@@ -76,13 +134,28 @@ To terminate your Pod:
 1. Click the **Terminate** button (trash icon).
 2. Click **Terminate Pod** to confirm.
 
-<Danger>
+</Tab>
 
-Terminating a Pod permanently deletes all data that isn't stored in a <NetworkVolumeTooltip />. Be sure that you've saved any data you might need to access again.
+<Tab title="Terminal">
 
-To learn more about how storage works, see the [Pod storage overview](/pods/storage/types).
+Stop your Pod:
 
-</Danger>
+```bash
+curl --request POST \
+  --url "https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID/stop" \
+  --header "Authorization: Bearer $RUNPOD_API_KEY"
+```
+
+You'll still be charged a small amount for storage on stopped Pods (\$0.20 per GB per month). If you don't need to retain any data on your Pod, terminate it completely:
+
+```bash
+curl --request DELETE \
+  --url "https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID" \
+  --header "Authorization: Bearer $RUNPOD_API_KEY"
+```
+
+</Tab>
+</Tabs>
 
 ## Next steps
 
