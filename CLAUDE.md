@@ -38,6 +38,6 @@ Examples of things worth capturing:
 
 ## Terminology Quick Reference
 
-**Capitalize:** Runpod, Pods, Serverless, Hub, Instant Clusters, Flash, Secure Cloud, Community Cloud
+**Capitalize:** Runpod, Pods, Serverless, Hub, Instant Clusters, Flash, Secure Cloud, Community Cloud, Public Endpoint
 
-**Lowercase:** endpoint, worker, template, handler, network volume, data center, cluster, fine-tune
+**Lowercase:** endpoint, worker, template, handler, network volume, data center, cluster, fine-tune, repo

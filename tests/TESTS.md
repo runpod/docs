@@ -4,18 +4,21 @@ Minimal test definitions that simulate real user prompts. Tests are intentionall
 
 ## How to Run
 
-In Claude Code, use natural language:
+Use the `/test` command:
+
+```
+/test flash-quickstart           # Single test
+/test serverless                 # All serverless tests
+/test pods local                 # All pod tests with local docs
+/test smoke                      # Smoke tests only
+```
+
+Or natural language:
 
 ```
 Run the flash-quickstart test
-```
-
-```
 Run all vLLM tests
-```
-
-```
-Run smoke tests
+Run smoke tests using local docs
 ```
 
 ### Doc Source Modes

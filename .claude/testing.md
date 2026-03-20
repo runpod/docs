@@ -8,24 +8,35 @@ Tests should be **hard to pass**. They simulate a user typing a simple request w
 
 ## Running Tests
 
-Use the `/test` command or natural language:
+Use the `/test` command:
 
 ```
-/test pods-quickstart-terminal        # Command form
-Run the flash-quickstart test         # Natural language
+/test <test-id>              # Single test with published docs
+/test <test-id> local        # Single test with local docs
+/test <category>             # All tests in category
+/test <category> local       # Category with local docs
+/test smoke                  # Smoke tests only
 ```
 
-Use the `/test` command to run tests:
+### Categories
 
-```
-/test pods-quickstart-terminal        # Run with published docs
-/test pods-quickstart-terminal local  # Run with local MDX files
-/test smoke                           # Run all smoke tests
-```
+| Category | Description |
+|----------|-------------|
+| `smoke` | Fast tests, no GPU deploys |
+| `flash` | Flash SDK |
+| `serverless` | Serverless endpoints |
+| `vllm` | vLLM deployment |
+| `pods` | Pod management |
+| `storage` | Network volumes |
+| `templates` | Template management |
+| `clusters` | Instant Clusters |
+| `sdk` | SDKs and APIs |
+| `cli` | runpodctl |
+| `integrations` | Third-party integrations |
+| `public` | Public endpoints |
+| `tutorials` | End-to-end tutorials |
 
-The `/test` command loads the test definition and reminds you of the execution rules.
-
-## Test Execution Rules
+## Single Test Execution
 
 1. Read the test definition from `tests/TESTS.md`.
 2. **Do NOT use prior knowledge** - only use Runpod docs.
@@ -38,6 +49,42 @@ The `/test` command loads the test definition and reminds you of the execution r
    python3 tests/scripts/report.py <test-id> <PASS|FAIL|PARTIAL> [--local]
    ```
 8. Fill in the generated report template with actual results.
+
+## Batch Execution
+
+When running a category (e.g., `/test serverless` or `/test flash local`):
+
+1. **Parse category** - Identify all test IDs in that section of `tests/TESTS.md`
+2. **Show test list** - Display tests to be run and ask for confirmation
+3. **Run sequentially** - Execute each test following single test rules
+4. **Track results** - Record PASS/FAIL/PARTIAL for each test
+5. **Clean up between tests** - Delete all `doc_test_*` resources before starting next test
+6. **Generate summary** - Create batch summary report at end
+
+### Batch Summary Format
+
+```markdown
+## Batch Summary: <category>
+
+| Test ID | Status | Notes |
+|---------|--------|-------|
+| test-1 | PASS | |
+| test-2 | FAIL | Missing docs for X |
+| test-3 | PARTIAL | Used fallback GPU |
+
+**Results:** X passed, Y failed, Z partial out of N tests
+**Doc Source:** Published / Local
+**Date:** YYYY-MM-DD HH:MM
+```
+
+Save batch summaries to:
+- `tests/reports/batch-<category>-<timestamp>.md`
+- `~/Dev/doc-tests/batch-<category>-<timestamp>.md`
+
+### Batch Options
+
+- **Stop on failure**: By default, continue through all tests. Say "stop on first failure" to halt early.
+- **Skip tests**: Say "skip test-id" during batch to skip specific tests.
 
 ## GPU Fallback Guidance
 

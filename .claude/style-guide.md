@@ -13,6 +13,7 @@ Follow the Runpod style guide (`.cursor/rules/rp-styleguide.mdc`) and Google Dev
 - Secure Cloud
 - Community Cloud
 - Flash
+- Public Endpoint
 
 ### Generic Terms (lowercase)
 - endpoint
@@ -23,6 +24,7 @@ Follow the Runpod style guide (`.cursor/rules/rp-styleguide.mdc`) and Google Dev
 - fine-tune
 - network volume
 - data center
+- repo
 
 ### Headings
 Always use **sentence case** for headings and titles:
