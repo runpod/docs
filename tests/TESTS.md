@@ -104,6 +104,7 @@ Each test has:
 
 | ID | Goal | Difficulty |
 |----|------|------------|
+| pods-quickstart-terminal | Complete the Pod quickstart using only the terminal | Easy |
 | pods-create | Create a GPU Pod | Medium |
 | pods-start-stop | Start and stop an existing Pod | Easy |
 | pods-ssh-connect | Connect to a Pod via SSH | Medium |
