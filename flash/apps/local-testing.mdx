@@ -36,7 +36,7 @@ flash run --host 0.0.0.0
 # Call a queue-based endpoint (gpu_worker.py)
 curl -X POST http://localhost:8888/gpu_worker/runsync \
   -H "Content-Type: application/json" \
-  -d '{"message": "Hello from Flash"}'
+  -d '{"input": {"message": "Hello from Flash"}}'
 
 # Call a load-balanced endpoint (lb_worker.py)
 curl -X POST http://localhost:8888/lb_worker/process \
@@ -44,9 +44,25 @@ curl -X POST http://localhost:8888/lb_worker/process \
   -d '{"data": "test"}'
 ```
 
+<Note>
+Queue-based endpoints require the `{"input": {...}}` wrapper format to match the deployed endpoint behavior. Load-balanced endpoints accept direct JSON payloads.
+</Note>
+
 ### Using the API explorer
 
 Open [http://localhost:8888/docs](http://localhost:8888/docs) in your browser to access the interactive Swagger UI. You can test all endpoints directly from the browser.
+
+Flash extracts the first line of each function's docstring and displays it as the endpoint description in the API explorer. Add docstrings to your `@Endpoint` functions to make your API self-documenting:
+
+```python
+@Endpoint(name="gpu-worker", gpu=GpuGroup.ANY)
+def process_data(data: dict) -> dict:
+    """Process input data and return computed results."""
+    # Function implementation
+    return {"result": "processed"}
+```
+
+The docstring "Process input data and return computed results" appears in the Swagger UI, making it easier to understand what each endpoint does.
 
 ### Using Python
 
@@ -56,7 +72,7 @@ import requests
 # Call queue-based endpoint
 response = requests.post(
     "http://localhost:8888/gpu_worker/runsync",
-    json={"message": "Hello from Flash"}
+    json={"input": {"message": "Hello from Flash"}}
 )
 print(response.json())
 
