@@ -5,13 +5,13 @@ description: "Use the @runpod/ai-sdk-provider package to integrate Public Endpoi
 tag: "NEW"
 ---
 
-The `@runpod/ai-sdk-provider` package integrates Runpod Public Endpoints with the [Vercel AI SDK](https://ai-sdk.dev/docs/introduction). This gives you a streamlined, type-safe interface for text generation, streaming, and image generation in JavaScript and TypeScript projects.
+The `@runpod/ai-sdk-provider` package integrates Runpod Public Endpoints with the [Vercel AI SDK](https://ai-sdk.dev/docs/introduction). This gives you a streamlined, type-safe interface for text generation, streaming, image generation, and video generation in JavaScript and TypeScript projects.
 
 The Vercel AI SDK is a popular open-source library for building AI applications. By using the Runpod provider, you can access Runpod's Public Endpoints using the same patterns and APIs you'd use with other AI providers like OpenAI or Anthropic.
 
 ## Why use the Vercel AI SDK?
 
-- **Unified interface**: Use the same `generateText`, `streamText`, and `generateImage` functions regardless of which AI provider you're using.
+- **Unified interface**: Use the same `generateText`, `streamText`, `generateImage`, and `generateVideo` functions regardless of which AI provider you're using.
 - **Type safety**: Full TypeScript support with typed responses and parameters.
 - **Streaming built-in**: First-class support for streaming text responses.
 - **Framework integrations**: Works seamlessly with Next.js, React, Svelte, and other frameworks.
@@ -261,6 +261,91 @@ const { image } = await generateImage({
 | `maxPollAttempts` | Max polling attempts for async generation |
 | `pollIntervalMillis` | Milliseconds between status polls |
 
+## Video generation
+
+Use `experimental_generateVideo` to generate videos from text prompts or images. The Runpod provider supports 15 video models, including Sora, Wan, Seedance, and Kling.
+
+Video generation is asynchronous—the SDK submits a job, polls for completion, and returns the video URL when ready.
+
+### Text-to-video
+
+Generate videos from text prompts:
+
+```typescript
+import { runpod } from "@runpod/ai-sdk-provider";
+import { experimental_generateVideo as generateVideo } from "ai";
+
+const { video } = await generateVideo({
+  model: runpod.video("alibaba/wan-2.6-t2v"),
+  prompt: "A golden retriever running on a sunny beach, cinematic, 4k",
+});
+
+console.log(video.url);
+```
+
+The response includes:
+- `video.url`: URL to the generated video
+- `video.mediaType`: Video MIME type (`video/mp4`)
+
+### Image-to-video
+
+Animate an existing image:
+
+```typescript
+import { runpod } from "@runpod/ai-sdk-provider";
+import { experimental_generateVideo as generateVideo } from "ai";
+
+const { video } = await generateVideo({
+  model: runpod.video("alibaba/wan-2.6-i2v"),
+  prompt: "Animate this scene with gentle camera movement",
+  image: new URL("https://example.com/image.png"),
+});
+
+console.log(video.url);
+```
+
+### Video generation parameters
+
+Control the video generation with additional parameters:
+
+```typescript
+const { video } = await generateVideo({
+  model: runpod.video("alibaba/wan-2.6-t2v"),
+  prompt: "A serene mountain landscape with flowing water",
+  duration: 5,
+  aspectRatio: "16:9",
+  seed: 42,
+});
+```
+
+### Video provider options
+
+Pass model-specific parameters using `providerOptions`:
+
+```typescript
+const { video } = await generateVideo({
+  model: runpod.video("alibaba/wan-2.6-t2v"),
+  prompt: "A serene mountain landscape with flowing water",
+  duration: 5,
+  aspectRatio: "16:9",
+  providerOptions: {
+    runpod: {
+      negative_prompt: "blurry, low quality",
+      guidance_scale: 7.5,
+    },
+  },
+});
+```
+
+| Option | Description |
+|--------|-------------|
+| `negative_prompt` | Elements to exclude from the video |
+| `guidance_scale` | How closely to follow the prompt |
+| `num_inference_steps` | Number of inference steps |
+| `style` | Style preset (model-specific) |
+| `maxPollAttempts` | Max polling attempts (default: 120) |
+| `pollIntervalMillis` | Milliseconds between status polls (default: 5000) |
+
 ## Supported models
 
 ### Text models
@@ -278,6 +363,26 @@ const { image } = await generateImage({
 | `black-forest-labs-flux-1-schnell` | [Flux Schnell](/public-endpoints/models/flux-schnell). Fast generation, good for prototyping. |
 | `google-nano-banana-edit` | [Nano Banana Edit](/public-endpoints/models/nano-banana-edit). Supports multiple reference images. |
 | `bytedance-seedream-4-0-t2i` | [Seedream 4.0](/public-endpoints/models/seedream-4-t2i). Text-to-image with good prompt adherence. |
+
+### Video models
+
+| Model ID | Type | Company |
+|----------|------|---------|
+| `pruna/p-video` | t2v | Pruna AI |
+| `vidu/q3-t2v` | t2v | Shengshu Technology |
+| `vidu/q3-i2v` | i2v | Shengshu Technology |
+| `kwaivgi/kling-v2.6-std-motion-control` | i2v + video | KwaiVGI (Kuaishou) |
+| `kwaivgi/kling-video-o1-r2v` | i2v | KwaiVGI (Kuaishou) |
+| `kwaivgi/kling-v2.1-i2v-pro` | i2v | KwaiVGI (Kuaishou) |
+| `alibaba/wan-2.6-t2v` | t2v | Alibaba |
+| `alibaba/wan-2.6-i2v` | i2v | Alibaba |
+| `alibaba/wan-2.5` | i2v | Alibaba |
+| `alibaba/wan-2.2-t2v-720-lora` | i2v | Alibaba |
+| `alibaba/wan-2.2-i2v-720` | i2v | Alibaba |
+| `alibaba/wan-2.1-i2v-720` | i2v | Alibaba |
+| `bytedance/seedance-v1.5-pro-i2v` | i2v | ByteDance |
+| `openai/sora-2-pro-i2v` | i2v | OpenAI |
+| `openai/sora-2-i2v` | i2v | OpenAI |
 
 For a complete list of available models and their parameters, see the [model reference](/public-endpoints/reference).
 
