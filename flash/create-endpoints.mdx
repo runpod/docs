@@ -294,20 +294,41 @@ Environment variables are excluded from configuration hashing. Changing environm
 
 ## Persistent storage
 
-Attach a network volume for persistent storage across workers. Flash uses the volume `name` to find an existing volume or create a new one:
+Attach a network volume for persistent storage across workers. Each volume is tied to a specific datacenter. Flash uses the volume `name` to find an existing volume or create a new one:
 
 ```python
-from runpod_flash import Endpoint, GpuGroup, NetworkVolume
+from runpod_flash import Endpoint, GpuGroup, DataCenter, NetworkVolume
 
-vol = NetworkVolume(name="model-cache")  # Finds existing or creates new
+vol = NetworkVolume(name="model-cache", size=100, datacenter=DataCenter.US_GA_2)
 
 @Endpoint(
     name="model-server",
     gpu=GpuGroup.ANY,
+    datacenter=DataCenter.US_GA_2,
     volume=vol
 )
 async def serve(data: dict) -> dict:
     # Access files at /runpod-volume/
+    ...
+```
+
+For multi-datacenter deployments, pass a list of volumes (one per datacenter):
+
+```python
+from runpod_flash import Endpoint, GpuGroup, DataCenter, NetworkVolume
+
+volumes = [
+    NetworkVolume(name="models-us", size=100, datacenter=DataCenter.US_GA_2),
+    NetworkVolume(name="models-eu", size=100, datacenter=DataCenter.EU_RO_1),
+]
+
+@Endpoint(
+    name="global-server",
+    gpu=GpuGroup.ANY,
+    datacenter=[DataCenter.US_GA_2, DataCenter.EU_RO_1],
+    volume=volumes
+)
+async def serve(data: dict) -> dict:
     ...
 ```
 
