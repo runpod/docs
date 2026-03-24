@@ -29,6 +29,7 @@ This page provides a complete reference for all parameters available on the `End
 | `scaler_type` | `ServerlessScalerType` | Scaling strategy | auto |
 | `scaler_value` | `int` | Scaling threshold | `4` |
 | `template` | `PodTemplate` | Pod template overrides | `None` |
+| `min_cuda_version` | `str` | Minimum CUDA version for GPU host selection | `"12.8"` (GPU) / `None` (CPU) |
 
 ## Parameter details
 
@@ -537,6 +538,35 @@ template = PodTemplate(
 For simple environment variables, use the `env` parameter on `Endpoint` instead of `PodTemplate.env`.
 </Tip>
 
+### min_cuda_version
+
+**Type**: `str`
+**Default**: `"12.8"` for GPU endpoints, `None` for CPU endpoints
+
+Specifies the minimum CUDA driver version required on the host machine. GPU endpoints default to `"12.8"` to ensure workers run on hosts with recent CUDA drivers.
+
+```python
+from runpod_flash import Endpoint, GpuType
+
+# Use the default (12.8)
+@Endpoint(name="ml-inference", gpu=GpuType.NVIDIA_A100_80GB_PCIe)
+async def infer(data): ...
+
+# Override to allow older hosts
+@Endpoint(
+    name="legacy-compatible",
+    gpu=GpuType.NVIDIA_A100_80GB_PCIe,
+    min_cuda_version="12.4"
+)
+async def infer_legacy(data): ...
+```
+
+This parameter has no effect on CPU endpoints.
+
+<Note>
+Valid CUDA versions include: `"11.1"`, `"11.4"`, `"11.7"`, `"11.8"`, `"12.0"`, `"12.1"`, `"12.2"`, `"12.3"`, `"12.4"`, `"12.6"`, `"12.8"`. Invalid values raise a `ValueError`.
+</Note>
+
 ## EndpointJob
 
 When using `Endpoint(id=...)` or `Endpoint(image=...)`, the `.run()` method returns an `EndpointJob` object for async operations:
@@ -576,6 +606,7 @@ These changes restart all workers:
 - Storage (`volume`)
 - Datacenter (`datacenter`)
 - Flashboot setting (`flashboot`)
+- CUDA version requirement (`min_cuda_version`)
 
 Workers are temporarily unavailable during recreation (typically 30-90 seconds).
 
