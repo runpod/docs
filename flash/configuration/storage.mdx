@@ -43,26 +43,60 @@ If you specify a custom size that exceeds the instance limit, deployment will fa
 
 ## Network volumes
 
-Network volumes provide persistent storage that survives worker restarts. Use this to share data between endpoint functions with the same network volume attached, or to persist data between runs.
+Network volumes provide persistent storage that survives worker restarts. Each volume is tied to a specific datacenter. Use volumes to share data between endpoint functions or to persist data between runs.
 
 ### Attaching network volumes
 
-Attach a network volume using the `volume` parameter. Flash uses the volume `name` to find an existing volume or create a new one:
+Attach a network volume using the `volume` parameter. Flash uses the volume `name` to find an existing volume or create a new one. Specify the `datacenter` parameter to control where the volume is created:
 
 ```python
-from runpod_flash import Endpoint, GpuType, NetworkVolume
+from runpod_flash import Endpoint, GpuType, DataCenter, NetworkVolume
 
-vol = NetworkVolume(name="model-cache")  # Finds existing or creates new
+vol = NetworkVolume(name="model-cache", size=100, datacenter=DataCenter.US_GA_2)
 
 @Endpoint(
     name="persistent-storage",
     gpu=GpuType.NVIDIA_A100_80GB_PCIe,
+    datacenter=DataCenter.US_GA_2,
     volume=vol
 )
 async def process(data: dict) -> dict:
     # Access files at /runpod-volume/
     ...
 ```
+
+You can also reference an existing volume by ID:
+
+```python
+vol = NetworkVolume(id="vol_abc123")
+```
+
+### Multi-datacenter volumes
+
+For endpoints deployed across multiple datacenters, pass a list of volumes (one per datacenter):
+
+```python
+from runpod_flash import Endpoint, GpuType, DataCenter, NetworkVolume
+
+volumes = [
+    NetworkVolume(name="models-us", size=100, datacenter=DataCenter.US_GA_2),
+    NetworkVolume(name="models-eu", size=100, datacenter=DataCenter.EU_RO_1),
+]
+
+@Endpoint(
+    name="global-inference",
+    gpu=GpuType.NVIDIA_A100_80GB_PCIe,
+    datacenter=[DataCenter.US_GA_2, DataCenter.EU_RO_1],
+    volume=volumes
+)
+async def process(data: dict) -> dict:
+    # Workers in each region access their local volume at /runpod-volume/
+    ...
+```
+
+<Warning>
+Only one network volume is allowed per datacenter. If you specify multiple volumes in the same datacenter, deployment will fail.
+</Warning>
 
 ### Accessing network volume files
 
