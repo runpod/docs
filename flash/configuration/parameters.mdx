@@ -19,8 +19,8 @@ This page provides a complete reference for all parameters available on the `End
 | `dependencies` | `list[str]` | Python packages to install | `None` |
 | `system_dependencies` | `list[str]` | System packages to install (apt) | `None` |
 | `accelerate_downloads` | `bool` | Enable download acceleration | `True` |
-| `volume` | `NetworkVolume` | Network volume for persistent storage | `None` |
-| `datacenter` | `DataCenter` | Preferred datacenter | `EU_RO_1` |
+| `volume` | `NetworkVolume` or list | Network volume(s) for persistent storage | `None` |
+| `datacenter` | `DataCenter`, list, or `None` | Datacenter(s) for deployment | `None` (all DCs) |
 | `env` | `dict[str, str]` | Environment variables | `None` |
 | `gpu_count` | `int` | GPUs per worker | `1` |
 | `execution_timeout_ms` | `int` | Max execution time in milliseconds | `0` (no limit) |
@@ -138,7 +138,7 @@ Controls worker scaling. Accepts either a single integer (max workers with min=0
 **Type**: `int`
 **Default**: `60`
 
-Seconds workers stay active with no traffic before scaling down (to minimum workers).
+Number of seconds workers will stay active (running) after completing a request, waiting for additional requests before scaling down (to minimum workers).
 
 ```python
 # Quick scale-down for cost savings
@@ -208,19 +208,21 @@ async def process(data): ...
 
 ### volume
 
-**Type**: `NetworkVolume`
+**Type**: `NetworkVolume` or `list[NetworkVolume]`
 **Default**: `None`
 
-Attaches a network volume for persistent storage. Volumes are mounted at `/runpod-volume/`. Flash uses the volume `name` to find an existing volume or create a new one.
+Attaches network volume(s) for persistent storage. Volumes are mounted at `/runpod-volume/`. Flash uses the volume `name` to find an existing volume or create a new one. Each volume is tied to a specific datacenter.
 
 ```python
-from runpod_flash import Endpoint, GpuGroup, NetworkVolume
+from runpod_flash import Endpoint, GpuGroup, DataCenter, NetworkVolume
 
-vol = NetworkVolume(name="model-cache")  # Finds existing or creates new
+# Single volume in a specific datacenter
+vol = NetworkVolume(name="model-cache", size=100, datacenter=DataCenter.US_GA_2)
 
 @Endpoint(
     name="model-server",
     gpu=GpuGroup.ANY,
+    datacenter=DataCenter.US_GA_2,
     volume=vol
 )
 async def serve(data):
@@ -228,6 +230,30 @@ async def serve(data):
     model = load_model("/runpod-volume/models/bert")
     ...
 ```
+
+For multi-datacenter deployments, pass a list of volumes (one per datacenter):
+
+```python
+from runpod_flash import Endpoint, GpuGroup, DataCenter, NetworkVolume
+
+volumes = [
+    NetworkVolume(name="models-us", size=100, datacenter=DataCenter.US_GA_2),
+    NetworkVolume(name="models-eu", size=100, datacenter=DataCenter.EU_RO_1),
+]
+
+@Endpoint(
+    name="global-server",
+    gpu=GpuGroup.ANY,
+    datacenter=[DataCenter.US_GA_2, DataCenter.EU_RO_1],
+    volume=volumes
+)
+async def serve(data):
+    ...
+```
+
+<Warning>
+Only one network volume is allowed per datacenter. If you specify multiple volumes in the same datacenter, deployment will fail.
+</Warning>
 
 **Use cases**:
 - Share large models across workers
@@ -238,24 +264,65 @@ See [Storage](/flash/configuration/storage) for setup instructions.
 
 ### datacenter
 
-**Type**: `DataCenter`
-**Default**: `DataCenter.EU_RO_1`
+**Type**: `DataCenter`, `list[DataCenter]`, `str`, `list[str]`, or `None`
+**Default**: `None` (all available datacenters)
 
-Preferred datacenter for worker deployment.
+Specifies the datacenter(s) for worker deployment. When set to `None`, the endpoint is available in all datacenters.
 
 ```python
-from runpod_flash import Endpoint, DataCenter
+from runpod_flash import Endpoint, GpuGroup, DataCenter
 
+# Deploy to all available datacenters (default)
+@Endpoint(name="global", gpu=GpuGroup.ANY)
+async def process(data): ...
+
+# Deploy to a single datacenter
 @Endpoint(
-    name="eu-workers",
+    name="us-workers",
     gpu=GpuGroup.ANY,
-    datacenter=DataCenter.EU_RO_1
+    datacenter=DataCenter.US_GA_2
+)
+async def process(data): ...
+
+# Deploy to multiple datacenters
+@Endpoint(
+    name="multi-region",
+    gpu=GpuGroup.ANY,
+    datacenter=[DataCenter.US_GA_2, DataCenter.EU_RO_1]
+)
+async def process(data): ...
+
+# String DC IDs also work
+@Endpoint(
+    name="us-workers",
+    gpu=GpuGroup.ANY,
+    datacenter="US-GA-2"
 )
 async def process(data): ...
 ```
 
+**Available datacenters**:
+
+| Value | Location |
+|-------|----------|
+| `DataCenter.US_CA_2` | US - California |
+| `DataCenter.US_GA_2` | US - Georgia |
+| `DataCenter.US_IL_1` | US - Illinois |
+| `DataCenter.US_KS_2` | US - Kansas |
+| `DataCenter.US_MD_1` | US - Maryland |
+| `DataCenter.US_MO_1` | US - Missouri |
+| `DataCenter.US_MO_2` | US - Missouri |
+| `DataCenter.US_NC_1` | US - North Carolina |
+| `DataCenter.US_NC_2` | US - North Carolina |
+| `DataCenter.US_NE_1` | US - Nebraska |
+| `DataCenter.US_WA_1` | US - Washington |
+| `DataCenter.EU_CZ_1` | Europe - Czech Republic |
+| `DataCenter.EU_RO_1` | Europe - Romania |
+| `DataCenter.EUR_IS_1` | Europe - Iceland |
+| `DataCenter.EUR_NO_1` | Europe - Norway |
+
 <Note>
-Flash Serverless deployments are currently restricted to `EU-RO-1`.
+CPU endpoints are restricted to `CPU_DATACENTERS`, which currently only includes `EU_RO_1`.
 </Note>
 
 ### env
@@ -279,6 +346,24 @@ async def load_model():
     import os
     token = os.getenv("HF_TOKEN")
     model_id = os.getenv("MODEL_ID")
+    ...
+```
+
+<Warning>
+Values in your project's `.env` file are only available locally for CLI commands and development. They are **not** passed to deployed endpoints. You must declare environment variables explicitly using the `env` parameter.
+</Warning>
+
+To pass a local environment variable to your deployed endpoint, read it from `os.environ`:
+
+```python
+import os
+
+@Endpoint(
+    name="ml-worker",
+    gpu=GpuGroup.ANY,
+    env={"HF_TOKEN": os.environ["HF_TOKEN"]}  # Read from local env, pass to workers
+)
+async def load_model():
     ...
 ```
 
