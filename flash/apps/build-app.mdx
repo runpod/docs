@@ -34,20 +34,16 @@ uv pip install runpod-flash
 Use the `flash init` command to generate a structured project template with a preconfigured application entry point:
 
 ```bash
-flash init
+uv run flash init .
 ```
 
-Make sure your API key is set in the environment, either by creating a `.env` file or exporting the `RUNPOD_API_KEY` environment variable:
+Authenticate with Runpod:
 
 ```bash
-# Set the API key as an environment variable:
-export RUNPOD_API_KEY=YOUR_API_KEY
-
-# Or create a `.env` file:
-touch .env && echo "RUNPOD_API_KEY=YOUR_API_KEY" > .env
+uv run flash login
 ```
 
-Replace `YOUR_API_KEY` with your actual Runpod API key.
+This opens your browser to authorize Flash. After you approve, your credentials are saved for all Flash CLI commands.
 
 ## Step 2: Explore the project template
 
@@ -80,35 +76,15 @@ When you start the server, it creates API endpoints at `/gpu/hello` and `/cpu/he
 Install required dependencies:
 
 ```bash
-pip install -r requirements.txt
+uv pip install -r requirements.txt
 ```
 
-## Step 4: Configure your API key
-
-Open the `.env` template file in a text editor and add your [Runpod API key](/get-started/api-keys):
-
-```bash
-# Use your text editor of choice, e.g.
-cursor .env
-```
-
-Remove the `#` symbol from the beginning of the `RUNPOD_API_KEY` line and replace `your_api_key_here` with your actual Runpod API key:
-
-```text
-RUNPOD_API_KEY=your_api_key_here
-# FLASH_HOST=localhost
-# FLASH_PORT=8888
-# LOG_LEVEL=INFO
-```
-
-Save the file and close it.
-
-## Step 5: Start the local API server
+## Step 4: Start the local API server
 
 Use `flash run` to start the API server:
 
 ```bash
-flash run
+uv run flash run
 ```
 
 Open a new terminal tab or window and test your endpoints using cURL:
@@ -117,12 +93,12 @@ Open a new terminal tab or window and test your endpoints using cURL:
 # Test the queue-based GPU endpoint
 curl -X POST http://localhost:8888/gpu_worker/runsync \
     -H "Content-Type: application/json" \
-    -d '{"message": "Hello from the GPU!"}'
+    -d '{"input": {"input_data": {"message": "Hello from the GPU"}}}'
 
 # Test the load-balanced endpoint
 curl -X POST http://localhost:8888/lb_worker/process \
     -H "Content-Type: application/json" \
-    -d '{"data": "test"}'
+    -d '{"input_data": {"message": "Hello from Flash"}}'
 ```
 
 If you switch back to the terminal tab where you used `flash run`, you'll see the details of the job's progress.
@@ -132,12 +108,12 @@ If you switch back to the terminal tab where you used `flash run`, you'll see th
 For development with multiple endpoints, use `--auto-provision` to deploy all resources before testing:
 
 ```bash
-flash run --auto-provision
+uv run flash run --auto-provision
 ```
 
 This eliminates cold-start delays by provisioning all serverless endpoints upfront. Endpoints are cached and reused across server restarts, making subsequent runs faster. Resources are identified by name, so the same endpoint won't be re-deployed if the configuration hasn't changed.
 
-## Step 6: Open the API explorer
+## Step 5: Open the API explorer
 
 Besides starting the API server, `flash run` also starts an interactive API explorer. Point your web browser at [http://localhost:8888/docs](http://localhost:8888/docs) to explore the API.
 
@@ -148,7 +124,7 @@ To run endpoint functions in the explorer:
 
 You'll get a response from your workers right in the explorer.
 
-## Step 7: Customize your endpoints
+## Step 6: Customize your endpoints
 
 To customize your endpoints:
 
@@ -192,12 +168,12 @@ async def generate_image(prompt: str, width: int = 512, height: int = 512) -> di
 
 This creates a new Serverless endpoint specifically for image generation. When deployed, it will be available at its own endpoint URL with its own `/run` or `/runsync` routes.
 
-## Step 8: Deploy to Runpod
+## Step 7: Deploy to Runpod
 
 When you're ready to deploy your app to Runpod, use `flash deploy`:
 
 ```bash
-flash deploy
+uv run flash deploy
 ```
 
 This command:
@@ -229,13 +205,13 @@ All requests to deployed endpoints require authentication with your Runpod API k
 curl -X POST https://abc123xyz.api.runpod.ai/process \
     -H "Authorization: Bearer $RUNPOD_API_KEY" \
     -H "Content-Type: application/json" \
-    -d '{"input": {}}'
+    -d '{"input_data": {"message": "Hello from Flash"}}'
 
 # Call a queue-based endpoint
 curl -X POST https://api.runpod.ai/v2/def456xyz/runsync \
     -H "Authorization: Bearer $RUNPOD_API_KEY" \
     -H "Content-Type: application/json" \
-    -d '{"input": {}}'
+    -d '{"input": {"input_data": {"message": "Hello from the GPU"}}}'
 ```
 
 For detailed deployment options including environment management, see [Deploy Flash apps](/flash/apps/deploy-apps).
