@@ -110,6 +110,7 @@ Run all smoke tests using local docs
 
 | ID | Goal | Expected Outcome |
 |----|------|------------------|
+| serverless-quickstart | Complete the Serverless quickstart using runpodctl | Endpoint responds to /runsync request |
 | serverless-create-endpoint | Create a serverless endpoint | Endpoint ID returned |
 | serverless-serve-qwen | Create an endpoint to serve a Qwen model | Chat completion works |
 | serverless-custom-handler | Write a custom handler function and deploy it | Handler responds to request |
