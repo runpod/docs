@@ -65,8 +65,9 @@ Fast tests that don't require GPU deployments. Run these for quick validation.
 | sdk-python-install | Install the Runpod Python SDK | `import runpod` succeeds |
 | sdk-js-install | Install the Runpod JavaScript SDK | `require('runpod-sdk')` succeeds |
 | cli-install | Install runpodctl on your local machine | `runpodctl version` returns version |
-| cli-configure | Configure runpodctl with your API key | `runpodctl config` shows configured key |
-| cli-list-pods | List pods using runpodctl | `runpodctl get pods` returns list |
+| cli-configure | Configure runpodctl with your API key | `runpodctl user` shows account info |
+| cli-list-pods | List pods using runpodctl | `runpodctl pod list` returns list |
+| cli-list-gpus | List available GPUs using runpodctl | `runpodctl gpu list` returns GPU types |
 | template-list | List all templates | API returns template array |
 | api-key-create | Create an API key with specific permissions | New API key ID returned |
 | pods-add-ssh-key | Add an SSH key to your Runpod account | Key appears in account |
@@ -226,11 +227,21 @@ Run all smoke tests using local docs
 | ID | Goal | Expected Outcome |
 |----|------|------------------|
 | cli-install | Install runpodctl on your local machine | `runpodctl version` returns version |
-| cli-configure | Configure runpodctl with your API key | `runpodctl config` shows key |
-| cli-list-pods | List pods using runpodctl | `runpodctl get pods` returns list |
-| cli-create-pod | Create a pod using runpodctl | Pod ID returned |
+| cli-doctor | Run first-time setup with runpodctl doctor | API key and SSH configured |
+| cli-configure | Configure runpodctl with your API key | `runpodctl user` shows account info |
+| cli-list-gpus | List available GPUs using runpodctl | `runpodctl gpu list` returns GPU types |
+| cli-list-pods | List pods using runpodctl | `runpodctl pod list` returns list |
+| cli-create-pod | Create a pod using runpodctl | `runpodctl pod create` returns Pod ID |
+| cli-start-stop-pod | Start and stop a pod using runpodctl | `runpodctl pod start/stop` succeeds |
+| cli-delete-pod | Delete a pod using runpodctl | `runpodctl pod delete` succeeds |
+| cli-list-serverless | List serverless endpoints using runpodctl | `runpodctl serverless list` returns list |
+| cli-create-serverless | Create a serverless endpoint using runpodctl | `runpodctl serverless create` returns endpoint ID |
+| cli-list-templates | Search templates using runpodctl | `runpodctl template search` returns templates |
+| cli-list-network-volumes | List network volumes using runpodctl | `runpodctl network-volume list` returns list |
+| cli-hub-search | Search the Runpod Hub using runpodctl | `runpodctl hub search` returns results |
 | cli-send-file | Send a file to a Pod using runpodctl | File arrives on Pod |
 | cli-receive-file | Receive a file from a Pod using runpodctl | File downloaded locally |
+| cli-billing | View billing history using runpodctl | `runpodctl billing` returns history |
 
 ---
 

@@ -23,7 +23,7 @@ Run a test from the testing framework to validate documentation quality.
 
 | Category | Tests | Description |
 |----------|-------|-------------|
-| `smoke` | 12 | Fast tests, no GPU deploys |
+| `smoke` | 13 | Fast tests, no GPU deploys |
 | `flash` | 13 | Flash SDK tests |
 | `serverless` | 20 | Serverless endpoint tests |
 | `vllm` | 6 | vLLM deployment tests |
@@ -32,7 +32,7 @@ Run a test from the testing framework to validate documentation quality.
 | `templates` | 6 | Template tests |
 | `clusters` | 4 | Instant Cluster tests |
 | `sdk` | 8 | SDK and API tests |
-| `cli` | 6 | runpodctl tests |
+| `cli` | 16 | runpodctl tests |
 | `integrations` | 4 | Third-party integrations |
 | `public` | 3 | Public endpoint tests |
 | `tutorials` | 9 | End-to-end tutorials |
