@@ -13,7 +13,7 @@ This guide covers how to monitor your Flash deployments, debug issues, and resol
 When running Flash functions, logs are displayed in your terminal:
 
 ```text
-2025-11-19 12:35:15,109 | INFO  | Created endpoint: rb50waqznmn2kg - flash-quickstart-fb
+2025-11-19 12:35:15,109 | INFO  | Created endpoint: rb50waqznmn2kg - flash-quickstart
 2025-11-19 12:35:15,114 | INFO  | Endpoint:rb50waqznmn2kg | API /run
 2025-11-19 12:35:15,655 | INFO  | Endpoint:rb50waqznmn2kg | Started Job:b0b341e7-...
 2025-11-19 12:35:15,762 | INFO  | Job:b0b341e7-... | Status: IN_QUEUE
@@ -118,6 +118,23 @@ Get a key: https://docs.runpod.io/get-started/api-keys
    source ~/.bashrc
    ```
 
+### Corrupted credentials file
+
+**Error:**
+```
+Error: ~/.runpod/config.toml is corrupted and cannot be parsed.
+Run 'flash login' to re-authenticate, or delete the file and retry.
+```
+
+**Cause:** The credentials file at `~/.runpod/config.toml` contains invalid TOML and cannot be read. This can also appear as "No API key found" even after a successful `flash login`.
+
+**Solution:** Delete the credentials file and re-authenticate:
+
+```bash
+rm ~/.runpod/config.toml
+flash login
+```
+
 ### Invalid route configuration
 
 **Error:**
@@ -192,14 +209,14 @@ Duplicate route 'POST /process' in endpoint 'my-api'
 **Error:**
 ```
 Python 3.13 is not supported for Flash deployment.
-Supported versions: 3.10, 3.11, 3.12
+Supported versions: 3.12
 ```
 
-**Cause:** Flash requires Python 3.10, 3.11, or 3.12.
+**Cause:** Flash requires Python 3.12.
 
 **Solution:**
 
-Switch to a supported Python version using a virtual environment:
+Switch to Python 3.12 using a virtual environment:
 
 ```bash
 # Using pyenv
@@ -211,7 +228,7 @@ uv venv --python 3.12
 source .venv/bin/activate
 ```
 
-Alternatively, use a Docker container with a supported Python version for your build environment.
+Alternatively, use a Docker container with Python 3.12 for your build environment.
 
 ## Deployment errors
 
@@ -402,6 +419,47 @@ Failed to deserialize result: [error]
    ```
 
 3. **Check argument types**: Input arguments must also be serializable.
+
+### Payload too large
+
+**Error:**
+```
+Payload size X MB exceeds limit of 10.0 MB
+```
+
+**Cause:** The serialized argument exceeds the 10 MB limit. Flash uses base64 encoding, which expands data by approximately 33%, so roughly 7.5 MB of raw data becomes 10 MB when encoded.
+
+**Solutions:**
+
+1. **Use network volumes for large data**: Save large data to a network volume and pass the file path:
+   ```python
+   @Endpoint(name="processor", gpu=GpuGroup.ANY, volume="vol_abc123")
+   async def process(file_path: str) -> dict:
+       import numpy as np
+       data = np.load(file_path)  # Load from volume
+       return {"result": process_data(data)}
+   ```
+
+2. **Compress data before sending**: For data that must be passed directly, use compression:
+   ```python
+   import gzip
+
+   compressed = gzip.compress(data.tobytes())
+   # Pass compressed bytes instead
+   ```
+
+3. **Split large requests**: Break large datasets into smaller chunks and process them in multiple requests.
+
+### Deserialization timeout
+
+**Error:**
+```
+Deserialization timed out after 30s
+```
+
+**Cause:** The deserialization process took longer than 30 seconds. This usually indicates malformed or corrupted serialized data that causes the unpickle operation to hang.
+
+**Solution:** Verify your input data is properly serialized. If you're manually constructing payloads, ensure the data was serialized using `cloudpickle` and encoded with base64. The Flash SDK handles this automatically for programmatic calls.
 
 ### Circuit breaker open
 
