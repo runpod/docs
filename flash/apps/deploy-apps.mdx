@@ -329,6 +329,41 @@ When one endpoint needs to call a function on another endpoint:
 
 Each endpoint maintains its own connection to the state manager, querying for peer endpoint URLs as needed and caching results for 300 seconds to minimize API calls.
 
+#### Calling another endpoint from your code
+
+To call one endpoint from another, import the target endpoint function **inside** your function body. Flash automatically detects these imports and generates the necessary dispatch stubs.
+
+For example, if you have a GPU worker for inference:
+
+```python gpu_worker.py
+from runpod_flash import Endpoint, GpuType
+
+@Endpoint(
+    name="gpu-inference",
+    gpu=GpuType.NVIDIA_GEFORCE_RTX_4090,
+    dependencies=["torch"]
+)
+async def gpu_inference(payload: dict) -> dict:
+    import torch
+    # GPU inference logic
+    return {"result": "processed"}
+```
+
+You can call it from a CPU-based pipeline endpoint:
+
+```python cpu_worker.py
+from runpod_flash import Endpoint
+
+@Endpoint(name="pipeline", cpu="cpu5c-4-8")
+async def classify(text: str) -> dict:
+    # Import the GPU endpoint inside the function body
+    from gpu_worker import gpu_inference
+
+    # Flash routes this call to the gpu-inference endpoint
+    result = await gpu_inference({"text": text})
+    return {"classification": result}
+```
+
 ## Troubleshooting
 
 ### No @Endpoint functions found
