@@ -1,29 +1,39 @@
 ---
-title: "Manage Templates"
+title: "Manage templates"
+description: "Create and manage templates for Pods and Serverless endpoints using the GraphQL API."
 ---
 
-Required arguments:
+Use the GraphQL API to create and manage templates for Pods and Serverless endpoints.
 
-* `containerDiskInGb`
-* `dockerArgs`
-* `env`
-* `imageName`
-* `name`
-* `volumeInGb`
+For the complete schema, see the [GraphQL Spec](https://graphql-spec.runpod.io/).
 
-All other arguments are optional.
+## Quick reference
 
-If your container image is private, you can also specify Docker login credentials with a `containerRegistryAuthId` argument, which takes the ID (*not* the name) of the container registry credentials you saved in your Runpod user settings as a string.
+| Operation | Mutation |
+|-----------|----------|
+| Create template | `saveTemplate` |
+| Modify template | `saveTemplate` (with `id`) |
+| Delete template | `deleteTemplate` |
+| Create secret | `secretCreate` |
 
-<Info>
+## Required fields
 
-Template names must be unique as well; if you try to create a new template with the same name as an existing one, your call will fail.
+Templates require the following fields:
 
-</Info>
+| Field | Type | Description |
+|-------|------|-------------|
+| `containerDiskInGb` | Integer | Container disk size in GB. |
+| `imageName` | String | Docker image name with tag (e.g., `ubuntu:latest`). |
+| `name` | String | Unique template name. |
+| `volumeInGb` | Integer | Volume size in GB. Set to `0` for Serverless templates. |
 
-## Create a Pod Template
+<Note>
+Template names must be unique. Creating a template with a name that already exists will fail.
+</Note>
 
-### Create GPU Template
+## Create a template
+
+### GPU Pod template
 
 <Tabs>
 <Tab title="cURL">
@@ -31,51 +41,38 @@ Template names must be unique as well; if you try to create a new template with 
 curl --request POST \
   --header 'content-type: application/json' \
   --url 'https://api.runpod.io/graphql?api_key=${YOUR_API_KEY}' \
-  --data '{"query": "mutation { saveTemplate(input: { containerDiskInGb: 5, dockerArgs: \"sleep infinity\", env: [ { key: \"key1\", value: \"value1\" }, { key: \"key2\", value: \"value2\" } ], imageName: \"ubuntu:latest\", name: \"Generated Template\", ports: \"8888/http,22/tcp\", readme: \"## Hello, World!\", volumeInGb: 15, volumeMountPath: \"/workspace\" }) { containerDiskInGb dockerArgs env { key value } id imageName name ports readme volumeInGb volumeMountPath } }"}'
+  --data '{"query": "mutation { saveTemplate(input: { containerDiskInGb: 5, dockerArgs: \"sleep infinity\", env: [ { key: \"key1\", value: \"value1\" }, { key: \"key2\", value: \"value2\" } ], imageName: \"ubuntu:latest\", name: \"My GPU Template\", ports: \"8888/http,22/tcp\", readme: \"## Hello, World!\", volumeInGb: 15, volumeMountPath: \"/workspace\" }) { containerDiskInGb dockerArgs env { key value } id imageName name ports readme volumeInGb volumeMountPath } }"}'
 ```
-
 </Tab>
 
 <Tab title="GraphQL">
-```GraphQL
+```graphql
 mutation {
   saveTemplate(input: {
     containerDiskInGb: 5,
     dockerArgs: "sleep infinity",
     env: [
-      {
-        key: "key1",
-        value: "value1"
-      },
-      {
-        key: "key2",
-        value: "value2"
-      }
+      { key: "key1", value: "value1" },
+      { key: "key2", value: "value2" }
     ],
     imageName: "ubuntu:latest",
-    name: "Generated Template",
+    name: "My GPU Template",
     ports: "8888/http,22/tcp",
     readme: "## Hello, World!",
     volumeInGb: 15,
     volumeMountPath: "/workspace"
   }) {
-    containerDiskInGb
-    dockerArgs
-    env {
-      key
-      value
-    }
     id
-    imageName
     name
-    ports
-    readme
+    imageName
+    containerDiskInGb
     volumeInGb
-    volumeMountPath
+    dockerArgs
+    ports
+    env { key value }
   }
 }
 ```
-
 </Tab>
 
 <Tab title="Output">
@@ -83,37 +80,27 @@ mutation {
 {
   "data": {
     "saveTemplate": {
-      "containerDiskInGb": 5,
-      "dockerArgs": "sleep infinity",
-      "env": [
-        {
-          "key": "key1",
-          "value": "value1"
-        },
-        {
-          "key": "key2",
-          "value": "value2"
-        }
-      ],
       "id": "wphkv67a0p",
+      "name": "My GPU Template",
       "imageName": "ubuntu:latest",
-      "name": "Generated Template",
-      "ports": "8888/http,22/tcp",
-      "readme": "## Hello, World!",
+      "containerDiskInGb": 5,
       "volumeInGb": 15,
-      "volumeMountPath": "/workspace"
+      "dockerArgs": "sleep infinity",
+      "ports": "8888/http,22/tcp",
+      "env": [
+        { "key": "key1", "value": "value1" },
+        { "key": "key2", "value": "value2" }
+      ]
     }
   }
 }
 ```
-
 </Tab>
-
 </Tabs>
 
-### Create Serverless Template
+### Serverless template
 
-For Serverless templates, always pass `0` for `volumeInGb`, since Serverless workers don't have persistent storage (other than those with network volumes).
+For Serverless templates, set `volumeInGb` to `0` and include `isServerless: true`.
 
 <Tabs>
 <Tab title="cURL">
@@ -121,48 +108,34 @@ For Serverless templates, always pass `0` for `volumeInGb`, since Serverless wor
 curl --request POST \
   --header 'content-type: application/json' \
   --url 'https://api.runpod.io/graphql?api_key=${YOUR_API_KEY}' \
-  --data '{"query": "mutation { saveTemplate(input: { containerDiskInGb: 5, dockerArgs: \"python handler.py\", env: [ { key: \"key1\", value: \"value1\" }, { key: \"key2\", value: \"value2\" } ], imageName: \"runpod/serverless-hello-world:latest\", isServerless: true, name: \"Generated Serverless Template\", readme: \"## Hello, World!\", volumeInGb: 0 }) { containerDiskInGb dockerArgs env { key value } id imageName isServerless name readme } }"}'
+  --data '{"query": "mutation { saveTemplate(input: { containerDiskInGb: 5, dockerArgs: \"python handler.py\", env: [ { key: \"key1\", value: \"value1\" } ], imageName: \"runpod/serverless-hello-world:latest\", isServerless: true, name: \"My Serverless Template\", volumeInGb: 0 }) { id name imageName isServerless containerDiskInGb } }"}'
 ```
-
 </Tab>
 
 <Tab title="GraphQL">
-```GraphQL
+```graphql
 mutation {
   saveTemplate(input: {
     containerDiskInGb: 5,
     dockerArgs: "python handler.py",
     env: [
-      {
-        key: "key1",
-        value: "value1"
-      },
-      {
-        key: "key2",
-        value: "value2"
-      }
+      { key: "key1", value: "value1" }
     ],
     imageName: "runpod/serverless-hello-world:latest",
     isServerless: true,
-    name: "Generated Serverless Template",
-    readme: "## Hello, World!",
+    name: "My Serverless Template",
     volumeInGb: 0
   }) {
-    containerDiskInGb
-    dockerArgs
-    env {
-      key
-      value
-    }
     id
+    name
     imageName
     isServerless
-    name
-    readme
+    containerDiskInGb
+    dockerArgs
+    env { key value }
   }
 }
 ```
-
 </Tab>
 
 <Tab title="Output">
@@ -170,35 +143,44 @@ mutation {
 {
   "data": {
     "saveTemplate": {
+      "id": "xkhgg72fuo",
+      "name": "My Serverless Template",
+      "imageName": "runpod/serverless-hello-world:latest",
+      "isServerless": true,
       "containerDiskInGb": 5,
       "dockerArgs": "python handler.py",
       "env": [
-        {
-          "key": "key1",
-          "value": "value1"
-        },
-        {
-          "key": "key2",
-          "value": "value2"
-        }
-      ],
-      "id": "xkhgg72fuo",
-      "imageName": "runpod/serverless-hello-world:latest",
-      "isServerless": true,
-      "name": "Generated Serverless Template",
-      "readme": "## Hello, World!"
+        { "key": "key1", "value": "value1" }
+      ]
     }
   }
 }
 ```
-
 </Tab>
-
 </Tabs>
 
-## Modify a Template
+### Private container images
 
-### Modify a GPU Pod Template
+For private container images, use `containerRegistryAuthId` with the ID of your saved registry credentials from your [Runpod settings](https://www.console.runpod.io/user/settings).
+
+```graphql
+mutation {
+  saveTemplate(input: {
+    containerDiskInGb: 5,
+    imageName: "myregistry.io/private-image:latest",
+    containerRegistryAuthId: "YOUR_REGISTRY_CREDENTIALS_ID",
+    name: "Private Image Template",
+    volumeInGb: 10
+  }) {
+    id
+    name
+  }
+}
+```
+
+## Modify a template
+
+Include the template `id` to update an existing template. The same mutation works for both GPU and Serverless templates.
 
 <Tabs>
 <Tab title="cURL">
@@ -206,48 +188,28 @@ mutation {
 curl --request POST \
   --header 'content-type: application/json' \
   --url 'https://api.runpod.io/graphql?api_key=${YOUR_API_KEY}' \
-  --data '{"query": "mutation { saveTemplate(input: { id: \"wphkv67a0p\", containerDiskInGb: 5, dockerArgs: \"sleep infinity\", env: [ { key: \"key1\", value: \"value1\" }, { key: \"key2\", value: \"value2\" } ], imageName: \"ubuntu:latest\", name: \"Generated Template\", volumeInGb: 15, readme: \"## Goodbye, World!\" }) { id containerDiskInGb dockerArgs env { key value } imageName name volumeInGb readme } }"}'
+  --data '{"query": "mutation { saveTemplate(input: { id: \"wphkv67a0p\", containerDiskInGb: 10, imageName: \"ubuntu:latest\", name: \"My GPU Template\", volumeInGb: 20, readme: \"## Updated readme\" }) { id containerDiskInGb volumeInGb readme } }"}'
 ```
-
 </Tab>
 
 <Tab title="GraphQL">
-```GraphQL
+```graphql
 mutation {
   saveTemplate(input: {
     id: "wphkv67a0p",
-    containerDiskInGb: 5,
-    dockerArgs: "sleep infinity",
-    env: [
-      {
-        key: "key1",
-        value: "value1"
-      },
-      {
-        key: "key2",
-        value: "value2"
-      }
-    ],
+    containerDiskInGb: 10,
     imageName: "ubuntu:latest",
-    name: "Generated Template",
-    volumeInGb: 15,
-    readme: "## Goodbye, World!"
+    name: "My GPU Template",
+    volumeInGb: 20,
+    readme: "## Updated readme"
   }) {
     id
     containerDiskInGb
-    dockerArgs
-    env {
-      key
-      value
-    }
-    imageName
-    name
     volumeInGb
     readme
   }
 }
 ```
-
 </Tab>
 
 <Tab title="Output">
@@ -256,32 +218,23 @@ mutation {
   "data": {
     "saveTemplate": {
       "id": "wphkv67a0p",
-      "containerDiskInGb": 5,
-      "dockerArgs": "sleep infinity",
-      "env": [
-        {
-          "key": "key1",
-          "value": "value1"
-        },
-        {
-          "key": "key2",
-          "value": "value2"
-        }
-      ],
-      "imageName": "ubuntu:latest",
-      "name": "Generated Template",
-      "volumeInGb": 15,
-      "readme": "## Goodbye, World!"
+      "containerDiskInGb": 10,
+      "volumeInGb": 20,
+      "readme": "## Updated readme"
     }
   }
 }
 ```
-
 </Tab>
-
 </Tabs>
 
-### Modify a Serverless Template
+## Delete a template
+
+Delete a template by name. The template must not be in use by any Pods or Serverless endpoints.
+
+<Warning>
+It can take up to 2 minutes to delete a template after its most recent use by a Pod or Serverless endpoint.
+</Warning>
 
 <Tabs>
 <Tab title="cURL">
@@ -289,105 +242,16 @@ mutation {
 curl --request POST \
   --header 'content-type: application/json' \
   --url 'https://api.runpod.io/graphql?api_key=${YOUR_API_KEY}' \
-  --data '{"query": "mutation { saveTemplate(input: { id: \"xkhgg72fuo\", containerDisk
-
-InGb: 5, dockerArgs: \"python handler.py\", env: [ { key: \"key1\", value: \"value1\" }, { key: \"key2\", value: \"value2\" } ], imageName: \"runpod/serverless-hello-world:latest\", name: \"Generated Serverless Template\", volumeInGb: 0, readme: \"## Goodbye, World!\" }) { id containerDiskInGb dockerArgs env { key value } imageName name readme } }"}'
+  --data '{"query": "mutation { deleteTemplate(templateName: \"My GPU Template\") }"}'
 ```
-
 </Tab>
 
 <Tab title="GraphQL">
-```GraphQL
+```graphql
 mutation {
-  saveTemplate(input: {
-    id: "xkhgg72fuo",
-    containerDiskInGb: 5,
-    dockerArgs: "python handler.py",
-    env: [
-      {
-        key: "key1",
-        value: "value1"
-      },
-      {
-        key: "key2",
-        value: "value2"
-      }
-    ],
-    imageName: "runpod/serverless-hello-world:latest",
-    name: "Generated Serverless Template",
-    volumeInGb: 0,
-    readme: "## Goodbye, World!"
-  }) {
-    id
-    containerDiskInGb
-    dockerArgs
-    env {
-      key
-      value
-    }
-    imageName
-    name
-    readme
-  }
+  deleteTemplate(templateName: "My GPU Template")
 }
 ```
-
-</Tab>
-
-<Tab title="Output">
-```json
-{
-  "data": {
-    "saveTemplate": {
-      "id": "xkhgg72fuo",
-      "containerDiskInGb": 5,
-      "dockerArgs": "python handler.py",
-      "env": [
-        {
-          "key": "key1",
-          "value": "value1"
-        },
-        {
-          "key": "key2",
-          "value": "value2"
-        }
-      ],
-      "imageName": "runpod/serverless-hello-world:latest",
-      "name": "Generated Serverless Template",
-      "readme": "## Goodbye, World!"
-    }
-  }
-}
-```
-
-</Tab>
-
-</Tabs>
-
-## Delete a Template
-
-Note that the template you'd like to delete must not be in use by any Pods or assigned to any Serverless endpoints. It can take up to 2 minutes to be able to delete a template after its most recent use by a Pod or Serverless endpoint, too.
-
-The same mutation is used for deleting both Pod and Serverless templates.
-
-<Tabs>
-<Tab title="cURL">
-```bash
-curl --request POST \
-  --header 'content-type: application/json' \
-  --url 'https://api.runpod.io/graphql?api_key=${YOUR_API_KEY}' \
-  --data '{"query": "mutation { deleteTemplate(templateName: \"Generated Template\") }"}'
-```
-
-</Tab>
-
-<Tab title="GraphQL">
-```GraphQL
-mutation {
-  deleteTemplate(templateName: "Generated Template")
-}
-```
-
 </Tab>
 
 <Tab title="Output">
@@ -398,14 +262,12 @@ mutation {
   }
 }
 ```
-
 </Tab>
-
 </Tabs>
 
-## Create a Secret
+## Create a secret
 
-To create a secret, you need to send a GraphQL mutation request. This request will include the `secretCreate` mutation with the required input fields `value` and `name`. The `value` represents the actual secret, and the `name` is a unique identifier for the secret.
+Secrets store sensitive values that can be referenced in templates.
 
 <Tabs>
 <Tab title="cURL">
@@ -413,17 +275,16 @@ To create a secret, you need to send a GraphQL mutation request. This request wi
 curl --request POST \
   --header 'content-type: application/json' \
   --url 'https://api.runpod.io/graphql?api_key=${YOUR_API_KEY}' \
-  --data '{"query": "mutation { secretCreate(input: { value: \"i am a test secret\", name: \"i-am-a-secret\" }) { id name description } }"}'
+  --data '{"query": "mutation { secretCreate(input: { value: \"my-secret-value\", name: \"my-secret\" }) { id name description } }"}'
 ```
-
 </Tab>
 
 <Tab title="GraphQL">
-```GraphQL
+```graphql
 mutation {
   secretCreate(input: {
-    value: "i am a test secret",
-    name: "i-am-a-secret"
+    value: "my-secret-value",
+    name: "my-secret"
   }) {
     id
     name
@@ -431,7 +292,24 @@ mutation {
   }
 }
 ```
-
 </Tab>
 
+<Tab title="Output">
+```json
+{
+  "data": {
+    "secretCreate": {
+      "id": "abc123",
+      "name": "my-secret",
+      "description": null
+    }
+  }
+}
+```
+</Tab>
 </Tabs>
+
+## Next steps
+
+- [Manage Pods](/sdks/graphql/manage-pods) — Create and control Pods.
+- [Manage endpoints](/sdks/graphql/manage-endpoints) — Deploy Serverless endpoints using your templates.
