@@ -38,25 +38,23 @@ If you haven't set up payments yet, you'll be prompted to add a payment method a
 
 <Tab title="Terminal">
 
-First, [create an API key](/get-started/api-keys) if you haven't already. Export it as an environment variable:
+First, install the [Runpod CLI](/runpodctl/overview) on your local machine and configure it with your API key:
 
 ```bash
-export RUNPOD_API_KEY="your-api-key"
+# Install runpodctl
+bash <(wget -qO- cli.runpod.io)
+
+# Configure your API key
+runpodctl config --apiKey "your-api-key"
 ```
 
 Then deploy your Pod:
 
 ```bash
-curl --request POST \
-  --url https://rest.runpod.io/v1/pods \
-  --header "Authorization: Bearer $RUNPOD_API_KEY" \
-  --header "Content-Type: application/json" \
-  --data '{
-    "name": "quickstart-pod",
-    "imageName": "runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04",
-    "gpuTypeIds": ["NVIDIA A40"],
-    "gpuCount": 1
-  }'
+runpodctl pod create \
+  --name "quickstart-pod" \
+  --gpu-id "NVIDIA A40" \
+  --image "runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04"
 ```
 
 The response includes your Pod ID:
@@ -96,31 +94,24 @@ Once your Pod finishes initializing, connect and run some code:
 <Tab title="Terminal">
 
 <Note>
-You'll need an [SSH key added to your account](/pods/configuration/use-ssh) for this to work.
+You'll need an [SSH key added to your account](/pods/configuration/use-ssh) for this to work. You can run `runpodctl doctor` to set this up automatically.
 </Note>
 
-Get your Pod's SSH connection details:
+Get the SSH command for your Pod:
 
 ```bash
-curl --request GET \
-  --url "https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID" \
-  --header "Authorization: Bearer $RUNPOD_API_KEY"
+runpodctl ssh info $RUNPOD_POD_ID
 ```
 
-The response includes `publicIp` and `portMappings`:
+The output includes the SSH command to connect:
 
 ```json
 {
-  "id": "uv9wy55tyv30lo",
-  "publicIp": "194.68.245.207",
-  "portMappings": {
-    "22": 22100
-  },
-  ...
+  "sshCommand": "ssh root@194.68.245.207 -p 22100 -i ~/.ssh/id_ed25519"
 }
 ```
 
-Use these values to connect via SSH:
+Use this command to connect and run code:
 
 ```bash
 ssh root@194.68.245.207 -p 22100
@@ -165,17 +156,13 @@ To terminate your Pod:
 Stop your Pod:
 
 ```bash
-curl --request POST \
-  --url "https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID/stop" \
-  --header "Authorization: Bearer $RUNPOD_API_KEY"
+runpodctl pod stop $RUNPOD_POD_ID
 ```
 
 You'll still be charged a small amount for storage on stopped Pods (\$0.20 per GB per month). If you don't need to retain any data on your Pod, terminate it completely:
 
 ```bash
-curl --request DELETE \
-  --url "https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID" \
-  --header "Authorization: Bearer $RUNPOD_API_KEY"
+runpodctl pod delete $RUNPOD_POD_ID
 ```
 
 </Tab>

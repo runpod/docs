@@ -1,237 +1,309 @@
 ---
 title: "Quickstart"
 sidebarTitle: "Quickstart"
-description: "Write a handler function, build a worker image, create an endpoint, and send your first request."
+description: "Deploy your first Serverless endpoint in 5 minutes using a ready-to-use template."
 ---
 
-<Tip>
-
-For an even faster start, clone or download the [worker-basic](https://github.com/runpod-workers/worker-basic) repository for a pre-configured template for building and deploying Serverless workers. After cloning the repository, skip to [step 6 of this tutorial](#step-6%3A-build-and-push-your-docker-image) to deploy and test the endpoint.
-
-</Tip>
+This quickstart gets you running a Serverless endpoint on Runpod in minutes, using a ready-to-use template to deploy a language model and send a test request.
 
 ## Requirements
 
-* You've [created a Runpod account](/get-started/manage-accounts).
-* You've installed [Python 3.x](https://www.python.org/downloads/) and [Docker](https://docs.docker.com/get-started/get-docker/) on your local machine and configured them for your command line.
+- A [Runpod account](/get-started/manage-accounts) with available credits.
+- A [Runpod API key](/get-started/api-keys).
 
-## Step 1: Create project files
+## Step 1: Set up your environment
 
-Create a new directory with empty files for your project:
+Choose your preferred method for interacting with Runpod. If using the CLI or REST API, you'll need to configure your API key.
 
-```bash
-mkdir serverless-quickstart && cd serverless-quickstart
-touch handler.py Dockerfile requirements.txt test_input.json
-```
+<Tabs>
+<Tab title="Runpod CLI">
 
-## Step 2: Install the Serverless SDK
+Install and configure the Runpod CLI.
 
-Create a virtual environment and install the Serverless SDK
+**macOS/Linux:**
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install runpod
+# Install runpodctl
+curl -fsSL https://install.runpod.io | bash
+
+# Configure with your API key
+runpodctl doctor
 ```
 
-## Step 3: Create a handler function
+**Windows:**
 
-Add the following code to `handler.py`:
+```powershell
+# Install using PowerShell
+iwr -useb https://install.runpod.io/windows | iex
 
-```python handler.py
-import runpod
-import time  
-
-def handler(event):
-#   This function processes incoming requests to your Serverless endpoint.
-#
-#    Args:
-#        event (dict): Contains the input data and request metadata
-#       
-#    Returns:
-#       Any: The result to be returned to the client
-    
-    # Extract input data
-    print(f"Worker Start")
-    input = event['input']
-    
-    prompt = input.get('prompt')  
-    seconds = input.get('seconds', 0)  
-
-    print(f"Received prompt: {prompt}")
-    print(f"Sleeping for {seconds} seconds...")
-    
-    # You can replace this sleep call with your own Python code
-    time.sleep(seconds)  
-    
-    return prompt 
-
-# Start the Serverless function when the script is run
-if __name__ == '__main__':
-    runpod.serverless.start({'handler': handler })
+# Configure with your API key
+runpodctl doctor
 ```
 
-This is a bare-bones handler that processes a JSON object and outputs a `prompt` string contained in the `input` object. 
+Verify the installation:
 
-<Tip>
+```bash
+runpodctl version
+```
 
-You can replace the `time.sleep(seconds)` call with your own Python code for generating images, text, or running any AI/ML workload.
+</Tab>
+<Tab title="REST API">
 
-</Tip>
+Export your Runpod API key as an environment variable:
 
-## Step 4: Create a test input file
+```bash
+export RUNPOD_API_KEY="your_api_key_here"
+```
 
-Add the following code to `test_input.json` to properly test your handler locally:
+</Tab>
+<Tab title="Web">
 
-```json test_input.json
-{
-    "input": {
-        "prompt": "Hey there!"
+No setup required. Log in to the [Runpod console](https://www.runpod.io/console/serverless) to get started.
+
+</Tab>
+</Tabs>
+
+## Step 2: Deploy an endpoint
+
+Deploy a vLLM worker with a small, fast language model.
+
+<Tabs>
+<Tab title="Runpod CLI">
+
+First, create a Serverless template with the vLLM worker image:
+
+```bash
+runpodctl template create \
+  --name "vllm-qwen" \
+  --image "runpod/worker-v1-vllm:stable-cuda12.1.0" \
+  --env '{"MODEL_NAME": "Qwen/Qwen2.5-0.5B-Instruct"}' \
+  --serverless
+```
+
+Note the template ID from the output. Then create an endpoint using that template:
+
+```bash
+runpodctl serverless create \
+  --name "my-first-endpoint" \
+  --template-id YOUR_TEMPLATE_ID \
+  --gpu-id "NVIDIA GeForce RTX 4090" \
+  --workers-min 0 \
+  --workers-max 3
+```
+
+The output includes your endpoint ID:
+
+```
+Endpoint created successfully
+ID: abc123xyz
+Name: my-first-endpoint
+```
+
+</Tab>
+<Tab title="REST API">
+
+First, create a template using the vLLM worker image:
+
+```bash
+curl --request POST \
+  --url https://rest.runpod.io/v1/templates \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "name": "vllm-qwen",
+    "imageName": "runpod/worker-v1-vllm:stable-cuda12.1.0",
+    "isServerless": true,
+    "env": {
+      "MODEL_NAME": "Qwen/Qwen2.5-0.5B-Instruct"
     }
-}
+  }'
 ```
 
-## Step 5: Test your handler function locally
+Note the `id` from the response. Then create an endpoint using that template:
 
-Run your handler function using your local terminal:
-
-```sh
-python handler.py
+```bash
+curl --request POST \
+  --url https://rest.runpod.io/v1/endpoints \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "name": "my-first-endpoint",
+    "templateId": "YOUR_TEMPLATE_ID",
+    "gpuTypeIds": ["NVIDIA GeForce RTX 4090", "NVIDIA L4", "NVIDIA RTX A4000"],
+    "workersMin": 0,
+    "workersMax": 3,
+    "idleTimeout": 5
+  }'
 ```
 
-You should see output similar to this:
-
-```text
---- Starting Serverless Worker |  Version 1.7.9 ---
-INFO   | Using test_input.json as job input.
-DEBUG  | Retrieved local job: {'input': {'prompt': 'Hey there!'}, 'id': 'local_test'}
-INFO   | local_test | Started.
-Worker Start
-Received prompt: Hey there!
-Sleeping for 0 seconds...
-DEBUG  | local_test | Handler output: Hey there!
-DEBUG  | local_test | run_job return: {'output': 'Hey there!'}
-INFO   | Job local_test completed successfully.
-INFO   | Job result: {'output': 'Hey there!'}
-INFO   | Local testing complete, exiting.
-```
-
-## Step 6: Create a Dockerfile
-
-Add the following content to `Dockerfile`:
-
-<Tip>
-New to Dockerfiles? Learn the fundamentals with our [introduction to containers](/tutorials/introduction/containers) tutorial series.
-</Tip>
-
-```dockerfile Dockerfile
-FROM python:3.10-slim
-
-WORKDIR /
-
-# Install dependencies
-RUN pip install --no-cache-dir runpod
-
-# Copy your handler file
-COPY handler.py /
-
-# Start the container
-CMD ["python3", "-u", "handler.py"]
-```
-
-## Step 7: Build and push your worker image
-
-<Tip>
-
-Instead of building and pushing your image via Docker Hub, you can also [deploy your worker from a GitHub repository](/serverless/workers/github-integration).
-
-</Tip>
-
-Before you can deploy your worker on Runpod Serverless, you need to push it to Docker Hub:
-<Steps>
-  <Step title="Build your Docker image">
-    Build your Docker image, specifying the platform for Runpod deployment, replacing `[YOUR_USERNAME]` with your Docker username:
-    
-    ```sh
-    docker build --platform linux/amd64 --tag [YOUR_USERNAME]/serverless-test .
-    ```
-  </Step>
-  
-  <Step title="Push the image to your container registry">
-    ```sh
-    docker push [YOUR_USERNAME]/serverless-test:latest
-    ```
-  </Step>
-</Steps>
-
-## Step 8: Deploy your worker using the Runpod console
-
-To deploy your worker to a Serverless endpoint:
-
-1. Go to the [Serverless section](https://www.console.runpod.io/serverless) of the Runpod console.
-2. Click **New Endpoint**.
-3. Click **Import from Docker Registry**
-4. In the **Container Image** field, enter your Docker image URL: `docker.io/yourusername/serverless-test:latest`.
-5. Click **Next** to proceed to endpoint configuration.
-6. Configure your endpoint settings:
-   * (Optional) Enter a custom name for your endpoint, or use the randomly generated name.
-   * Make sure the **Endpoint Type** is set to **Queue**.
-   * Under **GPU Configuration**, check the box for **16 GB** GPUs.
-   * Leave the rest of the settings at their defaults.
-7. Click **Deploy Endpoint**.
-
-The system will redirect you to a dedicated detail page for your new endpoint.
-
-## Step 9: Test your endpoint
-
-To test your endpoint, click the **Requests** tab in the endpoint detail page:
-
-<Frame>
-  <img src="/images/8f34ba77-serverless-get-started-endpoint-details.png" />
-</Frame>
-
-On the left you should see the default test request:
+The response includes your endpoint ID:
 
 ```json
 {
-    "input": {
-        "prompt": "Hello World"
-    }
+  "id": "abc123xyz",
+  "name": "my-first-endpoint",
+  ...
 }
 ```
 
-Leave the default input as is and click **Run**. The system will take a few minutes to initialize your workers.
+</Tab>
+<Tab title="Web">
 
-When the workers finish processing your request, you should see output on the right side of the page similar to this:
+1. Go to the [Serverless section](https://www.runpod.io/console/serverless) and click **New Endpoint**.
+2. Under **The Hub**, click **vLLM**.
+3. Click **Deploy vX.X.X**.
+4. In the **Model** field, enter: `Qwen/Qwen2.5-0.5B-Instruct`
+5. Click **Next** then **Create Endpoint**.
+6. Once deployed, note your **Endpoint ID** from the endpoint details page—you'll need it for API requests.
+
+</Tab>
+</Tabs>
+
+Your endpoint will begin initializing. This takes 1-2 minutes while Runpod provisions resources and loads the model.
+
+## Step 3: Send a request
+
+Once your endpoint shows **Ready** status, send a test request. If you haven't already, export your API key in your terminal:
+
+```bash
+export RUNPOD_API_KEY="your_api_key_here"
+```
+
+<Tabs>
+<Tab title="cURL">
+
+Run this command in your terminal, replacing `YOUR_ENDPOINT_ID` with your actual endpoint ID:
+
+```bash
+curl --request POST \
+  --url "https://api.runpod.ai/v2/YOUR_ENDPOINT_ID/runsync" \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "input": {
+      "prompt": "What is the capital of France?",
+      "max_tokens": 100
+    }
+  }'
+```
+
+</Tab>
+<Tab title="Python">
+
+Create a file called `test_endpoint.py` and paste the following code:
+
+```python test_endpoint.py
+import requests
+import os
+
+ENDPOINT_ID = "YOUR_ENDPOINT_ID"  # Replace with your endpoint ID
+API_KEY = os.environ.get("RUNPOD_API_KEY")
+
+if not API_KEY:
+    raise ValueError("RUNPOD_API_KEY environment variable not set")
+
+response = requests.post(
+    f"https://api.runpod.ai/v2/{ENDPOINT_ID}/runsync",
+    headers={"Authorization": f"Bearer {API_KEY}"},
+    json={
+        "input": {
+            "prompt": "What is the capital of France?",
+            "max_tokens": 100
+        }
+    }
+)
+
+print(response.json())
+```
+
+Install dependencies and run the script:
+
+```bash
+pip install requests
+python test_endpoint.py
+```
+
+</Tab>
+</Tabs>
+
+You should receive a response like this:
 
 ```json
 {
-    "delayTime": 15088,
-    "executionTime": 60,
-    "id": "04f01223-4aa2-40df-bdab-37e5caa43cbe-u1",
-    "output": "Hello World",
-    "status": "COMPLETED",
-    "workerId": "uhbbfre73gqjwh"
+  "id": "sync-abc123-xyz",
+  "status": "COMPLETED",
+  "output": {
+    "text": "The capital of France is Paris.",
+    ...
+  }
 }
 ```
+
+<Tip>
+The first request may take 30-60 seconds as the worker loads the model into GPU memory. Subsequent requests will complete in just a few seconds until the worker scales down due to inactivity.
+</Tip>
+
+## Step 4: Clean up
+
+To avoid ongoing charges, delete your endpoint when you're done testing.
+
+<Tabs>
+<Tab title="Runpod CLI">
+
+List your endpoints to find the ID:
+
+```bash
+runpodctl serverless list
+```
+
+Delete the endpoint:
+
+```bash
+runpodctl serverless delete YOUR_ENDPOINT_ID
+```
+
+Optionally, delete the template you created:
+
+```bash
+runpodctl template delete YOUR_TEMPLATE_ID
+```
+
+</Tab>
+<Tab title="REST API">
+
+```bash
+curl --request DELETE \
+  --url "https://rest.runpod.io/v1/endpoints/YOUR_ENDPOINT_ID" \
+  --header "Authorization: Bearer $RUNPOD_API_KEY"
+```
+
+</Tab>
+<Tab title="Web">
+
+1. Go to the [Serverless section](https://www.runpod.io/console/serverless).
+2. Click the three dots on your endpoint and select **Delete Endpoint**.
+3. Type the endpoint name to confirm.
+
+</Tab>
+</Tabs>
 
 <Check>
-Congratulations! You've successfully deployed and tested your first Serverless endpoint.
+You've successfully deployed and tested your first Serverless endpoint.
 </Check>
 
 ## Next steps
 
 <CardGroup cols={2}>
-  <Card title="Handler functions" href="/serverless/workers/handler-functions" icon="code" horizontal>
-    Create more advanced handler functions.
-  </Card>
-  <Card title="Create a Dockerfile" href="/serverless/workers/create-dockerfile" icon="docker" horizontal>
-    Add AI/ML models and other dependencies to your worker.
+  <Card title="Build a custom worker" href="/serverless/build-worker" icon="hammer" horizontal>
+    Create your own handler function and Docker image.
   </Card>
   <Card title="Send requests" href="/serverless/endpoints/send-requests" icon="paper-plane" horizontal>
-    Learn how to structure and send requests to your endpoint.
+    Learn about sync, async, and streaming requests.
   </Card>
-  <Card title="Manage endpoints" href="/serverless/endpoints/overview" icon="sliders" horizontal>
-    Configure and manage your Serverless endpoints.
+  <Card title="Endpoint settings" href="/serverless/endpoints/endpoint-configurations" icon="gear" horizontal>
+    Configure scaling, timeouts, and GPU selection.
+  </Card>
+  <Card title="Configure vLLM" href="/serverless/vllm/configuration" icon="message-bot" horizontal>
+    Customize your vLLM deployment for different models.
   </Card>
 </CardGroup>
