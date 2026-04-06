@@ -209,14 +209,14 @@ Duplicate route 'POST /process' in endpoint 'my-api'
 **Error:**
 ```
 Python 3.13 is not supported for Flash deployment.
-Supported versions: 3.12
+Supported versions: 3.11, 3.12
 ```
 
-**Cause:** Flash requires Python 3.12.
+**Cause:** Flash requires Python 3.11 or 3.12.
 
 **Solution:**
 
-Switch to Python 3.12 using a virtual environment:
+Switch to a supported Python version using a virtual environment:
 
 ```bash
 # Using pyenv
@@ -228,7 +228,7 @@ uv venv --python 3.12
 source .venv/bin/activate
 ```
 
-Alternatively, use a Docker container with Python 3.12 for your build environment.
+Alternatively, use a Docker container with Python 3.11 or 3.12 for your build environment.
 
 ## Deployment errors
 
@@ -551,6 +551,102 @@ async def process(data: dict) -> dict:
         "accelerate>=0.25.0"
     ]
 )
+```
+
+### Models requiring trust_remote_code
+
+**Symptom:** Model fails to load with a security warning about remote code execution.
+
+**Cause:** Some Hugging Face models (like RMBG, certain vision transformers, and custom architectures) require `trust_remote_code=True` to load custom model code from the repository.
+
+**Solution:** Pass `trust_remote_code=True` when loading the model:
+
+```python
+@Endpoint(
+    name="custom-model",
+    gpu=GpuGroup.ANY,
+    dependencies=["transformers", "torch"]
+)
+def run_model(data):
+    from transformers import AutoModel, AutoProcessor
+
+    model = AutoModel.from_pretrained(
+        "briaai/RMBG-1.4",
+        trust_remote_code=True  # Required for custom model architectures
+    )
+    processor = AutoProcessor.from_pretrained(
+        "briaai/RMBG-1.4",
+        trust_remote_code=True
+    )
+    # ...
+```
+
+<Warning>
+Only use `trust_remote_code=True` with models from trusted sources. This setting allows the model repository to execute arbitrary Python code on your worker.
+</Warning>
+
+### Common ML library compatibility issues
+
+When using popular ML libraries together, you may encounter compatibility issues. Here are some tested combinations:
+
+**PyTorch + Transformers + Diffusers:**
+
+```python
+dependencies=[
+    "torch>=2.0.0,<2.5",
+    "transformers>=4.35.0,<4.46",
+    "diffusers>=0.25.0",
+    "accelerate>=0.25.0"
+]
+```
+
+**Segmentation models (like RMBG, SAM):**
+
+```python
+dependencies=[
+    "torch>=2.0.0",
+    "transformers>=4.35.0",
+    "pillow>=10.0.0",
+    "timm>=0.9.0"  # Often required for vision models
+]
+```
+
+**vLLM for LLM inference:**
+
+```python
+dependencies=[
+    "vllm>=0.3.0",
+    "torch>=2.1.0"
+]
+```
+
+<Tip>
+If you encounter dependency conflicts, try pinning to specific versions that are known to work together. Check the library documentation or GitHub issues for compatible version combinations.
+</Tip>
+
+### Worker import errors
+
+**Symptom:** Function raises `NameError: name 'helper_function' is not defined` or similar.
+
+**Cause:** Helper functions, classes, or variables defined outside the `@Endpoint` function are not available on the remote worker. Flash serializes only the decorated function body, not external code.
+
+**Solution:** Make your endpoint function self-contained. See [Serialization boundaries](/flash/execution-model#serialization-boundaries) for details.
+
+```python
+# Incorrect - external helper won't be available
+def process_data(x):
+    return x * 2
+
+@Endpoint(name="worker", gpu=GpuGroup.ANY)
+def compute(data):
+    return process_data(data)  # Error: process_data not defined
+
+# Correct - helper inside the function
+@Endpoint(name="worker", gpu=GpuGroup.ANY)
+def compute(data):
+    def process_data(x):
+        return x * 2
+    return process_data(data)
 ```
 
 ## Getting help

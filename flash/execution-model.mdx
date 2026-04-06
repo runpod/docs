@@ -12,6 +12,12 @@ Flash runs your Python functions on remote GPU/CPU workers while you maintain lo
 
 The `@Endpoint` decorator marks functions for remote execution. Everything else runs locally.
 
+<Warning>
+
+Treat `@Endpoint` functions as self-contained units. Helper functions, classes, and variables defined outside the decorated function may not be available on the remote worker. Move all required logic inside the function body or import it from installed packages.
+
+</Warning>
+
 ```python
 import asyncio
 from runpod_flash import Endpoint, GpuType
@@ -135,6 +141,106 @@ def process(data): ...
 2. More jobs arrive while worker busy → Scale up to max workers.
 3. Jobs complete → Workers stay running for `idle_timeout` seconds before scaling down to idle.
 4. No new jobs → Scale down to min workers.
+
+## Serialization boundaries
+
+Flash serializes your `@Endpoint` functions and their inputs to send them to remote workers. Understanding what gets serialized helps you avoid common issues.
+
+### What gets serialized
+
+When you call an `@Endpoint` function, Flash serializes:
+
+- The function body (the code inside the decorated function).
+- Function arguments (must be JSON-serializable or picklable).
+- Return values (must be JSON-serializable).
+
+### What does NOT get serialized
+
+Flash does **not** automatically serialize:
+
+- Helper functions defined outside the endpoint.
+- Classes defined in your local module.
+- Global variables or module-level state.
+- Local imports at the top of your file.
+
+### Making functions self-contained
+
+Your endpoint functions should be self-contained. This means all required logic should be either:
+
+1. **Inside the function body**
+2. **Imported from installed packages**
+
+**Correct** — logic inside the function:
+
+```python
+@Endpoint(name="processor", gpu=GpuGroup.ANY, dependencies=["numpy"])
+def process(data: list) -> dict:
+    import numpy as np
+
+    # Helper function defined inside the endpoint
+    def normalize(arr):
+        return (arr - arr.min()) / (arr.max() - arr.min())
+
+    result = normalize(np.array(data))
+    return {"result": result.tolist()}
+```
+
+**Incorrect** — external helper won't be available:
+
+```python
+# This helper is defined outside the endpoint
+def normalize(arr):
+    return (arr - arr.min()) / (arr.max() - arr.min())
+
+@Endpoint(name="processor", gpu=GpuGroup.ANY, dependencies=["numpy"])
+def process(data: list) -> dict:
+    import numpy as np
+    result = normalize(np.array(data))  # Error: normalize not defined on worker
+    return {"result": result.tolist()}
+```
+
+### Using external modules
+
+If you need to share code across multiple endpoints, create a Python package and include it in your dependencies:
+
+```python
+@Endpoint(
+    name="processor",
+    gpu=GpuGroup.ANY,
+    dependencies=["my-utils-package", "numpy"]  # Your package on PyPI or a git URL
+)
+def process(data: list) -> dict:
+    import numpy as np
+    from my_utils import normalize  # Now available on the worker
+
+    result = normalize(np.array(data))
+    return {"result": result.tolist()}
+```
+
+For Flash apps, you can also use local modules within your project structure. See [Build apps](/flash/apps/build-app) for details.
+
+### Void functions
+
+Endpoint functions don't need to return a value. Functions that return `None` (void functions) are useful for fire-and-forget tasks like logging events, sending notifications, or triggering background processes:
+
+```python
+@Endpoint(name="logger", gpu=GpuGroup.ANY)
+async def log_event(event_type: str, payload: dict):
+    """Logs an event without returning a result."""
+    import requests
+    requests.post("https://logging.example.com/events", json={
+        "type": event_type,
+        "payload": payload
+    })
+    # No return statement needed
+```
+
+When you call a void function, the awaited result is `None`:
+
+```python
+result = await log_event("user_action", {"action": "login"})
+print(result)  # None
+```
 
 ## Cold starts and warm starts
 
