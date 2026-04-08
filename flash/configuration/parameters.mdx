@@ -30,6 +30,7 @@ This page provides a complete reference for all parameters available on the `End
 | `scaler_value` | `int` | Scaling threshold | `4` |
 | `template` | `PodTemplate` | Pod template overrides | `None` |
 | `min_cuda_version` | `str` or `CudaVersion` | Minimum CUDA version for GPU host selection | `"12.8"` (GPU) / `None` (CPU) |
+| `max_concurrency` | `int` | Maximum concurrent jobs per worker (queue-based only) | `1` |
 
 ## Parameter details
 
@@ -573,6 +574,44 @@ This parameter has no effect on CPU endpoints.
 
 <Note>
 Valid CUDA versions: `CudaVersion.V11_1`, `V11_4`, `V11_7`, `V11_8`, `V12_0`, `V12_1`, `V12_2`, `V12_3`, `V12_4`, `V12_6`, `V12_8` (or equivalent strings like `"12.4"`). Invalid values raise a `ValueError`.
+</Note>
+
+### max_concurrency
+
+**Type**: `int`
+**Default**: `1`
+
+Maximum number of jobs a single worker can process concurrently. This parameter applies only to queue-based endpoints and is ignored for load-balanced endpoints.
+
+```python
+from runpod_flash import Endpoint, GpuType
+
+# Process up to 4 jobs concurrently per worker
+@Endpoint(
+    name="batch-processor",
+    gpu=GpuType.NVIDIA_A100_80GB_PCIe,
+    max_concurrency=4
+)
+async def process_batch(data):
+    import asyncio
+    # Async operations can run concurrently
+    await asyncio.sleep(1)
+    return {"processed": data}
+```
+
+When `max_concurrency` is greater than 1, Flash configures the worker to accept multiple jobs at once. This is useful for I/O-bound workloads where a worker spends time waiting for external resources like API calls, database queries, or file downloads.
+
+<Warning>
+Concurrent execution requires async handlers. If you set `max_concurrency > 1` on a sync handler, Flash logs a warning. For best results, make your handler function `async` and use `await` for I/O operations.
+</Warning>
+
+**Recommendations**:
+- `max_concurrency=1` (default): Use for GPU-bound workloads where each job fully utilizes the GPU.
+- `max_concurrency=2-8`: Use for mixed workloads with some I/O wait time.
+- `max_concurrency>8`: Use for highly I/O-bound workloads. Ensure your handler and GPU can handle this level of concurrency.
+
+<Note>
+Load-balanced endpoints handle concurrency through their underlying web server and do not use this parameter. If you set `max_concurrency` on a load-balanced endpoint, it is ignored and Flash logs a warning.
 </Note>
 
 ## EndpointJob
