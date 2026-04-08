@@ -1,0 +1,190 @@
+---
+title: "Fitness checks"
+sidebarTitle: "Fitness checks"
+description: "Validate worker readiness at startup with built-in and custom fitness checks."
+---
+
+import { WorkersTooltip } from "/snippets/tooltips.jsx";
+
+Fitness checks verify that your <WorkersTooltip /> are ready to process jobs before accepting requests. The Runpod SDK runs these checks once at startup, confirming that system resources, GPU availability, and any custom requirements are met before your worker begins handling workloads.
+
+If any check fails, the worker exits immediately and is marked as unhealthy. This prevents unhealthy workers from processing jobs and causing failures.
+
+## Custom fitness checks
+
+Register custom fitness checks using the `@runpod.serverless.register_fitness_check` decorator. Custom checks run before built-in system checks, letting you validate application-specific requirements like model files, environment variables, or external service connectivity.
+
+```python handler.py
+import runpod
+
+@runpod.serverless.register_fitness_check
+def check_model_files():
+    """Verify required model files exist."""
+    from pathlib import Path
+    model_path = Path("/models/my-model.safetensors")
+    if not model_path.exists():
+        raise RuntimeError(f"Model not found: {model_path}")
+
+@runpod.serverless.register_fitness_check
+async def check_external_api():
+    """Verify external API is accessible."""
+    import aiohttp
+    async with aiohttp.ClientSession() as session:
+        async with session.get("https://api.example.com/health", timeout=5) as resp:
+            if resp.status != 200:
+                raise RuntimeError(f"API health check failed: {resp.status}")
+
+def handler(job):
+    return {"output": "success"}
+
+runpod.serverless.start({"handler": handler})
+```
+
+Key points for custom checks:
+
+- Both sync and async functions are supported.
+- Raise an exception to signal failure. No return value is needed for success.
+- Add checks anywhere in your code before calling `runpod.serverless.start()`.
+- Checks run in the order they are registered.
+
+### Common check patterns
+
+**Verify environment variables:**
+
+```python
+@runpod.serverless.register_fitness_check
+def check_required_env_vars():
+    """Ensure required environment variables are set."""
+    import os
+    required = ["MODEL_NAME", "API_KEY", "CACHE_DIR"]
+    missing = [var for var in required if not os.getenv(var)]
+    if missing:
+        raise RuntimeError(f"Missing environment variables: {', '.join(missing)}")
+```
+
+**Validate GPU availability:**
+
+```python
+@runpod.serverless.register_fitness_check
+def check_gpu_memory():
+    """Verify GPU has sufficient memory for the model."""
+    import torch
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA not available")
+
+    gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
+    required_memory_gb = 16  # Adjust based on your model
+    if gpu_memory_gb < required_memory_gb:
+        raise RuntimeError(f"Insufficient GPU memory: {gpu_memory_gb:.1f}GB (need {required_memory_gb}GB)")
+```
+
+**Check external service connectivity:**
+
+```python
+@runpod.serverless.register_fitness_check
+async def check_database_connection():
+    """Verify database is accessible."""
+    import asyncpg
+    import os
+    try:
+        conn = await asyncpg.connect(os.getenv("DATABASE_URL"), timeout=5)
+        await conn.close()
+    except Exception as e:
+        raise RuntimeError(f"Database connection failed: {e}")
+```
+
+## Built-in system checks
+
+The SDK includes built-in checks that validate system resources and GPU health. These run automatically after any custom checks you define.
+
+### All workers
+
+Every worker runs these three checks:
+
+| Check | Description | Default | Environment variable |
+|-------|-------------|---------|---------------------|
+| Memory | Validates available RAM meets minimum threshold | 4 GB | `RUNPOD_MIN_MEMORY_GB` |
+| Disk space | Validates free disk space as a percentage of total | 10% | `RUNPOD_MIN_DISK_PERCENT` |
+| Network | Validates internet connectivity | 5s timeout | `RUNPOD_NETWORK_CHECK_TIMEOUT` |
+
+### GPU workers
+
+GPU workers run four additional checks:
+
+| Check | Description | Default | Environment variable |
+|-------|-------------|---------|---------------------|
+| CUDA version | Validates CUDA driver version meets minimum | 11.8 | `RUNPOD_MIN_CUDA_VERSION` |
+| CUDA initialization | Verifies GPU devices can be initialized and memory allocated | N/A | N/A |
+| GPU compute benchmark | Runs a quick matrix multiplication to validate performance | 100ms timeout | `RUNPOD_GPU_BENCHMARK_TIMEOUT` |
+| GPU binary test | Comprehensive GPU health check via native binary | N/A | N/A |
+
+<Note>
+GPU checks are skipped automatically on CPU-only workers. The same code works for both CPU and GPU deployments without modification.
+</Note>
+
+## Configuration
+
+Configure built-in check thresholds using environment variables in your Dockerfile or at runtime:
+
+```dockerfile Dockerfile
+ENV RUNPOD_MIN_MEMORY_GB=8.0
+ENV RUNPOD_MIN_DISK_PERCENT=15.0
+ENV RUNPOD_MIN_CUDA_VERSION=12.0
+ENV RUNPOD_NETWORK_CHECK_TIMEOUT=10
+ENV RUNPOD_GPU_BENCHMARK_TIMEOUT=2
+```
+
+Or set them in Python before starting your handler:
+
+```python handler.py
+import os
+os.environ["RUNPOD_MIN_MEMORY_GB"] = "8.0"
+os.environ["RUNPOD_MIN_DISK_PERCENT"] = "15.0"
+```
+
+## Startup behavior
+
+Fitness checks run once when the worker starts, before it accepts jobs. The logs show the status of each check:
+
+**GPU worker:**
+
+```
+[info]--- Starting Serverless Worker | Version 1.8.2 ---
+[info]Running 7 fitness check(s)...
+[info]Memory check passed: 181.49GB available (of 187.85GB total)
+[info]Disk space check passed: 9.88GB free (98.8% available)
+[info]Network connectivity passed: Connected to 8.8.8.8 (23ms)
+[info]CUDA version check passed: 12.7 (minimum: 11.8)
+[info]CUDA initialization passed: 2 device(s) initialized successfully
+[info]GPU compute benchmark passed: Matrix multiply completed in 42ms
+[info]GPU binary test passed: 2 GPU(s) healthy (CUDA 12.7)
+[info]All fitness checks passed.
+```
+
+**CPU worker:**
+
+```
+[info]--- Starting Serverless Worker | Version 1.8.2 ---
+[info]Running 3 fitness check(s)...
+[info]Memory check passed: 359.41GB available (of 377.18GB total)
+[info]Disk space check passed: 9.88GB free (98.8% available)
+[info]Network connectivity passed: Connected to 8.8.8.8 (23ms)
+[info]All fitness checks passed.
+```
+
+## Failure behavior
+
+When any fitness check fails:
+
+1. The worker logs the failure with details about what went wrong.
+2. The worker exits immediately with exit code 1.
+3. Runpod marks the worker as unhealthy.
+4. The system attempts to start a replacement worker.
+
+This fail-fast approach prevents partially functional workers from accepting jobs and producing errors or unexpected results.
+
+## Next steps
+
+- [Create a Dockerfile](/serverless/workers/create-dockerfile) to package your handler with custom fitness checks.
+- [Deploy your worker](/serverless/workers/deploy) to a Serverless endpoint.
+- [Monitor worker logs](/serverless/development/logs) to view fitness check results.
