@@ -10,17 +10,39 @@ This guide covers how to monitor your Flash deployments, debug issues, and resol
 
 ### Viewing logs
 
-When running Flash functions, logs are displayed in your terminal:
+When you run Flash functions, logs appear in your terminal. You get real-time visibility into job execution, including worker startup, request assignment, and execution status:
 
 ```text
 2025-11-19 12:35:15,109 | INFO  | Created endpoint: rb50waqznmn2kg - flash-quickstart
 2025-11-19 12:35:15,114 | INFO  | Endpoint:rb50waqznmn2kg | API /run
 2025-11-19 12:35:15,655 | INFO  | Endpoint:rb50waqznmn2kg | Started Job:b0b341e7-...
 2025-11-19 12:35:15,762 | INFO  | Job:b0b341e7-... | Status: IN_QUEUE
+2025-11-19 12:35:17,629 | INFO  | Job:b0b341e7-... | Streaming endpoint startup logs while waiting for request assignment
+worker log: 2025-11-19T12:35:19Z create container runpod/flash:py3.12-latest
+worker log: 2025-11-19T12:35:20Z worker is ready
+2025-11-19 12:35:28,202 | INFO  | Job:b0b341e7-... | Status: IN_PROGRESS
+2025-11-19 12:35:29,520 | INFO  | Job:b0b341e7-... | Request assigned to worker icmkdgnrmdf8gz, streaming pod logs
 2025-11-19 12:36:09,983 | INFO  | Job:b0b341e7-... | Status: COMPLETED
 2025-11-19 12:36:10,068 | INFO  | Worker:icmkdgnrmdf8gz | Delay Time: 51842 ms
 2025-11-19 12:36:10,068 | INFO  | Worker:icmkdgnrmdf8gz | Execution Time: 1533 ms
 ```
+
+**Log output explained:**
+
+| Log entry | Description |
+|-----------|-------------|
+| `Status: IN_QUEUE` | Job is waiting for a worker |
+| `Streaming endpoint startup logs...` | Flash is polling worker startup logs |
+| `worker log:` prefix | Real-time logs from the worker during initialization |
+| `Status: IN_PROGRESS` | Worker is executing your function |
+| `Request assigned to worker [ID]` | Job has been assigned to a specific worker |
+| `Status: COMPLETED` | Job finished successfully |
+| `Delay Time` | Time spent waiting in queue (milliseconds) |
+| `Execution Time` | Time spent executing your function (milliseconds) |
+
+<Note>
+Worker log polling has some latency. Logs from very short-running jobs may appear after the job completes, or may not be captured at all due to the polling interval.
+</Note>
 
 Control log verbosity with the `LOG_LEVEL` environment variable:
 
@@ -66,6 +88,31 @@ async def process(data: dict) -> dict:
 
     return result
 ```
+
+### Worker availability diagnostics
+
+If workers are unavailable or throttled, Flash displays diagnostic information explaining why your job is waiting:
+
+```text
+2025-11-19 12:46:54,085 | INFO  | Job:b7475d47-... | Workers are currently throttled on endpoint for selected gpu AMPERE_80. Consider raising max workers or changing gpu type.
+2025-11-19 12:46:54,085 | INFO  | Job:b7475d47-... | Waiting for request: endpoint metrics: worker=None, assignment=unassigned, status=IN_QUEUE, workers={ready:0, running:0, idle:0, initializing:0, throttled:1, unhealthy:0}, readyWorkers=[]
+```
+
+**Understanding endpoint metrics:**
+
+| Metric | Description |
+|--------|-------------|
+| `worker` | Current worker ID (None if not assigned) |
+| `assignment` | Request assignment status |
+| `status` | Job status (IN_QUEUE, IN_PROGRESS, COMPLETED) |
+| `ready` | Workers ready to accept jobs |
+| `running` | Workers currently executing jobs |
+| `idle` | Workers scaled down, waiting to be activated |
+| `initializing` | Workers starting up |
+| `throttled` | Workers temporarily unavailable due to resource constraints |
+| `unhealthy` | Workers that have crashed |
+
+When you see throttling messages, Flash is telling you that the requested GPU type has limited availability. See [GPU availability issues](#job-stuck-in-queue) for solutions.
 
 ## Configuration errors
 
@@ -482,9 +529,13 @@ Circuit breaker is open. Retry in [N] seconds
 
 ### Job stuck in queue
 
-**Symptom:** Job status shows `IN_QUEUE` for extended periods.
+**Symptom:** Job status shows `IN_QUEUE` for extended periods, or you see messages like:
 
-**Cause:** The requested GPU types are not available.
+```text
+Workers are currently throttled on endpoint for selected gpu AMPERE_80. Consider raising max workers or changing gpu type.
+```
+
+**Cause:** The requested GPU types are not available, or workers are throttled due to resource constraints. Check the [worker availability diagnostics](#worker-availability-diagnostics) in your logs to understand the specific issue.
 
 **Solutions:**
 
