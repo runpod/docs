@@ -30,7 +30,7 @@ This page provides a complete reference for all parameters available on the `End
 | `scaler_value` | `int` | Scaling threshold | `4` |
 | `template` | `PodTemplate` | Pod template overrides | `None` |
 | `min_cuda_version` | `str` or `CudaVersion` | Minimum CUDA version for GPU host selection | `"12.8"` (GPU) / `None` (CPU) |
-| `max_concurrency` | `int` | Maximum concurrent jobs per worker (queue-based only) | `1` |
+| `max_concurrency` | `int` | Maximum concurrent jobs per worker (queue-based only). Values >1 only achieve true concurrency with async handlers; sync handlers log a build-time warning. | `1` |
 
 ## Parameter details
 
@@ -599,10 +599,10 @@ async def process_batch(data):
     return {"processed": data}
 ```
 
-When `max_concurrency` is greater than 1, Flash configures the worker to accept multiple jobs at once. This is useful for I/O-bound workloads where a worker spends time waiting for external resources like API calls, database queries, or file downloads.
+`max_concurrency` controls how many jobs a single worker processes simultaneously. Each worker pulls up to `max_concurrency` jobs from the queue at once. This is useful for I/O-bound workloads where a worker spends time waiting for external resources like API calls, database queries, or file downloads.
 
 <Warning>
-Concurrent execution requires async handlers. If you set `max_concurrency > 1` on a sync handler, Flash logs a warning. For best results, make your handler function `async` and use `await` for I/O operations.
+True concurrent execution requires async handlers. With sync handlers, the runtime pulls multiple jobs from the queue but processes them one at a time—and Flash logs a build-time warning. For best results, make your handler function `async` and use `await` for I/O operations.
 </Warning>
 
 **Recommendations**:
