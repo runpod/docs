@@ -45,11 +45,31 @@ Comma-separated list of packages to exclude from the build (e.g., `torch,torchvi
 
 ## What happens during build
 
-1. **Function discovery**: Finds all `@Endpoint` decorated functions.
-2. **Grouping**: Groups functions by their endpoint configuration.
-3. **Manifest generation**: Creates `.flash/flash_manifest.json` with endpoint definitions.
-4. **Dependency installation**: Installs Python packages for Linux x86_64.
-5. **Packaging**: Bundles everything into `.flash/artifact.tar.gz`.
+1. **Python version validation**: Verifies your local Python version is supported (3.12).
+2. **Function discovery**: Finds all `@Endpoint` decorated functions.
+3. **Grouping**: Groups functions by their endpoint configuration.
+4. **Manifest generation**: Creates `.flash/flash_manifest.json` with endpoint definitions.
+5. **Dependency installation**: Installs Python packages for Linux x86_64.
+6. **Packaging**: Bundles everything into `.flash/artifact.tar.gz`.
+
+## Built-in ignore patterns
+
+Flash automatically excludes certain files and directories from deployment artifacts. These patterns cover common development files that shouldn't be deployed to production.
+
+| Category | Patterns |
+|----------|----------|
+| Build artifacts | `.build/`, `.flash/`, `.runpod/`, `*.tar.gz`, `.git/`, `__pycache__/`, `*.pyc`, `*.pyo`, `*.pyd`, `*.egg-info/`, `dist/`, `build/` |
+| Virtual environments | `.venv/`, `venv/`, `env/` |
+| IDE files | `.vscode/`, `.idea/` |
+| Environment files | `.env`, `.env.local` |
+| Tests | `tests/`, `test_*.py`, `*_test.py` |
+| Documentation | `docs/`, `*.md` (except `README.md`) |
+
+Flash also respects your `.gitignore` file and excludes any files matching those patterns.
+
+<Tip>
+If you use other environment file variants like `.env.dev` or `.env.staging`, add them to your `.gitignore` to exclude them from deployment artifacts.
+</Tip>
 
 ## Build artifacts
 
@@ -70,21 +90,15 @@ Flash automatically handles cross-platform builds:
 
 ### Python version in deployed workers
 
-Your local Python version does not affect what runs in the cloud. `flash build` downloads wheels for the container's Python version automatically.
+All Flash workers (GPU and CPU) run Python 3.12. `flash build` downloads wheels targeting Python 3.12 automatically.
 
-| Worker type | Python version | Notes |
-|-------------|----------------|-------|
-| GPU | 3.12 only | The GPU base image includes multiple interpreters (3.9–3.14) for interactive pod use, but torch and CUDA libraries are installed only for 3.12. |
-| CPU | 3.10, 3.11, or 3.12 | Configurable via the `PYTHON_VERSION` build arg. |
-
-Image tags follow the pattern `py{version}-{tag}` (for example, `runpod/flash:py3.12-latest`).
+Image tags follow the pattern `py3.12-{tag}` (for example, `runpod/flash:py3.12-latest`).
 
 ## Managing deployment size
 
-Runpod Serverless has a **500MB deployment limit**. Flash automatically excludes packages that are pre-installed in the base image:
+Runpod Serverless has a **1.5GB deployment limit**. Flash automatically excludes packages that are pre-installed in the base image:
 
-- `torch`, `torchvision`, `torchaudio`
-- `numpy`, `triton`
+- `torch`, `torchvision`, `torchaudio`, `triton`
 
 These packages are excluded at archive time, so you don't need to specify them manually.
 
@@ -100,8 +114,9 @@ flash build --exclude scipy,pandas
 
 | Resource type | Base image | Auto-excluded packages |
 |--------------|------------|------------------------|
-| GPU | PyTorch base | `torch`, `torchvision`, `torchaudio`, `numpy`, `triton` |
-| CPU | Python slim | `torch`, `torchvision`, `torchaudio`, `numpy`, `triton` |
+| GPU | PyTorch base | `torch`, `torchvision`, `torchaudio`, `triton` |
+| CPU | Python slim | `torch`, `torchvision`, `torchaudio`, `triton` |
+
 
 <Tip>
 
@@ -125,7 +140,7 @@ def my_function(data):
 
 ### Archive is too large
 
-Base image packages (`torch`, `numpy`, `triton`, etc.) are auto-excluded. If the archive is still too large, use `--exclude` to skip additional packages or `--no-deps` to skip transitive dependencies:
+Some CUDA packages (`torch`, `torchvision`, `torchaudio`, `triton`) are auto-excluded. If the archive is still too large, use `--exclude` to skip additional packages or `--no-deps` to skip transitive dependencies:
 
 ```bash
 flash build --exclude scipy,pandas
@@ -137,7 +152,6 @@ If a package doesn't have Linux x86_64 wheels:
 
 1. Ensure standard pip is installed: `python -m ensurepip --upgrade`
 2. Check PyPI for Linux wheel availability.
-3. For Python 3.13+, some packages may require newer manylinux versions.
 
 ### Need to examine generated files
 
