@@ -13,7 +13,7 @@ This guide covers how to monitor your Flash deployments, debug issues, and resol
 When running Flash functions, logs are displayed in your terminal:
 
 ```text
-2025-11-19 12:35:15,109 | INFO  | Created endpoint: rb50waqznmn2kg - flash-quickstart-fb
+2025-11-19 12:35:15,109 | INFO  | Created endpoint: rb50waqznmn2kg - flash-quickstart
 2025-11-19 12:35:15,114 | INFO  | Endpoint:rb50waqznmn2kg | API /run
 2025-11-19 12:35:15,655 | INFO  | Endpoint:rb50waqznmn2kg | Started Job:b0b341e7-...
 2025-11-19 12:35:15,762 | INFO  | Job:b0b341e7-... | Status: IN_QUEUE
@@ -73,7 +73,15 @@ async def process(data: dict) -> dict:
 
 **Error:**
 ```
-RUNPOD_API_KEY environment variable is required but not set
+No RunPod API key found. Set one with:
+
+  flash login                              # interactive setup
+                 or
+  export RUNPOD_API_KEY=<your-api-key>     # environment variable
+                 or
+  echo 'RUNPOD_API_KEY=<your-api-key>' >> .env
+
+Get a key: https://docs.runpod.io/get-started/api-keys
 ```
 
 **Cause:** Flash requires a valid Runpod API key to provision and manage endpoints.
@@ -97,7 +105,7 @@ RUNPOD_API_KEY environment variable is required but not set
 
    **Option 3: .env file for local CLI use**
    ```bash
-   echo "RUNPOD_API_KEY=your_api_key" > .env
+   echo "RUNPOD_API_KEY=your_api_key" >> .env
    ```
 
    <Note>
@@ -109,6 +117,23 @@ RUNPOD_API_KEY environment variable is required but not set
    echo 'export RUNPOD_API_KEY="your_api_key"' >> ~/.bashrc
    source ~/.bashrc
    ```
+
+### Corrupted credentials file
+
+**Error:**
+```
+Error: ~/.runpod/config.toml is corrupted and cannot be parsed.
+Run 'flash login' to re-authenticate, or delete the file and retry.
+```
+
+**Cause:** The credentials file at `~/.runpod/config.toml` contains invalid TOML and cannot be read. This can also appear as "No API key found" even after a successful `flash login`.
+
+**Solution:** Delete the credentials file and re-authenticate:
+
+```bash
+rm ~/.runpod/config.toml
+flash login
+```
 
 ### Invalid route configuration
 
@@ -177,6 +202,34 @@ Duplicate route 'POST /process' in endpoint 'my-api'
 
 **Solution:** Ensure each route is unique within an endpoint. Either change the path or method of one function.
 
+## Build errors
+
+### Unsupported Python version
+
+**Error:**
+```
+Python 3.13 is not supported for Flash deployment.
+Supported versions: 3.12
+```
+
+**Cause:** Flash requires Python 3.12.
+
+**Solution:**
+
+Switch to Python 3.12 using a virtual environment:
+
+```bash
+# Using pyenv
+pyenv install 3.12
+pyenv local 3.12
+
+# Or using uv
+uv venv --python 3.12
+source .venv/bin/activate
+```
+
+Alternatively, use a Docker container with Python 3.12 for your build environment.
+
 ## Deployment errors
 
 ### Tarball too large
@@ -191,7 +244,7 @@ Tarball exceeds maximum size. File size: 1.6GB, Max: 1.5GB
 **Solution:**
 
 1. Check for large files that shouldn't be included (datasets, model weights, logs).
-2. Add large files to `.flashignore` to exclude them from the build.
+2. Add large files to `.gitignore` to exclude them from the build.
 3. Use [network volumes](/flash/configuration/storage) to store large models instead of bundling them.
 
 ### Invalid tarball format
@@ -209,6 +262,35 @@ File is not a valid gzip file. Expected magic bytes (31, 139)
 rm -rf .flash
 flash build
 ```
+
+### SSL certificate verification failed
+
+**Error:**
+```
+SSL certificate verification failed. This usually means Python cannot find your system's CA certificates.
+```
+
+**Cause:** Python cannot locate the system's trusted CA certificates, preventing secure connections during deployment. This commonly occurs on fresh Python installations, especially on macOS.
+
+**Solution:** Try one of these fixes:
+
+1. **Install certifi and set the certificate bundle path:**
+   ```bash
+   pip install certifi
+   export REQUESTS_CA_BUNDLE=$(python -c "import certifi; print(certifi.where())")
+   ```
+
+2. **macOS only:** Run the certificate installer that comes with Python. Find it in your Python installation folder (typically `/Applications/Python 3.x/`) and run `Install Certificates.command`.
+
+3. **Add to shell profile for persistence:**
+   ```bash
+   echo 'export REQUESTS_CA_BUNDLE=$(python -c "import certifi; print(certifi.where())")' >> ~/.bashrc
+   source ~/.bashrc
+   ```
+
+<Note>
+Transient SSL errors (like connection resets) are automatically retried during upload. The certificate verification error requires manual intervention because it indicates a system configuration issue.
+</Note>
 
 ### Resource provisioning failed
 
@@ -337,6 +419,47 @@ Failed to deserialize result: [error]
    ```
 
 3. **Check argument types**: Input arguments must also be serializable.
+
+### Payload too large
+
+**Error:**
+```
+Payload size X MB exceeds limit of 10.0 MB
+```
+
+**Cause:** The serialized argument exceeds the 10 MB limit. Flash uses base64 encoding, which expands data by approximately 33%, so roughly 7.5 MB of raw data becomes 10 MB when encoded.
+
+**Solutions:**
+
+1. **Use network volumes for large data**: Save large data to a network volume and pass the file path:
+   ```python
+   @Endpoint(name="processor", gpu=GpuGroup.ANY, volume="vol_abc123")
+   async def process(file_path: str) -> dict:
+       import numpy as np
+       data = np.load(file_path)  # Load from volume
+       return {"result": process_data(data)}
+   ```
+
+2. **Compress data before sending**: For data that must be passed directly, use compression:
+   ```python
+   import gzip
+
+   compressed = gzip.compress(data.tobytes())
+   # Pass compressed bytes instead
+   ```
+
+3. **Split large requests**: Break large datasets into smaller chunks and process them in multiple requests.
+
+### Deserialization timeout
+
+**Error:**
+```
+Deserialization timed out after 30s
+```
+
+**Cause:** The deserialization process took longer than 30 seconds. This usually indicates malformed or corrupted serialized data that causes the unpickle operation to hang.
+
+**Solution:** Verify your input data is properly serialized. If you're manually constructing payloads, ensure the data was serialized using `cloudpickle` and encoded with base64. The Flash SDK handles this automatically for programmatic calls.
 
 ### Circuit breaker open
 
