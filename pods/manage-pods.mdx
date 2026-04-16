@@ -15,11 +15,12 @@ runpodctl config --apiKey RUNPOD_API_KEY
 
 | Action | Web UI | CLI |
 |--------|-----|-----|
-| **Deploy** | [Pods page](https://www.console.runpod.io/pods) → Deploy | `runpodctl create pods --name NAME --gpuType "GPU" --imageName "IMAGE"` |
-| **Start** | Expand Pod → Play icon | `runpodctl start pod POD_ID` |
-| **Stop** | Expand Pod → Stop icon | `runpodctl stop pod POD_ID` |
-| **Terminate** | Expand Pod → Trash icon | `runpodctl remove pod POD_ID` |
-| **List** | [Pods page](https://www.console.runpod.io/pods) | `runpodctl get pod` |
+| **Deploy** | [Pods page](https://www.console.runpod.io/pods) → Deploy | `runpodctl pod create --name NAME --gpu-id "GPU" --image "IMAGE"` |
+| **Start** | Expand Pod → Play icon | `runpodctl pod start POD_ID` |
+| **Stop** | Expand Pod → Stop icon | `runpodctl pod stop POD_ID` |
+| **Update** | Three-dot menu → Edit Pod | `runpodctl pod update POD_ID` |
+| **Terminate** | Expand Pod → Trash icon | `runpodctl pod delete POD_ID` |
+| **List** | [Pods page](https://www.console.runpod.io/pods) | `runpodctl pod list` |
 
 ## Deploy a Pod
 
@@ -47,12 +48,12 @@ Deploy preconfigured Pods from the [Runpod Hub](/hub/overview#deploy-as-a-pod) f
 <Tab title="CLI">
 
 ```sh
-runpodctl create pods \
+runpodctl pod create \
   --name hello-world \
-  --gpuType "NVIDIA A40" \
-  --imageName "runpod/pytorch:3.10-2.0.0-117" \
-  --containerDiskSize 10 \
-  --volumeSize 100
+  --gpu-id "NVIDIA A40" \
+  --image "runpod/pytorch:3.10-2.0.0-117" \
+  --container-disk-in-gb 10 \
+  --volume-in-gb 100
 ```
 
 </Tab>
@@ -71,6 +72,21 @@ curl --request POST \
     "gpuCount": 1,
     "containerDiskInGb": 50,
     "volumeInGb": 20
+  }'
+```
+
+To deploy a Pod from an existing template, use the `templateId` parameter instead of specifying individual configuration options:
+
+```bash
+curl --request POST \
+  --url https://rest.runpod.io/v1/pods \
+  --header 'Authorization: Bearer RUNPOD_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "name": "my-pod-from-template",
+    "templateId": "YOUR_TEMPLATE_ID",
+    "gpuTypeIds": ["NVIDIA GeForce RTX 4090"],
+    "gpuCount": 1
   }'
 ```
 
@@ -102,12 +118,22 @@ Pods with [network volumes](/storage/network-volumes) attached cannot be stopped
 <Tab title="CLI">
 
 ```sh
-runpodctl stop pod $RUNPOD_POD_ID
+runpodctl pod stop $RUNPOD_POD_ID
 ```
 
 **Schedule a stop** (e.g., after 2 hours):
 ```sh
-sleep 2h; runpodctl stop pod $RUNPOD_POD_ID &
+sleep 2h; runpodctl pod stop $RUNPOD_POD_ID &
+```
+
+</Tab>
+
+<Tab title="REST API">
+
+```bash
+curl --request POST \
+  --url "https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID/stop" \
+  --header 'Authorization: Bearer RUNPOD_API_KEY'
 ```
 
 </Tab>
@@ -128,11 +154,58 @@ Resume a stopped Pod. Note: You may be allocated [zero GPUs](/references/trouble
 <Tab title="CLI">
 
 ```sh
-runpodctl start pod $RUNPOD_POD_ID
+runpodctl pod start $RUNPOD_POD_ID
+```
+
+</Tab>
+
+<Tab title="REST API">
+
+```bash
+curl --request POST \
+  --url "https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID/start" \
+  --header 'Authorization: Bearer RUNPOD_API_KEY'
 ```
 
 </Tab>
 </Tabs>
+
+## Update a Pod
+
+Modify an existing Pod's configuration, such as storage size, image, ports, or environment variables.
+
+<Warning>
+Editing a running Pod resets it completely, erasing all data not stored in `/workspace` or a network volume.
+</Warning>
+
+<Tabs>
+<Tab title="Web">
+
+1. Open the [Pods page](https://www.console.runpod.io/pods).
+2. Click the three-dot menu next to the Pod you want to update.
+3. Click **Edit Pod** and modify your configuration.
+4. Click **Save** to apply changes.
+
+</Tab>
+
+<Tab title="REST API">
+
+```bash
+curl --request PATCH \
+  --url "https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID" \
+  --header 'Authorization: Bearer RUNPOD_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "containerDiskInGb": 100,
+    "volumeInGb": 200
+  }'
+```
+
+See the [Pod API reference](/api-reference/pods/PATCH/pods/podId) for all editable fields.
+
+</Tab>
+</Tabs>
+
 
 ## Terminate a Pod
 
@@ -151,11 +224,17 @@ Terminating permanently deletes all data not stored in a [network volume](/stora
 <Tab title="CLI">
 
 ```sh
-# Single Pod
-runpodctl remove pod $RUNPOD_POD_ID
+runpodctl pod delete $RUNPOD_POD_ID
+```
 
-# Bulk remove by name
-runpodctl remove pods my-bulk-task --podCount 40
+</Tab>
+
+<Tab title="REST API">
+
+```bash
+curl --request DELETE \
+  --url "https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID" \
+  --header 'Authorization: Bearer RUNPOD_API_KEY'
 ```
 
 </Tab>
