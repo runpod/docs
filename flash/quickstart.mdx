@@ -12,9 +12,9 @@ This quickstart gets you running GPU workloads on Runpod in minutes. You'll exec
 
 ## Requirements
 
-- [Runpod account](/get-started/manage-accounts).
+- [Runpod account](/get-started/manage-accounts) with a verified email address.
 - [An API key](/get-started/api-keys) with **All** access permissions to your Runpod account.
-- [Python 3.10-3.12](https://www.python.org/downloads/) installed (3.13+ is not yet supported).
+- [Python 3.12](https://www.python.org/downloads/) installed.
 - [uv](https://docs.astral.sh/uv/) installed.
 
 ## Step 1: Install Flash
@@ -70,6 +70,7 @@ from runpod_flash import Endpoint, GpuGroup
     name="flash-quickstart",
     gpu=GpuGroup.ANY, # Use any available GPU
     workers=3,
+    idle_timeout=300, # Keep worker running for 5 minutes
     dependencies=["numpy", "torch"]
 )
 def gpu_matrix_multiply(size):
@@ -147,10 +148,27 @@ export RUNPOD_API_KEY="your_key"
 Replace `your_key` with your actual API key from the [Runpod console](https://www.runpod.io/console/user/settings).
 </Tip>
 
-Try running the script again immediately and notice how much faster it is. Flash reuses the same endpoint and cached dependencies. You can even update the code and run it again to see the changes take effect instantly.
+## Step 5: Update and run again
 
+With your endpoint running, make a change and run the script again:
 
-## Step 5: Understand what you just did
+1. Open `gpu_demo.py` and change the matrix size from `1000` to `2000`:
+
+   ```python
+   result = await gpu_matrix_multiply(2000)
+   ```
+
+2. Run the script again:
+
+   ```bash
+   python gpu_demo.py
+   ```
+
+This time, the result should appear in 1-3 seconds instead of 30-60 seconds, injects the code into the running worker so code changes take effect immediately without reprovisioning.
+
+This instant iteration is one of Flash's key features. You can develop and test GPU code as quickly as local development, even though it runs on remote hardware.
+
+## Step 6: Understand what you just did
 
 Let's break down the code you just ran:
 
@@ -174,6 +192,7 @@ Flash automatically loads your credentials from `flash login` or the `RUNPOD_API
     name="flash-quickstart",
     gpu=GpuGroup.ANY,
     workers=3,
+    idle_timeout=300,
     dependencies=["numpy", "torch"]
 )
 def gpu_matrix_multiply(size):
@@ -202,6 +221,7 @@ The `@Endpoint` decorator configures everything in one place:
 - **`name`**: Identifies your endpoint in the [Runpod console](https://www.runpod.io/console/serverless).
 - **`gpu`**: Which GPU to use (`GpuGroup.ANY` accepts any available GPU for faster provisioning).
 - **`workers`**: Maximum parallel workers (allows 3 concurrent executions).
+- **`idle_timeout`**: Seconds a worker stays active after completing a request before scaling down. Setting this to 300 (5 minutes) gives you more time to iterate on your code while the worker remains warm.
 - **`dependencies`**: Python packages to install on the worker.
 - **Function body**: The matrix multiplication code runs on the remote GPU, not your local machine.
 - **Return value**: The result is returned to your local machine as a Python dictionary.
@@ -238,7 +258,7 @@ Here's what happens when you call an `@Endpoint` decorated function:
 
 Everything outside the `@Endpoint` function (all the `print` statements, etc.) runs **locally on your machine**. Only the decorated function runs remotely.
 
-## Step 6: Run multiple operations in parallel
+## Step 7: Run multiple operations in parallel
 
 Flash makes it easy to run multiple GPU operations concurrently. Replace your `main()` function with the code below:
 
