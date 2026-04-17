@@ -116,11 +116,32 @@ GPU workers run four additional checks:
 | CUDA version | Validates CUDA driver version meets minimum | 11.8 | `RUNPOD_MIN_CUDA_VERSION` |
 | CUDA initialization | Verifies GPU devices can be initialized and memory allocated | N/A | N/A |
 | GPU compute benchmark | Runs a quick matrix multiplication to validate performance | 100ms timeout | `RUNPOD_GPU_BENCHMARK_TIMEOUT` |
-| GPU binary test | Comprehensive GPU health check via native binary | N/A | N/A |
+| GPU binary test | Comprehensive GPU health check via native CUDA binary (opt-in) | N/A | N/A |
 
 <Note>
 GPU checks are skipped automatically on CPU-only workers. The same code works for both CPU and GPU deployments without modification.
 </Note>
+
+### Installing the GPU test binary
+
+The `gpu_test` native binary is not bundled in the `runpod` PyPI package to keep the package universal and installable across all platforms, including Nix and other non-glibc systems.
+
+To run the full CUDA memory-allocation test on GPU workers, install the binary after installing the package:
+
+```bash
+pip install runpod
+runpod install-gpu-test
+```
+
+Or in a Dockerfile:
+
+```dockerfile
+RUN pip install runpod && runpod install-gpu-test
+```
+
+This command downloads the `gpu_test` binary from the GitHub release matching your installed `runpod` version, verifies its SHA256 checksum, and installs it into the package's `serverless/binaries/` directory.
+
+**Fallback behavior:** If the binary is not installed, the GPU binary test falls back to an `nvidia-smi`-based availability check. This confirms GPU presence but does not perform the native CUDA memory-allocation test.
 
 ## Configuration
 
@@ -144,7 +165,14 @@ os.environ["RUNPOD_MIN_DISK_PERCENT"] = "15.0"
 
 ### GPU binary test configuration
 
-The GPU binary test has additional configuration options:
+The `runpod install-gpu-test` command accepts these options:
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--version` | Release tag to download | Installed `runpod` version |
+| `--dest` | Override destination path | Package's `serverless/binaries/` directory |
+
+The GPU binary test has additional runtime configuration options:
 
 | Environment variable | Description | Default |
 |---------------------|-------------|---------|
