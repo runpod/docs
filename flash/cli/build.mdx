@@ -43,9 +43,13 @@ Custom name for the output archive file.
 Comma-separated list of packages to exclude from the build (e.g., `torch,torchvision`). Use this to skip packages already in the base image.
 </ResponseField>
 
+<ResponseField name="--python-version" type="string" default="3.12">
+Target Python version for worker images (3.10, 3.11, or 3.12). Overrides per-resource `python_version` declarations. Defaults to the version declared on resource configs, or 3.12 if none set.
+</ResponseField>
+
 ## What happens during build
 
-1. **Python version validation**: Verifies your local Python version is supported (3.12).
+1. **Python version resolution**: Resolves the target Python version from CLI flag, resource configs, or default (3.12).
 2. **Function discovery**: Finds all `@Endpoint` decorated functions.
 3. **Grouping**: Groups functions by their endpoint configuration.
 4. **Manifest generation**: Creates `.flash/flash_manifest.json` with endpoint definitions.
@@ -90,9 +94,21 @@ Flash automatically handles cross-platform builds:
 
 ### Python version in deployed workers
 
-All Flash workers (GPU and CPU) run Python 3.12. `flash build` downloads wheels targeting Python 3.12 automatically.
+Flash workers support Python 3.10, 3.11, and 3.12. The target version is determined by:
 
-Image tags follow the pattern `py3.12-{tag}` (for example, `runpod/flash:py3.12-latest`).
+1. **CLI flag:** The `--python-version` flag takes precedence.
+2. **Resource config:** The `python_version` parameter on your endpoint configs.
+3. **Default:** Python 3.12 when neither is specified.
+
+All resources in a Flash app must use the same Python version because Flash ships a single tarball for the entire app. If resources declare conflicting versions, the build fails.
+
+| Version | Cold start | Notes |
+|---------|------------|-------|
+| 3.12 (default) | No overhead | PyTorch pre-installed in base image |
+| 3.11 | +~7 GB on GPU | Alternative Python install required |
+| 3.10 | +~7 GB on GPU | EOL 2026-10-31; consider migrating to 3.11 |
+
+Image tags follow the pattern `py{version}-{tag}` (for example, `runpod/flash:py3.12-latest`).
 
 ## Managing deployment size
 

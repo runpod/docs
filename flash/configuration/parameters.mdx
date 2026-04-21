@@ -30,6 +30,7 @@ This page provides a complete reference for all parameters available on the `End
 | `scaler_value` | `int` | Scaling threshold | `4` |
 | `template` | `PodTemplate` | Pod template overrides | `None` |
 | `min_cuda_version` | `str` or `CudaVersion` | Minimum CUDA version for GPU host selection | `"12.8"` (GPU) / `None` (CPU) |
+| `python_version` | `str` | Python version for the worker image | `"3.12"` |
 
 ## Parameter details
 
@@ -575,6 +576,41 @@ This parameter has no effect on CPU endpoints.
 Valid CUDA versions: `CudaVersion.V11_1`, `V11_4`, `V11_7`, `V11_8`, `V12_0`, `V12_1`, `V12_2`, `V12_3`, `V12_4`, `V12_6`, `V12_8` (or equivalent strings like `"12.4"`). Invalid values raise a `ValueError`.
 </Note>
 
+### python_version
+
+**Type**: `str`
+**Default**: `"3.12"`
+
+Sets the Python version for the worker image. Supported values: `"3.10"`, `"3.11"`, and `"3.12"`.
+
+```python
+from runpod_flash import Endpoint, GpuGroup
+
+# Use Python 3.11 for this endpoint
+@Endpoint(
+    name="legacy-model",
+    gpu=GpuGroup.ANY,
+    python_version="3.11"
+)
+async def process(data): ...
+
+# Default (Python 3.12)
+@Endpoint(name="modern-model", gpu=GpuGroup.ANY)
+async def infer(data): ...
+```
+
+All resources in a Flash app must use the same Python version because Flash ships a single tarball for the entire app. If resources declare conflicting versions, the build fails.
+
+<Warning>
+Python 3.10 and 3.11 workers incur approximately 7 GB of additional cold-start overhead on GPU endpoints because the alternative Python interpreter must be installed alongside the base image's PyTorch environment.
+</Warning>
+
+<Note>
+Python 3.10 reaches end-of-life on 2026-10-31. Consider migrating to Python 3.11 or 3.12 before then.
+</Note>
+
+The `--python-version` CLI flag on `flash build` and `flash deploy` overrides per-resource declarations.
+
 ## EndpointJob
 
 When using `Endpoint(id=...)` or `Endpoint(image=...)`, the `.run()` method returns an `EndpointJob` object for async operations:
@@ -615,6 +651,7 @@ These changes restart all workers:
 - Datacenter (`datacenter`)
 - Flashboot setting (`flashboot`)
 - CUDA version requirement (`min_cuda_version`)
+- Python version (`python_version`)
 
 Workers are temporarily unavailable during recreation (typically 30-90 seconds).
 
