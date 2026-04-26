@@ -371,32 +371,16 @@ async def classify(text: str) -> dict:
 
 ## Call deployed endpoints from scripts
 
-After deploying your Flash app, you can call your `@Endpoint` functions directly from Python scripts by setting the `FLASH_APP` and `FLASH_ENV` environment variables. This enables implicit endpoint resolution, where Flash automatically routes function calls to the deployed endpoints in the specified app and environment.
-
-### Set the environment context
-
-Export the environment variables before running your script:
-
-```bash
-export FLASH_APP="my-app"
-export FLASH_ENV="production"
-
-python my_script.py
-```
-
-Or set them inline:
-
-```bash
-FLASH_APP=my-app FLASH_ENV=production python my_script.py
-```
+After deploying your Flash app, you can call your `@Endpoint` functions directly from Python scripts. Flash automatically resolves the app context from your project structure, so in most cases you can run scripts without any additional configuration.
 
 ### How it works
 
-When you call an `@Endpoint` function and both `FLASH_APP` and `FLASH_ENV` are set, Flash:
+When you run a script that calls an `@Endpoint` function, Flash:
 
-1. Looks up the deployed endpoint by name within the specified app and environment.
-2. Routes the request to that endpoint using Flash's sentinel service.
-3. Returns the result to your script.
+1. Detects the app context from the project directory structure.
+2. Looks up the deployed endpoint by name within the resolved app and environment.
+3. Routes the request to that endpoint using Flash's sentinel service.
+4. Returns the result to your script.
 
 This lets you reuse the same `@Endpoint` function definitions to interact with deployed endpoints without modifying your code.
 
@@ -419,7 +403,7 @@ async def run_inference(data: dict) -> dict:
     return {"result": "processed"}
 ```
 
-You can call it from a separate script:
+You can call it from a separate script in the same project:
 
 ```python
 # call_inference.py
@@ -427,7 +411,7 @@ import asyncio
 from gpu_worker import run_inference
 
 async def main():
-    # With FLASH_APP and FLASH_ENV set, this calls the deployed endpoint
+    # Flash resolves the app context automatically
     result = await run_inference({"input": "data"})
     print(result)
 
@@ -435,7 +419,23 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Run the script with the environment variables:
+Run the script:
+
+```bash
+python call_inference.py
+```
+
+### Override the resolved context
+
+Flash resolves the app name from your project's directory structure. Use `FLASH_APP` and `FLASH_ENV` environment variables to override this automatic resolution when needed.
+
+A common use case is when you move a script to a different directory. Since the resolved app name depends on the directory location, moving the script changes the resolved context. To continue targeting the original app, set `FLASH_APP` explicitly:
+
+```bash
+FLASH_APP=my-app python call_inference.py
+```
+
+You can also override the environment:
 
 ```bash
 FLASH_APP=my-app FLASH_ENV=production python call_inference.py
@@ -443,15 +443,13 @@ FLASH_APP=my-app FLASH_ENV=production python call_inference.py
 
 ### Error without context
 
-If you run a script with `@Endpoint` calls without setting `FLASH_APP` and `FLASH_ENV`, and without using `flash dev`, Flash raises an error:
+If Flash cannot resolve the app context and you haven't set the environment variables, it raises an error:
 
 ```text
 RuntimeError: no flash context for endpoint 'inference'. either:
   - use 'flash dev' for local development
   - set FLASH_APP and FLASH_ENV to target a deployed environment
 ```
-
-This explicit error prevents accidental provisioning of new endpoints when you intend to use existing deployed ones.
 
 ### Automatic context in deployed workers
 
