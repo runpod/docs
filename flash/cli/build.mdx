@@ -43,9 +43,13 @@ Custom name for the output archive file.
 Comma-separated list of packages to exclude from the build (e.g., `torch,torchvision`). Use this to skip packages already in the base image.
 </ResponseField>
 
+<ResponseField name="--python-version" type="string">
+Target Python version for worker images (3.10, 3.11, 3.12, or 3.13). Overrides per-resource `python_version` declarations and local interpreter detection.
+</ResponseField>
+
 ## What happens during build
 
-1. **Python version validation**: Verifies your local Python version is supported (3.12).
+1. **Python version resolution**: Resolves the target Python version from CLI flag, resource configs, or your local interpreter.
 2. **Function discovery**: Finds all `@Endpoint` decorated functions.
 3. **Grouping**: Groups functions by their endpoint configuration.
 4. **Manifest generation**: Creates `.flash/flash_manifest.json` with endpoint definitions.
@@ -90,9 +94,28 @@ Flash automatically handles cross-platform builds:
 
 ### Python version in deployed workers
 
-All Flash workers (GPU and CPU) run Python 3.12. `flash build` downloads wheels targeting Python 3.12 automatically.
+Flash workers support Python 3.10, 3.11, 3.12, and 3.13. The target version is determined by:
 
-Image tags follow the pattern `py3.12-{tag}` (for example, `runpod/flash:py3.12-latest`).
+1. **CLI flag:** The `--python-version` flag takes precedence.
+2. **Resource config:** The `python_version` parameter on your endpoint configs.
+3. **Local interpreter:** Your local Python version (from `sys.version_info`) when neither is specified.
+
+All resources in a Flash app must use the same Python version because Flash ships a single tarball for the entire app. If resources declare conflicting versions, the build fails.
+
+<Warning>
+**Breaking change in Flash 0.x:** Flash now matches your local Python version by default instead of always defaulting to Python 3.12. If you upgrade Flash and your local Python differs from 3.12, your first deploy will trigger a rolling release. To maintain consistent behavior across team members, declare `python_version` explicitly on your resource configs or use `--python-version` on the CLI.
+</Warning>
+
+| Version | Cold start | Notes |
+|---------|------------|-------|
+| 3.12 | No overhead | PyTorch pre-installed in base image |
+| 3.13 | +~7 GB on GPU | Alternative Python install required |
+| 3.11 | +~7 GB on GPU | Alternative Python install required |
+| 3.10 | +~7 GB on GPU | EOL 2026-10-31; consider migrating to 3.11+ |
+
+If your local Python version is not supported (for example, 3.9 or 3.14), the build fails with an actionable error message listing the supported versions.
+
+Image tags follow the pattern `py{version}-{tag}` (for example, `runpod/flash:py3.12-latest`).
 
 ## Managing deployment size
 
@@ -164,7 +187,7 @@ ls .flash/.build/
 ## Related commands
 
 - [`flash deploy`](/flash/cli/deploy) - Build and deploy in one step (includes `--preview` option for local testing)
-- [`flash run`](/flash/cli/run) - Start development server
+- [`flash dev`](/flash/cli/dev) - Start development server
 - [`flash env`](/flash/cli/env) - Manage environments
 
 <Note>

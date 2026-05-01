@@ -275,6 +275,7 @@ The `flash_manifest.json` file is the brain of your deployment. It tells each en
 - Which functions to execute.
 - What Docker image to use.
 - How to configure resources (GPUs, workers, scaling).
+- Environment variables for workers.
 - How to route HTTP requests (for load balancer endpoints).
 
 ```json
@@ -293,6 +294,10 @@ The `flash_manifest.json` file is the brain of your deployment. It tells each en
       "imageName": "runpod/flash:latest",
       "gpuIds": "AMPERE_16",
       "workersMax": 3,
+      "env": {
+        "HF_TOKEN": "your_token",
+        "MODEL_ID": "gpt2"
+      },
       "functions": [
         {"name": "gpu_hello", "module": "gpu_worker"}
       ]
@@ -328,6 +333,143 @@ When one endpoint needs to call a function on another endpoint:
 4. **Response**: The target endpoint executes the function and returns the result.
 
 Each endpoint maintains its own connection to the state manager, querying for peer endpoint URLs as needed and caching results for 300 seconds to minimize API calls.
+
+#### Calling another endpoint from your code
+
+To call one endpoint from another, import the target endpoint function **inside** your function body. Flash automatically detects these imports and generates the necessary dispatch stubs.
+
+For example, if you have a GPU worker for inference:
+
+```python gpu_worker.py
+from runpod_flash import Endpoint, GpuType
+
+@Endpoint(
+    name="gpu-inference",
+    gpu=GpuType.NVIDIA_GEFORCE_RTX_4090,
+    dependencies=["torch"]
+)
+async def gpu_inference(payload: dict) -> dict:
+    import torch
+    # GPU inference logic
+    return {"result": "processed"}
+```
+
+You can call it from a CPU-based pipeline endpoint:
+
+```python cpu_worker.py
+from runpod_flash import Endpoint
+
+@Endpoint(name="pipeline", cpu="cpu5c-4-8")
+async def classify(text: str) -> dict:
+    # Import the GPU endpoint inside the function body
+    from gpu_worker import gpu_inference
+
+    # Flash routes this call to the gpu-inference endpoint
+    result = await gpu_inference({"text": text})
+    return {"classification": result}
+```
+
+## Call deployed endpoints from scripts
+
+After deploying your Flash app, you can call your `@Endpoint` functions directly from Python scripts. Flash automatically resolves the app context from your project structure, so in most cases you can run scripts without any additional configuration.
+
+### How it works
+
+When you run a script that calls an `@Endpoint` function, Flash:
+
+1. Detects the app context from the project directory structure.
+2. Looks up the deployed endpoint by name within the resolved app and environment.
+3. Routes the request to that endpoint using Flash's sentinel service.
+4. Returns the result to your script.
+
+This lets you reuse the same `@Endpoint` function definitions to interact with deployed endpoints without modifying your code.
+
+### Example: calling within the same script
+
+The simplest approach is to call the endpoint directly in the same file where it's defined:
+
+```python
+# gpu_worker.py
+import asyncio
+from runpod_flash import Endpoint, GpuType
+
+@Endpoint(
+    name="inference",
+    gpu=GpuType.NVIDIA_GEFORCE_RTX_4090,
+    dependencies=["torch"]
+)
+async def run_inference(data: dict) -> dict:
+    import torch
+    # Inference logic
+    return {"result": "processed"}
+
+async def main():
+    result = await run_inference({"input": "data"})
+    print(result)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+Run the script:
+
+```bash
+python gpu_worker.py
+```
+
+### Example: importing from another script
+
+You can also import and call endpoints from a separate script:
+
+```python
+# call_inference.py
+import asyncio
+from gpu_worker import run_inference
+
+async def main():
+    # Flash resolves the app context automatically
+    result = await run_inference({"input": "data"})
+    print(result)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+Run the script:
+
+```bash
+python call_inference.py
+```
+
+### Override the resolved context
+
+Flash resolves the app name from your project's directory structure. Use `FLASH_APP` and `FLASH_ENV` environment variables to override this automatic resolution when needed.
+
+A common use case is when you move a script to a different directory. Since the resolved app name depends on the directory location, moving the script changes the resolved context. To continue targeting the original app, set `FLASH_APP` explicitly:
+
+```bash
+FLASH_APP=my-app python call_inference.py
+```
+
+You can also override the environment:
+
+```bash
+FLASH_APP=my-app FLASH_ENV=production python call_inference.py
+```
+
+### Error without context
+
+If Flash cannot resolve the app context and you haven't set the environment variables, it raises an error:
+
+```text
+RuntimeError: no flash context for endpoint 'inference'. either:
+  - use 'flash dev' for local development
+  - set FLASH_APP and FLASH_ENV to target a deployed environment
+```
+
+### Automatic context in deployed workers
+
+When Flash deploys your app, it automatically sets `FLASH_APP` and `FLASH_ENV` environment variables on each worker. This enables cross-endpoint communication within your deployed application without additional configuration.
 
 ## Troubleshooting
 
