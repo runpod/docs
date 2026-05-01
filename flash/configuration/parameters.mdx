@@ -30,6 +30,7 @@ This page provides a complete reference for all parameters available on the `End
 | `scaler_value` | `int` | Scaling threshold | `4` |
 | `template` | `PodTemplate` | Pod template overrides | `None` |
 | `min_cuda_version` | `str` or `CudaVersion` | Minimum CUDA version for GPU host selection | `"12.8"` (GPU) / `None` (CPU) |
+| `python_version` | `str` | Python version for the worker image | Local Python |
 
 ## Parameter details
 
@@ -138,6 +139,7 @@ Controls worker scaling. Accepts either a single integer (max workers with min=0
 
 **Type**: `int`
 **Default**: `60`
+**Valid range**: 1-3600 seconds
 
 Number of seconds workers will stay active (running) after completing a request, waiting for additional requests before scaling down (to minimum workers).
 
@@ -575,6 +577,53 @@ This parameter has no effect on CPU endpoints.
 Valid CUDA versions: `CudaVersion.V11_1`, `V11_4`, `V11_7`, `V11_8`, `V12_0`, `V12_1`, `V12_2`, `V12_3`, `V12_4`, `V12_6`, `V12_8` (or equivalent strings like `"12.4"`). Invalid values raise a `ValueError`.
 </Note>
 
+### python_version
+
+**Type**: `str`
+**Default**: Local Python version
+
+Sets the Python version for the worker image. Supported values: `"3.10"`, `"3.11"`, `"3.12"`, and `"3.13"`.
+
+When you don't specify a Python version, Flash matches your local interpreter (the Python version you run Flash from). The resolution order is:
+
+1. `--python-version` CLI flag (highest priority)
+2. `python_version` declared on resource configs
+3. Your local Python version (`sys.version_info`)
+
+```python
+from runpod_flash import Endpoint, GpuGroup
+
+# Explicitly set Python 3.11 for this endpoint
+@Endpoint(
+    name="legacy-model",
+    gpu=GpuGroup.ANY,
+    python_version="3.11"
+)
+async def process(data): ...
+
+# Uses your local Python version (e.g., 3.12 if that's what you're running)
+@Endpoint(name="modern-model", gpu=GpuGroup.ANY)
+async def infer(data): ...
+```
+
+All resources in a Flash app must use the same Python version because Flash ships a single tarball for the entire app. If resources declare conflicting versions, the build fails.
+
+<Warning>
+**Breaking change:** Flash now matches your local Python version by default instead of always defaulting to Python 3.12. If your local Python differs from 3.12, your first deploy after upgrading Flash will trigger a rolling release. For consistent behavior across team members, declare `python_version` explicitly or use the `--python-version` CLI flag.
+</Warning>
+
+<Warning>
+Python 3.10, 3.11, and 3.13 workers incur approximately 7 GB of additional cold-start overhead on GPU endpoints because the alternative Python interpreter must be installed alongside the base image's PyTorch environment.
+</Warning>
+
+<Note>
+Python 3.10 reaches end-of-life on 2026-10-31. Consider migrating to Python 3.11 or later.
+</Note>
+
+If your local Python version is not supported (for example, 3.9 or 3.14), the build fails with an actionable error message listing the supported versions.
+
+The `--python-version` CLI flag on `flash build` and `flash deploy` overrides both per-resource declarations and local interpreter detection.
+
 ## EndpointJob
 
 When using `Endpoint(id=...)` or `Endpoint(image=...)`, the `.run()` method returns an `EndpointJob` object for async operations:
@@ -615,6 +664,7 @@ These changes restart all workers:
 - Datacenter (`datacenter`)
 - Flashboot setting (`flashboot`)
 - CUDA version requirement (`min_cuda_version`)
+- Python version (`python_version`)
 
 Workers are temporarily unavailable during recreation (typically 30-90 seconds).
 
