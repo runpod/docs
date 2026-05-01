@@ -129,6 +129,7 @@ Run all smoke tests using local docs
 | serverless-github-deploy | Deploy an endpoint from GitHub | Endpoint from GitHub repo |
 | serverless-ssh-worker | SSH into a running worker for debugging | SSH session established |
 | serverless-metrics | View endpoint metrics (execution time, delay) | Metrics data returned |
+| serverless-lb-websocket | Deploy a load balancing worker with WebSocket support and connect to it | WebSocket connection succeeds and receives streaming response |
 
 ---
 
