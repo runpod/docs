@@ -1,32 +1,36 @@
 ---
-title: "run"
-sidebarTitle: "run"
+title: "dev"
+sidebarTitle: "dev"
 ---
 
 Start the Flash development server for local testing with automatic updates. A local development server provides a unified interface for testing while `@Endpoint` functions execute on Runpod Serverless.
 
 ```bash
-flash run [OPTIONS]
+flash dev [OPTIONS]
 ```
+
+<Note>
+`flash run` is a hidden alias for `flash dev` and works identically. New projects should use `flash dev`.
+</Note>
 
 ## Example
 
 Start the development server with defaults:
 
 ```bash
-flash run
+flash dev
 ```
 
 Start with auto-provisioning to eliminate cold-start delays:
 
 ```bash
-flash run --auto-provision
+flash dev --auto-provision
 ```
 
 Start on a custom port:
 
 ```bash
-flash run --port 3000
+flash dev --port 3000
 ```
 
 ## Flags
@@ -47,9 +51,28 @@ Enable or disable auto-reload on code changes. Enabled by default.
 Auto-provision all Serverless endpoints on startup instead of lazily on first call. Eliminates cold-start delays during development.
 </ResponseField>
 
+## Endpoint descriptions from docstrings
+
+Flash extracts the first line of each function's docstring and uses it in two places:
+
+- **Startup table**: The "Description" column shows the docstring when the server starts.
+- **Swagger UI**: The endpoint summary in the API explorer at `/docs`.
+
+Add docstrings to your `@Endpoint` functions to make your API self-documenting:
+
+```python
+@Endpoint(name="text-processor", gpu=GpuGroup.ANY)
+def analyze_text(text: str) -> dict:
+    """Analyze text and return sentiment scores."""
+    # Implementation here
+    return {"sentiment": "positive"}
+```
+
+When you run `flash dev`, the startup table displays "Analyze text and return sentiment scores" as the description for this endpoint, and the same text appears in the Swagger UI summary.
+
 ## Architecture
 
-With `flash run`, Flash starts a local development server alongside remote Serverless endpoints:
+With `flash dev`, Flash starts a local development server alongside remote Serverless endpoints:
 
 ```mermaid
 %%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#9289FE','primaryTextColor':'#fff','primaryBorderColor':'#9289FE','lineColor':'#5F4CFE','secondaryColor':'#AE6DFF','tertiaryColor':'#FCB1FF','edgeLabelBackground':'#5F4CFE', 'fontSize':'14px','fontFamily':'font-inter'}}}%%
@@ -95,7 +118,7 @@ This differs from `flash deploy`, where all endpoints run on Runpod without a lo
 By default, endpoints are provisioned lazily on first `@Endpoint` function call. Use `--auto-provision` to provision all endpoints at server startup:
 
 ```bash
-flash run --auto-provision
+flash dev --auto-provision
 ```
 
 ### How it works
@@ -144,6 +167,10 @@ curl -X POST http://localhost:8888/lb_worker/process \
   -d '{"input_data": {"message": "Hello from Flash"}}'
 ```
 
+<Note>
+Queue-based endpoints require the `{"input": {...}}` wrapper format to match deployed endpoint behavior. Load-balanced endpoints accept direct JSON payloads.
+</Note>
+
 Open http://localhost:8888/docs for the interactive API explorer.
 
 ## Requirements
@@ -151,9 +178,9 @@ Open http://localhost:8888/docs for the interactive API explorer.
 - `RUNPOD_API_KEY` must be set in your `.env` file or environment.
 - A valid Flash project structure (created by `flash init` or manually).
 
-## flash run vs flash deploy
+## flash dev vs flash deploy
 
-| Aspect | `flash run` | `flash deploy` |
+| Aspect | `flash dev` | `flash deploy` |
 |--------|-------------|----------------|
 | Local development server | Yes (http://localhost:8888) | No |
 | `@Endpoint` functions run on | Runpod Serverless | Runpod Serverless |
