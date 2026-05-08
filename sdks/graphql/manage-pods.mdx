@@ -11,10 +11,8 @@ For the complete schema, see the [GraphQL Spec](https://graphql-spec.runpod.io/)
 
 | Operation | Mutation/Query |
 |-----------|---------------|
-| Create on-demand Pod | `podFindAndDeployOnDemand` |
-| Create spot Pod | `podRentInterruptable` |
+| Create Pod | `podFindAndDeployOnDemand` |
 | Start Pod | `podResume` |
-| Start spot Pod | `podBidResume` |
 | Stop Pod | `podStop` |
 | List all Pods | `myself { pods { ... } }` |
 | Get Pod by ID | `pod(input: {podId: "..."})` |
@@ -22,9 +20,7 @@ For the complete schema, see the [GraphQL Spec](https://graphql-spec.runpod.io/)
 
 ## Create a Pod
 
-### On-demand Pod
-
-On-demand Pods provide guaranteed compute at a fixed price.
+Pods provide guaranteed compute at a fixed price.
 
 <Tabs>
 <Tab title="cURL">
@@ -87,72 +83,6 @@ mutation {
 </Tab>
 </Tabs>
 
-### Spot Pod
-
-Spot Pods offer lower prices but can be interrupted when demand is high.
-
-<Tabs>
-<Tab title="cURL">
-```bash
-curl --request POST \
-  --header 'content-type: application/json' \
-  --url 'https://api.runpod.io/graphql?api_key=${YOUR_API_KEY}' \
-  --data '{"query": "mutation { podRentInterruptable( input: { bidPerGpu: 0.2, cloudType: SECURE, gpuCount: 1, volumeInGb: 40, containerDiskInGb: 40, minVcpuCount: 2, minMemoryInGb: 15, gpuTypeId: \"NVIDIA RTX A6000\", name: \"Runpod Pytorch\", imageName: \"runpod/pytorch\", dockerArgs: \"\", ports: \"8888/http\", volumeMountPath: \"/workspace\", env: [{ key: \"JUPYTER_PASSWORD\", value: \"your-password\" }] } ) { id imageName env machineId machine { podHostId } } }"}'
-```
-</Tab>
-
-<Tab title="GraphQL">
-```graphql
-mutation {
-  podRentInterruptable(
-    input: {
-      bidPerGpu: 0.2
-      cloudType: SECURE
-      gpuCount: 1
-      volumeInGb: 40
-      containerDiskInGb: 40
-      minVcpuCount: 2
-      minMemoryInGb: 15
-      gpuTypeId: "NVIDIA RTX A6000"
-      name: "Runpod Pytorch"
-      imageName: "runpod/pytorch"
-      dockerArgs: ""
-      ports: "8888/http"
-      volumeMountPath: "/workspace"
-      env: [{ key: "JUPYTER_PASSWORD", value: "your-password" }]
-    }
-  ) {
-    id
-    imageName
-    env
-    machineId
-    machine {
-      podHostId
-    }
-  }
-}
-```
-</Tab>
-
-<Tab title="Output">
-```json
-{
-  "data": {
-    "podRentInterruptable": {
-      "id": "fkjbybgpwuvmhk",
-      "imageName": "runpod/pytorch",
-      "env": ["JUPYTER_PASSWORD=your-password"],
-      "machineId": "hpvdausak8xb",
-      "machine": {
-        "podHostId": "fkjbybgpwuvmhk-64410065"
-      }
-    }
-  }
-}
-```
-</Tab>
-</Tabs>
-
 ### Filter by CUDA version
 
 Use `allowedCudaVersions` to restrict Pods to machines with specific CUDA versions.
@@ -195,9 +125,7 @@ mutation {
 
 ## Start a Pod
 
-Resume a stopped Pod. Use `podResume` for on-demand Pods or `podBidResume` for spot Pods.
-
-### On-demand Pod
+Resume a stopped Pod using the `podResume` mutation.
 
 <Tabs>
 <Tab title="cURL">
@@ -250,45 +178,6 @@ mutation {
   }
 }
 ```
-
-### Spot Pod
-
-<Tabs>
-<Tab title="cURL">
-```bash
-curl --request POST \
-  --header 'content-type: application/json' \
-  --url 'https://api.runpod.io/graphql?api_key=${YOUR_API_KEY}' \
-  --data '{"query": "mutation { podBidResume( input: { podId: \"YOUR_POD_ID\", bidPerGpu: 0.2, gpuCount: 1 } ) { id desiredStatus imageName } }"}'
-```
-</Tab>
-
-<Tab title="GraphQL">
-```graphql
-mutation {
-  podBidResume(input: { podId: "YOUR_POD_ID", bidPerGpu: 0.2, gpuCount: 1 }) {
-    id
-    desiredStatus
-    imageName
-  }
-}
-```
-</Tab>
-
-<Tab title="Output">
-```json
-{
-  "data": {
-    "podBidResume": {
-      "id": "YOUR_POD_ID",
-      "desiredStatus": "RUNNING",
-      "imageName": "runpod/tensorflow"
-    }
-  }
-}
-```
-</Tab>
-</Tabs>
 
 ## Stop a Pod
 
@@ -560,7 +449,7 @@ Query a specific GPU type to see pricing and availability.
 curl --request POST \
   --header 'content-type: application/json' \
   --url 'https://api.runpod.io/graphql?api_key=${YOUR_API_KEY}' \
-  --data '{"query": "query { gpuTypes(input: {id: \"NVIDIA GeForce RTX 3090\"}) { id displayName memoryInGb secureCloud communityCloud lowestPrice(input: {gpuCount: 1}) { minimumBidPrice uninterruptablePrice } } }"}'
+  --data '{"query": "query { gpuTypes(input: {id: \"NVIDIA GeForce RTX 3090\"}) { id displayName memoryInGb secureCloud communityCloud lowestPrice(input: {gpuCount: 1}) { uninterruptablePrice } } }"}'
 ```
 </Tab>
 
@@ -574,7 +463,6 @@ query {
     secureCloud
     communityCloud
     lowestPrice(input: { gpuCount: 1 }) {
-      minimumBidPrice
       uninterruptablePrice
     }
   }
@@ -594,7 +482,6 @@ query {
         "secureCloud": false,
         "communityCloud": true,
         "lowestPrice": {
-          "minimumBidPrice": 0.163,
           "uninterruptablePrice": 0.3
         }
       }
@@ -615,7 +502,7 @@ Use the `stockStatus` field to check availability before creating a Pod. Values 
 curl --request POST \
   --header 'content-type: application/json' \
   --url 'https://api.runpod.io/graphql?api_key=${YOUR_API_KEY}' \
-  --data '{"query": "query { gpuTypes(input: { id: \"NVIDIA RTX A4000\" }) { id displayName lowestPrice(input: { gpuCount: 1, secureCloud: true }) { stockStatus minimumBidPrice uninterruptablePrice availableGpuCounts } } }"}'
+  --data '{"query": "query { gpuTypes(input: { id: \"NVIDIA RTX A4000\" }) { id displayName lowestPrice(input: { gpuCount: 1, secureCloud: true }) { stockStatus uninterruptablePrice availableGpuCounts } } }"}'
 ```
 </Tab>
 
@@ -627,7 +514,6 @@ query {
     displayName
     lowestPrice(input: { gpuCount: 1, secureCloud: true }) {
       stockStatus
-      minimumBidPrice
       uninterruptablePrice
       availableGpuCounts
     }
@@ -646,7 +532,6 @@ query {
         "displayName": "RTX A4000",
         "lowestPrice": {
           "stockStatus": "High",
-          "minimumBidPrice": 0.2,
           "uninterruptablePrice": 0.35,
           "availableGpuCounts": [1, 2, 4]
         }
@@ -667,7 +552,6 @@ query {
         "displayName": "RTX A4000",
         "lowestPrice": {
           "stockStatus": "Low",
-          "minimumBidPrice": 0.16,
           "uninterruptablePrice": 0.24,
           "availableGpuCounts": [1, 2, 3, 4, 5, 6, 7]
         }
