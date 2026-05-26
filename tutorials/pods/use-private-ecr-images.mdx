@@ -1,0 +1,133 @@
+---
+title: "Use private AWS ECR images"
+sidebarTitle: "Private ECR images"
+description: "Pull container images from private AWS ECR repositories using cross-account delegation."
+---
+
+import { PodTooltip } from "/snippets/tooltips.jsx";
+
+This tutorial shows how to deploy <PodTooltip />s using container images stored in private AWS Elastic Container Registry (ECR) repositories. Instead of managing credentials directly, you configure cross-account IAM delegation that allows Runpod to pull images on your behalf.
+
+## What you'll learn
+
+- How to configure an AWS ECR repository policy for cross-account access.
+- How to add an ECR credential in the Runpod console.
+- How to deploy a Pod using your private ECR image.
+
+## Requirements
+
+- A Runpod account with credits.
+- An AWS account with an ECR repository containing a private container image.
+- AWS CLI installed (optional, for command-line configuration).
+
+## Step 1: Configure your ECR repository policy
+
+To pull images from your private ECR repository, Runpod needs cross-account access. You grant this access by adding an IAM policy to your repository.
+
+1. Open the [Amazon ECR console](https://console.aws.amazon.com/ecr/).
+2. Select the repository containing your container image.
+3. In the left navigation, select **Permissions**.
+4. Click **Edit policy JSON** and add the following policy statement:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowRunpodPull",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": [
+        "ecr:GetAuthorizationToken",
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:BatchGetImage"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:PrincipalArn": "arn:aws:iam::418399314813:role/prod-us-east-1-deployment-role"
+        }
+      }
+    }
+  ]
+}
+```
+
+5. Click **Save**.
+
+<Note>
+
+The `aws:PrincipalArn` condition restricts access to Runpod's deployment role, ensuring only Runpod can use this permission to pull images.
+
+</Note>
+
+### Alternative: Configure via AWS CLI
+
+You can also configure the repository policy using the AWS CLI:
+
+```bash
+aws ecr set-repository-policy \
+    --repository-name YOUR_REPOSITORY_NAME \
+    --policy-text '{
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Sid": "AllowRunpodPull",
+          "Effect": "Allow",
+          "Principal": "*",
+          "Action": [
+            "ecr:GetAuthorizationToken",
+            "ecr:BatchCheckLayerAvailability",
+            "ecr:GetDownloadUrlForLayer",
+            "ecr:BatchGetImage"
+          ],
+          "Condition": {
+            "StringEquals": {
+              "aws:PrincipalArn": "arn:aws:iam::418399314813:role/prod-us-east-1-deployment-role"
+            }
+          }
+        }
+      ]
+    }'
+```
+
+Replace `YOUR_REPOSITORY_NAME` with the name of your ECR repository.
+
+## Step 2: Add your ECR credential to Runpod
+
+Once the ECR policy is configured, add the credential to the Runpod console:
+
+1. Navigate to [Settings](https://www.runpod.io/console/user/settings) in the Runpod console.
+2. Scroll down to **Container Registry Authentication** and click **Add Credential**.
+3. Select **AWS ECR** as the registry type.
+4. Enter a **Name** for this credential (for example, `my-ecr-repo`).
+5. Enter the **ECR Image URI** in the format `ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/REPOSITORY_NAME`.
+6. Click **Create**.
+
+<Warning>
+
+The credential creation will fail if the ECR repository policy from Step 1 is not correctly configured. Verify the policy grants access to Runpod's IAM role before proceeding.
+
+</Warning>
+
+## Step 3: Deploy a Pod with your private image
+
+Now you can deploy a Pod using your private ECR image:
+
+1. Navigate to [Pods](https://www.runpod.io/console/pods) and select **Deploy**.
+2. Choose your GPU configuration.
+3. Under **Container Image**, enter your full ECR image URI (for example, `123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:latest`).
+4. Configure any additional settings such as environment variables or exposed ports.
+5. Click **Deploy**.
+
+Runpod will use the registered credential to authenticate and pull your private image.
+
+<Check>
+You've configured cross-account ECR delegation and deployed a Pod using a private container image.
+</Check>
+
+## Next steps
+
+- Learn how to [create custom templates](/pods/templates/create-custom-template) from your container images.
+- Explore [environment variables](/pods/templates/environment-variables) for configuring your containers.
+- Set up [network volumes](/storage/network-volumes) for persistent storage.
