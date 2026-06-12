@@ -5,89 +5,130 @@ description: "Reference guide for all Serverless endpoint settings and parameter
 ---
 
 import GPUTable from '/snippets/serverless-gpu-pricing-table.mdx';
+import { MachinesTooltip, InferenceTooltip } from "/snippets/tooltips.jsx";
 
-This guide details the configuration options available for Runpod Serverless endpoints. These settings control how your endpoint scales, how it utilizes hardware, and how it manages request lifecycles.
+This guide details the configuration options available for Runpod Serverless endpoints.
+
+<Note>
+Some settings can only be updated after deploying your endpoint. See [Edit an endpoint](/serverless/endpoints/overview#edit-an-endpoint).
+</Note>
+
+## Quick reference
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| **Active workers** | 0 | Always-on workers (eliminates cold starts) |
+| **Max workers** | 3 | Maximum concurrent workers |
+| **GPUs per worker** | 1 | GPU count per worker instance |
+| **Idle timeout** | 5s | Time before idle worker shuts down |
+| **Execution timeout** | 600s (10 min) | Max job duration |
+| **Job TTL** | 24h | Total job lifespan in system |
+| **FlashBoot** | Enabled | Faster cold starts via state retention |
 
 ## General configuration
 
 ### Endpoint name
 
-The name assigned to your endpoint helps you identify it within the Runpod console. This is a local display name and does not impact the endpoint ID used for API requests.
+Display name for identifying your endpoint in the console. Does not affect the endpoint ID used for API requests.
 
 ### Endpoint type
 
-Select the architecture that best fits your application's traffic pattern:
+**Queue-based endpoints** use a built-in queueing system with guaranteed execution and automatic retries. Ideal for async tasks, batch processing, and long-running jobs. Implemented using [handler functions](/serverless/workers/handler-functions).
 
-**Queue based endpoints** utilize a built-in queueing system to manage requests. They are ideal for asynchronous tasks, batch processing, and long-running jobs where immediate synchronous responses are not required. These endpoints provide guaranteed execution and automatic retries for failed requests. Queue based endpoints are implemented using [handler functions](/serverless/workers/handler-functions).
-
-**Load balancing endpoints** route traffic directly to available workers, bypassing the internal queue. They are designed for high-throughput, low-latency applications that require synchronous request/response cycles, such as real-time inference or custom REST APIs. For implementation details, see [Load balancing endpoints](/serverless/load-balancing/overview).
+**Load balancing endpoints** route traffic directly to workers, bypassing the queue. Designed for low-latency applications like real-time <InferenceTooltip /> or custom REST APIs. See [Load balancing endpoints](/serverless/load-balancing/overview).
 
 ### GPU configuration
 
-This setting determines the hardware tier your workers will utilize. You can select multiple GPU categories to create a prioritized list. Runpod attempts to allocate the first category in your list. If that hardware is unavailable, it automatically falls back to the subsequent options. Selecting multiple GPU types significantly improves endpoint availability during periods of high demand.
+Determines the hardware tier for your workers. Select multiple GPU categories to create a prioritized fallback list. If your first choice is unavailable, Runpod automatically uses the next option. Selecting multiple types improves availability during high demand.
 
 <GPUTable />
+
+#### GPU priority and worker distribution
+
+Specify up to three GPU types in priority order when configuring an endpoint. Runpod uses this ranking to distribute workers across available GPUs, improving availability during high demand.
+
+For endpoints with five or more workers, Runpod distributes workers across your selected GPU priorities. Most workers run on your primary GPU type, with fewer assigned to secondary and tertiary selections. This reduces throttling when your primary GPU is constrained.
+
+For endpoints with fewer than five workers, all workers use the highest-priority GPU type available.
 
 ## Worker scaling
 
 ### Active workers
 
-This setting defines the minimum number of workers that remain warm and ready to process requests at all times. Setting this to 1 or higher eliminates cold starts for the initial wave of requests. Active workers incur charges even when idle, but they receive a 20-30% discount compared to on-demand workers.
+Minimum number of workers that remain warm and ready at all times. Setting this to 1+ eliminates cold starts. Active workers incur charges continuously, including when idle.
 
 ### Max workers
 
-This setting controls the maximum number of concurrent instances your endpoint can scale to. This acts as a safety limit for costs and a cap on concurrency. We recommend setting your max worker count approximately 20% higher than your expected maximum concurrency. This buffer allows for smoother scaling during traffic spikes.
+Maximum concurrent instances your endpoint can scale to. Acts as a cost safety limit and concurrency cap. Set ~20% higher than expected max concurrency to handle traffic spikes smoothly.
 
 ### GPUs per worker
 
-This defines how many GPUs are assigned to a single worker instance. The default is 1. When choosing between multiple lower-tier GPUs or fewer high-end GPUs, you should generally prioritize high-end GPUs with lower GPU count per worker when possible.
+Number of GPUs assigned to each worker instance. Default is 1. Generally prioritize fewer high-end GPUs over multiple lower-tier GPUs.
 
 ### Auto-scaling type
 
-This setting determines the logic used to scale workers up and down.
+**Queue delay**: Adds workers when requests wait longer than the threshold (default: 4 seconds). Best when slight delays are acceptable for higher utilization.
 
-**Queue delay** scaling adds workers based on wait times. If requests sit in the queue for longer than a defined threshold (default 4 seconds), the system provisions new workers. This is best for workloads where slight delays are acceptable in exchange for higher utilization.
-
-**Request count** scaling is more aggressive. It adjusts worker numbers based on the total volume of pending and active work. The formula used is `Math.ceil((requestsInQueue + requestsInProgress) / scalerValue)`. Use a scaler value of 1 for maximum responsiveness, or increase it to scale more conservatively. This strategy is recommended for LLM workloads or applications with frequent, short requests.
+**Request count**: More aggressive scaling based on pending + active work. Formula: `Math.ceil((requestsInQueue + requestsInProgress) / scalerValue)`. Use scaler value of 1 for max responsiveness. Recommended for LLM workloads or frequent short requests.
 
 ## Lifecycle and timeouts
 
 ### Idle timeout
 
-The idle timeout determines how long a worker remains active after completing a request before shutting down. While a worker is idle, you are billed for the time, but the worker remains "warm," allowing it to process subsequent requests immediately. The default is 5 seconds.
+How long a worker stays active after completing a request before shutting down. You're billed during idle time, but the worker remains warm for immediate processing. Default: 5 seconds.
 
 ### Execution timeout
 
-The execution timeout acts as a failsafe to prevent runaway jobs from consuming infinite resources. It specifies the maximum duration a single job is allowed to run before being forcibly terminated. We strongly recommend keeping this enabled. The default is 600 seconds (10 minutes), and it can be extended up to 24 hours.
+Maximum duration for a single job. When exceeded, the job fails and the worker stops. Keep enabled to prevent runaway jobs. Default: 600s (10 min). Range: 5s to 7 days.
+
+Configure in **Advanced** settings, or override per-request via `executionTimeout` in the [job policy](/serverless/endpoints/send-requests#execution-policies).
 
 ### Job TTL (time-to-live)
 
-This setting defines how long a job request remains valid in the queue before expiring. If a worker does not pick up the job within this window, the system discards it. The default is 24 hours.
+Total lifespan of a job in the system. When TTL expires, job data is deleted regardless of state (queued, running, or completed). Default: 24 hours. Range: 10s to 7 days.
+
+The timer starts at submission, not execution. If a job queues for 45 minutes with a 1-hour TTL, only 15 minutes remain for execution.
+
+<Warning>
+TTL is a hard limit. If it expires while a job is running, the job is immediately removed and status checks return 404. Set TTL to cover both expected queue time and execution time.
+</Warning>
+
+Override per-request via `ttl` in the [job policy](/serverless/endpoints/send-requests#execution-policies).
+
+### Result retention
+
+| Request type | Retention | Notes |
+|--------------|-----------|-------|
+| Async (`/run`) | 30 min | Retrieve via `/status/{job_id}` |
+| Sync (`/runsync`) | 1 min | Returned in response; also available via `/status/{job_id}` |
+
+Results are permanently deleted after retention expires.
 
 ## Performance features
 
 ### FlashBoot
 
-FlashBoot reduces cold start times by retaining the state of worker resources shortly after they spin down. This allows the system to "revive" a worker much faster than a standard fresh boot. FlashBoot is most effective on endpoints with consistent traffic, where workers frequently cycle between active and idle states.
+Reduces cold starts by retaining worker state after spin-down, allowing faster "revival" than fresh boots. Most effective on endpoints with consistent traffic where workers frequently cycle between active and idle.
+Both new GPU and CPU endpoints will have FlashBoot enabled by default, and you can edit existing endpoints to enable or disable FlashBoot.
 
 ### Model
 
-The Model field allows you to select from a list of [cached models](/serverless/endpoints/model-caching). When selected, Runpod schedules your workers on host machines that already have these large model files pre-loaded. This significantly reduces the time required to load models during worker initialization.
+Select from [cached models](/serverless/endpoints/model-caching) to schedule workers on <MachinesTooltip /> with model files pre-loaded. Significantly reduces model loading time during initialization.
 
 ## Advanced settings
 
 ### Data centers
 
-You can restrict your endpoint to specific geographical regions. For maximum reliability and availability, we recommend allowing all data centers. Restricting this list decreases the pool of available GPUs your endpoint can draw from.
+Restrict your endpoint to specific regions. For maximum availability, allow all data centers:restricting decreases the available GPU pool.
 
 ### Network volumes
 
-[Network volumes](/storage/network-volumes) provide persistent storage that survives worker restarts. While they enable data sharing between workers, they introduce network latency and restrict your endpoint to the specific data center where the volume resides. Use network volumes only if your workload specifically requires shared persistence or datasets larger than the container limit.
+[Network volumes](/storage/network-volumes) provide persistent storage across worker restarts. Tradeoffs: adds network latency and restricts your endpoint to the volume's data center. Use only when you need shared persistence or datasets exceeding container limits.
 
 ### CUDA version selection
 
-This filter ensures your workers are scheduled on host machines with compatible drivers. While you should select the version your code requires, we recommend also selecting all newer versions. CUDA is generally backward compatible, and selecting a wider range of versions increases the pool of available hardware.
+Ensures workers run on <MachinesTooltip /> with compatible drivers. Select your required version plus all newer versions, since CUDA is backward compatible and a wider range increases available hardware.
 
 ### Expose HTTP/TCP ports
 
-Enabling this option exposes the public IP and port of the worker, allowing for direct external communication. This is required for applications that need persistent connections, such as WebSockets.
+Exposes the worker's public IP and port for direct external communication. Required for persistent connections like WebSockets.

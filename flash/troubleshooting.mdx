@@ -1,0 +1,576 @@
+---
+title: "Troubleshooting"
+sidebarTitle: "Troubleshooting"
+description: "Monitor, debug, and troubleshoot Flash deployments."
+---
+
+This guide covers how to monitor your Flash deployments, debug issues, and resolve common errors.
+
+## Monitoring and debugging
+
+### Viewing logs
+
+When running Flash functions, logs are displayed in your terminal:
+
+```text
+2025-11-19 12:35:15,109 | INFO  | Created endpoint: rb50waqznmn2kg - flash-quickstart
+2025-11-19 12:35:15,114 | INFO  | Endpoint:rb50waqznmn2kg | API /run
+2025-11-19 12:35:15,655 | INFO  | Endpoint:rb50waqznmn2kg | Started Job:b0b341e7-...
+2025-11-19 12:35:15,762 | INFO  | Job:b0b341e7-... | Status: IN_QUEUE
+2025-11-19 12:36:09,983 | INFO  | Job:b0b341e7-... | Status: COMPLETED
+2025-11-19 12:36:10,068 | INFO  | Worker:icmkdgnrmdf8gz | Delay Time: 51842 ms
+2025-11-19 12:36:10,068 | INFO  | Worker:icmkdgnrmdf8gz | Execution Time: 1533 ms
+```
+
+Control log verbosity with the `LOG_LEVEL` environment variable:
+
+```bash
+LOG_LEVEL=DEBUG python your_script.py
+```
+
+Available levels: `DEBUG`, `INFO`, `WARNING`, `ERROR`.
+
+### Runpod console
+
+View detailed metrics and logs in the [Runpod console](https://www.runpod.io/console/serverless):
+
+1. Navigate to the **Serverless** section.
+2. Click on your endpoint to view:
+   - Active workers and queue depth.
+   - Request history and job status.
+   - Worker logs and execution details.
+
+The console provides metrics including request rate, queue depth, latency, worker count, and error rate.
+
+### View worker logs
+
+Access detailed logs for specific workers:
+
+1. Go to the [Serverless console](https://www.runpod.io/console/serverless).
+2. Select your endpoint.
+3. Click on a worker to view its logs.
+
+Logs include dependency installation output, function execution output (print statements, errors), and system-level messages.
+
+### Add logging to functions
+
+Include print statements in your endpoint functions for debugging:
+
+```python
+@Endpoint(name="processor", gpu=GpuGroup.ANY)
+async def process(data: dict) -> dict:
+    print(f"Received data: {data}")  # Visible in worker logs
+
+    result = do_processing(data)
+    print(f"Processing complete: {result}")
+
+    return result
+```
+
+## Configuration errors
+
+### API key not set
+
+**Error:**
+```
+No RunPod API key found. Set one with:
+
+  flash login                              # interactive setup
+                 or
+  export RUNPOD_API_KEY=<your-api-key>     # environment variable
+                 or
+  echo 'RUNPOD_API_KEY=<your-api-key>' >> .env
+
+Get a key: https://docs.runpod.io/get-started/api-keys
+```
+
+**Cause:** Flash requires a valid Runpod API key to provision and manage endpoints.
+
+**Solution:**
+
+1. Generate an API key from [Settings > API Keys](https://www.runpod.io/console/user/settings) in the Runpod console. The key needs **All** access permissions.
+
+2. Authenticate using one of these methods:
+
+   **Option 1: Use `flash login` (recommended)**
+   ```bash
+   flash login
+   ```
+   Opens your browser for authentication and saves your credentials.
+
+   **Option 2: Environment variable**
+   ```bash
+   export RUNPOD_API_KEY="your_api_key"
+   ```
+
+   **Option 3: .env file for local CLI use**
+   ```bash
+   echo "RUNPOD_API_KEY=your_api_key" >> .env
+   ```
+
+   <Note>
+   Values in your `.env` file are only available locally for CLI commands. They are not passed to deployed endpoints.
+   </Note>
+
+   **Option 4: Shell profile for persistent local access**
+   ```bash
+   echo 'export RUNPOD_API_KEY="your_api_key"' >> ~/.bashrc
+   source ~/.bashrc
+   ```
+
+### Corrupted credentials file
+
+**Error:**
+```
+Error: ~/.runpod/config.toml is corrupted and cannot be parsed.
+Run 'flash login' to re-authenticate, or delete the file and retry.
+```
+
+**Cause:** The credentials file at `~/.runpod/config.toml` contains invalid TOML and cannot be read. This can also appear as "No API key found" even after a successful `flash login`.
+
+**Solution:** Delete the credentials file and re-authenticate:
+
+```bash
+rm ~/.runpod/config.toml
+flash login
+```
+
+### Invalid route configuration
+
+**Error:**
+```
+Load-balanced endpoints require route decorators
+```
+
+**Cause:** Load-balanced endpoints require HTTP method decorators for each route.
+
+**Solution:** Ensure all routes use the correct decorator pattern:
+
+```python
+from runpod_flash import Endpoint
+
+api = Endpoint(name="api", cpu="cpu5c-4-8", workers=(1, 5))
+
+# Correct - using route decorators
+@api.post("/process")
+async def process_data(data: dict) -> dict:
+    return {"result": "processed"}
+
+@api.get("/health")
+async def health_check() -> dict:
+    return {"status": "healthy"}
+```
+
+### Invalid HTTP method
+
+**Error:**
+```
+method must be one of {'GET', 'POST', 'PUT', 'DELETE', 'PATCH'}
+```
+
+**Cause:** The HTTP method specified is not supported.
+
+**Solution:** Use one of the supported HTTP methods: `GET`, `POST`, `PUT`, `DELETE`, or `PATCH`.
+
+### Invalid path format
+
+**Error:**
+```
+path must start with '/'
+```
+
+**Cause:** HTTP paths must begin with a forward slash.
+
+**Solution:** Ensure paths start with `/`:
+
+```python
+# Correct
+@api.get("/health")
+
+# Incorrect
+@api.get("health")
+```
+
+### Duplicate routes
+
+**Error:**
+```
+Duplicate route 'POST /process' in endpoint 'my-api'
+```
+
+**Cause:** Two functions define the same HTTP method and path combination.
+
+**Solution:** Ensure each route is unique within an endpoint. Either change the path or method of one function.
+
+## Build errors
+
+### Unsupported Python version
+
+**Error:**
+```
+Local Python 3.9 is not supported by Flash workers (supported: 3.10, 3.11, 3.12, 3.13).
+Pass --python-version, declare python_version on a resource config, or run flash from a supported interpreter.
+```
+
+**Cause:** Flash supports Python 3.10, 3.11, 3.12, and 3.13. Your local Python version is outside this range.
+
+**Solution:**
+
+You have three options:
+
+1. **Use the `--python-version` CLI flag** to override local detection:
+   ```bash
+   flash build --python-version 3.12
+   flash deploy --python-version 3.12
+   ```
+
+2. **Declare `python_version` on your resource configs:**
+   ```python
+   @Endpoint(name="my-endpoint", gpu=GpuGroup.ANY, python_version="3.12")
+   ```
+
+3. **Switch to a supported Python version** using a virtual environment:
+   ```bash
+   # Using pyenv
+   pyenv install 3.12
+   pyenv local 3.12
+
+   # Or using uv
+   uv venv --python 3.12
+   source .venv/bin/activate
+   ```
+
+<Tip>
+Python 3.12 is recommended for best performance with no cold-start overhead. Python 3.10, 3.11, and 3.13 incur additional cold-start overhead on GPU workers because an alternative Python interpreter must be installed.
+</Tip>
+
+## Deployment errors
+
+### Tarball too large
+
+**Error:**
+```
+Tarball exceeds maximum size. File size: 1.6GB, Max: 1.5GB
+```
+
+**Cause:** The deployment package exceeds the 1.5GB limit.
+
+**Solution:**
+
+1. Check for large files that shouldn't be included (datasets, model weights, logs).
+2. Add large files to `.gitignore` to exclude them from the build.
+3. Use [network volumes](/flash/configuration/storage) to store large models instead of bundling them.
+
+### Invalid tarball format
+
+**Error:**
+```
+File is not a valid gzip file. Expected magic bytes (31, 139)
+```
+
+**Cause:** The build artifact is corrupted or not a valid gzip file.
+
+**Solution:** Delete the `.flash` directory and rebuild:
+
+```bash
+rm -rf .flash
+flash build
+```
+
+### SSL certificate verification failed
+
+**Error:**
+```
+SSL certificate verification failed. This usually means Python cannot find your system's CA certificates.
+```
+
+**Cause:** Python cannot locate the system's trusted CA certificates, preventing secure connections during deployment. This commonly occurs on fresh Python installations, especially on macOS.
+
+**Solution:** Try one of these fixes:
+
+1. **Install certifi and set the certificate bundle path:**
+   ```bash
+   pip install certifi
+   export REQUESTS_CA_BUNDLE=$(python -c "import certifi; print(certifi.where())")
+   ```
+
+2. **macOS only:** Run the certificate installer that comes with Python. Find it in your Python installation folder (typically `/Applications/Python 3.x/`) and run `Install Certificates.command`.
+
+3. **Add to shell profile for persistence:**
+   ```bash
+   echo 'export REQUESTS_CA_BUNDLE=$(python -c "import certifi; print(certifi.where())")' >> ~/.bashrc
+   source ~/.bashrc
+   ```
+
+<Note>
+Transient SSL errors (like connection resets) are automatically retried during upload. The certificate verification error requires manual intervention because it indicates a system configuration issue.
+</Note>
+
+### Resource provisioning failed
+
+**Error:**
+```
+Failed to provision resources: [error details]
+```
+
+**Cause:** Flash couldn't create the Serverless endpoint on Runpod.
+
+**Solutions:**
+
+1. **Check GPU availability**: The requested GPU types may not be available. Add fallback options:
+   ```python
+   gpu=[GpuType.NVIDIA_A100_80GB_PCIe, GpuType.NVIDIA_RTX_A6000, GpuType.NVIDIA_GEFORCE_RTX_4090]
+   ```
+
+2. **Check account limits**: You may have hit worker capacity limits. Contact [Runpod support](https://www.runpod.io/contact) to increase limits.
+
+3. **Check network volume**: If using `volume=`, verify the volume exists and is in a compatible datacenter.
+
+## Runtime errors
+
+### Endpoint not deployed
+
+**Error:**
+```
+Endpoint URL not available - endpoint may not be deployed
+```
+
+**Cause:** The endpoint function was called before the endpoint finished provisioning.
+
+**Solutions:**
+
+1. **For standalone scripts**: Ensure the endpoint has time to provision. Flash handles this automatically, but network issues can cause delays.
+
+2. **For Flash apps**: Deploy the app first with `flash deploy`, then call the endpoint.
+
+3. **Check endpoint status**: View your endpoints in the [Serverless console](https://www.runpod.io/console/serverless).
+
+### Execution timeout
+
+**Error:**
+```
+Execution timeout on [endpoint] after [N]s
+```
+
+**Cause:** The endpoint function took longer than the configured timeout.
+
+**Solutions:**
+
+1. **Increase timeout**: Set `execution_timeout_ms` in your configuration:
+   ```python
+   @Endpoint(
+       name="long-running",
+       gpu=GpuType.NVIDIA_A100_80GB_PCIe,
+       execution_timeout_ms=600000  # 10 minutes
+   )
+   ```
+
+2. **Optimize function**: Profile your function to identify bottlenecks.
+
+3. **Use queue-based endpoints**: For long-running tasks, use the `@Endpoint` decorator pattern. Queue-based endpoints are designed for longer operations.
+
+### Connection failed
+
+**Error:**
+```
+Failed to connect to endpoint [name] ([url])
+```
+
+**Cause:** Network connectivity issue between your local environment and the Runpod endpoint.
+
+**Solutions:**
+
+1. **Check internet connection**: Verify you have network access.
+2. **Retry**: Transient network issues often resolve on retry. Flash includes automatic retry logic.
+3. **Check endpoint status**: Verify the endpoint is running in the [Serverless console](https://www.runpod.io/console/serverless).
+
+### HTTP errors from endpoint
+
+**Error:**
+```
+HTTP error from endpoint [name]: 500 - Internal Server Error
+```
+
+**Cause:** The endpoint function raised an exception during execution.
+
+**Solutions:**
+
+1. **Check logs**: View worker logs in the [Serverless console](https://www.runpod.io/console/serverless) for detailed error messages.
+
+2. **Test locally**: Use `flash dev` to test your function locally before deploying.
+
+3. **Add error handling**: Wrap your function logic in try/except to provide better error messages:
+   ```python
+   @Endpoint(name="processor", gpu=GpuGroup.ANY)
+   async def process(data: dict) -> dict:
+       try:
+           # Your logic here
+           return {"result": "success"}
+       except Exception as e:
+           return {"error": str(e)}
+   ```
+
+### Serialization errors
+
+**Error:**
+```
+Failed to deserialize result: [error]
+```
+
+**Cause:** The function's return value cannot be serialized/deserialized.
+
+**Solutions:**
+
+1. **Use simple types**: Return dictionaries, lists, strings, numbers, and other JSON-serializable types.
+
+2. **Avoid complex objects**: Don't return PyTorch tensors, NumPy arrays, or custom classes directly. Convert them first:
+   ```python
+   # Correct
+   return {"result": tensor.tolist()}
+
+   # Incorrect - tensor is not serializable
+   return {"result": tensor}
+   ```
+
+3. **Check argument types**: Input arguments must also be serializable.
+
+### Payload too large
+
+**Error:**
+```
+Payload size X MB exceeds limit of 10.0 MB
+```
+
+**Cause:** The serialized argument exceeds the 10 MB limit. Flash uses base64 encoding, which expands data by approximately 33%, so roughly 7.5 MB of raw data becomes 10 MB when encoded.
+
+**Solutions:**
+
+1. **Use network volumes for large data**: Save large data to a network volume and pass the file path:
+   ```python
+   @Endpoint(name="processor", gpu=GpuGroup.ANY, volume="vol_abc123")
+   async def process(file_path: str) -> dict:
+       import numpy as np
+       data = np.load(file_path)  # Load from volume
+       return {"result": process_data(data)}
+   ```
+
+2. **Compress data before sending**: For data that must be passed directly, use compression:
+   ```python
+   import gzip
+
+   compressed = gzip.compress(data.tobytes())
+   # Pass compressed bytes instead
+   ```
+
+3. **Split large requests**: Break large datasets into smaller chunks and process them in multiple requests.
+
+### Deserialization timeout
+
+**Error:**
+```
+Deserialization timed out after 30s
+```
+
+**Cause:** The deserialization process took longer than 30 seconds. This usually indicates malformed or corrupted serialized data that causes the unpickle operation to hang.
+
+**Solution:** Verify your input data is properly serialized. If you're manually constructing payloads, ensure the data was serialized using `cloudpickle` and encoded with base64. The Flash SDK handles this automatically for programmatic calls.
+
+### Circuit breaker open
+
+**Error:**
+```
+Circuit breaker is open. Retry in [N] seconds
+```
+
+**Cause:** Too many consecutive failures to the endpoint triggered the circuit breaker protection.
+
+**Solutions:**
+
+1. **Wait and retry**: The circuit breaker will automatically attempt recovery after the timeout (typically 60 seconds).
+
+2. **Check endpoint health**: Multiple failures usually indicate an underlying issue. Check logs and endpoint status.
+
+3. **Fix the root cause**: Address whatever is causing the repeated failures before retrying.
+
+## GPU availability issues
+
+### Job stuck in queue
+
+**Symptom:** Job status shows `IN_QUEUE` for extended periods.
+
+**Cause:** The requested GPU types are not available.
+
+**Solutions:**
+
+1. **Add fallback GPUs**: Expand your `gpu` list with additional options:
+   ```python
+   @Endpoint(
+       name="flexible",
+       gpu=[
+           GpuType.NVIDIA_A100_80GB_PCIe,    # First choice
+           GpuType.NVIDIA_RTX_A6000,         # Fallback
+           GpuType.NVIDIA_GEFORCE_RTX_4090   # Second fallback
+       ]
+   )
+   ```
+
+2. **Use GpuGroup.ANY**: For development, accept any available GPU:
+   ```python
+   gpu=GpuGroup.ANY
+   ```
+
+3. **Check availability**: View GPU availability in the [Serverless console](https://www.runpod.io/console/serverless).
+
+4. **Contact support**: For guaranteed capacity, contact [Runpod support](https://www.runpod.io/contact).
+
+## Dependency errors
+
+### Module not found
+
+**Error (in worker logs):**
+```
+ModuleNotFoundError: No module named 'transformers'
+```
+
+**Cause:** A required dependency was not specified in the `@Endpoint` decorator.
+
+**Solution:** Add all required packages to the `dependencies` parameter:
+
+```python
+@Endpoint(
+    name="processor",
+    gpu=GpuGroup.ANY,
+    dependencies=["transformers", "torch", "pillow"]
+)
+async def process(data: dict) -> dict:
+    from transformers import pipeline
+    # ...
+```
+
+### Version conflicts
+
+**Symptom:** Function fails with import errors or unexpected behavior.
+
+**Cause:** Dependency version conflicts between packages.
+
+**Solution:** Pin specific versions:
+
+```python
+@Endpoint(
+    name="processor",
+    gpu=GpuGroup.ANY,
+    dependencies=[
+        "transformers==4.36.0",
+        "torch==2.1.0",
+        "accelerate>=0.25.0"
+    ]
+)
+```
+
+## Getting help
+
+If you're still stuck:
+
+1. **Discord**: Join the [Runpod Discord](https://discord.gg/cUpRmau42V) for community support.
+2. **GitHub Issues**: Report bugs or request features on the [Flash repository](https://github.com/runpod/flash).
+3. **Support**: Contact [Runpod support](https://www.runpod.io/contact) for account-specific issues.
