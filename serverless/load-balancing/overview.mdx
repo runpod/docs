@@ -89,7 +89,9 @@ This exposes custom endpoints: `https://ENDPOINT_ID.api.runpod.ai/ping` and `htt
 
 ## Health checks
 
-Workers must expose a `/ping` endpoint on the `PORT_HEALTH` port. The load balancer periodically checks this endpoint:
+Each worker exposes a health check endpoint on the `PORT_HEALTH` port, and the load balancer polls it periodically to decide whether the worker is healthy enough to receive traffic. By default the load balancer polls `/ping`, but you can point it at any path by setting the `HEALTH_CHECK_PATH` environment variable. This is useful when you deploy a public image whose server already exposes a health check at a different path, such as a `llama.cpp` image that serves `/health`, so you don't need to build a custom image just to satisfy the health check.
+
+The load balancer interprets the response code from the health check endpoint as follows:
 
 | Response code | Status |
 |---------------|--------|
@@ -101,7 +103,7 @@ Unhealthy workers are automatically removed from the routing pool.
 
 <Note>
 
-When calculating endpoint metrics, Runpod calculates the cold start time for load balancing workers by measuring the time it takes between  `/ping`  first returning `204` until it first returns `200`. 
+When calculating endpoint metrics, Runpod calculates the cold start time for load balancing workers by measuring the time it takes between the health check endpoint first returning `204` until it first returns `200`.
 
 </Note>
 
@@ -112,6 +114,7 @@ When calculating endpoint metrics, Runpod calculates the cold start time for loa
 |----------|---------|-------------|
 | `PORT` | `80` | Main application server port |
 | `PORT_HEALTH` | Same as `PORT` | Health check endpoint port |
+| `HEALTH_CHECK_PATH` | `/ping` | Path the load balancer polls to check worker health |
 
 If using a custom port, add it to your endpoint's environment variables and expose it in container configuration (under **Expose HTTP Ports (Max 10)**).
 
