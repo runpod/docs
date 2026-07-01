@@ -1,0 +1,529 @@
+---
+title: "Manage Runpod infrastructure with Terraform"
+sidebarTitle: "Terraform"
+description: "Use the Runpod Terraform provider to manage pods, endpoints, templates, and more as code."
+---
+
+The [Runpod Terraform provider](https://github.com/runpod/terraform-provider-runpod) lets you manage Runpod infrastructure declaratively using HashiCorp Terraform. Define pods, serverless endpoints, templates, and machines in HCL configuration files, apply them with `terraform apply`, and track state like any other Terraform-managed resource.
+
+## Prerequisites
+
+- [Terraform](https://developer.hashicorp.com/terraform/downloads) 1.0 or higher
+- A [Runpod API key](/get-started/api-keys)
+
+## Install and configure
+
+### Add the provider to your configuration
+
+Create a `main.tf` file and declare the Runpod provider:
+
+```hcl
+terraform {
+  required_providers {
+    runpod = {
+      source  = "runpod/runpod"
+      version = "~> 1.0"
+    }
+  }
+}
+
+provider "runpod" {
+  api_key = var.runpod_api_key
+}
+```
+
+### Set your API key
+
+The recommended approach is to pass your API key as an environment variable so it stays out of your configuration files:
+
+```bash
+export RUNPOD_API_KEY="your-api-key-here"
+```
+
+Or declare it as a Terraform variable and pass it at apply time:
+
+```hcl
+variable "runpod_api_key" {
+  description = "Runpod API key"
+  type        = string
+  sensitive   = true
+}
+```
+
+```bash
+terraform apply -var="runpod_api_key=your-api-key-here"
+```
+
+### Initialize and apply
+
+```bash
+terraform init
+terraform plan
+terraform apply
+```
+
+---
+
+## Quick example: create a pod
+
+This example creates a GPU pod running Miniconda with SSH enabled:
+
+```hcl
+terraform {
+  required_providers {
+    runpod = {
+      source  = "runpod/runpod"
+      version = "~> 1.0"
+    }
+  }
+}
+
+provider "runpod" {
+  api_key = var.runpod_api_key
+}
+
+variable "runpod_api_key" {
+  type      = string
+  sensitive = true
+}
+
+resource "runpod_pod" "my_pod" {
+  image_name  = "runpod/miniconda:py3.10-cuda11.8.0"
+  gpu_count   = 1
+  gpu_type_id = "NVIDIA GeForce RTX 4090"
+  cloud_type  = "SECURE"
+  start_ssh   = true
+
+  env = [
+    "MY_VAR=hello"
+  ]
+}
+
+output "pod_id" {
+  value = runpod_pod.my_pod.id
+}
+
+output "pod_status" {
+  value = runpod_pod.my_pod.status
+}
+```
+
+---
+
+## Resources
+
+### `runpod_pod`
+
+Creates and manages a Runpod pod.
+
+```hcl
+resource "runpod_pod" "example" {
+  image_name  = "runpod/miniconda:py3.10-cuda11.8.0"
+  gpu_count   = 1
+  gpu_type_id = "NVIDIA GeForce RTX 4090"
+  cloud_type  = "SECURE"
+  start_ssh   = true
+}
+```
+
+**Arguments**
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `image_name` | string | Optional* | Docker image name. Required if `template_id` is not set. |
+| `template_id` | string | Optional* | Pod template ID. Required if `image_name` is not set. |
+| `machine_id` | string | Optional | Machine ID to deploy on. |
+| `gpu_type_id` | string | Optional | GPU type ID. Auto-selected if omitted. |
+| `gpu_count` | number | Optional | Number of GPUs. Default: `1`. |
+| `cloud_type` | string | Optional | `COMMUNITY`, `SECURE`, or `ALL`. Default: `SECURE`. |
+| `name` | string | Optional | Pod name. |
+| `docker_args` | string | Optional | Docker arguments. |
+| `env` | list(string) | Optional | Environment variables as `["KEY=VALUE", ...]`. |
+| `port` | number | Optional | Main port for the pod. |
+| `ports` | string | Optional | Port configuration string (e.g. `"8080/http,22/tcp"`). |
+| `volume_in_gb` | number | Optional | Persistent volume size in GB. |
+| `volume_mount_path` | string | Optional | Path to mount the volume inside the container. |
+| `volume_key` | string | Optional | Volume encryption key (sensitive). |
+| `container_disk_in_gb` | number | Optional | Container disk size in GB. |
+| `start_ssh` | bool | Optional | Start SSH on boot. Default: `false`. |
+| `start_jupyter` | bool | Optional | Start Jupyter notebook on boot. Default: `false`. |
+| `bid_per_gpu` | number | Optional | Bid price per GPU for interruptible (spot) pods. |
+| `stop_after` | string | Optional | Auto-stop timestamp in ISO 8601 format. |
+| `terminate_after` | string | Optional | Auto-terminate timestamp in ISO 8601 format. |
+
+**Attributes (read-only)**
+
+| Attribute | Description |
+|---|---|
+| `id` | Pod ID assigned after creation. |
+| `status` | Current pod status. |
+| `cost_per_hr` | Cost per hour. |
+| `memory_in_gb` | Memory allocated in GB. |
+| `vcpu_count` | Virtual CPU count. |
+| `cluster_ip` | Cluster IP address. |
+| `created_at` | Creation timestamp. |
+| `locked` | Whether the pod is locked. |
+
+---
+
+### `runpod_pod_action`
+
+Performs an action on an existing pod. Use this to stop, resume, terminate, or reset a pod without destroying and recreating it.
+
+```hcl
+resource "runpod_pod_action" "stop" {
+  pod_id = runpod_pod.example.id
+  action = "stop"
+}
+```
+
+**Arguments**
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `pod_id` | string | Required | ID of the pod to act on. |
+| `action` | string | Required | Action to perform: `stop`, `resume`, `terminate`, or `reset`. |
+
+**Attributes (read-only)**
+
+| Attribute | Description |
+|---|---|
+| `status` | Pod status after the action completes. |
+
+---
+
+### `runpod_template`
+
+Creates and manages a reusable pod template. Templates let you define a standard configuration (image, environment variables, disk, ports) once and reuse it across multiple pods or endpoints.
+
+```hcl
+resource "runpod_template" "my_template" {
+  name       = "my-vllm-template"
+  image_name = "runpod/worker-vllm:stable-cuda12.1.0"
+
+  env = {
+    MODEL_NAME = "meta-llama/Llama-3.1-8B-Instruct"
+  }
+
+  container_disk_in_gb = 20
+  is_serverless        = true
+}
+```
+
+**Arguments**
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Required | Template name. |
+| `image_name` | string | Required | Docker image name. |
+| `category` | string | Optional | `NVIDIA`, `AMD`, or `CPU`. |
+| `container_disk_in_gb` | number | Optional | Container disk size in GB. |
+| `container_registry_auth_id` | string | Optional | Registry auth ID for private images. |
+| `docker_entrypoint` | list(string) | Optional | Docker entrypoint array. |
+| `docker_start_cmd` | list(string) | Optional | Docker start command array. |
+| `env` | map(string) | Optional | Environment variables as a key-value map. |
+| `is_public` | bool | Optional | Make the template publicly visible. |
+| `is_serverless` | bool | Optional | Mark template as serverless. |
+| `ports` | list(string) | Optional | Ports array. |
+| `volume_in_gb` | number | Optional | Volume size in GB. |
+| `volume_mount_path` | string | Optional | Volume mount path. |
+| `readme` | string | Optional | Template documentation. |
+
+**Attributes (read-only)**
+
+| Attribute | Description |
+|---|---|
+| `id` | Template ID. |
+| `is_runpod` | Whether it's an official Runpod template. |
+| `earned` | Credits earned from template usage. |
+| `runtime_in_min` | Runtime in minutes. |
+
+---
+
+### `runpod_endpoint`
+
+Creates and manages a serverless endpoint. Endpoints auto-scale workers based on demand.
+
+```hcl
+resource "runpod_endpoint" "my_endpoint" {
+  template_id  = runpod_template.my_template.id
+  name         = "my-llm-endpoint"
+  workers_min  = 0
+  workers_max  = 3
+  idle_timeout = 5
+  gpu_count    = 1
+
+  env = {
+    MODEL_NAME = "meta-llama/Llama-3.1-8B-Instruct"
+  }
+}
+```
+
+**Arguments**
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `template_id` | string | Required | Template ID for the endpoint. |
+| `name` | string | Optional | Endpoint name. |
+| `workers_min` | number | Optional | Minimum number of workers (0 = scale to zero). |
+| `workers_max` | number | Optional | Maximum number of workers. |
+| `idle_timeout` | number | Optional | Idle timeout in minutes before scaling down. |
+| `gpu_count` | number | Optional | Number of GPUs per worker. |
+| `compute_type` | string | Optional | `GPU` or `CPU`. |
+| `network_volume_id` | string | Optional | Single network volume ID to attach. |
+| `network_volume_ids` | list(string) | Optional | Multiple network volume IDs to attach. |
+| `env` | map(string) | Optional | Environment variables as a key-value map. |
+| `data_center_ids` | list(string) | Optional | Restrict workers to specific data center IDs. |
+
+**Attributes (read-only)**
+
+| Attribute | Description |
+|---|---|
+| `id` | Endpoint ID. |
+| `created_at` | Creation timestamp. |
+| `version` | Endpoint version. |
+| `template_version` | Template version in use. |
+| `users` | User IDs with access to this endpoint. |
+| `workers` | List of active workers (id, pod_id, status, uptime_ms, start_time, last_busy_ms). |
+
+---
+
+### `runpod_machine`
+
+Manages a machine listing. Primarily used by host providers to list machines and set pricing.
+
+```hcl
+resource "runpod_machine" "my_machine" {
+  gpu_type_id        = "NVIDIA GeForce RTX 4090"
+  gpu_count          = 1
+  secure_cloud       = true
+  listed             = true
+  host_price_per_gpu = 0.39
+}
+```
+
+**Arguments**
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `gpu_type_id` | string | Required | GPU type ID. |
+| `name` | string | Optional | Machine name. |
+| `gpu_count` | number | Optional | Number of GPUs. Default: `1`. |
+| `cpu_count` | number | Optional | Number of CPUs. |
+| `memory_in_gb` | number | Optional | Memory in GB. |
+| `disk_in_gb` | number | Optional | Disk size in GB. |
+| `data_center_id` | string | Optional | Data center ID. |
+| `location` | string | Optional | Location/country code. |
+| `secure_cloud` | bool | Optional | Use Secure Cloud. Default: `false`. |
+| `listed` | bool | Optional | List machine for others to use. Default: `true`. |
+| `host_price_per_gpu` | number | Optional | Your host price per GPU. |
+| `bid_price_per_gpu` | number | Optional | Bid price per GPU. |
+
+**Attributes (read-only)**
+
+| Attribute | Description |
+|---|---|
+| `id` | Machine ID. |
+| `verified` | Whether the machine is verified. |
+| `maintenance_mode` | Whether the machine is in maintenance mode. |
+
+---
+
+## Data sources
+
+### `runpod_gpu_types`
+
+Lists all available GPU types with pricing information.
+
+```hcl
+data "runpod_gpu_types" "available" {}
+
+output "gpus" {
+  value = data.runpod_gpu_types.available
+}
+```
+
+**Attributes**
+
+| Attribute | Description |
+|---|---|
+| `id` | GPU type ID. |
+| `display_name` | GPU display name (e.g. `NVIDIA GeForce RTX 4090`). |
+| `manufacturer` | GPU manufacturer. |
+| `memory_in_gb` | VRAM in GB. |
+| `cuda_cores` | CUDA core count. |
+| `secure_cloud` | Whether available in Secure Cloud. |
+| `secure_price` | Secure Cloud price per hour. |
+| `community_price` | Community Cloud price per hour. |
+
+---
+
+### `runpod_data_centers`
+
+Lists all available data centers.
+
+```hcl
+data "runpod_data_centers" "all" {}
+```
+
+**Attributes**
+
+| Attribute | Description |
+|---|---|
+| `id` | Data center ID (e.g. `US-TX-3`). |
+| `name` | Data center name. |
+| `location` | Geographic location. |
+| `global_network` | Whether global network is enabled. |
+
+---
+
+### `runpod_pod`
+
+Retrieves information about an existing pod by ID.
+
+```hcl
+data "runpod_pod" "existing" {
+  id = "abc123"
+}
+```
+
+**Arguments**
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Required | Pod ID to look up. |
+
+---
+
+### `runpod_machine`
+
+Retrieves information about a specific machine by ID.
+
+```hcl
+data "runpod_machine" "host" {
+  id = "machine-id"
+}
+```
+
+**Arguments**
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Required | Machine ID to look up. |
+
+---
+
+### `runpod_machines`
+
+Lists machines, optionally filtered by listed status.
+
+```hcl
+data "runpod_machines" "listed" {
+  listed = true
+}
+```
+
+**Arguments**
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `listed` | bool | Optional | Filter by listed status. |
+
+---
+
+### `runpod_template`
+
+Retrieves information about a template by ID.
+
+```hcl
+data "runpod_template" "vllm" {
+  id = "template-id"
+}
+```
+
+**Arguments**
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Required | Template ID to look up. |
+
+---
+
+### `runpod_user`
+
+Retrieves information about the authenticated user.
+
+```hcl
+data "runpod_user" "me" {}
+
+output "ssh_key" {
+  value = data.runpod_user.me.pub_key
+}
+```
+
+---
+
+## Complete example: serverless endpoint
+
+This example creates a template and a serverless endpoint for a vLLM worker, then outputs the endpoint ID.
+
+```hcl
+terraform {
+  required_providers {
+    runpod = {
+      source  = "runpod/runpod"
+      version = "~> 1.0"
+    }
+  }
+}
+
+provider "runpod" {
+  api_key = var.runpod_api_key
+}
+
+variable "runpod_api_key" {
+  type      = string
+  sensitive = true
+}
+
+resource "runpod_template" "vllm" {
+  name       = "llama-vllm"
+  image_name = "runpod/worker-vllm:stable-cuda12.1.0"
+
+  env = {
+    MODEL_NAME      = "meta-llama/Llama-3.1-8B-Instruct"
+    HF_TOKEN        = var.hf_token
+    MAX_MODEL_LEN   = "8192"
+  }
+
+  container_disk_in_gb = 20
+  is_serverless        = true
+}
+
+variable "hf_token" {
+  type      = string
+  sensitive = true
+}
+
+resource "runpod_endpoint" "llm" {
+  template_id  = runpod_template.vllm.id
+  name         = "llama-3-1-8b"
+  workers_min  = 0
+  workers_max  = 5
+  idle_timeout = 5
+  gpu_count    = 1
+}
+
+output "endpoint_id" {
+  value       = runpod_endpoint.llm.id
+  description = "Endpoint ID — use in API requests as /v2/{endpoint_id}/run"
+}
+```
+
+Run it:
+
+```bash
+terraform apply \
+  -var="runpod_api_key=$RUNPOD_API_KEY" \
+  -var="hf_token=$HF_TOKEN"
+```
