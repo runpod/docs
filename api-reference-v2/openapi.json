@@ -138,9 +138,16 @@
         "name": "product",
         "in": "query",
         "required": false,
-        "description": "Availability product context. Valid only with include=AVAILABILITY. Supported values for CPUs: POD, SERVERLESS. Upstream default when omitted: POD.",
+        "description": "Comma-separated availability product context. Valid only with include=AVAILABILITY. Supported values for CPUs: POD, SERVERLESS. Defaults to POD when omitted.",
         "schema": {
-          "$ref": "#/components/schemas/CpuProduct"
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/CpuProduct"
+          },
+          "example": [
+            "POD",
+            "SERVERLESS"
+          ]
         }
       },
       "CpuVCPUCountFilter": {
@@ -153,6 +160,47 @@
           "minimum": 2
         },
         "example": 4
+      },
+      "LogSourceParam": {
+        "name": "source",
+        "in": "query",
+        "required": false,
+        "description": "Log source to stream. Omit to include both container and system logs.",
+        "schema": {
+          "$ref": "#/components/schemas/LogSource"
+        }
+      },
+      "LogTail": {
+        "name": "tail",
+        "in": "query",
+        "required": false,
+        "description": "Number of historical lines to backfill before streaming. Defaults to\n100 when omitted; set `0` to stream live with no backfill. Maximum 5000.\nIgnored when `since` or `Last-Event-ID` is provided — the resume cursor\ndrives the backfill instead.\n",
+        "schema": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5000,
+          "default": 100
+        }
+      },
+      "LogSince": {
+        "name": "since",
+        "in": "query",
+        "required": false,
+        "description": "RFC3339 timestamp to resume from. Ignored when `Last-Event-ID` is\nprovided. When set, the stream resumes from this point and `tail` is\nignored.\n",
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "LogLastEventID": {
+        "name": "Last-Event-ID",
+        "in": "header",
+        "required": false,
+        "description": "SSE reconnect cursor — a timestamp emitted by this endpoint. Takes\nprecedence over `since` and `tail`: when present, the stream resumes\nfrom this point. Sent automatically by EventSource on reconnect.\n",
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        }
       }
     },
     "schemas": {
@@ -682,6 +730,155 @@
           }
         }
       },
+      "ReleaseSource": {
+        "type": "string",
+        "description": "What produced the release.\n- `GIT_BUILD` — a completed GitHub build (see `buildId`)\n- `MANUAL`    — a manual configuration change\n",
+        "x-enum-varnames": [
+          "ReleaseSourceGitBuild",
+          "ReleaseSourceManual"
+        ],
+        "enum": [
+          "GIT_BUILD",
+          "MANUAL"
+        ]
+      },
+      "ReleaseDiffEntry": {
+        "type": "object",
+        "required": [
+          "field",
+          "old",
+          "new"
+        ],
+        "properties": {
+          "field": {
+            "type": "string",
+            "description": "The changed configuration field. Top-level (e.g. `gpuCount`,\n`locations`) or template-scoped (e.g. `template.imageName`,\n`template.env`).\n",
+            "example": "template.imageName"
+          },
+          "old": {
+            "nullable": true,
+            "description": "Previous value, as raw JSON. Null when the field was added."
+          },
+          "new": {
+            "nullable": true,
+            "description": "New value, as raw JSON. Null when the field was removed."
+          }
+        }
+      },
+      "Release": {
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "createdAt",
+          "workerCount",
+          "diff"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "rel_abc123"
+          },
+          "version": {
+            "type": "integer",
+            "nullable": true,
+            "description": "The endpoint configuration version this release produced.",
+            "example": 4
+          },
+          "source": {
+            "$ref": "#/components/schemas/ReleaseSource"
+          },
+          "buildId": {
+            "type": "string",
+            "nullable": true,
+            "description": "The GitHub build that produced this release. Set when `source` is\n`GIT_BUILD`; null for `MANUAL` releases. Fetch build detail/logs via\n`/v2/serverless/{id}/builds/{buildId}`.\n",
+            "example": "build_abc123"
+          },
+          "createdByUserId": {
+            "type": "string",
+            "nullable": true,
+            "description": "ID of the user who created the release."
+          },
+          "workerCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Workers currently running this release's version.",
+            "example": 2
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-03-13T20:00:00Z"
+          },
+          "diff": {
+            "type": "array",
+            "description": "Configuration fields that changed in this release.",
+            "items": {
+              "$ref": "#/components/schemas/ReleaseDiffEntry"
+            }
+          }
+        }
+      },
+      "RolloutSummary": {
+        "type": "object",
+        "required": [
+          "inProgress",
+          "workersOnLatest",
+          "workersTotal",
+          "percentOnLatest"
+        ],
+        "properties": {
+          "inProgress": {
+            "type": "boolean",
+            "description": "True while any worker is still running an older version.",
+            "example": true
+          },
+          "workersOnLatest": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Workers running the endpoint's current version.",
+            "example": 2
+          },
+          "workersTotal": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "All workers currently allocated to the endpoint.",
+            "example": 3
+          },
+          "percentOnLatest": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Percentage of workers on the current version (0 when there are no workers).",
+            "example": 67
+          }
+        }
+      },
+      "ListEndpointReleasesResponse": {
+        "type": "object",
+        "required": [
+          "rollout",
+          "releases"
+        ],
+        "properties": {
+          "endpointVersion": {
+            "type": "integer",
+            "nullable": true,
+            "description": "The endpoint's current configuration version. Null if unknown.",
+            "example": 4
+          },
+          "rollout": {
+            "$ref": "#/components/schemas/RolloutSummary"
+          },
+          "releases": {
+            "type": "array",
+            "description": "Release history, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/Release"
+            }
+          }
+        }
+      },
       "CreateEndpointRequest": {
         "allOf": [
           {
@@ -930,6 +1127,18 @@
           "stop",
           "restart",
           "terminate"
+        ]
+      },
+      "LogSource": {
+        "type": "string",
+        "description": "Log source to include in a log stream.\n- `container` — container stdout/stderr log stream\n- `system`    — host lifecycle/userlogs stream\n",
+        "x-enum-varnames": [
+          "LogSourceContainer",
+          "LogSourceSystem"
+        ],
+        "enum": [
+          "container",
+          "system"
         ]
       },
       "Cloud": {
@@ -1469,6 +1678,7 @@
           "name",
           "size",
           "dataCenter",
+          "type",
           "tags"
         ],
         "properties": {
@@ -1484,8 +1694,8 @@
           },
           "size": {
             "type": "integer",
-            "minimum": 1,
-            "maximum": 4000,
+            "minimum": 10,
+            "maximum": 4096,
             "description": "Allocated storage in GB",
             "example": 50
           },
@@ -1493,6 +1703,14 @@
             "type": "string",
             "description": "Data center location; immutable after creation",
             "example": "EU-RO-1"
+          },
+          "type": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/VolumeType"
+              }
+            ],
+            "description": "Storage tier of this volume. Set at creation and immutable."
           },
           "tags": {
             "type": "array",
@@ -1519,8 +1737,8 @@
           },
           "size": {
             "type": "integer",
-            "minimum": 1,
-            "maximum": 4000,
+            "minimum": 10,
+            "maximum": 4096,
             "description": "Storage to allocate in GB",
             "example": 50
           },
@@ -1529,12 +1747,22 @@
             "minLength": 1,
             "description": "Data center in which to create the volume",
             "example": "EU-RO-1"
+          },
+          "type": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/VolumeType"
+              }
+            ],
+            "description": "Storage tier for the volume. Optional. When omitted, the volume is\nprovisioned using the requested data center's default (primary)\nstorage tier. HIGH_PERFORMANCE provisions a high-performance (HPS)\nvolume; STANDARD provisions a standard volume. A volume's tier is\nimmutable after creation.\n"
           }
         }
       },
       "UpdateNetworkVolumeRequest": {
         "type": "object",
-        "description": "All fields are optional. Only provided fields are updated.",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "description": "Only the provided fields are updated. At least one field must be\npresent; an empty body is rejected.\n",
         "properties": {
           "name": {
             "type": "string",
@@ -1544,8 +1772,8 @@
           },
           "size": {
             "type": "integer",
-            "minimum": 1,
-            "maximum": 4000,
+            "minimum": 10,
+            "maximum": 4096,
             "description": "New size in GB. Must be greater than or equal to the current size —\nnetwork volume storage cannot be reduced.\n",
             "example": 100
           }
@@ -3038,6 +3266,113 @@
         }
       }
     },
+    "/v2/pods/{id}/logs": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Pod identifier",
+          "example": "pod_abc123"
+        }
+      ],
+      "get": {
+        "operationId": "getPodLogs",
+        "summary": "Stream pod logs",
+        "description": "Streams pod logs as Server-Sent Events. The `source` query parameter\nselects which log source to include.\n\nThe SSE `data` payload shape is:\n`{ \"source\": \"container\", \"line\": \"...\", \"ts\": \"...\" }`.\nLog-event `id` values are the event `ts` timestamp so\nbrowser/EventSource reconnects can resume with `Last-Event-ID`.\n",
+        "tags": [
+          "Pods"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/LogSourceParam"
+          },
+          {
+            "$ref": "#/components/parameters/LogTail"
+          },
+          {
+            "$ref": "#/components/parameters/LogSince"
+          },
+          {
+            "$ref": "#/components/parameters/LogLastEventID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pod log event stream",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always `no-cache` for SSE responses."
+              },
+              "Connection": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always `keep-alive` to hold the SSE stream open."
+              },
+              "X-Accel-Buffering": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always `no` to disable proxy buffering of the SSE stream."
+              }
+            },
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "container",
+                        "system"
+                      ],
+                      "example": "container"
+                    },
+                    "line": {
+                      "type": "string",
+                      "example": "Model loaded."
+                    },
+                    "ts": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-05-01T22:00:00Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pod not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v2/pods/{id}/action": {
       "parameters": [
         {
@@ -3356,6 +3691,177 @@
           },
           "404": {
             "description": "Serverless endpoint not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/serverless/{id}/releases": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Serverless endpoint identifier",
+          "example": "ep_abc123"
+        }
+      ],
+      "get": {
+        "operationId": "listEndpointReleases",
+        "summary": "List serverless endpoint releases",
+        "description": "Returns the endpoint's release history (newest first) plus a rollout\nsummary of how many workers are running the current version. Each\nrelease is a versioned configuration snapshot with a `diff` of what\nchanged; build-driven releases carry a `buildId` (fetch build detail via\nthe builds sub-routes).\n",
+        "tags": [
+          "Serverless"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListEndpointReleasesResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Serverless endpoint not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/serverless/{id}/workers/{workerId}/logs": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Serverless endpoint identifier",
+          "example": "ep_abc123"
+        },
+        {
+          "name": "workerId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Worker identifier (from GET /v2/serverless/{id}/workers)",
+          "example": "worker_abc"
+        }
+      ],
+      "get": {
+        "operationId": "getWorkerLogs",
+        "summary": "Stream serverless worker logs",
+        "description": "Streams a serverless worker's logs as Server-Sent Events. The `source`\nquery parameter selects which log source to include.\n\nThe SSE `data` payload shape is:\n`{ \"source\": \"container\", \"line\": \"...\", \"ts\": \"...\" }`.\nLog-event `id` values are the event `ts` timestamp so browser/EventSource\nreconnects can resume with `Last-Event-ID`.\n",
+        "tags": [
+          "Serverless"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/LogSourceParam"
+          },
+          {
+            "$ref": "#/components/parameters/LogTail"
+          },
+          {
+            "$ref": "#/components/parameters/LogSince"
+          },
+          {
+            "$ref": "#/components/parameters/LogLastEventID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Worker log event stream",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always `no-cache` for SSE responses."
+              },
+              "Connection": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always `keep-alive` to hold the SSE stream open."
+              },
+              "X-Accel-Buffering": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always `no` to disable proxy buffering of the SSE stream."
+              }
+            },
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "container",
+                        "system"
+                      ],
+                      "example": "container"
+                    },
+                    "line": {
+                      "type": "string",
+                      "example": "Model loaded."
+                    },
+                    "ts": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-05-01T22:00:00Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Worker not found",
             "content": {
               "application/problem+json": {
                 "schema": {
