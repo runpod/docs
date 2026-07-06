@@ -1,0 +1,93 @@
+---
+title: "Cache files to a network volume"
+sidebarTitle: "Volume cache"
+description: "Persist model weights and other files to an attached network volume to speed up Serverless worker cold starts."
+---
+
+import { ColdStartTooltip, WorkersTooltip } from "/snippets/tooltips.jsx";
+
+The Runpod Python SDK includes a volume cache that persists files to an attached network volume and restores them the next time a worker starts. This reduces <ColdStartTooltip /> times, because a recycled worker can read cached files from the volume instead of downloading them again.
+
+The volume cache is best-effort and self-contained. It caches the files a worker produces during startup (such as downloaded model weights) and never affects the outcome of a job. If any part of the cache fails, the worker falls back to a normal cold start.
+
+## Requirements
+
+- A [network volume](/storage/network-volumes#network-volumes-for-serverless) attached to your endpoint. The cache is stored on the volume, so nothing is cached when no volume is mounted.
+- The Runpod Python SDK installed in your worker image. Endpoints built with recent versions of the SDK wire the volume cache into the worker loop automatically.
+
+## How it works
+
+The volume cache runs in two phases, tied to the <WorkersTooltip /> lifecycle:
+
+- **Hydrate (on cold start):** Before the worker accepts any jobs, the cache extracts previously cached files from the network volume into their original locations. Hydration runs once per worker, and is skipped when the local files are already up to date.
+- **Sync (after the first job):** After the worker completes its first successful job, the cache packs the files that changed during startup into a new archive and writes it to the volume. This runs in the background, so it doesn't delay your response.
+
+Each worker writes its own archive, so multiple workers on the same endpoint can cache concurrently without overwriting each other. Cached files are stored under `.cache/<endpoint-id>/` on the network volume.
+
+## Configure the volume cache
+
+You configure the volume cache with environment variables set on your endpoint. See [Environment variables](/serverless/development/environment-variables) for how to set them in the Runpod console.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RUNPOD_VOLUME_CACHE` | Enabled | Controls whether the built-in volume cache runs. Set to `0`, `false`, or `no` to turn it off. |
+| `RUNPOD_VOLUME_CACHE_MAX_GB` | `50` | Maximum total size, in gigabytes, of cached archives on the volume. When the cache exceeds this size, the oldest archives are pruned first. |
+| `RUNPOD_CACHE_DIRS` | None | Additional directories to cache, beyond the model directories discovered automatically. Separate multiple paths with a colon (`:`), for example `/root/.cache:/workspace/models`. |
+
+### Directories that are cached
+
+By default, the volume cache targets the directories where Hugging Face and PyTorch store downloaded model weights:
+
+- `HF_HOME` if set, otherwise `~/.cache/huggingface`.
+- `HF_HUB_CACHE`, if set.
+- `TORCH_HOME`, if set.
+
+Add any other directories your worker downloads into at startup with `RUNPOD_CACHE_DIRS`.
+
+## Use the cache directly
+
+If you want explicit control over what gets cached and when, use the `VolumeCache` class from the Runpod Python SDK instead of relying on the built-in behavior. This is useful when your worker downloads files outside the automatically discovered directories, or when you want to cache files that aren't tied to the first job.
+
+```python title="handler.py"
+import runpod
+from runpod.serverless import VolumeCache
+
+cache = VolumeCache(["/workspace/models"])
+
+def download_model():
+    # Download model weights into /workspace/models
+    ...
+
+# Hydrate from the volume, download only what's missing, then sync back
+with cache.warm():
+    download_model()
+
+def handler(job):
+    ...
+
+runpod.serverless.start({"handler": handler})
+```
+
+The `warm()` context manager hydrates the cache when the block is entered and syncs it when the block exits, so cached files are restored before your download runs and any new files are persisted afterward. You can also call `cache.hydrate()` and `cache.sync()` directly for finer control.
+
+`VolumeCache` accepts the following arguments:
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `dirs` | Required | A list of directories to cache. |
+| `namespace` | Endpoint ID | Groups cached archives on the volume. Defaults to the endpoint ID. |
+| `volume_path` | `/runpod-volume` | Mount path of the network volume. |
+| `max_size_gb` | Unlimited | Maximum total size of cached archives, in gigabytes. Oldest archives are pruned first. |
+| `best_effort` | `True` | When `True`, cache errors are logged and swallowed instead of raised. |
+
+## Limitations
+
+- The cache is populated after the first successful job on a worker, and the write runs in the background. If a worker is recycled before the write finishes, that worker's contribution may not be cached until a later run.
+- Automatic syncing applies to standard (non-streaming) handlers. Streaming handlers that yield results don't trigger the built-in sync, so use `VolumeCache` directly to cache files for those workers.
+- Only regular files are cached. Symbolic links, hard links, and special files are skipped for safety.
+
+## Next steps
+
+- [Optimize your endpoints](/serverless/development/optimization): Combine the volume cache with other strategies to reduce cold starts.
+- [Cached models](/serverless/endpoints/model-caching): Use Runpod's platform-level model cache for Hugging Face models.
+- [Storage options](/serverless/storage/overview): Compare container disks, network volumes, and S3-compatible storage.
