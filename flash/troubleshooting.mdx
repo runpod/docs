@@ -244,6 +244,23 @@ You have three options:
 Python 3.12 is recommended for best performance with no cold-start overhead. Python 3.10, 3.11, and 3.13 incur additional cold-start overhead on GPU workers because an alternative Python interpreter must be installed.
 </Tip>
 
+### Local module could not be resolved
+
+**Error:**
+```
+endpoint.py: relative import (level=1, module='helpers') could not be resolved to a local file under /path/to/project
+```
+
+**Cause:** An `@Endpoint` file imports a local (non-pip) module that Flash can't resolve to a bundle-able file, such as a broken relative import, a missing package submodule, or a file outside the project root. Flash fails the build instead of shipping an artifact that would break on the worker.
+
+**Solution:**
+
+1. Fix the import so it points to a file that exists under your project root.
+2. Move the imported module under the project directory if it lives outside it.
+3. Confirm that package imports have an `__init__.py` file.
+
+For how Flash resolves and bundles local imports, see [Import local modules](/flash/create-endpoints#import-local-modules).
+
 ## Deployment errors
 
 ### Tarball too large
@@ -463,6 +480,25 @@ Payload size X MB exceeds limit of 10.0 MB
    ```
 
 3. **Split large requests**: Break large datasets into smaller chunks and process them in multiple requests.
+
+### Local module payload too large
+
+**Error:**
+```
+Inline module payload is X bytes, over the 8388608-byte live-serverless cap.
+Use `flash deploy` for endpoints with large local dependencies.
+```
+
+**Cause:** On the live execution path (calling an `@Endpoint` function directly or during `flash dev`), Flash ships your local module source inline with the request, and the combined source exceeds the 8 MiB cap.
+
+**Solution:** Deploy the app with `flash deploy`, which bundles local modules into the build artifact instead of the request payload:
+
+```bash
+flash deploy
+
+# If using uv:
+uv run flash deploy
+```
 
 ### Deserialization timeout
 

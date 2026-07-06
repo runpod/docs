@@ -242,6 +242,22 @@ async def process_video(video_data):
     return {"processed": True}
 ```
 
+## Import local modules
+
+Your endpoint can import local (non-pip) Python modules that live alongside it in your project, such as a sibling `utils.py` file or a `helpers/` package. Flash detects these imports, follows them transitively, and ships the module source to the worker for you, so an import like `import utils` or `from helpers import load` works remotely with no extra configuration.
+
+Flash resolves local imports whether they appear at the top of the file or inside the function body, and it supports absolute imports (`import utils`), relative imports (`from . import helpers`), and dynamic imports with a literal name (`importlib.import_module("plugin")`). It also pulls in the `__init__.py` files for any packages you import. Flash can't resolve dynamic imports whose module name is computed at runtime, so it emits a warning and leaves those for you to make available on the worker.
+
+Flash bundles only local project files. Imports that resolve to the standard library or an installed pip package are left to the worker image, so continue to declare pip packages through the `dependencies` parameter.
+
+### Live execution size limit
+
+When you run an endpoint live (calling an `@Endpoint` function directly, or during `flash dev`), Flash ships the resolved module source inline with the request. The combined source is capped at 8 MiB. If your local dependencies exceed this limit, deploy the app with `flash deploy` instead, which bundles local modules into the build artifact rather than the request payload.
+
+### Keep endpoints at or above their local dependencies
+
+On the live execution path, Flash treats a module imported by absolute name from a parent directory as external and doesn't ship it, which causes a `ModuleNotFoundError` on the worker. For example, this happens with `import shared` when `shared.py` sits above your endpoint file. To avoid it, place your endpoint at or above its local dependencies, or use `flash deploy`, which resolves imports against the whole project directory.
+
 ## Parallel execution
 
 Endpoint functions are async. Use Python's `asyncio` to run multiple operations concurrently:
