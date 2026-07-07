@@ -1,0 +1,121 @@
+---
+title: "Model Repo testing"
+sidebarTitle: "Model Repo testing"
+description: "Upload a model to Model Repo and deploy it to a Serverless endpoint."
+---
+
+## Scripted testing
+
+A shell script is available that runs all of the steps below automatically using mock model files. Download `model_repo_testing.sh` from the internal Notion page and run it to validate end-to-end without manually executing each step.
+
+## Manual testing
+
+### Prerequisites
+
+- Your email is [feature-flagged](https://us.posthog.com/project/105711/feature_flags/299352) for Model Repo access.
+- The following environment variables are exported:
+
+```bash
+export RUNPOD_API_URL="https://rest.runpod.io/v1"
+export RUNPOD_GRAPHQL_URL="https://api.runpod.io/graphql"
+export RUNPOD_API_KEY="your-api-key"
+
+export MODEL_NAME="$(whoami)-test-$(date +%s)"  # must be unique per test run
+export MODEL_PATH="/path/to/model"
+```
+
+- `MODEL_NAME` should be unique for each test run. Reusing the same name uploads a new version of the existing model rather than creating a new one.
+- `jq` is installed for parsing JSON output.
+
+### Step 1: Build runpodctl
+
+```bash
+git clone git@github.com:runpod/runpodctl.git
+cd runpodctl
+make
+```
+
+### Step 2: Upload the model
+
+```bash
+./bin/runpodctl model add \
+  --name "$MODEL_NAME" \
+  --model-path "$MODEL_PATH" \
+  --create-upload
+```
+
+This outputs a JSON string listing all uploaded files.
+
+### Step 3: Wait for the model to be hashed
+
+After upload, the model must be hashed by an asynchronous background process. This typically completes in a few minutes but can take up to 10–15 minutes.
+
+Poll until the hash field is non-null:
+
+```bash
+./bin/runpodctl model list --name "$MODEL_NAME" | jq -r '.[0].versions[0].hash'
+```
+
+While hashing is in progress, the command returns `null`:
+
+```bash
+% ./bin/runpodctl model list --name "$MODEL_NAME" | jq -r '.[0].versions[0].hash'
+null
+```
+
+Once hashing is complete, it returns the hash value:
+
+```bash
+% ./bin/runpodctl model list --name "$MODEL_NAME" | jq -r '.[0].versions[0].hash'
+71a311bdf0ca44119ed74dbef8cf573bc89b58cbc48a10fe508f756ebb1922dc
+```
+
+### Step 4: Build the model URL
+
+```bash
+export USER_ID="$(./bin/runpodctl user | jq -r '.id')"
+export MODEL_HASH="$(./bin/runpodctl model list --name "$MODEL_NAME" | jq -r '.[0].versions[0].hash')"
+export MODEL_URL="https://local/${USER_ID}/${MODEL_NAME}:${MODEL_HASH}"
+```
+
+### Step 5: Deploy a Serverless endpoint with the model attached
+
+```bash
+./bin/runpodctl serverless create \
+  --name "$(whoami)_ctl_test" \
+  --template-id "mockworker" \
+  --gpu-id "AMPERE_24" \
+  --workers-max 3 \
+  --workers-min 1 \
+  --model-reference "$MODEL_URL"
+```
+
+Notes:
+- `--model-reference` is only supported with `--template-id` and GPU endpoints.
+- `--gpu-id` accepts a single GPU ID — do not pass a comma-separated list.
+- `--model-reference` is repeatable if multiple models need to be attached.
+
+### Step 6: Verify the model is attached to the worker
+
+1. Go to **Serverless** in the left navigation bar under **Resources**.
+2. Select the endpoint you created (`ctl_test` if you used the commands above).
+3. Click the **Workers** tab.
+4. Select a worker showing a **Running** status.
+5. Click **Connect**, then use the `ssh` command or the **Web Terminal**.
+6. Run the following to confirm your model files are present:
+
+```bash
+find /runpod-volume/huggingface-cache/hub/models--$(echo $MODEL_NAME | sed 's@/@--@g')/snapshots/${MODEL_REVISION} -type f
+```
+
+<Note>
+There is currently no way to retrieve SSH connection details for a running Serverless worker via `runpodctl`. Use the web UI to connect.
+</Note>
+
+### Step 7: Clean up
+
+Delete the endpoint after testing to stop spend. Use the web UI or:
+
+```bash
+./bin/runpodctl serverless delete <endpoint-id>
+```
