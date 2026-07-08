@@ -1,0 +1,68 @@
+---
+title: "Download input files"
+sidebarTitle: "Download files"
+description: "Fetch files from URLs in your job input with the Runpod SDK."
+---
+
+Many Serverless handlers receive URLs in their job input and need to download the referenced files before they can process them. The Runpod SDK provides the `download_files_from_urls()` helper to fetch these files, with built-in retries and safeguards against server-side request forgery (SSRF).
+
+## Import the download helper
+
+Import `download_files_from_urls()` from the utils module:
+
+```python
+from runpod.serverless.utils import download_files_from_urls
+```
+
+## Download files in your handler
+
+Pass the job ID and one or more URLs to `download_files_from_urls()`. You can provide a single URL string or a list of URLs. The function downloads each file concurrently and returns a list of absolute paths to the downloaded files, saved to a `downloaded_files` directory inside the job's working directory.
+
+```python
+import runpod
+from runpod.serverless.utils import download_files_from_urls
+
+
+def handler(event):
+    job_id = event["id"]
+    image_urls = event["input"]["image_urls"]
+
+    # Download every URL in the input to local files
+    file_paths = download_files_from_urls(job_id, image_urls)
+
+    # Process the downloaded files (your code here)
+    result = process_images(file_paths)
+
+    return {"output": result}
+
+
+runpod.serverless.start({"handler": handler})
+```
+
+The returned list preserves the order of the input URLs. If a download fails after all retries, its entry in the list is `None`, so check each path before you use it.
+
+## SSRF protection
+
+To keep a malicious job input from making your worker fetch internal resources (such as cloud instance-metadata endpoints), the SDK validates each download before it sends the request. By default, it enforces the following rules:
+
+- **Scheme allowlist**: Only `http` and `https` URLs are allowed.
+- **Destination validation**: The URL's host is resolved, and the download is blocked if any resolved address is not a globally routable public IP. This blocks link-local addresses (including the cloud metadata address `169.254.169.254`), loopback, private (RFC 1918) ranges, shared address space (CGNAT), reserved and multicast ranges, and their IPv6 equivalents.
+- **Redirect revalidation**: Redirects are followed up to a fixed limit, and each hop is revalidated against the rules above.
+- **Size cap**: Downloads larger than the configured maximum are aborted.
+
+When a download is blocked, the SDK raises an `SSRFError`. Because `SSRFError` isn't a request error, it isn't retried or silently swallowed. The call fails immediately, so the unsafe download is surfaced rather than hidden.
+
+<Warning>
+These protections are enabled by default. Handlers that previously downloaded files from a private or same-VPC address will now fail unless you set `RUNPOD_ALLOW_PRIVATE_DOWNLOAD_URLS` (see [Configuration](#configuration) below). Downloads over a non-`http(s)` scheme are always blocked.
+</Warning>
+
+## Configuration
+
+Configure the download safeguards with the following environment variables. Set them on your endpoint the same way as any other [environment variable](/serverless/development/environment-variables).
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RUNPOD_ALLOW_PRIVATE_DOWNLOAD_URLS` | `false` | Set to `true` to allow downloads from private, internal, or same-VPC addresses. Use this only when your worker legitimately fetches from a self-hosted endpoint you control. |
+| `RUNPOD_MAX_DOWNLOAD_BYTES` | `5368709120` (5 GiB) | Maximum size, in bytes, of a single download. Downloads whose size exceeds this cap are aborted. |
+
+Setting `RUNPOD_ALLOW_PRIVATE_DOWNLOAD_URLS` to `true` lifts only the private-address restriction. The `http`/`https` scheme allowlist and the size cap still apply.
