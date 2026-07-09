@@ -1,0 +1,65 @@
+---
+title: "Worker affinity"
+sidebarTitle: "Worker affinity"
+description: "Pin follow-up requests to a specific worker using the X-Runpod-Worker-Id header."
+---
+
+Worker affinity lets clients route follow-up requests to the same worker that served an earlier request. This is useful for stateful workloads where a worker holds session state in memory and re-routing to a different worker would require reloading it.
+
+## How it works
+
+Every response from the load balancer includes an `X-Runpod-Worker-Id` header that identifies the worker that handled the request:
+
+```
+X-Runpod-Worker-Id: <worker-id>
+```
+
+To pin a subsequent request to that worker, send the header back with one of the following values:
+
+| Header value | Behavior |
+|---|---|
+| *(omitted or empty)* | Normal routing — least-load selection, no preference |
+| `<worker-id>` | **Soft affinity**: prefer the specified worker; fall back to least-load if the worker is unavailable or at capacity |
+| `strict <worker-id>` | **Strict affinity**: only use the specified worker; wait if the worker is at capacity, return `404` if the worker is gone |
+| `strict-resume <worker-id>` | **Strict-resume affinity**: same as strict, but also resumes the worker pod if it has been scaled down |
+
+## Affinity modes
+
+### Soft affinity
+
+```
+X-Runpod-Worker-Id: wrk_abc123
+```
+
+The load balancer attempts to route to the specified worker. If the worker is unavailable, at capacity, or not found, the request falls through to normal least-load selection. This mode never fails a request due to affinity; it is best-effort.
+
+### Strict affinity
+
+```
+X-Runpod-Worker-Id: strict wrk_abc123
+```
+
+The load balancer only routes to the specified worker. If the worker is at capacity, the request waits. If the worker is gone and not found in the active worker set, the load balancer returns a `404` with reason `affinity_worker_gone`. Use this mode when falling back to a different worker would produce incorrect results.
+
+### Strict-resume affinity
+
+```
+X-Runpod-Worker-Id: strict-resume wrk_abc123
+```
+
+Same as strict, but if the worker pod has been scaled down, the load balancer calls `ResumePodById` to bring it back up before routing the request. The worker is scoped to the endpoint and cross-endpoint access is not possible.
+
+<Warning>
+`strict-resume` effectively prevents scale-down for the pinned worker as long as requests keep arriving. This keeps the worker running and accruing cost. Use this mode intentionally and ensure your client stops sending the affinity header when the session ends.
+</Warning>
+
+## Worker ID on responses
+
+The load balancer always sets `X-Runpod-Worker-Id` on the response to reflect the worker that actually served the request. Use the value from the response header for pinning rather than tracking it separately.
+
+## Error reference
+
+| Status | Reason | Description |
+|--------|--------|-------------|
+| `404` | `affinity_worker_gone` | Strict mode: the requested worker is not in the active worker set |
+| `503` | `affinity_resume_failed` | Strict-resume mode: the worker pod could not be resumed |
