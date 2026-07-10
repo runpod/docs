@@ -4,87 +4,74 @@ sidebarTitle: "Volume cache"
 description: "Persist model weights and other files to an attached network volume to speed up Serverless worker cold starts."
 ---
 
-import { ColdStartTooltip, WorkersTooltip } from "/snippets/tooltips.jsx";
+import { ColdStartTooltip } from "/snippets/tooltips.jsx";
 
-The Runpod Python SDK includes a volume cache that persists files to an attached network volume and restores them the next time a worker starts. This reduces <ColdStartTooltip /> times, because a recycled worker can read cached files from the volume instead of downloading them again.
+The Runpod Python SDK includes `VolumeCache`, a helper that warms local directories across Serverless workers using an attached network volume. It keeps a browsable mirror of your cache directories on the volume: on cold start it restores previously cached files into place, and after your code runs it copies newly written files back. This turns a repeated multi-GB model download on every cold start into a one-time cost per endpoint, which reduces <ColdStartTooltip /> times.
 
-The volume cache is best-effort and self-contained. It caches the files a worker produces during startup (such as downloaded model weights) and never affects the outcome of a job. If any part of the cache fails, the worker falls back to a normal cold start.
+`VolumeCache` is best-effort and self-contained, and it never affects the outcome of a job. If any part of the cache fails, the worker falls back to a normal cold start. You add it explicitly by wrapping the code that populates your cache, so nothing runs until you opt in.
 
 ## Requirements
 
-- A [network volume](/storage/network-volumes#network-volumes-for-serverless) attached to your endpoint. The cache is stored on the volume, so nothing is cached when no volume is mounted.
-- The Runpod Python SDK installed in your worker image. Endpoints built with recent versions of the SDK wire the volume cache into the worker loop automatically.
+- A [network volume](/storage/network-volumes#network-volumes-for-serverless) attached to your endpoint, mounted at `/runpod-volume`. The mirror is stored on the volume, so every operation is a safe no-op when no volume is mounted.
+- The Runpod Python SDK installed in your worker image.
+- An endpoint namespace to scope the mirror. On Serverless this defaults to `RUNPOD_ENDPOINT_ID`, which Runpod sets automatically.
 
-## How it works
+## Usage
 
-The volume cache runs in two phases, tied to the <WorkersTooltip /> lifecycle:
-
-- **Hydrate (on cold start):** Before the worker accepts any jobs, the cache extracts previously cached files from the network volume into their original locations. Hydration runs once per worker, and is skipped when the local files are already up to date.
-- **Sync (after the first job):** After the worker completes its first successful job, the cache packs the files that changed during startup into a new archive and writes it to the volume. This runs in the background, so it doesn't delay your response.
-
-Each worker writes its own archive, so multiple workers on the same endpoint can cache concurrently without overwriting each other. Cached files are stored under `.cache/<endpoint-id>/` on the network volume.
-
-## Configure the volume cache
-
-You configure the volume cache with environment variables set on your endpoint. See [Environment variables](/serverless/development/environment-variables) for how to set them in the Runpod console.
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `RUNPOD_VOLUME_CACHE` | Enabled | Controls whether the built-in volume cache runs. Set to `0`, `false`, or `no` to turn it off. |
-| `RUNPOD_VOLUME_CACHE_MAX_GB` | `50` | Maximum total size, in gigabytes, of cached archives on the volume. When the cache exceeds this size, the oldest archives are pruned first. |
-| `RUNPOD_CACHE_DIRS` | None | Additional directories to cache, beyond the model directories discovered automatically. Separate multiple paths with a colon (`:`), for example `/root/.cache:/workspace/models`. |
-
-### Directories that are cached
-
-By default, the volume cache targets the directories where Hugging Face and PyTorch store downloaded model weights:
-
-- `HF_HOME` if set, otherwise `~/.cache/huggingface`.
-- `HF_HUB_CACHE`, if set.
-- `TORCH_HOME`, if set.
-
-Add any other directories your worker downloads into at startup with `RUNPOD_CACHE_DIRS`.
-
-## Use the cache directly
-
-If you want explicit control over what gets cached and when, use the `VolumeCache` class from the Runpod Python SDK instead of relying on the built-in behavior. This is useful when your worker downloads files outside the automatically discovered directories, or when you want to cache files that aren't tied to the first job.
+`VolumeCache` is a context manager. Wrapping it around your model load hydrates the cache before the block runs and syncs any changes back afterward:
 
 ```python title="handler.py"
 import runpod
 from runpod.serverless import VolumeCache
 
-cache = VolumeCache(["/workspace/models"])
-
-def download_model():
-    # Download model weights into /workspace/models
+def handler(job):
     ...
 
 # Hydrate from the volume, download only what's missing, then sync back
-with cache.warm():
-    download_model()
-
-def handler(job):
-    ...
+with VolumeCache(dirs=["/root/.cache/huggingface"]):
+    model = load_model()   # downloads land in the cached directory
 
 runpod.serverless.start({"handler": handler})
 ```
 
-The `warm()` context manager hydrates the cache when the block is entered and syncs it when the block exits, so cached files are restored before your download runs and any new files are persisted afterward. You can also call `cache.hydrate()` and `cache.sync()` directly for finer control.
+When you enter the block, `hydrate()` copies files that are missing or newer on the volume mirror into the container. When you exit, `sync()` copies files that are missing or newer in the container back onto the mirror. By default the sync runs on a background daemon thread and returns immediately, so the `with` block doesn't wait on it. A process-exit hook completes any outstanding syncs, so short-lived processes still finish syncing before they exit.
+
+You can also call the phases directly when they happen at different points in your worker's lifecycle:
+
+```python
+vc = VolumeCache(dirs=["/data/models"], namespace="my-model-cache")
+
+vc.hydrate()                 # restore cached files (for example, at startup)
+model = load_model()         # populate the cache
+vc.sync(background=False)     # persist new files back to the volume, inline
+```
+
+## Constructor
 
 `VolumeCache` accepts the following arguments:
 
 | Argument | Default | Description |
 |----------|---------|-------------|
-| `dirs` | Required | A list of directories to cache. |
-| `namespace` | Endpoint ID | Groups cached archives on the volume. Defaults to the endpoint ID. |
-| `volume_path` | `/runpod-volume` | Mount path of the network volume. |
-| `max_size_gb` | Unlimited | Maximum total size of cached archives, in gigabytes. Oldest archives are pruned first. |
-| `best_effort` | `True` | When `True`, cache errors are logged and swallowed instead of raised. |
+| `dirs` | Required | A list of local directories to cache. |
+| `namespace` | `RUNPOD_ENDPOINT_ID` | Isolation key for the on-volume mirror. Must be a single safe path component. |
+| `volume_path` | `/runpod-volume` | Mount point of the network volume. |
+| `best_effort` | `True` | When `True`, cache errors are logged and swallowed instead of raised. Set to `False` while debugging. |
+| `max_workers` | `min(32, (os.cpu_count() or 4) * 4)` | Thread count for the parallel copy of large files. The work is I/O-bound, so the default oversubscribes the CPU count. |
+
+## How it works
+
+`VolumeCache` adapts its transport to the size of your files, which keeps both many-small-file caches and multi-GB weight files fast.
+
+- **Size-bucketed mirror:** Cached files live at `{volume_path}/.cache/{namespace}` on the volume. Files below 256 KiB are packed into a single `small.tar` archive, which collapses the per-file metadata round-trips that make many small files slow on a network volume. Larger files are copied unpacked into a `big/` subdirectory, which preserves their original relative paths so the large-file subtree stays browsable. A versioned `manifest.json`, written last, records the size and modification time of every cached file and marks the mirror as complete. A mirror without a valid, current manifest is treated as absent, so a sync self-heals.
+- **Incremental large files, whole-archive small files:** Large-file transfers are diffed per file against the manifest, so unchanged files are skipped. The `small.tar` archive is repacked whole whenever any small file changes, since unpacking and re-diffing many tiny files individually is slower than the volume's per-file overhead.
+- **Parallel copy:** Large-file transfers run across a thread pool sized by `max_workers`. The work is I/O-bound, so the default oversubscribes the CPU count.
+- **Safety:** Symbolic links are never followed or copied. Every archive member and every large-file destination is checked to resolve inside one of your configured `dirs` before it is written, so a mirror entry can't write outside your cached directories.
 
 ## Limitations
 
-- The cache is populated after the first successful job on a worker, and the write runs in the background. If a worker is recycled before the write finishes, that worker's contribution may not be cached until a later run.
-- Automatic syncing applies to standard (non-streaming) handlers. Streaming handlers that yield results don't trigger the built-in sync, so use `VolumeCache` directly to cache files for those workers.
-- Only regular files are cached. Symbolic links, hard links, and special files are skipped for safety.
+- **Concurrent cold-start write amplification:** If several workers cold-start at the same time, each may miss the still-empty mirror, download the model, and sync a full copy back. There's no coordination between concurrent syncs, so the mirror reflects whichever worker synced most recently.
+- **Background sync on short-lived processes:** `sync()` schedules the copy on a daemon thread. If the process exits without a normal interpreter shutdown (for example, `os._exit` or `SIGKILL`), the exit hook never runs and the sync may not complete.
+- **Orphaned large files aren't pruned:** If you delete or rename a large file locally, its copy under `big/` stays on the volume. Hydration is manifest-driven and ignores it, but volume usage grows as you swap model versions.
 
 ## Next steps
 
