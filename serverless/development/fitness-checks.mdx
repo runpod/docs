@@ -188,25 +188,35 @@ Your own registered checks still run even when these flags are set.
 
 ## Test fitness checks locally
 
-Because fitness checks don't run during local testing, you can invoke the runner manually to confirm your checks behave as expected before deploying:
+Fitness checks don't run during local testing, so to verify yours before you deploy, call each check function directly. A check signals failure by raising an exception, so you can call it and handle the result yourself.
 
 ```python title="test_fitness.py"
 import asyncio
-from runpod.serverless.modules.rp_fitness import run_fitness_checks, clear_fitness_checks
+import inspect
+from handler import check_gpu, check_disk_space
 
-async def test_fitness_checks():
-    """Run registered fitness checks manually."""
+async def run_check(check):
+    """Call a single fitness check and report the result."""
     try:
-        await run_fitness_checks()
-        print("All checks passed!")
-    except SystemExit as e:
-        print(f"Check failed with exit code: {e.code}")
-    finally:
-        clear_fitness_checks()
+        if inspect.iscoroutinefunction(check):
+            await check()
+        else:
+            check()
+        print(f"{check.__name__} passed")
+    except Exception as e:
+        print(f"{check.__name__} failed: {e}")
+
+async def main():
+    for check in (check_gpu, check_disk_space):
+        await run_check(check)
 
 if __name__ == "__main__":
-    asyncio.run(test_fitness_checks())
+    asyncio.run(main())
 ```
+
+<Warning>
+Don't use the runner, `run_fitness_checks()`, to test for failures. When a check fails, the runner force-kills the worker by calling `os._exit(1)`, which terminates the process immediately. It doesn't raise a catchable exception, and it skips any `except` or `finally` blocks. Call your check functions directly instead, as shown above.
+</Warning>
 
 ## Best practices
 
