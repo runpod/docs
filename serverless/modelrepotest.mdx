@@ -1,129 +1,169 @@
 ---
 title: "Model Repo testing"
-sidebarTitle: "Model Repo testing"
 description: "Upload a model to Model Repo and deploy it to a Serverless endpoint."
+---
+
+<Note>
+Model Repo is currently in alpha and is available on Mac and Linux only. Windows support is coming soon.
+</Note>
+
+## Why use Model Repo
+
+Model Repo lets you upload your own models to private storage on Runpod and attach them directly to Serverless endpoints. Key benefits:
+
+- **Faster cold starts**: Models are pre-cached on the worker host rather than downloaded at runtime.
+- **No HuggingFace dependency**: Your models are stored in Runpod's infrastructure, so endpoints don't require an outbound download on every cold start.
+- **Private storage**: Models are stored in your account and are not accessible to other users.
+
 ---
 
 ## Scripted testing
 
 A shell script is available that runs all of the steps below automatically using mock model files. Download `model_repo_testing.sh` from the internal Notion page and run it to validate end-to-end without manually executing each step.
 
+---
+
 ## Manual testing
 
 ### Prerequisites
 
-- Your email is [feature-flagged](https://us.posthog.com/project/105711/feature_flags/299352) for Model Repo access.
-- The following environment variables are exported:
+- Your email is feature-flagged for Model Repo access.
+- `jq` is installed for parsing JSON output.
+
+### Set environment variables
+
+Export the following before running any commands. **Make sure to set your actual API key — missing this is the most common source of auth errors later.**
 
 ```bash
 export RUNPOD_API_URL="https://rest.runpod.io/v1"
 export RUNPOD_GRAPHQL_URL="https://api.runpod.io/graphql"
-export RUNPOD_API_KEY="your-api-key"
+export RUNPOD_API_KEY="your-api-key"   # replace with your actual API key
 
-export MODEL_NAME="$(whoami)-test-$(date +%s)"  # must be unique per test run
-export MODEL_PATH="/path/to/model"
+export MODEL_NAME="$(whoami)-test-$(date +%s)"   # unique name per test run — reusing the same name uploads a new version, not a new model
+export MODEL_PATH="/path/to/model"               # local path to the model files you want to upload
 ```
 
-- `MODEL_NAME` should be unique for each test run. Reusing the same name uploads a new version of the existing model rather than creating a new one.
-- `jq` is installed for parsing JSON output.
+<Warning>
+`MODEL_NAME` must be unique for each test run. If you reuse the same name, the upload creates a new version of the existing model rather than a new model.
+</Warning>
 
-### Step 1: Install Go
+---
 
-Building runpodctl requires Go:
+### Step 1: Install runpodctl
+
+**Option A: Install via Homebrew (recommended)**
 
 ```bash
-brew install go
+brew install runpod/runpodctl/runpodctl
 ```
 
-### Step 2: Build runpodctl
+**Option B: Build from source**
 
 ```bash
+brew install go                              # install Go, required to build runpodctl
 git clone git@github.com:runpod/runpodctl.git
 cd runpodctl
-make
+make                                         # builds the binary to ./bin/runpodctl
 ```
 
-### Step 3: Upload the model
+<Note>
+If you build from source, the binary is at `./bin/runpodctl`. Either run it with that path, or add `./bin` to your `PATH`. The steps below use `runpodctl` — adjust accordingly.
+</Note>
+
+---
+
+### Step 2: Upload the model
 
 ```bash
-./bin/runpodctl model add \
-  --name "$MODEL_NAME" \
-  --model-path "$MODEL_PATH" \
-  --create-upload
+runpodctl model add \
+  --name "$MODEL_NAME" \          # the name to register the model under in your repo
+  --model-path "$MODEL_PATH" \    # local path to the model files
+  --create-upload                 # creates the upload session and transfers files
 ```
 
 This outputs a JSON string listing all uploaded files.
 
-### Step 4: Wait for the model to be hashed
+---
+
+### Step 3: Wait for the model to be hashed
 
 After upload, the model must be hashed by an asynchronous background process. This typically completes in a few minutes but can take up to 10–15 minutes.
 
-Poll until the hash field is non-null:
+Poll until the `hash` field is non-null:
 
 ```bash
-./bin/runpodctl model list --name "$MODEL_NAME" | jq -r '.[0].versions[0].hash'
+runpodctl model list --name "$MODEL_NAME" | jq -r '.[0].versions[0].hash'
 ```
 
 While hashing is in progress, the command returns `null`:
 
-```bash
-% ./bin/runpodctl model list --name "$MODEL_NAME" | jq -r '.[0].versions[0].hash'
+```
+% runpodctl model list --name "$MODEL_NAME" | jq -r '.[0].versions[0].hash'
 null
 ```
 
 Once hashing is complete, it returns the hash value:
 
-```bash
-% ./bin/runpodctl model list --name "$MODEL_NAME" | jq -r '.[0].versions[0].hash'
+```
+% runpodctl model list --name "$MODEL_NAME" | jq -r '.[0].versions[0].hash'
 71a311bdf0ca44119ed74dbef8cf573bc89b58cbc48a10fe508f756ebb1922dc
 ```
 
-### Step 5: Build the model URL
+---
+
+### Step 4: Build the model URL
 
 ```bash
-export USER_ID="$(./bin/runpodctl user | jq -r '.id')"
-export MODEL_HASH="$(./bin/runpodctl model list --name "$MODEL_NAME" | jq -r '.[0].versions[0].hash')"
-export MODEL_URL="https://local/${USER_ID}/${MODEL_NAME}:${MODEL_HASH}"
+export USER_ID="$(runpodctl user | jq -r '.id')"        # your Runpod user ID
+export MODEL_HASH="$(runpodctl model list --name "$MODEL_NAME" | jq -r '.[0].versions[0].hash')"   # the hash from step 3
+export MODEL_URL="https://local/${USER_ID}/${MODEL_NAME}:${MODEL_HASH}"   # the full model reference URL
 ```
 
-### Step 6: Deploy a Serverless endpoint with the model attached
+The resulting `MODEL_URL` will look like:
 
-```bash
-./bin/runpodctl serverless create \
-  --name "$(whoami)_ctl_test" \
-  --template-id "mockworker" \
-  --gpu-id "AMPERE_24" \
-  --workers-max 3 \
-  --workers-min 1 \
-  --model-reference "$MODEL_URL"
+```
+https://local/user1a2b3c4d/myusername-test-1720540800:71a311bdf0ca44119ed74dbef8cf573bc89b58cbc48a10fe508f756ebb1922dc
 ```
 
-Notes:
-- `--model-reference` is only supported with `--template-id` and GPU endpoints.
-- `--gpu-id` accepts a single GPU ID — do not pass a comma-separated list.
-- `--model-reference` is repeatable if multiple models need to be attached.
+---
 
-### Step 7: Verify the model is attached to the worker
-
-1. Go to **Serverless** in the left navigation bar under **Resources**.
-2. Select the endpoint you created (`ctl_test` if you used the commands above).
-3. Click the **Workers** tab.
-4. Select a worker showing a **Running** status.
-5. Click **Connect**, then use the `ssh` command or the **Web Terminal**.
-6. Run the following to confirm your model files are present:
+### Step 5: Deploy a Serverless endpoint with the model attached
 
 ```bash
-find /runpod-volume/huggingface-cache/hub/models--$(echo $MODEL_NAME | sed 's@/@--@g')/snapshots/${MODEL_REVISION} -type f
+runpodctl serverless create \
+  --name "$(whoami)_ctl_test" \          # name for the endpoint
+  --template-id "mockworker" \           # worker template to use
+  --gpu-id "AMPERE_24" \                 # GPU type
+  --workers-max 3 \                      # maximum number of active workers
+  --workers-min 1 \                      # minimum number of workers kept warm
+  --model-reference "$MODEL_URL"         # attaches your model to the endpoint
 ```
 
 <Note>
-There is currently no way to retrieve SSH connection details for a running Serverless worker via `runpodctl`. Use the web UI to connect.
+`--model-reference` is only supported with `--template-id` and GPU endpoints. It is repeatable if you need to attach multiple models to the same endpoint.
 </Note>
 
-### Step 8: Clean up
+---
 
-Delete the endpoint after testing to stop spend. Use the web UI or:
+### Step 6: Verify the model is working
+
+Send a test request to confirm the endpoint is live and the model is accessible. Replace `ENDPOINT_ID` with the ID returned in the previous step:
 
 ```bash
-./bin/runpodctl serverless delete <endpoint-id>
+curl -s -X POST "https://api.runpod.ai/v2/${ENDPOINT_ID}/runsync" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"prompt": "hello"}}' | jq
+```
+
+A successful response confirms the endpoint is running and the model is attached. If the request fails with an auth error, verify that `RUNPOD_API_KEY` is set correctly.
+
+---
+
+### Step 7: Clean up
+
+Delete the endpoint after testing to stop accruing spend. Use the web UI or:
+
+```bash
+runpodctl serverless delete <endpoint-id>
 ```
