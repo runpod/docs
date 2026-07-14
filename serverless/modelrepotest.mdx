@@ -17,12 +17,6 @@ Model Repo lets you upload your own models to private storage on Runpod and atta
 
 ---
 
-## Scripted testing
-
-A shell script is available that runs all of the steps below automatically using mock model files. Download `model_repo_testing.sh` from the internal Notion page and run it to validate end-to-end without manually executing each step.
-
----
-
 ## Manual testing
 
 ### Prerequisites
@@ -39,7 +33,7 @@ export RUNPOD_API_URL="https://rest.runpod.io/v1"
 export RUNPOD_GRAPHQL_URL="https://api.runpod.io/graphql"
 export RUNPOD_API_KEY="your-api-key"   # replace with your actual API key
 
-export MODEL_NAME="$(whoami)-test-$(date +%s)"   # unique name per test run — reusing the same name uploads a new version, not a new model
+export MODEL_NAME="model_name"  # unique name per test run — reusing the same name uploads a new version, not a new model
 export MODEL_PATH="/path/to/model"               # local path to the model files you want to upload
 ```
 
@@ -75,10 +69,13 @@ If you build from source, the binary is at `./bin/runpodctl`. Either run it with
 ### Step 2: Upload the model
 
 ```bash
+# --name: the name to register the model under in your repo
+# --model-path: local path to the model files
+# --create-upload: creates the upload session and transfers files
 runpodctl model add \
-  --name "$MODEL_NAME" \          # the name to register the model under in your repo
-  --model-path "$MODEL_PATH" \    # local path to the model files
-  --create-upload                 # creates the upload session and transfers files
+  --name "$MODEL_NAME" \
+  --model-path "$MODEL_PATH" \
+  --create-upload
 ```
 
 This outputs a JSON string listing all uploaded files.
@@ -111,18 +108,11 @@ Once hashing is complete, it returns the hash value:
 
 ---
 
-### Step 4: Build the model URL
+### Step 4: Get your user ID and model hash
 
 ```bash
 export USER_ID="$(runpodctl user | jq -r '.id')"        # your Runpod user ID
 export MODEL_HASH="$(runpodctl model list --name "$MODEL_NAME" | jq -r '.[0].versions[0].hash')"   # the hash from step 3
-export MODEL_URL="https://local/${USER_ID}/${MODEL_NAME}:${MODEL_HASH}"   # the full model reference URL
-```
-
-The resulting `MODEL_URL` will look like:
-
-```
-https://local/user1a2b3c4d/myusername-test-1720540800:71a311bdf0ca44119ed74dbef8cf573bc89b58cbc48a10fe508f756ebb1922dc
 ```
 
 ---
@@ -130,17 +120,27 @@ https://local/user1a2b3c4d/myusername-test-1720540800:71a311bdf0ca44119ed74dbef8
 ### Step 5: Deploy a Serverless endpoint with the model attached
 
 ```bash
+# --name: name for the endpoint
+# --hub-id: the Hub template to deploy
+# --gpu-id: GPU type
+# --workers-max: maximum number of active workers
+# --workers-min: minimum number of workers kept warm
+# --model-reference: attaches your model to the endpoint
+# --env: sets the model path on the worker
+# --min-cuda-version: works around a bug in runpodctl
 runpodctl serverless create \
-  --name "$(whoami)_ctl_test" \          # name for the endpoint
-  --template-id "mockworker" \           # worker template to use
-  --gpu-id "AMPERE_24" \                 # GPU type
-  --workers-max 3 \                      # maximum number of active workers
-  --workers-min 1 \                      # minimum number of workers kept warm
-  --model-reference "$MODEL_URL"         # attaches your model to the endpoint
+  --name "my_worker" \
+  --hub-id "cm8h09d9n000008jvh2rqdsmb" \
+  --gpu-id "AMPERE_24" \
+  --workers-max 3 \
+  --workers-min 1 \
+  --model-reference "https://local/$USER_ID/$MODEL_NAME:$MODEL_HASH" \
+  --env MODEL_NAME="/runpod/model-store/modelrepo-local/models/$USER_ID/$MODEL_NAME/$MODEL_HASH" \
+  --min-cuda-version "13.0"
 ```
 
 <Note>
-`--model-reference` is only supported with `--template-id` and GPU endpoints. It is repeatable if you need to attach multiple models to the same endpoint.
+`--model-reference` is only supported with `--hub-id` and GPU endpoints. It is repeatable if you need to attach multiple models to the same endpoint.
 </Note>
 
 ---
@@ -157,6 +157,8 @@ curl -s -X POST "https://api.runpod.ai/v2/${ENDPOINT_ID}/runsync" \
 ```
 
 A successful response confirms the endpoint is running and the model is attached. If the request fails with an auth error, verify that `RUNPOD_API_KEY` is set correctly.
+
+If you prefer a graphical interface to curl, you can also send requests to the worker from the web UI.
 
 ---
 
