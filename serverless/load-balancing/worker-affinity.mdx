@@ -16,43 +16,43 @@ X-Runpod-Worker-Id: <worker-id>
 
 To pin a subsequent request to that worker, send the header back with one of the following values:
 
-| Header value | Behavior |
-|---|---|
-| *(omitted or empty)* | Normal routing — least-load selection, no preference |
-| `<worker-id>` | **Soft affinity**: prefer the specified worker; fall back to least-load if the worker is unavailable or at capacity |
-| `strict <worker-id>` | **Strict affinity**: only use the specified worker; wait if the worker is at capacity, return `404` if the worker is gone |
-| `strict-resume <worker-id>` | **Strict-resume affinity**: same as strict, but also resumes the worker pod if it has been scaled down |
+| Header value                | Behavior                                                                                                                  |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| *(omitted or empty)*        | Normal routing — normal worker selection, no preference                                                                   |
+| `<worker-id>`               | **Soft affinity**: prefer the specified worker; fall back to normal worker selection if the worker is unavailable or at capacity |
+| `strict <worker-id>`        | **Strict affinity**: only use the specified worker; wait if the worker is at capacity, return `404` if the worker is gone |
+| `strict-resume <worker-id>` | **Strict-resume affinity**: same as strict, but also resumes the worker pod if it has been scaled down                    |
 
 ## Affinity modes
 
 ### Soft affinity
 
 ```
-X-Runpod-Worker-Id: wrk_abc123
+X-Runpod-Worker-Id: pod-abc123
 ```
 
-The load balancer attempts to route to the specified worker. If the worker is unavailable, at capacity, or not found, the request falls through to normal least-load selection. This mode never fails a request due to affinity; it is best-effort.
+The load balancer attempts to route to the specified worker. If the worker is unavailable, at capacity, or not found, the request falls through to normal worker selection. This mode never fails a request due to affinity; it is best-effort.
 
 ### Strict affinity
 
 ```
-X-Runpod-Worker-Id: strict wrk_abc123
+X-Runpod-Worker-Id: strict pod-abc123
 ```
 
-The load balancer only routes to the specified worker. If the worker is at capacity, the request waits. If the worker is gone and not found in the active worker set, the load balancer returns a `404` with reason `affinity_worker_gone`. Use this mode when falling back to a different worker would produce incorrect results.
+The load balancer only routes to the specified worker. If the worker is at capacity, the request waits up to ~5 minutes. If the worker does not free up within that time, the request returns `400` with reason `timed out waiting for worker`. If the worker is gone and not found in the active worker set, the load balancer returns a `404` with reason `affinity_worker_gone`. Use this mode when falling back to a different worker would produce incorrect results.
 
 ### Strict-resume affinity
 
 ```
-X-Runpod-Worker-Id: strict-resume wrk_abc123
+X-Runpod-Worker-Id: strict-resume pod-abc123
 ```
 
-Same as strict, but if the worker pod has been scaled down, the load balancer calls `ResumePodById` to bring it back up before routing the request. The worker is scoped to the endpoint and cross-endpoint access is not possible.
+Same as strict, but if the worker pod has been scaled down, the load balancer calls `ResumePodById` to bring it back up and retries while the request waits. If the resume cannot complete, it keeps retrying rather than failing immediately. The request only ends in `400` on timeout, or `404` if the pod is truly gone (terminated or redeployed under a new ID). Cross-endpoint access is not possible.
 
-`strict-resume` keeps a worker running as long as requests keep coming in. Workers scale down after being idle (no requests) for a set period. If your  client sends a request before that idle period expires, the timer resets and  the worker stays up. This means a worker receiving regular traffic, with or  without strict-resume, will never scale down. 
+`strict-resume` keeps a worker running as long as requests keep coming in. Workers scale down after being idle (no requests) for a set period. If your client sends a request before that idle period expires, the timer resets and the worker stays up. This means a worker receiving regular traffic, with or without strict-resume, will never scale down.
 
 <Note>
- When your session is done, send your next request without the  `X-Runpod-Worker-Id` header so the worker is no longer pinned and can go idle.
+  When your session is done, send your next request without the `X-Runpod-Worker-Id` header so the worker is no longer pinned and can go idle.
 </Note>
 
 ## Worker ID on responses
@@ -61,7 +61,7 @@ The load balancer always sets `X-Runpod-Worker-Id` on the response to reflect th
 
 ## Error reference
 
-| Status | Reason | Description |
-|--------|--------|-------------|
-| `404` | `affinity_worker_gone` | Strict mode: the requested worker is not in the active worker set |
-| `503` | `affinity_resume_failed` | Strict-resume mode: the worker pod could not be resumed |
+| Status | Reason                 | Description                                                                                          |
+| ------ | ---------------------- | ---------------------------------------------------------------------------------------------------- |
+| `404`  | `affinity_worker_gone` | Strict or strict-resume: the requested worker is not in the active worker set                        |
+| `400`  | `worker_timeout`       | Strict or strict-resume: the pinned worker did not become available within the request timeout (~5 minutes) |
