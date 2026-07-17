@@ -31,9 +31,9 @@ To deploy workers with AI/ML models, follow this order of preference:
 
 1. [**Use cached models**](/serverless/endpoints/model-caching): For models on Hugging Face (public or gated), this is the recommended approach. Cached models provide the fastest cold starts and persist across worker restarts.
 
-2. [**Bake the model into your Docker image**](/serverless/workers/create-dockerfile#including-models-and-files): For private models not on Hugging Face, embed them directly in your container image. This ensures the model is always available but increases image size.
+2. [**Bake the model into your Docker image**](/serverless/workers/create-dockerfile#including-models-and-files): For private models not on Hugging Face, embed them directly in your container image. This increases image size and initialization time, but ensures the model is stored directly on machine disk before the worker starts, so it's ready to serve requests quickly after billing begins.
 
-3. [**Use network volumes**](/storage/network-volumes): For development workflows or very large models (500GB+), store models on a network volume. This is slower than cached or baked models but offers flexibility for iteration.
+3. [**Use network volumes**](/storage/network-volumes): For development workflows or very large models (500GB+), store models on a network volume. Reading from network volume will occur after a worker starts running and billing begins, and will be slower than reading cached or baked models directly from machine disk. However, worker initialization time will be faster, and changes to the underlying image will not require rebuilding and repushing the image with the model artifact, making it faster to iterate during development.
 
 ## Worker types
 
@@ -49,7 +49,7 @@ The system may also spin up **extra workers** during traffic spikes when Docker 
 
 | State | Description | Billing |
 |-------|-------------|---------|
-| **Initializing** | Downloading image, loading code | No |
+| **Initializing** | Downloading image, loading code, and downloading cached models (if using model caching) | No |
 | **Idle** | Scaled down, waiting for requests | No |
 | **Running** | Processing requests | Yes |
 | **Throttled** | Temporarily unable to run due to host <MachineTooltip /> resource constraints | No |
