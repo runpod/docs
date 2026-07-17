@@ -1,0 +1,76 @@
+---
+title: "Worker affinity"
+sidebarTitle: "Worker affinity"
+description: "Pin follow-up requests to a specific worker using the X-Runpod-Worker-Id header."
+---
+
+Worker affinity lets clients route follow-up requests to the same worker that served an earlier request. This is useful for stateful workloads where a worker holds session state in memory and re-routing to a different worker would require reloading it.
+
+## How it works
+
+Every response from the load balancer includes an `X-Runpod-Worker-Id` header that identifies the worker that handled the request:
+
+```
+X-Runpod-Worker-Id: <worker-id>
+```
+
+To pin a subsequent request to that worker, send the header back with one of the following values:
+
+| Header value                | Behavior                                                                                                                  |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| *(omitted or empty)*        | Normal routing — normal worker selection, no preference                                                                   |
+| `<worker-id>`               | **Soft affinity**: prefer the specified worker; fall back to normal worker selection if the worker is unavailable or at capacity |
+| `strict <worker-id>`        | **Strict affinity**: only use the specified worker; wait if the worker is at capacity, return `404` if the worker is gone |
+| `strict-resume <worker-id>` | **Strict-resume affinity**: same as strict, but also resumes the worker pod if it has been scaled down                    |
+
+## Affinity modes
+
+### Soft affinity
+
+```
+X-Runpod-Worker-Id: pod-abc123
+```
+
+- Routes to the specified worker if available.
+- Falls back to normal worker selection if the worker is unavailable, at capacity, or not found.
+- Never fails a request due to affinity — this mode is best-effort.
+
+### Strict affinity
+
+```
+X-Runpod-Worker-Id: strict pod-abc123
+```
+
+- Routes only to the specified worker.
+- If the worker is at capacity, the request waits up to ~5 minutes.
+- If the worker does not free up in time, returns `400` with reason `timed out waiting for worker`.
+- If the worker is gone, returns `404` with reason `affinity_worker_gone`.
+- Use this mode when falling back to a different worker would produce incorrect results.
+
+### Strict-resume affinity
+
+```
+X-Runpod-Worker-Id: strict-resume pod-abc123
+```
+
+- Same as strict, but also resumes a scaled-down worker before routing.
+- If the resume cannot complete immediately, it keeps retrying while the request waits.
+- Returns `400` on timeout, or `404` if the pod is truly gone (terminated or redeployed under a new ID).
+- Cross-endpoint access is not possible.
+
+`strict-resume` keeps a worker running as long as requests keep coming in. Workers scale down after being idle (no requests) for a set period. If your client sends a request before that idle period expires, the timer resets and the worker stays up. This means a worker receiving regular traffic, with or without strict-resume, will never scale down.
+
+<Note>
+  When your session is done, send your next request without the `X-Runpod-Worker-Id` header so the worker is no longer pinned and can go idle.
+</Note>
+
+## Worker ID on responses
+
+The load balancer always sets `X-Runpod-Worker-Id` on the response to reflect the worker that actually served the request. Use the value from the response header for pinning rather than tracking it separately.
+
+## Error reference
+
+| Status | Reason                 | Description                                                                                          |
+| ------ | ---------------------- | ---------------------------------------------------------------------------------------------------- |
+| `404`  | `affinity_worker_gone` | Strict or strict-resume: the requested worker is not in the active worker set                        |
+| `400`  | `worker_timeout`       | Strict or strict-resume: the pinned worker did not become available within the request timeout (~5 minutes) |
