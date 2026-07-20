@@ -251,13 +251,26 @@ Python 3.12 is recommended for best performance with no cold-start overhead. Pyt
 endpoint.py: relative import (level=1, module='helpers') could not be resolved to a local file under /path/to/project
 ```
 
-**Cause:** An `@Endpoint` file imports a local (non-pip) module that Flash can't resolve to a bundle-able file, such as a broken relative import, a missing package submodule, or a file outside the project root. Flash fails the build instead of shipping an artifact that would break on the worker.
+Or, for an ignore-excluded import:
+
+```
+Shipped code imports local modules that the build ignore rules (.gitignore or built-in defaults) exclude:
+  utils/helpers.py (imported by endpoint.py)
+
+Shipping them would silently override a deliberate exclusion, and omitting them would break the worker with ModuleNotFoundError. Remove the matching ignore pattern or stop importing these modules from shipped code.
+```
+
+**Cause:** This `LocalModuleResolutionError` has two variants: an `@Endpoint` file imports a local module that Flash can't resolve, or shipped code imports a local module that an ignore pattern excludes.
 
 **Solution:**
+
+For an unresolvable import:
 
 1. Fix the import so it points to a file that exists under your project root.
 2. Move the imported module under the project directory if it lives outside it.
 3. Confirm that package imports have an `__init__.py` file.
+
+For an ignore-excluded import, remove the matching ignore pattern, or stop importing that module from your shipped code.
 
 For how Flash resolves and bundles local imports, see [Import local modules](/flash/create-endpoints#import-local-modules).
 
@@ -499,6 +512,8 @@ flash deploy
 # If using uv:
 uv run flash deploy
 ```
+
+See [Live execution size limit](/flash/create-endpoints#live-execution-size-limit) for details on how local module source is shipped.
 
 ### Deserialization timeout
 

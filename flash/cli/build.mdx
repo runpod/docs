@@ -76,11 +76,20 @@ Flash also respects your `.gitignore` file and excludes any files matching those
 If you use other environment file variants like `.env.dev` or `.env.staging`, add them to your `.gitignore` to exclude them from deployment artifacts.
 </Tip>
 
-### Local modules are force-included
+### Local modules and the ignore filter
 
-Local (non-pip) modules that your endpoints import are always bundled, even when an ignore pattern would otherwise exclude them. During the build, Flash resolves the import closure of each `@Endpoint` file and force-includes the files those imports depend on. For example, if an endpoint imports a sibling `test_helpers.py`, Flash bundles it even though the `test_*.py` ignore rule would normally drop it.
+Local (non-pip) modules that your endpoints import are bundled automatically, provided they pass the ignore filter: your `.gitignore` plus the built-in patterns listed above. During the build, Flash resolves the transitive local-import closure of every shipped Python file and checks it against the files the ignore filter already selected.
 
-If an `@Endpoint` file imports a local module that Flash can't resolve (such as a broken relative import or a file outside the project root), the build fails with a clear error instead of shipping a broken artifact. A file that fails resolution but doesn't define an endpoint is skipped with a warning. For details on how local imports are resolved and bundled, see [Import local modules](/flash/create-endpoints#import-local-modules).
+If shipped code imports a local module that an ignore rule excludes (for example, a `test_*.py` sibling or a file under `tests/`), the build fails with a `LocalModuleResolutionError` instead of silently overriding your ignore rules or shipping a broken artifact. Flash names each excluded file and the file that imports it:
+
+```
+Shipped code imports local modules that the build ignore rules (.gitignore or built-in defaults) exclude:
+  utils/helpers.py (imported by endpoint.py)
+
+Shipping them would silently override a deliberate exclusion, and omitting them would break the worker with ModuleNotFoundError. Remove the matching ignore pattern or stop importing these modules from shipped code.
+```
+
+If an `@Endpoint` file has a local import Flash can't resolve at all (a broken relative import, or a file outside your project root), the build also fails with a clear error. A file that fails resolution but doesn't define an endpoint is skipped with a warning and the build continues. For details on how local imports are resolved and bundled, see [Import local modules](/flash/create-endpoints#import-local-modules).
 
 ## Build artifacts
 
