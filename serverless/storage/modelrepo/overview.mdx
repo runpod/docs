@@ -1,0 +1,110 @@
+---
+title: "Overview"
+sidebarTitle: "Overview"
+description: "Store, version, and pre-cache your model files on Runpod infrastructure."
+---
+
+<Note>
+Model Repo is currently in alpha and is available on Mac and Linux only. Windows support is coming soon.
+</Note>
+
+Model Repo is a private model storage service built into Runpod. Upload your model files once, and Runpod caches them directly on your Serverless worker hosts so they are ready before the worker starts — no external download required at cold start time.
+
+## How it works
+
+When you create a Serverless endpoint with a model attached, Runpod fetches the model files from storage and caches them on the host machine before the worker container starts. Once the worker boots, the files are already on disk. This eliminates the download step that normally adds seconds or minutes to a cold start.
+
+Model files are stored in your private Runpod account on Cloudflare R2. Each uploaded version is content-addressed: after the upload, Runpod computes a hash of the files, and you use that hash to pin a specific version when configuring an endpoint.
+
+The model reference URL format is:
+
+```
+https://local/{user-id}/{model-name}:{hash}
+```
+
+You pass this URL as the `--model-reference` flag when creating or updating an endpoint. Runpod uses it to know exactly which version of which model to cache on the host.
+
+## What you can upload
+
+<!-- [ENGINEERING: Are all file types supported, or only specific ones? State this explicitly.] -->
+<!-- [ENGINEERING: Is there a per-file size limit?] -->
+<!-- [ENGINEERING: Is there a total storage limit per account or per model?] -->
+<!-- [ENGINEERING: How long does Runpod retain uploaded models? Is there a retention/expiry policy?] -->
+
+Model Repo accepts model files in any format. There is no restriction on file type — you can upload PyTorch checkpoints, GGUF files, safetensors, ONNX models, or any other format your worker needs.
+
+## How the model is available inside the worker
+
+When the worker starts, your model files are available at this path inside the container:
+
+```
+/runpod/model-store/modelrepo-local/models/{user-id}/{model-name}/{model-hash}
+```
+
+Pass this path to the worker as an environment variable using the `--env` flag when creating the endpoint:
+
+```
+--env MODEL_NAME="/runpod/model-store/modelrepo-local/models/$USER_ID/$MODEL_NAME/$MODEL_HASH"
+```
+
+Your handler function reads `MODEL_NAME` to know where to load the model from. Model Repo only handles delivering the files to the host — your handler is fully responsible for loading the model and processing requests.
+
+<!-- [ENGINEERING: Marcin's question — does Runpod do any additional wrapping of the model (e.g., auto-adding /ping, adding a handler wrapper)? The current doc says users write their own handler. Confirm this is accurate.] -->
+
+For queue-based endpoints, you write a handler function that receives requests, loads the model from `MODEL_NAME`, runs inference, and returns results. For load balancing endpoints (FastAPI, Flask, etc.), your server process loads the model from that path on startup.
+
+## Model Repo vs network volumes
+
+Both Model Repo and [network volumes](/storage/network-volumes) can make model files available to Serverless workers. The key difference is when and how the files are delivered.
+
+| | Model Repo | Network volume |
+|---|---|---|
+| **Delivery** | Cached on host before worker starts | Mounted as a network filesystem at runtime |
+| **Cold start impact** | Lower — files already on disk | Higher — network mount adds latency |
+| **Best for** | Fixed, versioned model weights | Frequently changing files, shared state |
+| **Versioning** | Built-in, content-addressed by hash | Manual — you manage file paths yourself |
+| **Multi-worker sharing** | Not shared across workers | Shared across all workers on the same volume |
+| **Storage billing** | <!-- [ENGINEERING: how is Model Repo storage billed? $/GB/month?] --> | $0.07/GB/month |
+
+Use Model Repo when:
+- You have a fixed set of model weights you want to distribute reliably to workers.
+- You want shorter cold starts without depending on HuggingFace or any external download source.
+- You need version control over exactly which model checkpoint is deployed.
+
+Use a network volume when:
+- Workers need to read and write shared files during a run (e.g., checkpoints, intermediate outputs).
+- Your files change frequently and you want all workers to see the latest version immediately.
+- You need the same set of files available to many concurrent workers simultaneously.
+
+## Switching from your current setup
+
+The effort to adopt Model Repo depends on how you currently deliver your model files to workers.
+
+**If you download from HuggingFace or a URL at cold start:**
+
+1. Upload your model files to Model Repo using `runpodctl`.
+2. Record the model URL (contains the user ID, name, and hash).
+3. Add `--model-reference` to your endpoint configuration.
+4. Remove the download logic from your handler or startup script.
+
+The files will be available at a local path when the worker starts, so your loading code changes from a `hf_hub_download()` call (or equivalent) to a local file open. Everything downstream — your handler function structure, request format, response format — stays the same.
+
+**If your model weights are baked into your Docker image:**
+
+Baking weights into a Docker image inflates image size and increases cold start times (Runpod must pull the full image on each new host). Moving weights out into Model Repo and shrinking your Docker image typically improves cold start performance.
+
+To migrate:
+1. Remove the model weights from your Dockerfile and rebuild without them.
+2. Upload the weights separately to Model Repo.
+3. Update your endpoint to reference the model URL.
+4. Update your worker code to load the model from the local path instead of from within the image.
+
+<!-- [ENGINEERING: Anything specific users need to do if their model has baked images (e.g., embedded image assets in weights)? Any known edge cases?] -->
+
+**If you cache models on a network volume:**
+
+You can switch to Model Repo if your model weights are stable and you do not need workers to write to the same storage location. The primary benefit is faster host-level caching and simpler version management. If your workers currently write to the network volume (for checkpoints, fine-tuning outputs, etc.), keep the network volume for that purpose.
+
+## Getting started
+
+See [Model Repo testing](/serverless/model-repo/testing) for a step-by-step guide to uploading a model and deploying it to a Serverless endpoint.
