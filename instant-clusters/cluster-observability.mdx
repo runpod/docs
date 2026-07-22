@@ -1,0 +1,69 @@
+---
+title: "Cluster observability"
+sidebarTitle: "Cluster observability"
+description: "Monitor your training workloads in real time with built-in Grafana dashboards."
+---
+
+Instant Clusters include a built-in observability engine that streams cluster metrics at 5-second granularity directly to a Grafana dashboard. No configuration is required. Authentication is handled automatically when you launch a cluster.
+
+## Access the dashboard
+
+1. In the left navigation, go to **Resources → Clusters** and select your cluster.
+2. Click on a pod row in the cluster list. A side panel opens on the right.
+3. In the side panel, select the **Connect** tab.
+4. Under **HTTP services**, click **Grafana** (Port 8889).
+
+## Available metrics
+
+Metrics are collected from two sources: NVIDIA DCGM for GPU telemetry and Node Exporter for host-level telemetry.
+
+### GPU metrics (DCGM)
+
+| Category | Metrics |
+|----------|---------|
+| Utilization | GPU core, memory copy, encoder, decoder utilization |
+| Frame buffer | Used, free, total, reserved VRAM; used percentage; BAR1 used |
+| Temperature | GPU temp, memory temp, slowdown threshold, shutdown threshold |
+| Power | Usage, management limit, enforced limit, total energy consumption, power violation, thermal violation |
+| Clocks | SM clock, memory clock, P-state, clock event reasons |
+| PCIe | Link generation, link width, replay counter |
+| ECC | Single-bit and double-bit aggregate errors, volatile double-bit errors |
+| Row remapping | Correctable, uncorrectable, pending, failure |
+| Fan | Fan speed |
+
+### Host metrics (Node Exporter)
+
+| Category | Metrics |
+|----------|---------|
+| CPU / scheduling | CPU seconds by mode, frequency, load averages (1/5/15 min), running/blocked processes, forks, context switches, interrupts, scheduler run/wait time |
+| Pressure (PSI) | CPU, I/O, and memory waiting and stalled seconds |
+| Memory | Total, free, available, buffers, cached, swap, active/inactive pages, anonymous pages, huge pages, slab, kernel stack, page tables, dirty, writeback, committed memory, and more |
+| vmstat | Page faults (minor/major), page in/out, swap in/out, OOM kills |
+| Disk | Read/write bytes, completed reads/writes, merged ops, read/write time, I/O time, in-progress I/O, discards, flushes |
+| Filesystem / FDs | Available, free, and total bytes; inode counts; file descriptor allocation |
+| Network (device) | Receive/transmit bytes, packets, drops, errors, FIFO, frame, multicast, compressed; carrier changes, MTU, speed, queue length, interface info |
+| Network (stack) | TCP open/established/segment/retransmit counters, UDP, ICMP, IP, socket stats, conntrack, ARP entries, softnet |
+| InfiniBand / RoCE | Port state, physical state, rate |
+| ethtool | Interface info, received counters |
+| Thermal / power (host) | hwmon temperatures (current, min, crit), power average, thermal zone temp, cooling device state |
+| EDAC (RAM ECC) | Correctable and uncorrectable memory errors per controller and CSROW |
+| Time / clock | Current time, boot time, timezone offset, clocksource info, NTP error, frequency adjustment, TAI offset |
+| XFS | Allocation, block-map, directory, inode, vnode, read/write operation counters |
+| Entropy / misc | Available entropy bits, pool size, uname/OS/DMI/NVMe info, scrape metadata |
+
+<Note>
+The dashboards shown are a first pass. Coverage and layout will expand over time as new metrics and pre-built views are added.
+</Note>
+
+## What to look for
+
+| Signal | What it indicates |
+|--------|-------------------|
+| High VRAM pressure (`DCGM_FI_DEV_FB_USED_PERCENT`) | Model or batch size may be too large for GPU memory |
+| Low GPU utilization (`DCGM_FI_DEV_GPU_UTIL`) | Data pipeline bottleneck, worker idle time, or checkpointing pauses |
+| GPU temperature near slowdown threshold | Thermal throttling likely; check cooling and power limits |
+| PCIe replay counter increasing | Hardware link issue — contact support |
+| ECC double-bit errors | Uncorrectable GPU memory errors — contact support |
+| NTP clock drift (`node_timex_estimated_error_seconds`) | Nodes out of sync; can affect distributed training coordination |
+| High memory pressure (PSI stalled) | Host memory contention; consider reducing CPU-side batch pre-processing |
+| Disk IOPS spikes | Dataset loading or checkpoint writes competing for I/O |
