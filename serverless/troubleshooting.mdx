@@ -1,7 +1,7 @@
 ---
 title: "Troubleshooting"
 sidebarTitle: "Troubleshooting"
-description: "Common issues and solutions for Serverless endpoints and workers."
+description: "Common issues and solutions for Serverless endpoints and workers. Review configuration and operations guidance for Runpod Serverless."
 ---
 
 ## Deployment issues
@@ -35,6 +35,20 @@ If jobs remain `IN_QUEUE` for extended periods:
 - **Workers throttled**: Your endpoint may be hitting rate limits. Check the Workers tab for throttled workers.
 - **Cold start delays**: First requests after idle periods require worker initialization. Consider increasing `min_workers` or enabling [FlashBoot](/serverless/endpoints/endpoint-configurations#flashboot).
 
+### Jobs funneled to a single worker
+
+If your endpoint has multiple workers but nearly all jobs run on one worker while the others sit idle, and jobs stay `IN_QUEUE` even though workers are available, you may be running an affected version of the Runpod Python SDK.
+
+Versions 1.9.1 through 1.10.0 could corrupt per-worker job tracking on endpoints that use a network volume, causing most workers to stop pulling new jobs. This most often appeared on network volume endpoints such as ComfyUI workers.
+
+To fix this, upgrade the Runpod Python SDK to version 1.10.1 or later:
+
+```bash
+pip install --upgrade "runpod>=1.10.1"
+```
+
+Then rebuild and redeploy your worker image so the fix takes effect. No configuration or code changes are required.
+
 ### Jobs timing out
 
 | Cause | Solution |
@@ -50,6 +64,17 @@ Check the job status response for error details. Common causes:
 - **Handler exceptions**: Unhandled exceptions in your handler code. Add try/catch blocks and return structured errors.
 - **OOM (Out of Memory)**: Model or batch size exceeds GPU memory. Reduce batch size or use a larger GPU.
 - **Timeout**: Job exceeded execution timeout. Increase timeout or optimize processing.
+
+## Endpoint scaling issues
+
+### My endpoint was scaled down unexpectedly
+
+If your endpoint's max workers dropped without any change on your end, Runpod scaled the endpoint down automatically. This happens in two situations:
+
+- **Prolonged inactivity**: When an endpoint receives no requests for 3 days, its max workers is reduced to 2, and after 7 days its max workers is set to 0. Runpod emails you when the first reduction happens. For more details, see [idle endpoint scale-down](/serverless/endpoints/endpoint-configurations#idle-endpoint-scale-down).
+- **Repeated unhealthy workers**: When an endpoint consistently produces unhealthy (crashing) workers, Runpod scales it down to stop billing and reduce thrashing, and sends you an email.
+
+To bring the endpoint back, increase its max workers in the [Runpod console](https://www.console.runpod.io/serverless). If the scale-down was caused by unhealthy workers, fix the underlying problem first, or the endpoint may be scaled down again. Check the [logs](/serverless/development/logs) for crash errors, and verify your worker using [local testing](/serverless/development/local-testing).
 
 ## Cold start issues
 
