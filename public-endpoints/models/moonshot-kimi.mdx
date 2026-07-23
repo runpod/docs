@@ -1,0 +1,291 @@
+---
+title: "Moonshot Kimi"
+sidebarTitle: "Moonshot Kimi"
+description: "Moonshot's Kimi family of models handles advanced reasoning, chat, and coding, with extended thinking and a visible reasoning trace. See model inputs and outputs on Runpod Public Endpoints."
+---
+
+Moonshot's Kimi family of models handles advanced reasoning and chat. It supports extended thinking with a visible reasoning trace before the final answer. A single endpoint serves three variants, each selected by setting the `model` field in the request body.
+
+<Card title="Try in playground" icon="play" href="https://console.runpod.io/hub/playground/text/moonshot-kimi" horizontal>
+  Test Moonshot Kimi in the Runpod Hub playground.
+</Card>
+
+| | |
+|---|---|
+| **Endpoint** | `https://api.runpod.ai/v2/moonshot-kimi/runsync` |
+| **Pricing** | \$4.00–\$15.00 per 1M tokens |
+| **Type** | Text generation |
+
+<Note>
+This endpoint is fully compatible with the OpenAI API. See the [OpenAI compatibility examples](#openai-api-compatibility) below.
+</Note>
+
+## Model variants
+
+Choose a variant by setting the `model` field in the request body (default `kimi-k2.6`). The endpoint slug stays `moonshot-kimi` for every variant.
+
+| `model` value | Description | Context window | Price |
+|---|---|---|---|
+| `kimi-k2.6` (default) | General-purpose model with thinking and non-thinking modes, agentic capabilities, and multimodal input. | 256K (262,144 tokens) | \$4.00 per 1M tokens |
+| `kimi-k2.7-code` | Coding-focused model with thinking mode and agentic capabilities. | 256K (262,144 tokens) | \$4.00 per 1M tokens |
+| `kimi-k3` | Flagship model with always-on reasoning and configurable reasoning effort for long-horizon coding and knowledge work. | 1M (1,048,576 tokens) | \$15.00 per 1M tokens |
+
+To target a variant other than the default, set the `model` field to its ID. For example, to use the flagship model, set `"model": "kimi-k3"` in the request body (or `model="kimi-k3"` with the OpenAI SDK).
+
+## Request
+
+All parameters are passed within the `input` object in the request body.
+
+<ParamField body="input.messages" type="array" required>
+  Array of message objects with role and content.
+</ParamField>
+
+<ParamField body="input.messages[].role" type="string" required>
+  The role of the message author. Use `system`, `user`, or `assistant`.
+</ParamField>
+
+<ParamField body="input.messages[].content" type="string" required>
+  The content of the message.
+</ParamField>
+
+<ParamField body="input.model" type="string" default="kimi-k2.6">
+  The Kimi variant to use. One of `kimi-k2.6`, `kimi-k2.7-code`, or `kimi-k3`.
+</ParamField>
+
+<ParamField body="input.sampling_params.max_tokens" type="integer" default="2048">
+  Maximum number of tokens to generate.
+</ParamField>
+
+<ParamField body="input.sampling_params.temperature" type="float" default="1">
+  Controls randomness in generation. Lower values make output more deterministic.
+</ParamField>
+
+<ParamField body="input.sampling_params.seed" type="integer">
+  Seed for reproducible results.
+</ParamField>
+
+<ParamField body="input.sampling_params.top_k" type="integer">
+  Restricts sampling to the top K most probable tokens.
+</ParamField>
+
+<ParamField body="input.sampling_params.top_p" type="float">
+  Nucleus sampling threshold. Range: 0.0-1.0.
+</ParamField>
+
+<RequestExample>
+```bash cURL
+curl -X POST "https://api.runpod.ai/v2/moonshot-kimi/runsync" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": {
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are Kimi."
+        },
+        {
+          "role": "user",
+          "content": "What is Runpod?"
+        }
+      ],
+      "sampling_params": {
+        "max_tokens": 2048,
+        "temperature": 1
+      },
+      "model": "kimi-k2.6"
+    }
+  }'
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    "https://api.runpod.ai/v2/moonshot-kimi/runsync",
+    headers={
+        "Authorization": f"Bearer {RUNPOD_API_KEY}",
+        "Content-Type": "application/json",
+    },
+    json={
+        "input": {
+            "messages": [
+                {"role": "system", "content": "You are Kimi."},
+                {"role": "user", "content": "What is Runpod?"},
+            ],
+            "sampling_params": {
+                "max_tokens": 2048,
+                "temperature": 1,
+            },
+            "model": "kimi-k2.6",
+        }
+    },
+)
+
+result = response.json()
+print(result["output"])
+```
+
+```javascript JavaScript
+const response = await fetch(
+  "https://api.runpod.ai/v2/moonshot-kimi/runsync",
+  {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${RUNPOD_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      input: {
+        messages: [
+          { role: "system", content: "You are Kimi." },
+          { role: "user", content: "What is Runpod?" },
+        ],
+        sampling_params: {
+          max_tokens: 2048,
+          temperature: 1,
+        },
+        model: "kimi-k2.6",
+      },
+    }),
+  }
+);
+
+const result = await response.json();
+console.log(result.output);
+```
+</RequestExample>
+
+## Response
+
+<ResponseField name="id" type="string">
+  Unique identifier for the request.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Request status. Returns `COMPLETED` on success, `FAILED` on error.
+</ResponseField>
+
+<ResponseField name="delayTime" type="integer">
+  Time in milliseconds the request spent in queue before processing began.
+</ResponseField>
+
+<ResponseField name="executionTime" type="integer">
+  Time in milliseconds the model took to generate the response.
+</ResponseField>
+
+<ResponseField name="workerId" type="string">
+  Identifier of the worker that processed the request.
+</ResponseField>
+
+<ResponseField name="output" type="object">
+  The generation result containing the text and usage information.
+
+  <ResponseField name="output.choices" type="array">
+    Array containing the generated text.
+  </ResponseField>
+
+  <ResponseField name="output.cost" type="float">
+    Cost of the generation in USD.
+  </ResponseField>
+
+  <ResponseField name="output.usage" type="object">
+    Token usage information.
+  </ResponseField>
+</ResponseField>
+
+<ResponseExample>
+```json 200
+{
+  "id": "sync-a1b2c3d4-e5f6-7890-abcd-ef1234567890-u1",
+  "status": "COMPLETED",
+  "delayTime": 15,
+  "executionTime": 2345,
+  "workerId": "oqk7ao1uomckye",
+  "output": {
+    "choices": [
+      {
+        "tokens": [
+          "Runpod is a cloud computing platform that provides GPU resources for AI and machine learning workloads..."
+        ]
+      }
+    ],
+    "cost": 0.00074,
+    "usage": {
+      "input": 35,
+      "output": 150
+    }
+  }
+}
+```
+
+```json 400
+{
+  "id": "sync-a1b2c3d4-e5f6-7890-abcd-ef1234567890-u1",
+  "status": "FAILED",
+  "error": "Invalid messages format"
+}
+```
+</ResponseExample>
+
+## OpenAI API compatibility
+
+Moonshot Kimi is fully compatible with the OpenAI API format. You can use the OpenAI Python client to interact with this endpoint. You can set `model` to any of the three variant IDs.
+
+```python Python (OpenAI SDK)
+from openai import OpenAI
+
+client = OpenAI(
+    api_key=RUNPOD_API_KEY,
+    base_url="https://api.runpod.ai/v2/moonshot-kimi/openai/v1",
+)
+
+response = client.chat.completions.create(
+    model="kimi-k2.6",
+    messages=[
+        {
+            "role": "system",
+            "content": "You are Kimi.",
+        },
+        {
+            "role": "user",
+            "content": "What is Runpod?",
+        },
+    ],
+    max_tokens=2048,
+    temperature=1,
+    top_p=0.9,
+)
+
+print(response.choices[0].message.content)
+```
+
+For streaming responses, add `stream=True`:
+
+```python Python (Streaming)
+response = client.chat.completions.create(
+    model="kimi-k2.6",
+    messages=[
+        {"role": "user", "content": "Explain quantum computing in simple terms."}
+    ],
+    max_tokens=2048,
+    stream=True,
+)
+
+for chunk in response:
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="")
+```
+
+For more details, see [Send vLLM requests](/serverless/vllm/vllm-requests) and the [OpenAI API compatibility guide](/serverless/vllm/openai-compatibility).
+
+## Cost calculation
+
+Moonshot Kimi uses tiered pricing based on the variant. Kimi K2.6 and Kimi K2.7 Code charge \$4.00 per 1M tokens, while Kimi K3 charges \$15.00 per 1M tokens. Example costs:
+
+| Tokens | Kimi K2.6 & K2.7 Code (\$4.00/1M) | Kimi K3 (\$15.00/1M) |
+|--------|-----------------------------------|----------------------|
+| 1,000 tokens | \$0.004 | \$0.015 |
+| 10,000 tokens | \$0.04 | \$0.15 |
+| 100,000 tokens | \$0.40 | \$1.50 |
+| 1,000,000 tokens | \$4.00 | \$15.00 |
