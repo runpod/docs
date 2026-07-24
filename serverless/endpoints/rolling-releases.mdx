@@ -1,0 +1,46 @@
+---
+title: "Rolling releases"
+sidebarTitle: "Rolling releases"
+description: "How Runpod deploys endpoint updates without taking your endpoint offline."
+---
+
+When you update an endpoint's Docker image or configuration, Runpod deploys the change as a rolling release. Workers are replaced progressively rather than all at once, so your endpoint continues to handle requests throughout the update.
+
+## When a rolling release happens
+
+A rolling release starts automatically whenever you save a change to an endpoint that has active workers. This includes:
+
+- Updating the Docker image (for example, pushing a new image version and saving the endpoint)
+- Changing any endpoint configuration setting that requires workers to restart
+
+## How it works
+
+When a rolling release starts, Runpod distinguishes between idle workers and workers that are actively processing a job.
+
+**Idle workers** (not currently processing a job) on the old version are terminated immediately and replaced with new workers running the updated image.
+
+**Running workers** (actively processing a job) are allowed to finish their current job. Once the job completes, the worker is replaced with a new one on the updated image.
+
+During the rollout, your endpoint continues to accept and process requests. New requests are routed to workers on the updated image when available.
+
+## Best practices
+
+**Use versioned image tags, not `:latest`.** If you deploy with `:latest`, Runpod may serve the cached version on existing workers rather than your updated image. Workers only pick up a new image when they are replaced. Using an explicit version tag (for example, `v1.2.0` or a SHA digest) ensures a clean rollout.
+
+```sh
+# Tag with a version
+docker build -t yourusername/your-worker:v1.2.0 .
+docker push yourusername/your-worker:v1.2.0
+```
+
+Then update your endpoint to reference the new tag. This triggers a rolling release and guarantees all new workers use the correct image.
+
+**Expect a short overlap period.** During a rolling release, some workers run the old image and some run the new one. If your update changes request or response behavior in a breaking way, plan for this transition. For strict version consistency, scale your endpoint to zero workers before updating and then scale back up.
+
+<Note>
+To scale an endpoint to zero workers before updating, set **Max workers** to 0, wait for all running jobs to complete and workers to terminate, then update the image and restore your max workers setting.
+</Note>
+
+## Checking rollout status
+
+You can monitor which workers are running during a rollout from the **Workers** tab on your endpoint's detail page in the Runpod console. Workers on the previous image version will show as terminating as they finish their jobs and are replaced.
