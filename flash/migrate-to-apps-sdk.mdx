@@ -1,0 +1,258 @@
+---
+title: "Migrate from runpod-flash to the apps SDK"
+sidebarTitle: "Migrate to the apps SDK"
+description: "Move your Flash endpoints and apps to the apps SDK in the core runpod package."
+---
+
+<Note>
+The apps SDK ships in the core `runpod` package and is the successor to `runpod-flash`. It becomes available when the next `runpod` release is published to PyPI. Until then, use this guide to plan your migration.
+</Note>
+
+The apps SDK brings Flash into the core `runpod` package. You define GPU functions with a decorator and run them on Runpod through a single client, CLI, and set of worker runtimes, all shipped from the same `runpod` version. This guide maps your existing Flash code and commands to their apps SDK equivalents.
+
+Migration is mostly mechanical: install `runpod`, rename your decorators and CLI commands, then redeploy. Your Python control flow, function bodies, and hardware configuration carry over unchanged.
+
+## What changes at a glance
+
+| Area | Flash (`runpod-flash`) | Apps SDK (`runpod`) |
+| --- | --- | --- |
+| Package | `pip install runpod-flash` | `pip install runpod` |
+| Import | `from runpod_flash import Endpoint` | `import runpod` and `from runpod import App` |
+| Decorator | `@Endpoint(...)` | `@app.queue(...)`, `@app.api(...)`, or `@app.task(...)` |
+| Calling a function | Call the function directly | Call `.remote()`, `.remote.aio()`, `.local()`, or `.spawn()` |
+| CLI | `flash <command>` | `rp <command>` |
+| Local development | Local FastAPI dev server | Live dev sessions on real Runpod endpoints (`rp dev`) |
+
+Flash and the apps SDK share the same control plane. Apps, environments, and builds are the same platform objects, so apps you deployed with Flash keep running, and the apps SDK client can see and manage them.
+
+## Requirements
+
+- A [Runpod account](/get-started/manage-accounts) with a verified email address.
+- A [Runpod API key](/get-started/api-keys) with **All** access permissions.
+- [Python 3.10, 3.11, 3.12, 3.13, or 3.14](https://www.python.org/downloads/) installed.
+
+## Step 1: Install runpod and authenticate
+
+Uninstall `runpod-flash` and install `runpod`. Installing the package also installs the `rp` CLI.
+
+```bash
+pip uninstall runpod-flash
+pip install runpod
+
+# Or with uv:
+uv add runpod
+```
+
+Authenticate with Runpod:
+
+```bash
+rp login
+```
+
+This opens your browser to approve the login. After you approve, your API key is saved to `~/.runpod/config.toml` for the `rp` CLI and the SDK.
+
+<Tip>
+To store a key without the browser flow, run `rp login --api-key YOUR_KEY`. You can also set the `RUNPOD_API_KEY` environment variable, which the SDK reads when no config file is present.
+</Tip>
+
+## Step 2: Create an app and rename your decorators
+
+In Flash, you decorate a function with `@Endpoint` and call it directly. In the apps SDK, you create a named `App` and decorate functions with `@app.queue`, `@app.api`, or `@app.task`.
+
+**Before (Flash):**
+
+```python
+import asyncio
+from runpod_flash import Endpoint, GpuGroup
+
+@Endpoint(
+    name="matrix-multiply",
+    gpu=GpuGroup.ANY,
+    workers=3,
+    idle_timeout=300,
+    dependencies=["numpy"],
+)
+def matrix_multiply(size):
+    import numpy as np
+    return {"mean": float(np.mean(np.random.rand(size, size)))}
+
+async def main():
+    result = await matrix_multiply(1000)
+    print(result)
+
+asyncio.run(main())
+```
+
+**After (apps SDK):**
+
+```python
+import runpod
+from runpod import App, GpuGroup
+
+app = App("matrix-demo")
+
+@app.queue(
+    name="matrix-multiply",
+    gpu=GpuGroup.ANY,
+    workers=3,
+    idle_timeout=300,
+    dependencies=["numpy"],
+)
+def matrix_multiply(size):
+    import numpy as np
+    return {"mean": float(np.mean(np.random.rand(size, size)))}
+
+@runpod.local_entrypoint
+def main():
+    result = matrix_multiply.remote(1000)
+    print(result)
+```
+
+The hardware and dependency configuration is identical. Three things change:
+
+- Functions belong to a named `App`. Create one with `runpod.App("name")` before defining functions.
+- You call the function through a method, not directly. Use `.remote()` to run it in the cloud (calling the handle directly raises a `TypeError`). See [Step 3](#step-3-update-how-you-call-functions).
+- The apps SDK uses `@runpod.local_entrypoint` as the entry point for a dev session instead of `asyncio.run(main())`. Run the module with `rp dev`.
+
+### Choose the right decorator
+
+Flash's remote functions map to three apps SDK decorators, depending on the workload:
+
+| Decorator | Use for | Runs on |
+| --- | --- | --- |
+| `@app.queue` | Queue-based, autoscaling jobs (the default) | A Serverless endpoint |
+| `@app.api` | Load-balanced HTTP services with routes | A load-balanced Serverless endpoint |
+| `@app.task` | Ephemeral, run-to-completion work (for example, training) | A dedicated Pod, provisioned per call and terminated when the function returns |
+
+## Step 3: Update how you call functions
+
+In Flash you await the decorated function directly. In the apps SDK, each decorated function becomes a handle with explicit call methods:
+
+| Method | Behavior |
+| --- | --- |
+| `func.remote(*args)` | Run in the cloud and block for the result. |
+| `await func.remote.aio(*args)` | The async form of `.remote()`, for use inside an event loop. |
+| `func.spawn(*args)` | Fire and forget. Returns a `Job`; call `job.result()` to collect the output later. |
+| `func.local(*args)` | Run the function body in your local process, with no cloud involved. |
+
+```python
+# Sync remote call, blocks for the result
+result = square.remote(4)
+
+# Async variant
+result = await square.remote.aio(5)
+
+# Fire and forget, collect later
+job = square.spawn(6)
+result = job.result()
+
+# Run locally, no cloud involved
+result = square.local(7)
+```
+
+You can also call one function's `.remote()` from inside another function's body to build cross-endpoint pipelines: the nested call runs on the sibling resource.
+
+## Step 4: Update your CLI commands
+
+The `flash` CLI becomes `rp`. Most commands keep the same name and behavior:
+
+| Flash command | Apps SDK command |
+| --- | --- |
+| `flash login` | `rp login` |
+| `flash init` | `rp init` |
+| `flash dev` | `rp dev <module>` |
+| `flash deploy` | `rp deploy` |
+| `flash app list` | `rp app list` |
+| `flash env list` | `rp env list` |
+| `flash undeploy` | `rp undeploy` |
+| `flash update` | `rp update` |
+
+The apps SDK adds `rp logs <pod_id> --follow` for streaming worker logs, and `rp secret` and `rp registry` command groups for managing platform secrets and container registry credentials.
+
+<Note>
+The `rp` CLI is not the same as [`runpodctl`](/runpodctl/overview). It manages apps, endpoints, and Pods for the apps SDK, while `runpodctl` remains a separate tool.
+</Note>
+
+## Configuration parameter parity
+
+The decorator configuration surface carries over directly. The following parameters are available on `@app.queue` (and, except where noted, on `@app.api` and `@app.task`):
+
+| Parameter | Description |
+| --- | --- |
+| `gpu` | GPU type, pool, or shorthand string (for example, `"H100"`, `GpuGroup.ADA_24`). Mutually exclusive with `cpu`. |
+| `cpu` | CPU instance type (for example, `"cpu3c-1-2"`). |
+| `gpu_count` | Number of GPUs per worker. Defaults to `1`. |
+| `workers` | Worker range as `(min, max)`, or an int `n` for `(0, n)`. Defaults to `(0, 3)`, which scales to zero when idle. Not available on `@app.task`. |
+| `idle_timeout` | Seconds a worker stays active after a request before scaling down. Defaults to `60`. Not available on `@app.task`. |
+| `dependencies` | Python packages to install on the worker. |
+| `system_dependencies` | System packages to install on the worker. |
+| `volume` | A [`Volume`](#volumes-secrets-and-models) to attach for persistent storage. |
+| `env` | Environment variables, including [`Secret`](#volumes-secrets-and-models) references. |
+| `datacenter` | One or more datacenters to deploy to. |
+| `image` | A custom base image. The deployed code still arrives from the build artifact, so any image with a `python3` binary works. |
+| `registry_auth` | Registry credentials for a private `image`. |
+| `model` | A [`Model`](#volumes-secrets-and-models) to pre-cache on the worker. Not available on `@app.task`. |
+| `max_concurrency` | Jobs one worker processes at once. Defaults to `1`. Only meaningful for async functions. `@app.queue` only. |
+| `execution_timeout_ms` | Per-job timeout in milliseconds. `0` means no cap. |
+| `flashboot` | Enable FlashBoot for faster cold starts. Defaults to `True`. Not available on `@app.task`. |
+| `scaler_type` / `scaler_value` | Autoscaling strategy (`QUEUE_DELAY` or `REQUEST_COUNT`) and threshold. `scaler_value` defaults to `4`. Not available on `@app.task`. |
+| `min_cuda_version` | Minimum CUDA version to filter hosts by (`"11.8"` through `"13.0"`). |
+| `accelerate_downloads` | Accelerate model and dependency downloads. Defaults to `True`. |
+| `container_disk_gb` | Container disk size in GB. |
+
+### Volumes, secrets, and models
+
+The apps SDK provides typed helpers for storage, secrets, and cached models, imported from `runpod`:
+
+```python
+from runpod import App, Volume, Secret, Model
+
+app = App("inference")
+
+models = Volume("models", size=100)          # persistent network volume
+llama = Model("meta-llama/Llama-3.1-8B-Instruct")  # pre-cached weights
+
+@app.queue(
+    gpu="H100",
+    volume=models,
+    model=llama,
+    env={"HF_TOKEN": Secret("hf-token")},     # decrypted on the worker
+)
+def chat(prompt: str):
+    import vllm
+    llm = vllm.LLM(model=str(llama.path))     # weights already on disk
+    return llm.generate(prompt)
+```
+
+- `Volume` attaches a network volume, created on first use. Access its mount path inside the worker with `volume.path`.
+- `Secret` references an encrypted platform secret by name. Its value is decrypted when the worker boots and never travels through the SDK. Manage secrets with `rp secret add/list/delete`.
+- `Model` pre-caches Hugging Face weights so they are on disk before your function runs. Access the staged directory with `model.path`.
+
+## What is not carried over
+
+A few Flash features are intentionally left out of the apps SDK:
+
+- **The unified `Endpoint` class.** Use `@app.queue`, `@app.api`, or `@app.task` instead.
+- **The local HTTP dev server.** `rp dev` provisions temporary live endpoints on the platform, watches your files, and re-runs your entry point on demand, so you develop against real infrastructure.
+- **Queue class endpoints.**
+- **`.env` auto-loading.** Environment configuration is explicit through the `env=` parameter and `Secret`. The `rp init` template excludes `.env` from the deploy artifact.
+
+## Your existing Flash apps keep running
+
+Apps, environments, and builds are the same platform objects across Flash and the apps SDK. Apps you deployed with Flash keep running, and you can see and manage them with the apps SDK client:
+
+```bash
+rp app list          # see your deployed apps, including ones deployed with Flash
+rp undeploy          # remove deployed endpoints
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Flash overview" href="/flash/overview" icon="bolt" horizontal>
+    Review the Flash concepts that carry over to the apps SDK.
+  </Card>
+  <Card title="Configuration parameters" href="/flash/configuration/parameters" icon="sliders" horizontal>
+    See the full configuration reference for endpoint functions.
+  </Card>
+</CardGroup>
