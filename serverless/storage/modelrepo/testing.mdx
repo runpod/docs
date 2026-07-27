@@ -4,7 +4,7 @@ description: "Upload a model to Model Repo and deploy it to a Serverless endpoin
 ---
 
 <Note>
-Model Repo is currently in beta and is available on Mac and Linux only. Windows support is coming soon.
+  Model Repo is currently in beta and is available on Mac and Linux only. Windows support is coming soon.
 </Note>
 
 ## Why use Model Repo
@@ -17,20 +17,14 @@ Model Repo lets you upload your own models to private storage on Runpod and atta
 
 ---
 
-## Scripted testing
-
-A shell script is available that runs all of the steps below automatically using mock model files. Download `model_repo_testing.sh` from the internal Notion page and run it to validate end-to-end without manually executing each step.
-
----
-
-## Manual testing
-
-### Prerequisites
+## Prerequisites
 
 - Your email is feature-flagged for Model Repo access.
 - `jq` is installed for parsing JSON output.
 
-### Set environment variables
+---
+
+## Step 1: Set environment variables
 
 Export the following before running any commands. **Make sure to set your actual API key — missing this is the most common source of auth errors later.**
 
@@ -39,17 +33,17 @@ export RUNPOD_API_URL="https://rest.runpod.io/v1"
 export RUNPOD_GRAPHQL_URL="https://api.runpod.io/graphql"
 export RUNPOD_API_KEY="your-api-key"   # replace with your actual API key
 
-export MODEL_NAME="$(whoami)-test-$(date +%s)"   # unique name per test run — reusing the same name uploads a new version, not a new model
-export MODEL_PATH="/path/to/model"               # local path to the model files you want to upload
+export MODEL_NAME="my-model"           # name to register your model under
+export MODEL_PATH="/path/to/model"     # local path to the model files you want to upload
 ```
 
-<Warning>
-`MODEL_NAME` must be unique for each test run. If you reuse the same name, the upload creates a new version of the existing model rather than a new model.
-</Warning>
+<Note>
+  Each upload under the same `MODEL_NAME` creates a new version of that model, not a new model. Use a different name if you want a separate model entry.
+</Note>
 
 ---
 
-### Step 1: Install runpodctl
+## Step 2: Install runpodctl
 
 **Option A: Install via Homebrew (recommended)**
 
@@ -60,19 +54,19 @@ brew install runpod/runpodctl/runpodctl
 **Option B: Build from source**
 
 ```bash
-brew install go                              # install Go, required to build runpodctl
+brew install go   # install Go, required to build runpodctl
 git clone git@github.com:runpod/runpodctl.git
 cd runpodctl
-make                                         # builds the binary to ./bin/runpodctl
+make              # builds the binary to ./bin/runpodctl
 ```
 
 <Note>
-If you build from source, the binary is at `./bin/runpodctl`. Either run it with that path, or add `./bin` to your `PATH`. The steps below use `runpodctl` — adjust accordingly.
+  If you build from source, the binary is at `./bin/runpodctl`. Either run it with that path, or add `./bin` to your `PATH`. The steps below use `runpodctl` — adjust accordingly.
 </Note>
 
 ---
 
-### Step 2: Upload the model
+## Step 3: Upload the model
 
 ```bash
 # --name: the name to register the model under in your repo
@@ -90,16 +84,16 @@ This outputs a JSON string listing all uploaded files.
 
 ---
 
-### Step 3: Get your user ID and model hash
+## Step 4: Get your user ID and model hash
 
 ```bash
-export USER_ID="$(runpodctl user | jq -r '.id')"        # your Runpod user ID
-export MODEL_HASH="$(runpodctl model list --name "$MODEL_NAME" | jq -r '.[0].versions[0].hash')"   # the model version hash
+export USER_ID="$(runpodctl user | jq -r '.id')"                                                           # your Runpod user ID
+export MODEL_HASH="$(runpodctl model list --name "$MODEL_NAME" | jq -r '.[0].versions[0].hash')"  # the model version hash
 ```
 
 ---
 
-### Step 4: Deploy a Serverless endpoint with the model attached
+## Step 5: Deploy a Serverless endpoint with the model attached
 
 ```bash
 # --name: name for the endpoint
@@ -122,12 +116,12 @@ runpodctl serverless create \
 ```
 
 <Note>
-`--model-reference` is only supported with `--hub-id` and GPU endpoints. It is repeatable if you need to attach multiple models to the same endpoint. The `--env MODEL_NAME` flag passes the full local path to the worker so your handler knows where to find the model files.
+  `--model-reference` is only supported with `--hub-id` and GPU endpoints. It is repeatable if you need to attach multiple models to the same endpoint. The `--env MODEL_NAME` flag passes the full local path to the worker so your handler knows where to find the model files.
 </Note>
 
 ---
 
-### Step 5: Verify the model is working
+## Step 6: Verify the model is working
 
 Send a test request to confirm the endpoint is live and the model is accessible. Replace `ENDPOINT_ID` with the ID returned in the previous step:
 
@@ -140,11 +134,11 @@ curl -s -X POST "https://api.runpod.ai/v2/${ENDPOINT_ID}/runsync" \
 
 A successful response confirms the endpoint is running and the model is attached. If the request fails with an auth error, verify that `RUNPOD_API_KEY` is set correctly.
 
-If you prefer a graphical interface, you can also send requests to the worker from the web UI.
+You can also send requests from the web UI if you prefer a graphical interface.
 
 ---
 
-### Step 6: Clean up
+## Step 7: Clean up
 
 Delete the endpoint after testing to stop accruing spend. Use the web UI or:
 
