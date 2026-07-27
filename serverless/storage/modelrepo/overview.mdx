@@ -48,8 +48,6 @@ Pass this path to the worker as an environment variable using the `--env` flag w
 
 Your handler function reads `MODEL_NAME` to know where to load the model from. Model Repo only handles delivering the files to the host — your handler is fully responsible for loading the model and processing requests.
 
-/* [ENGINEERING: Marcin's question — does Runpod do any additional wrapping of the model (e.g., auto-adding /ping, adding a handler wrapper)? The current doc says users write their own handler. Confirm this is accurate.] */
-
 For queue-based endpoints, you write a handler function that receives requests, loads the model from `MODEL_NAME`, runs inference, and returns results. For load balancing endpoints (FastAPI, Flask, etc.), your server process loads the model from that path on startup.
 
 ## Model Repo vs network volumes
@@ -63,12 +61,14 @@ Both Model Repo and [network volumes](/storage/network-volumes) can make model f
 | **Best for** | Fixed, versioned model weights | Frequently changing files, shared state |
 | **Versioning** | Built-in, content-addressed by hash | Manual — you manage file paths yourself |
 | **Multi-worker sharing** | Not shared across workers | Shared across all workers on the same volume |
+| **Data center availability** | Available in any data center | Tied to a single data center |
 | **Storage billing** | /* [ENGINEERING: how is Model Repo storage billed? $/GB/month?] */ | $0.07/GB/month |
 
 Use Model Repo when:
 - You have a fixed set of model weights you want to distribute reliably to workers.
 - You want shorter cold starts without depending on HuggingFace or any external download source.
 - You need version control over exactly which model checkpoint is deployed.
+- You want the same model available across multiple data centers, rather than tied to a single one.
 
 Use a network volume when:
 - Workers need to read and write shared files during a run (e.g., checkpoints, intermediate outputs).
@@ -98,7 +98,7 @@ To migrate:
 3. Update your endpoint to reference the model URL.
 4. Update your worker code to load the model from the local path instead of from within the image.
 
-/* [ENGINEERING: Anything specific users need to do if their model has baked images (e.g., embedded image assets in weights)? Any known edge cases?] */ 
+If your image references the baked-in model through a hardcoded path, update that reference to point to the Model Repo path instead. How much you need to change depends on how your image currently loads the model.
 
 **If you cache models on a network volume:**
 
