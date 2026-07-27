@@ -4,14 +4,14 @@ description: "Upload a model to Model Repo and deploy it to a Serverless endpoin
 ---
 
 <Note>
-Model Repo is currently in alpha and is available on Mac and Linux only. Windows support is coming soon.
+Model Repo is currently in beta and is available on Mac and Linux only. Windows support is coming soon.
 </Note>
 
 ## Why use Model Repo
 
 Model Repo lets you upload your own models to private storage on Runpod and attach them directly to Serverless endpoints. Key benefits:
 
-- **Faster cold starts**: Models are pre-cached on the worker host rather than downloaded at runtime.
+- **Faster cold starts**: Models are pre-cached on worker hosts when available, so cold starts are typically faster. In some cases a model may still need to be fetched from storage.
 - **No HuggingFace dependency**: Your models are stored in Runpod's infrastructure, so endpoints don't require an outbound download on every cold start.
 - **Private storage**: Models are stored in your account and are not accessible to other users.
 
@@ -75,63 +75,50 @@ If you build from source, the binary is at `./bin/runpodctl`. Either run it with
 ### Step 2: Upload the model
 
 ```bash
+# --name: the name to register the model under in your repo
+# --model-path: local path to the model files
+# --create-upload: creates the upload session and transfers files
+# --wait-for-hash: waits for the background hashing process to complete
 runpodctl model add \
-  --name "$MODEL_NAME" \          # the name to register the model under in your repo
-  --model-path "$MODEL_PATH" \    # local path to the model files
-  --create-upload                 # creates the upload session and transfers files
+  --name "$MODEL_NAME" \
+  --model-path "$MODEL_PATH" \
+  --create-upload \
+  --wait-for-hash
 ```
 
 This outputs a JSON string listing all uploaded files.
 
 ---
 
-### Step 3: Wait for the model to be hashed
-
-After upload, the model must be hashed by an asynchronous background process. This typically completes in a few minutes but can take up to 10–15 minutes.
-
-Poll until the `hash` field is non-null:
-
-```bash
-runpodctl model list --name "$MODEL_NAME" | jq -r '.[0].versions[0].hash'
-```
-
-While hashing is in progress, the command returns `null`:
-
-```
-% runpodctl model list --name "$MODEL_NAME" | jq -r '.[0].versions[0].hash'
-null
-```
-
-Once hashing is complete, it returns the hash value:
-
-```
-% runpodctl model list --name "$MODEL_NAME" | jq -r '.[0].versions[0].hash'
-71a311bdf0ca44119ed74dbef8cf573bc89b58cbc48a10fe508f756ebb1922dc
-```
-
----
-
-### Step 4: Get your user ID and model hash
+### Step 3: Get your user ID and model hash
 
 ```bash
 export USER_ID="$(runpodctl user | jq -r '.id')"        # your Runpod user ID
-export MODEL_HASH="$(runpodctl model list --name "$MODEL_NAME" | jq -r '.[0].versions[0].hash')"   # the hash from step 3
+export MODEL_HASH="$(runpodctl model list --name "$MODEL_NAME" | jq -r '.[0].versions[0].hash')"   # the model version hash
 ```
 
 ---
 
-### Step 5: Deploy a Serverless endpoint with the model attached
+### Step 4: Deploy a Serverless endpoint with the model attached
 
 ```bash
+# --name: name for the endpoint
+# --hub-id: Hub template to deploy
+# --gpu-id: GPU type
+# --workers-max: maximum number of active workers
+# --workers-min: minimum number of workers kept warm
+# --model-reference: attaches your model to the endpoint
+# --env MODEL_NAME: sets the model path on the worker
+# --min-cuda-version: works around a bug in runpodctl
 runpodctl serverless create \
-  --name "my_worker" \                   # name for the endpoint
-  --hub-id "cm8h09d9n000008jvh2rqdsmb" \  # Hub template to deploy
-  --gpu-id "AMPERE_24" \                 # GPU type
-  --workers-max 3 \                      # maximum number of active workers
-  --workers-min 1 \                      # minimum number of workers kept warm
-  --model-reference "https://local/$USER_ID/$MODEL_NAME:$MODEL_HASH" \   # attaches your model to the endpoint
-  --env MODEL_NAME="/runpod/model-store/modelrepo-local/models/$USER_ID/$MODEL_NAME/$MODEL_HASH" \   # sets the model path on the worker
-  --min-cuda-version "13.0"              # works around a bug in runpodctl
+  --name "my_worker" \
+  --hub-id "cm8h09d9n000008jvh2rqdsmb" \
+  --gpu-id "AMPERE_24" \
+  --workers-max 3 \
+  --workers-min 1 \
+  --model-reference "https://local/$USER_ID/$MODEL_NAME:$MODEL_HASH" \
+  --env MODEL_NAME="/runpod/model-store/modelrepo-local/models/$USER_ID/$MODEL_NAME/$MODEL_HASH" \
+  --min-cuda-version "13.0"
 ```
 
 <Note>
@@ -140,7 +127,7 @@ runpodctl serverless create \
 
 ---
 
-### Step 6: Verify the model is working
+### Step 5: Verify the model is working
 
 Send a test request to confirm the endpoint is live and the model is accessible. Replace `ENDPOINT_ID` with the ID returned in the previous step:
 
@@ -157,7 +144,7 @@ If you prefer a graphical interface, you can also send requests to the worker fr
 
 ---
 
-### Step 7: Clean up
+### Step 6: Clean up
 
 Delete the endpoint after testing to stop accruing spend. Use the web UI or:
 
