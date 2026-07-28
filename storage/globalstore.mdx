@@ -1,0 +1,75 @@
+---
+title: "GlobalStore"
+sidebarTitle: "GlobalStore"
+description: "Mount a bring-your-own S3-compatible bucket into Pods for read-heavy, region-portable object storage."
+tag: "NEW"
+---
+
+GlobalStore lets you register a bring-your-own S3-compatible bucket as an **ObjectStore** and mount one or more prefixes of it (**ObjectMounts**) into your Pods at container start. It is object-backed, read-heavy, and region-portable, so you can make the same objects available to Pods across regions without copying data into each one.
+
+<Note>
+GlobalStore is an early-access feature and may change while it's in active development. Today it's configured through the Runpod GraphQL API. See [Early access](/get-started/early-access) to learn more.
+</Note>
+
+## How GlobalStore works
+
+An ObjectStore is a registered reference to your external S3-compatible bucket. It records the endpoint URL, bucket name, credentials, and the regions in which the bucket is eligible to be used.
+
+An ObjectMount attaches a prefix of that bucket (a grouping of object keys, similar to a folder path) into a Pod at a chosen mount path. The mount is established when the container starts, so the objects under that prefix are available to your application as soon as the Pod is running.
+
+GlobalStore is distinct from the [S3-compatible API](/storage/s3-api), which exposes your Runpod network volumes over an S3 endpoint. GlobalStore instead mounts your own external S3-compatible bucket into Pods.
+
+## When to use GlobalStore
+
+Today, you attach ObjectMounts to Pods; Serverless worker support isn't available.
+
+GlobalStore is built for read-heavy workloads that read the same objects repeatedly or across regions, such as:
+
+- Serving models.
+- Reading inference artifacts.
+- Distributing model weights, LoRAs, or configuration read-only across regions.
+
+## When not to use GlobalStore
+
+<Warning>
+GlobalStore is not a replacement for [network volumes](/storage/network-volumes), Runpod's regional, high-performance block and file storage. For latency-sensitive or write-heavy workloads, use a network volume or [high-performance storage](/storage/high-performance-storage) instead.
+</Warning>
+
+GlobalStore does not support the following workloads:
+
+- High-throughput training.
+- POSIX filesystem semantics.
+- Active-active concurrent writes.
+
+Object storage doesn't behave like a POSIX filesystem, so applications that expect local-filesystem behavior aren't a good fit for GlobalStore.
+
+## Supported providers
+
+GlobalStore is tested with Tigris and Cloudflare R2. Other S3-compatible providers are untested and not supported.
+
+## Regional availability
+
+When you register an ObjectStore, you declare the regions in which it is eligible to be used. GlobalStore is available only in supported regions, and availability expands over time. To confirm whether GlobalStore is available in the regions you need, check the eligible regions when you register an ObjectStore, or contact [Runpod support](https://www.runpod.io/contact).
+
+## Read and write behavior
+
+Mounts are typically read-only, which matches GlobalStore's read-heavy design.
+
+The prefix a mount points at is subject to a simple rule: a read-only mount that points at an empty prefix fails, because there are no objects to read. An empty prefix with read-write access is allowed, and files are created under that prefix on write.
+
+## Credentials and security
+
+Your bucket credentials are encrypted at rest. The secret is write-only: the API never returns it after you submit it. Credentials are injected into the mount process through its environment and are never written to disk.
+
+An ObjectStore can only be used by the same account or organization that registered it.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="GlobalStore quickstart" href="/storage/globalstore-quickstart" icon="rocket" horizontal>
+    Register an ObjectStore and mount it into a Pod using the GraphQL API.
+  </Card>
+  <Card title="Network volumes" href="/storage/network-volumes" icon="hard-drive" horizontal>
+    Learn about Runpod's regional, high-performance storage.
+  </Card>
+</CardGroup>
