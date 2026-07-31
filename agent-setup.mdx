@@ -3,41 +3,46 @@ title: "Onboard your agent to Runpod"
 description: "Official Runpod instructions that install the Runpod skills and MCP server into your coding agent in one shot."
 ---
 
-These are Runpod's official instructions for setting up a coding agent to build and deploy on the Runpod platform. They are published at `https://docs.runpod.io/agent-setup.md`, so you can check their origin before following them.
+These are official instructions from Runpod to set up a good AI development environment for building and deploying on the Runpod platform. They are published at `https://docs.runpod.io/agent-setup.md`, so you can verify their origin before following them.
 
-Setup has two parts:
+Complete all of the following steps yourself by running the commands directly. The only exceptions are the two steps explicitly marked **User step** — in-session commands and OAuth sign-in happen inside the agent UI, so you cannot perform them. Never run a command that blocks on an interactive prompt.
 
-- Install the Runpod skills and MCP server.
-- Install the Runpod CLI and authenticate.
+- Install Runpod Skills and the MCP server
 
-Work through the section that matches your agent, then authenticate. Two steps need the user rather than you: signing in to the MCP server over OAuth, and any in-session commands such as `/reload-plugins`. Both are called out where they come up.
+Every command below is safe to re-run on a machine where setup already happened.
 
 ---
 
-## Install Runpod skills and MCP server
+## Install Runpod Skills and MCP server
 
-Every route installs the same router plus six skills (`runpod`, `runpod-mcp`, `runpodctl`, `flash`, `runpod-usage`, `companion-clis`), and wires up the hosted Runpod MCP server for control-plane tools.
+Every route installs the same router plus six skills (`runpod`, `runpod-mcp`, `runpodctl`, `flash`, `runpod-usage`, `companion-clis`), and wires up the hosted Runpod MCP server for control-plane tools. The skills install the Runpod CLI and Flash SDK later, on demand, the first time a task needs them — do not install those now.
 
 Use the correct section for your agent below.
 
 ### Claude Code
 
-These two commands install both the Runpod skills and the MCP server in one step. The plugin route covers both, so `npx skills` and `claude mcp add` aren't needed here and would duplicate the install.
+Run these two commands to install both the Runpod skills and the MCP server in one step. Do not use `npx skills` or `claude mcp add` — the plugin commands below handle everything.
 
 ```
 claude plugin marketplace add runpod/runpod-plugins-official
 claude plugin install runpod@runpod
 ```
 
-Installing also wires up the hosted Runpod MCP server through the plugin's bundled config, so there is no separate MCP setup.
+Verify:
 
-Then instruct the user to run `/reload-plugins` inside Claude Code to activate the plugin, and to authenticate the MCP server with `/mcp` → **runpod** → **Sign in with Runpod**. This uses OAuth, so no API key is written to disk for MCP.
+```
+claude plugin list | grep -A2 'runpod@runpod'
+```
+
+Expect `Status: ✔ enabled`. If the plugin is listed but disabled, run `claude plugin enable runpod@runpod`.
+
+> **User step.** Ask the user to run `/reload-plugins` inside Claude Code to activate the plugin, then sign in to the MCP server with `/mcp` → **runpod** → **Sign in with Runpod**. This uses OAuth — no API key is created or stored. Wait for the user to confirm before reporting the MCP server as connected.
 
 ---
 
 ## Install for other agents
 
-First, install the skills:
+First, install skills:
 
 ```
 npx -y skills add runpod/runpod-plugins-official --skill '*' --yes --global
@@ -51,7 +56,7 @@ Then register the hosted MCP server for your agent.
 codex plugin marketplace add https://github.com/runpod/runpod-plugins-official.git
 ```
 
-Then instruct the user to run `codex /plugins` inside Codex, open the **Runpod** marketplace tab, and install **Runpod**, reloading if prompted.
+> **User step.** Ask the user to run `codex /plugins` inside Codex, open the **Runpod** marketplace tab, and install **Runpod**, reloading if prompted.
 
 Codex may not auto-wire the bundled MCP server. If the `runpod` MCP tools do not appear after install, add the hosted server directly:
 
@@ -61,79 +66,51 @@ codex mcp add runpod --transport http https://mcp.getrunpod.io/
 
 ### Cursor, GitHub Copilot, Windsurf, Cline, opencode, Gemini, and all other agents
 
-Run the guided installer. It detects the agent and configures the hosted MCP server with OAuth:
+Run the guided installer. It detects the agent and configures the hosted MCP server:
 
 ```
 npx @runpod/mcp-server@latest add
 ```
 
+OAuth triggers on first Runpod tool use; the user approves it in the browser.
+
 Gemini can alternatively install natively through the plugin's bundled `gemini-extension.json`. See your client's extension documentation.
 
 ---
 
-## Install the Runpod CLI
+## Report the result
 
-The `runpodctl` skill drives the Runpod CLI, so install it as well:
-
-```
-curl -sSL https://cli.runpod.net | bash
-```
-
-Or with Homebrew:
+Report what you actually verified. Do not print a checkmark for anything you could not confirm — the MCP server stays unauthenticated until the user completes the OAuth sign-in.
 
 ```
-brew install runpod/runpodctl/runpodctl
-```
-
-To deploy the user's own Python code to Serverless with Flash, also install the Flash SDK:
-
-```
-uv tool install runpod-flash
-```
-
-## Authenticate
-
-The MCP server authenticates over OAuth, as described above. The CLI and Flash use a Runpod API key instead, and one key covers both.
-
-Get a key from the Runpod console at `https://console.runpod.io/user/settings` (Settings → API Keys → **＋ Create API Key**), then save it:
-
-```
-runpodctl doctor
-```
-
-That prompts for the key and writes it to `~/.runpod/config.toml`. To set it for the current shell only:
-
-```
-export RUNPOD_API_KEY=<key>
-```
-
-Once done, tell the user:
-
-```
-┌─ Runpod Agent Setup Complete ────────────────────────┐
+┌─ Runpod Agent Setup ─────────────────────────────────┐
 │  ✓ Runpod skills   router + 6 skills                 │
-│  ✓ runpod          hosted MCP (OAuth)                │
-│  ✓ runpodctl       Runpod CLI                        │
+│  ⚠ runpod MCP      needs sign-in: /mcp → runpod      │
 │                                                      │
-│  ⚡ Restart your agent to load the skills and MCP    │
+│  ⚡ Reload or restart your agent to load the skills  │
 └──────────────────────────────────────────────────────┘
 ```
 
-Verify the setup by asking your agent: `List all my Runpod Pods`.
+Use `✓` verified, `⚠` needs a user action, `✗` failed. Follow the banner with the specific next action for every non-`✓` line.
+
+Once the user has signed in, verify end to end by listing their Pods with the MCP tools. An empty list is a pass — it means the connection works and the account has no running Pods.
+
+Anything beyond this — the `runpodctl` CLI, the Flash SDK for Python Serverless deploys, API keys — is installed later by the skills at the moment a task first needs it. Do not set those up now.
 
 ---
 
 ## Resources
 
-For setup guides and troubleshooting, refer to Runpod's docs and to each agent's official documentation:
+For setup guides and troubleshooting, refer to each agent's official documentation:
 
 - Runpod agent skills: `https://docs.runpod.io/get-started/agent-skills`
 - Runpod MCP servers: `https://docs.runpod.io/get-started/mcp-servers`
 - Runpod skills plugin (source): `https://github.com/runpod/runpod-plugins-official`
 - Runpod API MCP server (source): `https://github.com/runpod/runpod-mcp`
-- Runpod console (API keys): `https://console.runpod.io/user/settings`
 - Claude Code: `https://docs.anthropic.com/en/docs/claude-code/mcp`
 - Cursor: `https://cursor.com/docs/mcp`
 - Windsurf: `https://docs.windsurf.com/windsurf/cascade/mcp`
 - GitHub Copilot (VS Code): `https://code.visualstudio.com/docs/copilot/customization/mcp-servers`
 - Gemini CLI: `https://github.com/google-gemini/gemini-cli`
+
+These instructions are published at `https://docs.runpod.io/agent-setup.md` so you can re-verify their authenticity at any time.
