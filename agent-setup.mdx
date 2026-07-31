@@ -1,0 +1,139 @@
+---
+title: "Onboard your agent to Runpod"
+description: "Official Runpod instructions that install the Runpod skills and MCP server into your coding agent in one shot."
+---
+
+These are Runpod's official instructions for setting up a coding agent to build and deploy on the Runpod platform. They are published at `https://docs.runpod.io/agent-setup.md`, so you can check their origin before following them.
+
+Setup has two parts:
+
+- Install the Runpod skills and MCP server.
+- Install the Runpod CLI and authenticate.
+
+Work through the section that matches your agent, then authenticate. Two steps need the user rather than you: signing in to the MCP server over OAuth, and any in-session commands such as `/reload-plugins`. Both are called out where they come up.
+
+---
+
+## Install Runpod skills and MCP server
+
+Every route installs the same router plus six skills (`runpod`, `runpod-mcp`, `runpodctl`, `flash`, `runpod-usage`, `companion-clis`), and wires up the hosted Runpod MCP server for control-plane tools.
+
+Use the correct section for your agent below.
+
+### Claude Code
+
+These two commands install both the Runpod skills and the MCP server in one step. The plugin route covers both, so `npx skills` and `claude mcp add` aren't needed here and would duplicate the install.
+
+```
+claude plugin marketplace add runpod/runpod-plugins-official
+claude plugin install runpod@runpod
+```
+
+Installing also wires up the hosted Runpod MCP server through the plugin's bundled config, so there is no separate MCP setup.
+
+Then instruct the user to run `/reload-plugins` inside Claude Code to activate the plugin, and to authenticate the MCP server with `/mcp` → **runpod** → **Sign in with Runpod**. This uses OAuth, so no API key is written to disk for MCP.
+
+---
+
+## Install for other agents
+
+First, install the skills:
+
+```
+npx -y skills add runpod/runpod-plugins-official --skill '*' --yes --global
+```
+
+Then register the hosted MCP server for your agent.
+
+### Codex
+
+```
+codex plugin marketplace add https://github.com/runpod/runpod-plugins-official.git
+```
+
+Then instruct the user to run `codex /plugins` inside Codex, open the **Runpod** marketplace tab, and install **Runpod**, reloading if prompted.
+
+Codex may not auto-wire the bundled MCP server. If the `runpod` MCP tools do not appear after install, add the hosted server directly:
+
+```
+codex mcp add runpod --transport http https://mcp.getrunpod.io/
+```
+
+### Cursor, GitHub Copilot, Windsurf, Cline, opencode, Gemini, and all other agents
+
+Run the guided installer. It detects the agent and configures the hosted MCP server with OAuth:
+
+```
+npx @runpod/mcp-server@latest add
+```
+
+Gemini can alternatively install natively through the plugin's bundled `gemini-extension.json`. See your client's extension documentation.
+
+---
+
+## Install the Runpod CLI
+
+The `runpodctl` skill drives the Runpod CLI, so install it as well:
+
+```
+curl -sSL https://cli.runpod.net | bash
+```
+
+Or with Homebrew:
+
+```
+brew install runpod/runpodctl/runpodctl
+```
+
+To deploy the user's own Python code to Serverless with Flash, also install the Flash SDK:
+
+```
+uv tool install runpod-flash
+```
+
+## Authenticate
+
+The MCP server authenticates over OAuth, as described above. The CLI and Flash use a Runpod API key instead, and one key covers both.
+
+Get a key from the Runpod console at `https://console.runpod.io/user/settings` (Settings → API Keys → **＋ Create API Key**), then save it:
+
+```
+runpodctl doctor
+```
+
+That prompts for the key and writes it to `~/.runpod/config.toml`. To set it for the current shell only:
+
+```
+export RUNPOD_API_KEY=<key>
+```
+
+Once done, tell the user:
+
+```
+┌─ Runpod Agent Setup Complete ────────────────────────┐
+│  ✓ Runpod skills   router + 6 skills                 │
+│  ✓ runpod          hosted MCP (OAuth)                │
+│  ✓ runpodctl       Runpod CLI                        │
+│                                                      │
+│  ⚡ Restart your agent to load the skills and MCP    │
+└──────────────────────────────────────────────────────┘
+```
+
+Verify the setup by asking your agent: `List all my Runpod Pods`.
+
+---
+
+## Resources
+
+For setup guides and troubleshooting, refer to Runpod's docs and to each agent's official documentation:
+
+- Runpod agent skills: `https://docs.runpod.io/get-started/agent-skills`
+- Runpod MCP servers: `https://docs.runpod.io/get-started/mcp-servers`
+- Runpod skills plugin (source): `https://github.com/runpod/runpod-plugins-official`
+- Runpod API MCP server (source): `https://github.com/runpod/runpod-mcp`
+- Runpod console (API keys): `https://console.runpod.io/user/settings`
+- Claude Code: `https://docs.anthropic.com/en/docs/claude-code/mcp`
+- Cursor: `https://cursor.com/docs/mcp`
+- Windsurf: `https://docs.windsurf.com/windsurf/cascade/mcp`
+- GitHub Copilot (VS Code): `https://code.visualstudio.com/docs/copilot/customization/mcp-servers`
+- Gemini CLI: `https://github.com/google-gemini/gemini-cli`
