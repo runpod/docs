@@ -274,6 +274,79 @@ Delete a Pod:
 runpodctl pod delete <pod-id>
 ```
 
+## Pod runtime status
+
+`runpodctl pod get` and `runpodctl pod list` now report a Pod's real runtime state in their JSON and YAML output, alongside the existing `desiredStatus`. `desiredStatus` is the state you asked for (for example, `RUNNING`), while `runtimeStatus` is what the Pod is actually doing. For example, a Pod still pulling a large image and a Pod that has been serving traffic for an hour both show `desiredStatus: RUNNING`, but their `runtimeStatus` values differ.
+
+<ResponseField name="runtimeStatus" type="string">
+Always present. What the Pod is actually doing (see the table below).
+</ResponseField>
+
+<ResponseField name="runtimeStatusReason" type="string">
+Present only when there is more to say. A stable token you can safely branch on in scripts.
+</ResponseField>
+
+<ResponseField name="lastStatusChange" type="string">
+Present when available. The backend's raw status text (for example, `Exited by user: <date>` or `Outbid: <date>`).
+</ResponseField>
+
+For example, `runpodctl pod list --output json` returns entries like this for a running Pod:
+
+```json
+{
+  "id": "abc123xyz",
+  "name": "my-training-pod",
+  "desiredStatus": "RUNNING",
+  "runtimeStatus": "running",
+  "imageName": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04",
+  "gpuCount": 1,
+  "costPerHr": 0.69,
+  "createdAt": "2025-01-15T09:30:00Z",
+  "uptimeSeconds": 3600
+}
+```
+
+When a Pod is initializing, `runtimeStatus` is `initializing`, `runtimeStatusReason` is `awaiting_container`, and `uptimeSeconds` is omitted because no container is reporting yet.
+
+### Runtime status values
+
+| Value | Meaning | What to do |
+| --- | --- | --- |
+| `running` | desiredStatus is `RUNNING` and the platform is reporting runtime telemetry, so the container is up. Does not imply that any port (such as SSH) is reachable. | Ready to use. |
+| `initializing` | desiredStatus is `RUNNING` but no telemetry is being reported yet. Usually the container is not up yet (image pull, container creation, or boot, which the platform does not distinguish). Read this as "no container reported," not "the container is provably down." | Keep polling. |
+| `stopped` | desiredStatus is `EXITED` and the last status change does not name a termination. The container is gone, but the Pod's disk is kept. | Run `runpodctl pod start <pod-id>` to bring it back. |
+| `terminated` | The Pod is being destroyed. A terminated Pod drops out of `runpodctl pod list` shortly after, so this is a narrow window. | None; the Pod is gone. Because a terminated Pod quickly drops out of `runpodctl pod list`, a teardown script should treat "Pod not found"—not `runtimeStatus: terminated`—as the reliable signal that a Pod is gone. |
+| `unknown` | The runtime state cannot be derived (an uncommon `desiredStatus`, or the runtime lookup failed). | Read `desiredStatus` from the same output. |
+
+### Runtime status reasons
+
+| Token | Paired status | Meaning |
+| --- | --- | --- |
+| `awaiting_container` | `initializing` | No container is being reported yet for a Pod that should be running. |
+| `stopped_by_user`, `terminated_by_user` | `stopped` or `terminated` | You stopped or terminated the Pod. |
+| `stopped_by_runpod`, `terminated_by_runpod` | `stopped` or `terminated` | Runpod stopped or terminated the Pod. No machine-readable cause is recorded; in practice this is a low account balance, a fatal image-pull failure, or host action. |
+| `stopped_outbid`, `terminated_outbid` | `stopped` or `terminated` | A spot or Community Cloud Pod lost its machine to a higher bid. Retry on a different machine or at on-demand pricing. To avoid another outbid, redeploy with `runpodctl pod create` on Secure Cloud or an on-demand configuration. |
+| `runtime_unavailable` | `unknown` | The runtime lookup could not be made, so `running` and `initializing` cannot be told apart. |
+
+<Tip>
+To poll a Pod to readiness in a script, wait for `runtimeStatus: running`. Branch on the `runtimeStatus` and `runtimeStatusReason` tokens rather than parsing the free-text `lastStatusChange`.
+
+```bash
+# Wait until the Pod's container is up
+until [ "$(runpodctl pod get <pod-id> --output json | jq -r '.runtimeStatus')" = "running" ]; do
+  sleep 5
+done
+```
+
+A `runtimeStatus` of `unknown` with reason `runtime_unavailable` during polling usually means the runtime lookup momentarily failed, not that the Pod is down—keep polling rather than treating it as terminal.
+</Tip>
+
+<Note>
+`runtimeStatus` and `desiredStatus` come from different sources, so a single command can briefly show them disagreeing (for example, `desiredStatus: RUNNING` next to `runtimeStatus: stopped`). When they disagree, trust `runtimeStatus`.
+</Note>
+
+The `uptimeSeconds` field now reports the container's actual uptime and is omitted entirely when no container is reporting, instead of always showing `0`.
+
 ## Pod URLs
 
 Access exposed ports on your Pod using the following URL pattern:
