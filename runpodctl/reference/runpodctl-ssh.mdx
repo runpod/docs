@@ -29,7 +29,7 @@ Include Pod ID and name in output. Shorthand: `-v`.
 
 <Note>
 
-The `ssh info` command returns connection details that you can use to connect via SSH manually. It does not start an interactive SSH session.
+The `ssh info` command returns connection details that you can use to connect via SSH manually. It does not start an interactive SSH session. When a Pod is not reachable, `runpodctl ssh info` now reports the specific reason instead of a generic "pod not ready" message.
 
 To connect to your Pod, use the SSH command provided in the output:
 ```bash
@@ -37,6 +37,25 @@ ssh user@host -p <port> -i <key-path>
 ```
 
 </Note>
+
+`runpodctl ssh info` explains which of the following cases applies. It also reports the Pod's `runtimeStatus`, so you can match a not-ready result to the runtime status vocabulary:
+
+| Reason | Meaning | What to do |
+| --- | --- | --- |
+| Pod is initializing | No container is reported yet (image pull, container creation, or boot). | Wait and try again. |
+| Pod is stopped | The Pod's container is gone but its disk is kept. | Start it with `runpodctl pod start <pod-id>`. |
+| Pod is terminated | The Pod has been destroyed. | None; deploy a new Pod. |
+| No SSH port published | The Pod is running but does not publish `22/tcp`. | Add it with the `runpodctl pod update` command the CLI provides (see the Warning below). |
+| No public IP | Port 22 is mapped, but the machine has no publicly routable IP. This affects direct SSH over a public IP specifically; basic SSH (proxied through Runpod, no public IP required) may still work. | Use [Basic SSH](/pods/configuration/use-ssh#basic-ssh-with-key-authentication), which does not need a public IP. If you need direct SSH over a public IP, redeploy on a machine that provides one. |
+| Mapping not ready yet | Port 22 is declared, but the host has not published the mapping yet. | Wait and try again. |
+
+For the "No SSH port published" case, `runpodctl ssh info` gives you a ready-to-run command of the form `runpodctl pod update <pod-id> --ports <existing-ports>,22/tcp` that preserves your existing ports.
+
+<Warning>
+`runpodctl pod update --ports` replaces the Pod's entire port list (unlike `--env`, which merges), so always include your current ports when you add `22/tcp`. Changing the port list also bumps the Pod's version, which can restart the container. Processes and container-local state outside the volume disk may not survive. If the Pod is running an active job, checkpoint your work to the volume disk before changing ports, since the container may restart.
+</Warning>
+
+For the full list of runtime status values, see [Pod runtime status](/runpodctl/reference/runpodctl-pod#pod-runtime-status).
 
 ### List SSH keys
 
