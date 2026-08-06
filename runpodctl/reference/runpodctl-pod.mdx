@@ -44,6 +44,30 @@ runpodctl pod list --since 7d
 runpodctl pod list --created-after 2025-01-15
 ```
 
+Example output (abbreviated):
+
+```json
+[
+  {
+    "id": "abc123xyz",
+    "name": "my-pod",
+    "desiredStatus": "RUNNING",
+    "runtimeStatus": "running",
+    "runtimeStatusReason": "",
+    "lastStatusChange": "Rented by User: ...",
+    "imageName": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04",
+    "gpuId": "NVIDIA GeForce RTX 4090",
+    "gpuCount": 1,
+    "costPerHr": 0.44,
+    "uptimeSeconds": 842
+  }
+]
+```
+
+Each Pod also includes a `runtimeStatus` and `runtimeStatusReason` field alongside `desiredStatus`, plus the backend's raw `lastStatusChange` note. See [Pod runtime status](#pod-runtime-status) for the full list of values.
+
+The `--status` flag filters on `desiredStatus` only (`RUNNING`, `EXITED`, and so on). It does not accept the lowercase `runtimeStatus` vocabulary.
+
 #### List flags
 
 <ResponseField name="--all, -a" type="bool">
@@ -77,6 +101,28 @@ Get detailed information about a specific Pod, including SSH connection info:
 ```bash
 runpodctl pod get <pod-id>
 ```
+
+Example output (abbreviated):
+
+```json
+{
+  "id": "abc123xyz",
+  "name": "my-pod",
+  "desiredStatus": "RUNNING",
+  "runtimeStatus": "running",
+  "runtimeStatusReason": "",
+  "lastStatusChange": "Rented by User: ...",
+  "imageName": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04",
+  "uptimeSeconds": 842,
+  "ssh": {
+    "ssh_command": "ssh root@... -p 12345 -i ~/.ssh/id_ed25519"
+  }
+}
+```
+
+`desiredStatus` reports what you asked the platform to do. `runtimeStatus` reports what the Pod is actually doing, derived from live runtime telemetry. Use `runtimeStatus` to tell an initializing Pod (image still pulling) apart from one that is serving traffic. See [Pod runtime status](#pod-runtime-status) for the full list of values.
+
+`uptimeSeconds` is the container's uptime and is omitted whenever no container is reporting.
 
 ### Create a Pod
 
@@ -259,7 +305,7 @@ New volume mount path.
 </ResponseField>
 
 <ResponseField name="--ports" type="string">
-New comma-separated list of ports.
+New comma-separated list of ports. This flag **replaces** the Pod's entire port list rather than appending to it, so include every port you want to keep. Changing the port list bumps the Pod's version and may restart the container, so processes and container-local state outside the volume may not survive the update.
 </ResponseField>
 
 <ResponseField name="--env" type="string">
@@ -273,6 +319,58 @@ Delete a Pod:
 ```bash
 runpodctl pod delete <pod-id>
 ```
+
+## Pod runtime status
+
+`pod get` and `pod list` report a derived `runtimeStatus` (and an optional `runtimeStatusReason` token) alongside the platform's `desiredStatus`. Use `runtimeStatus` when you need to know what the Pod is actually doing; a Pod whose 20 GB image is still downloading and one that has been serving traffic for an hour both show `desiredStatus: RUNNING`, but only the second shows `runtimeStatus: running`.
+
+Branch scripts on the token values below, not on the free-text `lastStatusChange`.
+
+### `runtimeStatus` values
+
+<ResponseField name="running">
+`desiredStatus` is `RUNNING` and the platform is reporting runtime telemetry. The container is up. Does not imply any port is reachable.
+</ResponseField>
+
+<ResponseField name="initializing">
+`desiredStatus` is `RUNNING` but no runtime telemetry is being reported yet. The Pod is placed on a machine but the container is not up (image pull, container create, or boot). Keep polling.
+</ResponseField>
+
+<ResponseField name="stopped">
+`desiredStatus` is `EXITED` and the last transition was not a termination. The container is gone but the disk is kept; `pod start` will bring it back.
+</ResponseField>
+
+<ResponseField name="terminated">
+The Pod is being destroyed. Terminated Pods drop out of `pod list` shortly after, so this is a narrow window.
+</ResponseField>
+
+<ResponseField name="unknown">
+The runtime status could not be derived, either because the runtime telemetry lookup failed or because `desiredStatus` is a value the platform does not surface in practice. Read `desiredStatus`, which is in the same output.
+</ResponseField>
+
+### `runtimeStatusReason` tokens
+
+<ResponseField name="awaiting_container">
+Paired with `initializing`. No container is being reported for a Pod that should be running.
+</ResponseField>
+
+<ResponseField name="stopped_by_user / terminated_by_user">
+You stopped or terminated the Pod.
+</ResponseField>
+
+<ResponseField name="stopped_by_runpod / terminated_by_runpod">
+Runpod stopped or terminated the Pod. The platform does not record a machine-readable cause; in practice this is insufficient credit, a fatal image-pull failure, or host action.
+</ResponseField>
+
+<ResponseField name="stopped_outbid / terminated_outbid">
+A Spot or Community Cloud Pod lost its machine to a higher bid. Retry elsewhere or at on-demand pricing.
+</ResponseField>
+
+<ResponseField name="runtime_unavailable">
+Paired with `unknown`. The runtime telemetry lookup could not be made, so `running` and `initializing` cannot be told apart.
+</ResponseField>
+
+The token is a lossy read of the backend's free-text `lastStatusChange`. A phrasing the CLI does not recognize leaves `runtimeStatusReason` absent rather than wrong; the raw text is still available in the `lastStatusChange` field on the same output.
 
 ## Pod URLs
 
