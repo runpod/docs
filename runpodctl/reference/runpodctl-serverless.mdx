@@ -232,6 +232,101 @@ Delete an endpoint:
 runpodctl serverless delete <endpoint-id>
 ```
 
+### Check endpoint health
+
+Get worker counts by state and job counts by outcome for an endpoint. This wraps `GET /v2/<endpoint-id>/health` and prints the response verbatim, so new fields returned by the invoke API appear without a CLI update.
+
+```bash
+runpodctl serverless health <endpoint-id>
+```
+
+### Invoke an endpoint
+
+Submit a job to an endpoint and wait for it to finish. The payload must be a JSON object and is sent as `{"input": <your JSON>}`; pass only the handler payload.
+
+```bash
+# Invoke and wait for the result
+runpodctl serverless run <endpoint-id> --input '{"prompt":"hello"}'
+
+# Read the payload from a file (skips shell quoting)
+runpodctl serverless run <endpoint-id> --input-file payload.json
+
+# Read the payload from stdin
+cat payload.json | runpodctl serverless run <endpoint-id> --input -
+
+# Give a cold or slow endpoint longer
+runpodctl serverless run <endpoint-id> --input '{}' --wait 15m
+
+# Submit and get the job ID back immediately
+runpodctl serverless run <endpoint-id> --input '{}' --no-wait
+```
+
+The job is submitted on `/run` and then polled on `/status` until it reaches a terminal status. The CLI never uses `/runsync`: `/runsync` releases the connection after roughly 90 seconds while the job continues running server-side, and until it answers there is no job ID to poll.
+
+The payload is validated as JSON locally before it is sent. Payloads over the invoke API's 10 MiB `/run` limit fail as a `usage_error` without a round trip; the size checked is the body the CLI actually sends (payload compacted and JSON-escaped inside `{"input": ...}`), so whitespace in an input file does not count against the limit and escaped characters do. If the top-level payload contains a `curl`-style envelope with an `input` field alongside `policy`, `webhook`, or `s3Config`, the CLI prints a warning naming those keys because they are ignored when nested inside `input`.
+
+The job payload is printed on stdout even when the job ends in a `FAILED` state, because the worker's own error message is typically the useful artifact. Progress messages and error objects (including the CLI's JSON error envelope) go to stderr.
+
+Exit codes:
+
+- `0` when the job is `COMPLETED`, or when `--wait 0` / `--no-wait` submitted the job successfully.
+- `1` when the request fails, when the wait budget runs out, or when the job ends `FAILED`, `CANCELLED`, or `TIMED_OUT`. In every case the last job payload is still printed on stdout.
+
+When `--wait` runs out, the job is still running server-side. The `timeout` error on stderr names the `serverless status` command to poll it with.
+
+#### Run flags
+
+<ResponseField name="--input" type="string">
+JSON payload for the handler. Pass `-` to read the payload from stdin. Mutually exclusive with `--input-file`.
+</ResponseField>
+
+<ResponseField name="--input-file" type="string">
+Path to a file containing the JSON payload. Pass `-` to read from stdin. Mutually exclusive with `--input`.
+</ResponseField>
+
+<ResponseField name="--wait" type="duration" default="5m">
+How long to wait for a terminal job status (for example `90s`, `10m`). A single API call inside the wait is never given less than one second, so a `--wait` below one second may overshoot by up to that much. `0` submits and returns without waiting.
+</ResponseField>
+
+<ResponseField name="--no-wait" type="bool">
+Submit and print the job ID without waiting. Equivalent to `--wait 0`; cannot be combined with an explicit `--wait`.
+</ResponseField>
+
+### Check job status
+
+Get the status of a job that was submitted earlier, either by `serverless run --no-wait` or by a `serverless run` that hit its `--wait` budget. By default this checks once and returns; pass `--wait` to keep polling until the job is terminal.
+
+```bash
+# Check once
+runpodctl serverless status <endpoint-id> <job-id>
+
+# Poll until the job is terminal, up to 5 minutes
+runpodctl serverless status <endpoint-id> <job-id> --wait 5m
+```
+
+Exit codes:
+
+- `0` when the job is `COMPLETED`, or when the job is still queued or running (after a single check with `--wait 0`).
+- `1` when the job ends `FAILED`, `CANCELLED`, or `TIMED_OUT`, or when `--wait` runs out. The job payload is printed on stdout either way.
+
+#### Status flags
+
+<ResponseField name="--wait" type="duration" default="0">
+Keep polling until the job is terminal, up to this long. `0` checks once and returns.
+</ResponseField>
+
+## Errors and exit codes
+
+`runpodctl serverless run` and `runpodctl serverless status` print a machine-readable JSON error envelope on stderr with a stable `code` field. The `code` values these commands can emit are:
+
+| Code | Meaning |
+|------|---------|
+| `usage_error` | Input the CLI rejected locally: invalid JSON, a payload that is not an object, an oversized payload, or a conflicting flag combination. |
+| `timeout` | The CLI stopped waiting. When the message names the `serverless status` command, the job is still running server-side and you should poll it rather than resubmit. When it does not, a single API call exceeded the per-call timeout and nothing is running. |
+| `job_failed` | The job reached a terminal status other than `COMPLETED` (`FAILED`, `CANCELLED`, or `TIMED_OUT`). |
+
+The `timeout` code is also emitted by `runpodctl model add --wait-for-hash` when its wait budget runs out. Previously that condition reported `cli_error`; the exit code and message text are unchanged, but scripts that branch on the stderr JSON `code` field need to match `timeout` instead.
+
 ## Serverless URLs
 
 Access your Serverless endpoint using these URL patterns:
