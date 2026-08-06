@@ -84,6 +84,9 @@ runpodctl serverless create --hub-id cm8h09d9n000008jvh2rqdsmb --gpu-id "NVIDIA 
 runpodctl serverless create --hub-id cm8h09d9n000008jvh2rqdsmb --name "my-vllm" \
   --env MODEL_NAME=meta-llama/Llama-3.1-8B-Instruct \
   --env MAX_TOKENS=4096
+
+# Block until a worker is ready before returning
+runpodctl serverless create --template-id "tpl_abc123" --gpu-id "NVIDIA GeForce RTX 4090" --workers-min 1 --wait
 ```
 
 When using `--hub-id`, GPU IDs and container disk size are automatically pulled from the Hub release config. You can override the GPU type with `--gpu-id`. Environment variables from the Hub release are included automatically, and you can override or add to them with `--env`.
@@ -177,6 +180,26 @@ Environment variable in `KEY=VALUE` format. Use multiple `--env` flags to set mu
 <ResponseField name="--model-reference" type="string">
 Model reference URL to attach to the endpoint. Use multiple `--model-reference` flags to attach multiple models. Works with both `--template-id` and `--hub-id`, and requires GPU compute type.
 </ResponseField>
+
+<ResponseField name="--wait" type="bool">
+Block until the endpoint has a ready or running worker before returning. See [Wait for a ready worker](#wait-for-a-ready-worker).
+</ResponseField>
+
+<ResponseField name="--wait-timeout" type="string" default="10m">
+Maximum time to wait when `--wait` is set. Accepts values like `90s`, `10m`, `1h`, `2d`. On timeout the endpoint is kept (it may be billing) and the error carries its `id`.
+</ResponseField>
+
+#### Wait for a ready worker
+
+By default, `serverless create` returns as soon as the endpoint is created, before any worker has come up. Pass `--wait` to block until the endpoint is actually able to serve traffic:
+
+```bash
+runpodctl serverless create --template-id <id> --workers-min 1 --wait
+```
+
+**Readiness predicate.** With `--wait`, the CLI polls the endpoint's `/health` and considers it ready once `ready > 0` or `running > 0` — that is, at least one worker is warm (flashboot-cached and available to resume on the next request) or already scheduled. `--workers-min 1` is the fastest way to reach the ready state because it starts (and bills for) a worker immediately.
+
+**Timeout behavior.** `--wait-timeout` defaults to `10m` and accepts values like `90s`, `10m`, `1h`, `2d`. If the wait times out or you cancel with `Ctrl-C`, **the endpoint is not deleted**. The command exits non-zero, and the error object carries an `id` field with the endpoint ID plus a `code` of `wait_timeout` or `wait_interrupted` so you can clean up with [`runpodctl serverless delete`](#delete-an-endpoint).
 
 ### Update an endpoint
 
