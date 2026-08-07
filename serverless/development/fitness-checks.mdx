@@ -1,0 +1,223 @@
+---
+title: "Fitness checks"
+sidebarTitle: "Fitness checks"
+description: "Validate a Serverless worker's environment at startup before it takes traffic. Review configuration and operations guidance for Runpod Serverless."
+---
+
+Fitness checks validate a worker's environment at startup, before it begins processing jobs. When a worker starts, Runpod runs each registered check in order. If a check fails, the worker logs the error, exits, and is marked unhealthy so Runpod can restart or replace it before any traffic reaches it. This lets you catch problems like a missing GPU, a model that won't load, or absent configuration up front, instead of failing requests one by one in production.
+
+Fitness checks are available in the Runpod Python SDK starting with version 1.9.0. To use them, make sure your worker image installs `runpod>=1.9.0`.
+
+There are two kinds of fitness checks: custom checks that you define for your own workload, and automatic system checks that Runpod runs for you without any code changes.
+
+## Register a custom fitness check
+
+Use the `@runpod.serverless.register_fitness_check` decorator to register your own checks. A check is a function that raises an exception (typically `RuntimeError`) to signal failure. If it returns without raising, the check passes. Both synchronous and asynchronous functions are supported.
+
+```python title="handler.py"
+import runpod
+import torch
+
+@runpod.serverless.register_fitness_check
+def check_gpu():
+    """Verify a GPU is available."""
+    if not torch.cuda.is_available():
+        raise RuntimeError("GPU not available")
+
+@runpod.serverless.register_fitness_check
+def check_disk_space():
+    """Verify sufficient disk space."""
+    import shutil
+    stat = shutil.disk_usage("/")
+    free_gb = stat.free / (1024**3)
+    if free_gb < 10:
+        raise RuntimeError(f"Insufficient disk space: {free_gb:.2f}GB free")
+
+def handler(job):
+    return {"output": "success"}
+
+runpod.serverless.start({"handler": handler})
+```
+
+### Asynchronous checks
+
+Checks can also be asynchronous functions, which is useful for I/O-bound validation such as confirming connectivity to an external service:
+
+```python title="handler.py"
+import runpod
+import aiohttp
+
+@runpod.serverless.register_fitness_check
+async def check_api_connectivity():
+    """Check if an external API is accessible."""
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get("https://api.example.com/health", timeout=5) as resp:
+                if resp.status != 200:
+                    raise RuntimeError(f"API health check failed: {resp.status}")
+        except Exception as e:
+            raise RuntimeError(f"Cannot connect to API: {e}")
+
+def handler(job):
+    return {"output": "success"}
+
+runpod.serverless.start({"handler": handler})
+```
+
+## When checks run
+
+Custom checks run once at worker startup, before the first job, and they execute in the order you register them. They run only on the Runpod Serverless platform, so they're skipped during local development and testing. When a check fails, Runpod logs the check name and exception, the worker exits with code 1, and the container is marked unhealthy so your endpoint can restart it. When all checks pass, the worker starts its heartbeat and begins accepting jobs.
+
+A failed startup looks like this in the logs:
+
+```
+ERROR  | Fitness check failed: check_gpu | RuntimeError: GPU not available
+ERROR  | Worker is unhealthy, exiting.
+```
+
+A successful startup logs each check as it runs:
+
+```
+INFO   | Running 2 fitness check(s)...
+DEBUG  | Executing fitness check: check_gpu
+DEBUG  | Fitness check passed: check_gpu
+DEBUG  | Executing fitness check: check_disk_space
+DEBUG  | Fitness check passed: check_disk_space
+INFO   | All fitness checks passed.
+```
+
+## Custom check examples
+
+The following examples cover common readiness checks you can adapt to your own workload.
+
+Verify that a GPU is available and has enough memory:
+
+```python
+import runpod
+import torch
+
+@runpod.serverless.register_fitness_check
+def check_gpu_available():
+    """Verify a GPU is available and has sufficient memory."""
+    if not torch.cuda.is_available():
+        raise RuntimeError("GPU is not available")
+
+    gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+    if gpu_memory_gb < 8:
+        raise RuntimeError(f"GPU memory insufficient: {gpu_memory_gb:.1f}GB (need at least 8GB)")
+```
+
+Confirm that required model files are present:
+
+```python
+import runpod
+from pathlib import Path
+
+@runpod.serverless.register_fitness_check
+def check_model_files():
+    """Verify required model files exist."""
+    required_files = [
+        Path("/models/model.safetensors"),
+        Path("/models/config.json"),
+        Path("/models/tokenizer.model"),
+    ]
+
+    for file_path in required_files:
+        if not file_path.exists():
+            raise RuntimeError(f"Required file not found: {file_path}")
+```
+
+Validate that required environment variables are set:
+
+```python
+import runpod
+import os
+
+@runpod.serverless.register_fitness_check
+def check_environment():
+    """Verify required environment variables are set."""
+    required_vars = ["API_KEY", "MODEL_PATH", "CONFIG_URL"]
+    missing = [var for var in required_vars if not os.environ.get(var)]
+
+    if missing:
+        raise RuntimeError(f"Missing environment variables: {', '.join(missing)}")
+```
+
+## Automatic system checks
+
+Along with your custom checks, Runpod automatically runs a set of built-in system checks at startup, with no registration required. These verify that the worker has enough memory, disk space, and network connectivity to run reliably. GPU workers run three additional checks that validate the CUDA version, initialize the CUDA device, and benchmark GPU compute. GPU workers also run a native GPU memory allocation test that exercises actual memory allocation across all detected GPUs; this test is skipped automatically on CPU-only workers.
+
+You can tune the thresholds for these checks using environment variables, or disable them entirely for testing. Your own registered checks always run, regardless of these settings.
+
+| Check | Applies to | What it verifies | Default threshold | Environment variable |
+|-------|-----------|------------------|-------------------|----------------------|
+| Memory | All workers | Available RAM | 4 GB minimum | `RUNPOD_MIN_MEMORY_GB` |
+| Disk space | All workers | Free space on `/` as a percentage of total | 10% free | `RUNPOD_MIN_DISK_PERCENT` |
+| Network connectivity | All workers | Internet connectivity via TCP to 8.8.8.8:53 | 5 second timeout | `RUNPOD_NETWORK_CHECK_TIMEOUT` |
+| CUDA version | GPU workers | Minimum CUDA driver version | CUDA 11.8+ | `RUNPOD_MIN_CUDA_VERSION` |
+| CUDA device initialization | GPU workers | Devices initialize and synchronize | — | — |
+| GPU compute benchmark | GPU workers | Compute responsiveness (matrix multiply) | 100 ms maximum | `RUNPOD_GPU_BENCHMARK_TIMEOUT` |
+
+The native GPU memory allocation test can be tuned with these additional variables. The test typically takes 100–500 ms per GPU, so keep that in mind when setting `RUNPOD_GPU_TEST_TIMEOUT`.
+
+| Environment variable | Default | Description |
+|----------------------|---------|-------------|
+| `RUNPOD_GPU_TEST_TIMEOUT` | 30 seconds | Timeout for the GPU memory allocation test. |
+| `RUNPOD_BINARY_GPU_TEST_PATH` | — | Override the path to the GPU test binary. |
+| `RUNPOD_GPU_MAX_ERROR_MESSAGES` | 10 | Maximum number of error messages to report. |
+
+You can set these variables in your Dockerfile to adjust the thresholds for your workload:
+
+```dockerfile title="Dockerfile"
+ENV RUNPOD_MIN_MEMORY_GB=8.0
+ENV RUNPOD_MIN_DISK_PERCENT=15.0
+ENV RUNPOD_MIN_CUDA_VERSION=12.0
+ENV RUNPOD_NETWORK_CHECK_TIMEOUT=10
+```
+
+### Disable automatic checks
+
+You can disable the automatic system checks with the following environment variables. This is intended for testing only and is not recommended in production, since the checks help catch unhealthy workers before they take traffic.
+
+| Environment variable | Effect |
+|----------------------|--------|
+| `RUNPOD_SKIP_AUTO_SYSTEM_CHECKS=true` | Skips the memory, disk, network, CUDA version, CUDA initialization, and GPU benchmark checks. |
+| `RUNPOD_SKIP_GPU_CHECK=true` | Skips the native GPU memory allocation test. |
+
+Your own registered checks still run even when these flags are set.
+
+## Test fitness checks locally
+
+Fitness checks don't run during local testing, so to verify yours before you deploy, call each check function directly. A check signals failure by raising an exception, so you can call it and handle the result yourself.
+
+```python title="test_fitness.py"
+import asyncio
+import inspect
+from handler import check_gpu, check_disk_space
+
+async def run_check(check):
+    """Call a single fitness check and report the result."""
+    try:
+        if inspect.iscoroutinefunction(check):
+            await check()
+        else:
+            check()
+        print(f"{check.__name__} passed")
+    except Exception as e:
+        print(f"{check.__name__} failed: {e}")
+
+async def main():
+    for check in (check_gpu, check_disk_space):
+        await run_check(check)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+<Warning>
+Don't use the runner, `run_fitness_checks()`, to test for failures. When a check fails, the runner force-kills the worker by calling `os._exit(1)`, which terminates the process immediately. It doesn't raise a catchable exception, and it skips any `except` or `finally` blocks. Call your check functions directly instead, as shown above.
+</Warning>
+
+## Best practices
+
+Keep your checks fast and focused on validating readiness, rather than doing heavy work like training models or processing large datasets. Use clear, descriptive error messages so failures are easy to diagnose from the logs. Keep in mind that fitness checks only validate the worker at startup; to catch problems that arise while processing jobs, add health checks and logging inside your handler as well.
