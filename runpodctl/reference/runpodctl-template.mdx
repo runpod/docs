@@ -94,11 +94,13 @@ Number of results to skip for pagination.
 
 ### Get template details
 
-Get detailed information about a specific template, including README, environment variables, and exposed ports:
+Get detailed information about a specific template, including README, environment variables, exposed ports, and any port labels set via `--port-labels`:
 
 ```bash
 runpodctl template get <template-id>
 ```
+
+The response includes a `portsConfig` field that lists each exposed port with its human-readable label (when one is set).
 
 ### Create a template
 
@@ -110,6 +112,12 @@ runpodctl template create --name "my-template" --image "runpod/pytorch:2.8.0-py3
 
 # Create a Serverless template
 runpodctl template create --name "my-serverless-template" --image "my-image:latest" --serverless
+
+# Attach a container registry auth for a private image
+runpodctl template create --name "private-gpu" --image "registry.example.com/team/image:tag" --registry-auth-id <registry-auth-id>
+
+# Expose ports with human-readable labels
+runpodctl template create --name "dev" --image "example/image:tag" --ports "22/tcp,8888/http" --port-labels "22=ssh,8888=jupyter lab"
 ```
 
 <Note>
@@ -144,6 +152,10 @@ Volume mount path.
 Comma-separated list of ports to expose (e.g., `8888/http,22/tcp`).
 </ResponseField>
 
+<ResponseField name="--port-labels" type="string">
+Human-readable labels for the ports declared with `--ports`, shown in the Runpod console. Accepts either comma-separated `port=name` pairs (e.g., `22=ssh,8888=jupyter lab`) or a JSON object (e.g., `'{"22/tcp":"ssh","8888/http":"jupyter lab"}'`). Each label must reference a port listed in `--ports`, so this flag requires `--ports`. Use the JSON form if a label name contains a comma, since the pair form splits on commas.
+</ResponseField>
+
 <ResponseField name="--env" type="string">
 Environment variables as a JSON object (e.g., `'{"KEY":"value"}'`).
 </ResponseField>
@@ -164,12 +176,23 @@ Create as a Serverless template. Serverless templates do not support volume disk
 Template README content.
 </ResponseField>
 
+<ResponseField name="--registry-auth-id" type="string">
+ID of a container registry auth to attach to the template, so private images can be pulled when the template is used. List available auth IDs with `runpodctl registry list`.
+</ResponseField>
+
 ### Update a template
 
 Update an existing template:
 
 ```bash
+# Rename a template
 runpodctl template update <template-id> --name "new-name"
+
+# Attach a container registry auth
+runpodctl template update <template-id> --registry-auth-id <registry-auth-id>
+
+# Update port labels
+runpodctl template update <template-id> --port-labels "22=ssh,8888=jupyter lab"
 ```
 
 #### Update flags
@@ -186,6 +209,10 @@ New Docker image name.
 New comma-separated list of ports.
 </ResponseField>
 
+<ResponseField name="--port-labels" type="string">
+New human-readable labels for the template's ports. Accepts the same `port=name` pair or JSON forms as on `create`. When `--ports` is also passed, labels are validated against the new port list; otherwise they are validated against the template's existing ports. Pass an empty value (`--port-labels ""`) to clear all labels.
+</ResponseField>
+
 <ResponseField name="--env" type="string">
 New environment variables as a JSON object.
 </ResponseField>
@@ -196,6 +223,10 @@ New README content.
 
 <ResponseField name="--container-disk-in-gb" type="int">
 New container disk size in GB.
+</ResponseField>
+
+<ResponseField name="--registry-auth-id" type="string">
+New container registry auth ID. Pass an empty value (`--registry-auth-id ""`) to detach the current registry auth from the template.
 </ResponseField>
 
 ### Delete a template
