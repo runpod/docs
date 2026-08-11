@@ -10,10 +10,10 @@ This is the Runpod documentation site, built with [Mintlify](https://mintlify.co
 
 | Topic | File |
 |-------|------|
-| Directory structure, navigation, snippets, tooltips | [.claude/architecture.md](.claude/architecture.md) |
-| Writing style, capitalization, terminology | [.claude/style-guide.md](.claude/style-guide.md) |
-| Running and writing documentation tests | [.claude/testing.md](.claude/testing.md) |
-| Local dev, linting, publishing workflow | [.claude/development.md](.claude/development.md) |
+| Directory structure, navigation, snippets, tooltips | `.claude/architecture.md` |
+| Writing style, capitalization, terminology | `.claude/style-guide.md` |
+| Running and writing documentation tests | `.claude/testing.md` |
+| Local dev, linting, publishing workflow | `.claude/development.md` |
 
 ## Key Commands
 
