@@ -340,7 +340,7 @@
         "name": "product",
         "in": "query",
         "required": false,
-        "description": "Comma-separated availability product contexts. Supported values: POD, CLUSTER, SERVERLESS. Valid only with include=AVAILABILITY. Upstream default when omitted: POD.",
+        "description": "Comma-separated availability product contexts. Supported values: POD, CLUSTER, SERVERLESS. Required with include=AVAILABILITY, and valid only with it (400 either way). There is no default: the same GPU type can be scarce for pods and plentiful for serverless, so the context has to be stated rather than assumed.",
         "style": "form",
         "explode": false,
         "schema": {
@@ -374,6 +374,25 @@
         "schema": {
           "$ref": "#/components/schemas/GpuCloudFilter"
         }
+      },
+      "CountryCodesFilter": {
+        "name": "countryCodes",
+        "in": "query",
+        "required": false,
+        "description": "Comma-separated ISO 3166-1 alpha-2 country codes, uppercase, to constrain availability to — e.g. FR or FR,DE. Values within this filter use OR semantics. Valid only with include=AVAILABILITY (400 otherwise); a malformed entry is a 422. Scopes availability, lowest-price calculations and the dataCenters array to those countries, so a listed data center outside them is omitted rather than returned with availability NONE. On the list endpoint a GPU type with no data center in those countries drops out entirely; the single-GPU endpoint still returns the requested type, with availability NONE and dataCenters omitted, so a 404 keeps meaning the GPU type does not exist. Read the NONE on availability rather than the absence of dataCenters, which is also absent when availability was not requested.",
+        "style": "form",
+        "explode": false,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$"
+          }
+        },
+        "example": [
+          "FR",
+          "DE"
+        ]
       },
       "CudaVersionsFilter": {
         "name": "cudaVersions",
@@ -409,7 +428,9 @@
         "name": "product",
         "in": "query",
         "required": false,
-        "description": "Comma-separated availability product context. Valid only with include=AVAILABILITY. Supported values for CPUs: POD, SERVERLESS. Defaults to POD when omitted.",
+        "description": "Comma-separated availability product contexts. Supported values for CPUs: POD, SERVERLESS. Required with include=AVAILABILITY, and valid only with it (400 either way). There is no default: availability differs by product.",
+        "style": "form",
+        "explode": false,
         "schema": {
           "type": "array",
           "items": {
@@ -479,13 +500,6 @@
         "type": "object",
         "description": "Container configuration universal to every containerized resource. Compose ContainerConfig instead unless the resource cannot support private registries (clusters, until the upstream input accepts a registry credential).\n",
         "properties": {
-          "image": {
-            "type": "string",
-            "description": "Docker image reference",
-            "examples": [
-              "runpod/pytorch:2.8.0-py3.11-cuda12.8.1"
-            ]
-          },
           "args": {
             "type": "string",
             "description": "Arguments passed to the container entrypoint",
@@ -501,6 +515,25 @@
               50
             ]
           },
+          "env": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Environment variables as key-value pairs",
+            "examples": [
+              {
+                "JUPYTER_PASSWORD": "hunter2"
+              }
+            ]
+          },
+          "image": {
+            "type": "string",
+            "description": "Docker image reference",
+            "examples": [
+              "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404"
+            ]
+          },
           "ports": {
             "type": "array",
             "description": "Exposed ports, formatted as port/protocol",
@@ -512,18 +545,6 @@
                 "8888/http",
                 "22/tcp"
               ]
-            ]
-          },
-          "env": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            },
-            "description": "Environment variables as key-value pairs",
-            "examples": [
-              {
-                "JUPYTER_PASSWORD": "hunter2"
-              }
             ]
           }
         }
@@ -856,13 +877,27 @@
           "pools": {
             "type": "array",
             "minItems": 1,
-            "description": "Serverless GPU pool IDs (as returned by `GET /v2/catalog/gpus` in\n`pool`). Workers are placed on whichever listed pool has capacity.\n",
+            "description": "Serverless GPU pool IDs (as returned by `GET /v2/catalog/gpus` in\n`pool`). Workers are placed on whichever listed pool has capacity.\nNarrow a pool down to specific cards with `excludedTypes`.\n",
             "items": {
               "type": "string"
             },
             "examples": [
               [
                 "ADA_24"
+              ]
+            ]
+          },
+          "excludedTypes": {
+            "type": "array",
+            "uniqueItems": true,
+            "description": "GPU **type** IDs to subtract from the selected pools — the `id`\nfield of `GET /v2/catalog/gpus`, the same identifiers pods take in\n`gpu.id`. Workers run on every type in `pools` except these. Omit to\nuse the whole pool.\n\nPools stay the unit of selection; types are the unit of\nsubtraction. There is no inclusive allowlist: a card later added to\none of your pools becomes eligible, which is the honest reading of\n\"this pool, minus these\".\n\nReplaced wholesale whenever `gpu` is supplied. A `PATCH` that sends\n`gpu` **without `excludedTypes`** therefore **clears** them —\nrestate them to keep them. A `PATCH` that omits `gpu` entirely\nleaves the selection untouched.\n\nRejected with 400 if a value is not a GPU type in one of `pools`;\nupstream accepts unrecognized exclusions silently, so a typo would\notherwise produce a filter that does nothing. Surrounding whitespace\nis trimmed, so `\" NVIDIA L40\"` and `\"NVIDIA L40\"` mean the same card.\n",
+            "items": {
+              "type": "string",
+              "pattern": "^\\s*[^-\\s]"
+            },
+            "examples": [
+              [
+                "NVIDIA L40"
               ]
             ]
           },
@@ -1028,15 +1063,12 @@
                 ]
               },
               "cpu": {
-                "description": "Read-only. Present for CPU serverless endpoints; CPU create/update is not yet supported.",
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/CpuConfig"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
+                "type": "array",
+                "minItems": 1,
+                "description": "Eligible CPU configurations for each worker, in the order they\nwere submitted. Present for CPU endpoints and omitted for GPU\nendpoints. Memory is derived from the selected flavor's catalog\nRAM multiplier.\n",
+                "items": {
+                  "$ref": "#/components/schemas/CpuConfig"
+                }
               },
               "workers": {
                 "allOf": [
@@ -1524,7 +1556,6 @@
             "type": "object",
             "required": [
               "name",
-              "gpu",
               "type",
               "scaling"
             ],
@@ -1536,13 +1567,8 @@
                   "my-inference"
                 ]
               },
-              "templateId": {
-                "type": "string",
-                "minLength": 1,
-                "description": "ID of a serverless template to base this endpoint on. The\ntemplate is resolved at create time into the same container\nsettings you could otherwise spread into this body (image,\nargs, disk, ports, env, registry); explicit body fields\noverride the template's, except `env`, which is merged per\nkey with body values winning. The template's\nallowedCudaVersions seeds the endpoint's when the body omits\nit; its pod-specific startSsh/startJupyter flags are\nignored. Later template edits do not affect the endpoint.\nThe template may be one of your own or a public catalog\ntemplate — see `GET /v2/catalog/templates` (unknown or\ninaccessible ID → 404) — and must be a serverless template\n(→ 422).\n",
-                "examples": [
-                  "30zmvf89kd"
-                ]
+              "scaling": {
+                "$ref": "#/components/schemas/EndpointScaling"
               },
               "type": {
                 "allOf": [
@@ -1552,6 +1578,44 @@
                 ],
                 "description": "Request-routing model. Required — it determines the valid scaler\nand request URLs, so it must be chosen explicitly on every create.\n"
               },
+              "allowedCudaVersions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^\\d+\\.\\d+$"
+                },
+                "description": "Acceptable CUDA versions for worker placement, as\n`major.minor`. GPU-only: a non-empty explicit or\ntemplate-inherited constraint is rejected with 400 for CPU\ncreate. An explicit empty array is allowed on create. Omit to\naccept any version (or inherit the template's constraint when\ncreating from `templateId`). Matching is exact — discover\nvalid values per GPU type via\n`GET /v2/catalog/gpus?include=AVAILABILITY&product=SERVERLESS`\n(`cudaVersions`).\n",
+                "examples": [
+                  [
+                    "12.8",
+                    "12.6"
+                  ]
+                ]
+              },
+              "cpu": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "description": "Eligible CPU configurations for each worker. Memory is derived from the\nselected flavor's catalog RAM multiplier. Exact duplicate configurations\nare rejected; the same flavor may be listed at different vCPU counts.\n",
+                "items": {
+                  "$ref": "#/components/schemas/CreateCpuConfig"
+                }
+              },
+              "dataCenterIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Preferred data centers for placement. Omit or pass an empty array to let the scheduler choose."
+              },
+              "flashboot": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/FlashBoot"
+                  }
+                ],
+                "default": "OFF"
+              },
               "gpu": {
                 "allOf": [
                   {
@@ -1559,6 +1623,24 @@
                   }
                 ],
                 "unevaluatedProperties": false
+              },
+              "networkVolumes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "templateId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "ID of a serverless template to base this endpoint on. The\ntemplate is resolved at create time into the same container\nsettings you could otherwise spread into this body (image,\nargs, disk, ports, env, registry); explicit body fields\noverride the template's, except `env`, which is merged per\nkey with body values winning. The template's\nallowedCudaVersions seeds the endpoint's when the body omits\nit; its pod-specific startSsh/startJupyter flags are\nignored. Later template edits do not affect the endpoint.\nThe template may be one of your own or a public catalog\ntemplate — see `GET /v2/catalog/templates` (unknown or\ninaccessible ID → 404) — and must be a serverless template\n(→ 422).\n",
+                "examples": [
+                  "30zmvf89kd"
+                ]
+              },
+              "timeout": {
+                "type": "integer",
+                "default": 300000
               },
               "workers": {
                 "allOf": [
@@ -1580,48 +1662,6 @@
                     "default": 10
                   }
                 }
-              },
-              "scaling": {
-                "$ref": "#/components/schemas/EndpointScaling"
-              },
-              "dataCenterIds": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                },
-                "description": "Preferred data centers for placement. Omit or pass an empty array to let the scheduler choose."
-              },
-              "networkVolumes": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "timeout": {
-                "type": "integer",
-                "default": 300000
-              },
-              "flashboot": {
-                "allOf": [
-                  {
-                    "$ref": "#/components/schemas/FlashBoot"
-                  }
-                ],
-                "default": "OFF"
-              },
-              "allowedCudaVersions": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "pattern": "^\\d+\\.\\d+$"
-                },
-                "description": "Acceptable CUDA versions for worker placement, as\n`major.minor`. Omit to accept any version (or inherit the\ntemplate's constraint when creating from `templateId`).\nMatching is exact — discover valid values per GPU type via\n`GET /v2/catalog/gpus?include=AVAILABILITY` (`cudaVersions`).\n",
-                "examples": [
-                  [
-                    "12.8",
-                    "12.6"
-                  ]
-                ]
               }
             }
           }
@@ -1654,16 +1694,32 @@
             "type": "object",
             "description": "Only provided fields are changed.",
             "properties": {
-              "name": {
-                "type": "string",
-                "minLength": 1
+              "allowedCudaVersions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^\\d+\\.\\d+$"
+                },
+                "description": "Acceptable CUDA versions for worker placement, as\n`major.minor`. An explicit `[]` clears the constraint;\nomitting the field leaves it unchanged. Takes effect as\nworkers are replaced. Rejected with 400 on CPU endpoints.\n"
               },
-              "templateId": {
-                "type": "string",
-                "description": "ID of a serverless template whose container settings are\napplied as if they were provided in this PATCH body (image,\nargs, disk, ports, env, registry). Explicit body fields\noverride the template's; `env` merges template and body per\nkey (body wins) and, per PATCH semantics, replaces the\nendpoint's env. One-time application — no link to the\ntemplate is retained. Must be one of your templates or a\npublic template (unknown or inaccessible ID → 404); must be\na serverless template (→ 422).\n",
-                "examples": [
-                  "30zmvf89kd"
-                ]
+              "cpu": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "description": "Complete replacement CPU selection. Valid only for an existing CPU\nendpoint; endpoint compute family cannot be changed.\n",
+                "items": {
+                  "$ref": "#/components/schemas/CreateCpuConfig"
+                }
+              },
+              "dataCenterIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Preferred data centers for placement. Omit or pass an empty array to let the scheduler choose."
+              },
+              "flashboot": {
+                "$ref": "#/components/schemas/FlashBoot"
               },
               "gpu": {
                 "allOf": [
@@ -1673,18 +1729,9 @@
                 ],
                 "unevaluatedProperties": false
               },
-              "workers": {
-                "$ref": "#/components/schemas/EndpointWorkers"
-              },
-              "scaling": {
-                "$ref": "#/components/schemas/EndpointScaling"
-              },
-              "dataCenterIds": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                },
-                "description": "Preferred data centers for placement. Omit or pass an empty array to let the scheduler choose."
+              "name": {
+                "type": "string",
+                "minLength": 1
               },
               "networkVolumes": {
                 "type": "array",
@@ -1692,19 +1739,21 @@
                   "type": "string"
                 }
               },
+              "scaling": {
+                "$ref": "#/components/schemas/EndpointScaling"
+              },
+              "templateId": {
+                "type": "string",
+                "description": "ID of a serverless template whose container settings are\napplied as if they were provided in this PATCH body (image,\nargs, disk, ports, env, registry). Explicit body fields\noverride the template's; `env` merges template and body per\nkey (body wins) and, per PATCH semantics, replaces the\nendpoint's env. One-time application — no link to the\ntemplate is retained. Must be one of your templates or a\npublic template (unknown or inaccessible ID → 404); must be\na serverless template (→ 422).\n",
+                "examples": [
+                  "30zmvf89kd"
+                ]
+              },
               "timeout": {
                 "type": "integer"
               },
-              "flashboot": {
-                "$ref": "#/components/schemas/FlashBoot"
-              },
-              "allowedCudaVersions": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "pattern": "^\\d+\\.\\d+$"
-                },
-                "description": "Acceptable CUDA versions for worker placement, as\n`major.minor`. An explicit `[]` clears the constraint;\nomitting the field leaves it unchanged. Takes effect as\nworkers are replaced. Rejected with 400 on CPU endpoints.\n"
+              "workers": {
+                "$ref": "#/components/schemas/EndpointWorkers"
               }
             }
           }
@@ -2192,27 +2241,19 @@
                   "my-training-pod"
                 ]
               },
-              "templateId": {
-                "type": "string",
-                "minLength": 1,
-                "description": "ID of a pod template to base this pod on. The template is\nresolved at create time into the same container settings you\ncould otherwise spread into this body (image, args, disk,\nports, env, registry, persistent mount, startSsh,\nstartJupyter, allowedCudaVersions); explicit body fields\noverride the template's, except `env`, which is merged per\nkey with body values winning. Sending either CUDA field\n(`allowedCudaVersions` or `minCudaVersion`) replaces the\ntemplate's CUDA constraint entirely, and CPU pods ignore it\n(like the persistent mount). The template is a one-time\nsource of settings: later template edits do not affect the\npod, and the created pod does not retain a link to the\ntemplate (`template` stays null). The template may be one\nof your own or a public catalog template — see\n`GET /v2/catalog/templates` (unknown or inaccessible ID →\n404) — and must not be a serverless template (→ 422). CPU\npods do not inherit a template's persistent mount.\n",
+              "allowedCudaVersions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^\\d+\\.\\d+$"
+                },
+                "description": "Acceptable CUDA versions for the host machine, as `major.minor`.\nOmit to accept any version. Matching is exact, so a version no\nmachine reports yields a capacity error rather than a fallback —\ndiscover valid values per GPU type via\n`GET /v2/catalog/gpus?include=AVAILABILITY&product=POD`\n(`cudaVersions`).\n\nGPU pods only; rejected with 400 when `cpu` is set. Mutually\nexclusive with minCudaVersion (400 if both are sent).\n",
                 "examples": [
-                  "30zmvf89kd"
+                  [
+                    "12.8",
+                    "12.6"
+                  ]
                 ]
-              },
-              "mounts": {
-                "$ref": "#/components/schemas/Mounts"
-              },
-              "gpu": {
-                "allOf": [
-                  {
-                    "$ref": "#/components/schemas/GpuConfig"
-                  }
-                ],
-                "unevaluatedProperties": false
-              },
-              "cpu": {
-                "$ref": "#/components/schemas/CreateCpuConfig"
               },
               "cloud": {
                 "allOf": [
@@ -2222,6 +2263,9 @@
                 ],
                 "default": "SECURE",
                 "description": "Cloud tier. Defaults to `SECURE` when omitted."
+              },
+              "cpu": {
+                "$ref": "#/components/schemas/CreateCpuConfig"
               },
               "dataCenterIds": {
                 "type": "array",
@@ -2235,19 +2279,21 @@
                   ]
                 ]
               },
-              "allowedCudaVersions": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "pattern": "^\\d+\\.\\d+$"
-                },
-                "description": "Acceptable CUDA versions for the host machine, as `major.minor`.\nOmit to accept any version. Matching is exact, so a version no\nmachine reports yields a capacity error rather than a fallback —\ndiscover valid values per GPU type via\n`GET /v2/catalog/gpus?include=AVAILABILITY` (`cudaVersions`).\n\nGPU pods only; rejected with 400 when `cpu` is set. Mutually\nexclusive with minCudaVersion (400 if both are sent).\n",
+              "globalNetworking": {
+                "type": "boolean",
+                "default": false,
+                "description": "Enable global networking, giving the pod a private IP reachable across data centers. Requires an NVIDIA GPU and a global-networking-enabled data center (both enforced upstream). See `GET /v2/catalog/datacenters` (`globalNetwork`) for eligible data centers.",
                 "examples": [
-                  [
-                    "12.8",
-                    "12.6"
-                  ]
+                  false
                 ]
+              },
+              "gpu": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/GpuConfig"
+                  }
+                ],
+                "unevaluatedProperties": false
               },
               "minCudaVersion": {
                 "type": "string",
@@ -2257,12 +2303,15 @@
                   "12.1"
                 ]
               },
-              "globalNetworking": {
+              "mounts": {
+                "$ref": "#/components/schemas/Mounts"
+              },
+              "startJupyter": {
                 "type": "boolean",
                 "default": false,
-                "description": "Enable global networking, giving the pod a private IP reachable across data centers. Requires an NVIDIA GPU and a global-networking-enabled data center (both enforced upstream). See `GET /v2/catalog/datacenters` (`globalNetwork`) for eligible data centers.",
+                "description": "Create-time flag telling the provisioner to start JupyterLab:\ninjects a generated `JUPYTER_PASSWORD` environment variable,\nunless the request already sets one. Only images that honor\nthe convention start Jupyter from it (RunPod official images\ndo); expose `8888/http` in `ports` to reach it.\n\nNot part of the pod's readable config — never returned by\nGET and not changeable by PATCH.\n",
                 "examples": [
-                  false
+                  true
                 ]
               },
               "startSsh": {
@@ -2273,12 +2322,12 @@
                   true
                 ]
               },
-              "startJupyter": {
-                "type": "boolean",
-                "default": false,
-                "description": "Create-time flag telling the provisioner to start JupyterLab:\ninjects a generated `JUPYTER_PASSWORD` environment variable,\nunless the request already sets one. Only images that honor\nthe convention start Jupyter from it (RunPod official images\ndo); expose `8888/http` in `ports` to reach it.\n\nNot part of the pod's readable config — never returned by\nGET and not changeable by PATCH.\n",
+              "templateId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "ID of a pod template to base this pod on. The template is\nresolved at create time into the same container settings you\ncould otherwise spread into this body (image, args, disk,\nports, env, registry, persistent mount, startSsh,\nstartJupyter, allowedCudaVersions); explicit body fields\noverride the template's, except `env`, which is merged per\nkey with body values winning. Sending either CUDA field\n(`allowedCudaVersions` or `minCudaVersion`) replaces the\ntemplate's CUDA constraint entirely, and CPU pods ignore it\n(like the persistent mount). The template is a one-time\nsource of settings: later template edits do not affect the\npod, and the created pod does not retain a link to the\ntemplate (`template` stays null). The template may be one\nof your own or a public catalog template — see\n`GET /v2/catalog/templates` (unknown or inaccessible ID →\n404) — and must not be a serverless template (→ 422). CPU\npods do not inherit a template's persistent mount.\n",
                 "examples": [
-                  true
+                  "30zmvf89kd"
                 ]
               }
             }
@@ -2306,6 +2355,17 @@
           {
             "type": "object",
             "properties": {
+              "globalNetworking": {
+                "type": "boolean",
+                "description": "Enable (true) or disable (false) global networking. Takes effect on the next pod start/restart, not live. Requires an NVIDIA GPU and a global-networking-enabled data center (both enforced upstream). See `GET /v2/catalog/datacenters` (`globalNetwork`) for eligible data centers."
+              },
+              "locked": {
+                "type": "boolean",
+                "description": "Lock the pod (true) or unlock it (false). Locked pods cannot be stopped or reset."
+              },
+              "mounts": {
+                "$ref": "#/components/schemas/Mounts"
+              },
               "name": {
                 "type": "string",
                 "minLength": 1
@@ -2316,17 +2376,6 @@
                 "examples": [
                   "30zmvf89kd"
                 ]
-              },
-              "mounts": {
-                "$ref": "#/components/schemas/Mounts"
-              },
-              "locked": {
-                "type": "boolean",
-                "description": "Lock the pod (true) or unlock it (false). Locked pods cannot be stopped or reset."
-              },
-              "globalNetworking": {
-                "type": "boolean",
-                "description": "Enable (true) or disable (false) global networking. Takes effect on the next pod start/restart, not live. Requires an NVIDIA GPU and a global-networking-enabled data center (both enforced upstream). See `GET /v2/catalog/datacenters` (`globalNetwork`) for eligible data centers."
               }
             }
           }
@@ -2636,6 +2685,9 @@
             ],
             "description": "Request body for creating a cluster. `compute` defines the\nhomogeneous pod shape; the container configuration (image, env, ports,\n…) applies to every pod and can be spread from a template response.\nPrivate registries are not yet supported for clusters — there is no\n`registry` field here, unlike the other create requests.\n",
             "properties": {
+              "compute": {
+                "$ref": "#/components/schemas/ClusterCompute"
+              },
               "name": {
                 "type": "string",
                 "minLength": 1,
@@ -2646,22 +2698,6 @@
               "type": {
                 "$ref": "#/components/schemas/ClusterType"
               },
-              "compute": {
-                "$ref": "#/components/schemas/ClusterCompute"
-              },
-              "startSsh": {
-                "type": "boolean",
-                "default": false,
-                "description": "Provision SSH access on every member pod: injects a PUBLIC_KEY environment variable carrying your account's registered SSH public key. Same semantics as the pod create flag."
-              },
-              "startJupyter": {
-                "type": "boolean",
-                "default": false,
-                "description": "Start Jupyter on every member pod, as on pod create."
-              },
-              "mounts": {
-                "$ref": "#/components/schemas/Mounts"
-              },
               "dataCenterIds": {
                 "type": "array",
                 "items": {
@@ -2671,6 +2707,19 @@
                 "example": [
                   "US-TX-3"
                 ]
+              },
+              "mounts": {
+                "$ref": "#/components/schemas/Mounts"
+              },
+              "startJupyter": {
+                "type": "boolean",
+                "default": false,
+                "description": "Start Jupyter on every member pod, as on pod create."
+              },
+              "startSsh": {
+                "type": "boolean",
+                "default": false,
+                "description": "Provision SSH access on every member pod: injects a PUBLIC_KEY environment variable carrying your account's registered SSH public key. Same semantics as the pod create flag."
               }
             }
           }
@@ -2810,42 +2859,6 @@
                   "My PyTorch Template"
                 ]
               },
-              "mounts": {
-                "$ref": "#/components/schemas/TemplateMounts"
-              },
-              "serverless": {
-                "type": "boolean",
-                "default": false
-              },
-              "public": {
-                "type": "boolean",
-                "default": false
-              },
-              "category": {
-                "description": "Optional. Defaults to `NVIDIA` when omitted.",
-                "allOf": [
-                  {
-                    "$ref": "#/components/schemas/TemplateCategory"
-                  }
-                ],
-                "default": "NVIDIA"
-              },
-              "startSsh": {
-                "type": "boolean",
-                "default": true,
-                "description": "Provision SSH access in containers created from this template:\ninjects a `PUBLIC_KEY` environment variable carrying the\ndeployer's registered SSH public keys (`PUT\n/v2/account/ssh-keys` — with none registered the flag does\nnothing), unless `env` already sets one. Only images that\nhonor the convention start sshd from it (all RunPod official\nimages do); direct SSH also needs a `22/tcp` entry in\n`ports`. Defaults to `true` when omitted, matching\nconsole-created templates.\n",
-                "examples": [
-                  true
-                ]
-              },
-              "startJupyter": {
-                "type": "boolean",
-                "default": true,
-                "description": "Start JupyterLab in containers created from this template:\ninjects a generated `JUPYTER_PASSWORD` environment variable,\nunless `env` already sets one. Only images that honor the\nconvention start Jupyter from it (RunPod official images do);\nexpose `8888/http` in `ports` to reach it. Defaults to `true`\nwhen omitted, matching console-created templates.\n",
-                "examples": [
-                  false
-                ]
-              },
               "allowedCudaVersions": {
                 "type": "array",
                 "items": {
@@ -2858,6 +2871,42 @@
                     "12.8",
                     "12.6"
                   ]
+                ]
+              },
+              "category": {
+                "description": "Optional. Defaults to `NVIDIA` when omitted.",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/TemplateCategory"
+                  }
+                ],
+                "default": "NVIDIA"
+              },
+              "mounts": {
+                "$ref": "#/components/schemas/TemplateMounts"
+              },
+              "public": {
+                "type": "boolean",
+                "default": false
+              },
+              "serverless": {
+                "type": "boolean",
+                "default": false
+              },
+              "startJupyter": {
+                "type": "boolean",
+                "default": true,
+                "description": "Start JupyterLab in containers created from this template:\ninjects a generated `JUPYTER_PASSWORD` environment variable,\nunless `env` already sets one. Only images that honor the\nconvention start Jupyter from it (RunPod official images do);\nexpose `8888/http` in `ports` to reach it. Defaults to `true`\nwhen omitted, matching console-created templates.\n",
+                "examples": [
+                  false
+                ]
+              },
+              "startSsh": {
+                "type": "boolean",
+                "default": true,
+                "description": "Provision SSH access in containers created from this template:\ninjects a `PUBLIC_KEY` environment variable carrying the\ndeployer's registered SSH public keys (`PUT\n/v2/account/ssh-keys` — with none registered the flag does\nnothing), unless `env` already sets one. Only images that\nhonor the convention start sshd from it (all RunPod official\nimages do); direct SSH also needs a `22/tcp` entry in\n`ports`. Defaults to `true` when omitted, matching\nconsole-created templates.\n",
+                "examples": [
+                  true
                 ]
               }
             }
@@ -2873,30 +2922,6 @@
           {
             "type": "object",
             "properties": {
-              "name": {
-                "type": "string",
-                "minLength": 1
-              },
-              "mounts": {
-                "$ref": "#/components/schemas/TemplateMounts"
-              },
-              "serverless": {
-                "type": "boolean"
-              },
-              "public": {
-                "type": "boolean"
-              },
-              "category": {
-                "$ref": "#/components/schemas/TemplateCategory"
-              },
-              "startSsh": {
-                "type": "boolean",
-                "description": "Provision SSH access at container startup (`PUBLIC_KEY` env injection). See the create-time field for details."
-              },
-              "startJupyter": {
-                "type": "boolean",
-                "description": "Start JupyterLab at container startup (`JUPYTER_PASSWORD` env injection). See the create-time field for details."
-              },
               "allowedCudaVersions": {
                 "type": "array",
                 "items": {
@@ -2904,6 +2929,30 @@
                   "pattern": "^\\d+\\.\\d+$"
                 },
                 "description": "Acceptable CUDA versions for pods created from this template. An explicit `[]` clears the constraint; omitting the field leaves it unchanged."
+              },
+              "category": {
+                "$ref": "#/components/schemas/TemplateCategory"
+              },
+              "mounts": {
+                "$ref": "#/components/schemas/TemplateMounts"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "public": {
+                "type": "boolean"
+              },
+              "serverless": {
+                "type": "boolean"
+              },
+              "startJupyter": {
+                "type": "boolean",
+                "description": "Start JupyterLab at container startup (`JUPYTER_PASSWORD` env injection). See the create-time field for details."
+              },
+              "startSsh": {
+                "type": "boolean",
+                "description": "Provision SSH access at container startup (`PUBLIC_KEY` env injection). See the create-time field for details."
               }
             }
           }
@@ -2983,6 +3032,14 @@
           "dataCenter"
         ],
         "properties": {
+          "dataCenter": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Data center in which to create the volume",
+            "examples": [
+              "EU-RO-1"
+            ]
+          },
           "name": {
             "type": "string",
             "minLength": 1,
@@ -2998,14 +3055,6 @@
             "description": "Storage to allocate in GB",
             "examples": [
               50
-            ]
-          },
-          "dataCenter": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Data center in which to create the volume",
-            "examples": [
-              "EU-RO-1"
             ]
           },
           "type": {
@@ -3094,15 +3143,15 @@
               "my-private-registry"
             ]
           },
-          "username": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Registry username (write-only, not returned in responses)"
-          },
           "password": {
             "type": "string",
             "minLength": 1,
             "description": "Registry password (write-only, not returned in responses)"
+          },
+          "username": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Registry username (write-only, not returned in responses)"
           }
         }
       },
@@ -3318,6 +3367,7 @@
           },
           "price": {
             "type": "object",
+            "description": "List price in USD per hour for a **single** GPU of this type. Pod\nrates are quoted separately per cloud (`secure`, `community`);\n`serverless` is the rate for this GPU's pool. In every case the\nrate for a unit is the figure times `gpu.count`; the rate actually\nbilled for a pod is reported as `cost` on the pod itself.\n",
             "required": [
               "secure",
               "community"
@@ -3336,11 +3386,20 @@
                 "examples": [
                   0.31
                 ]
+              },
+              "serverless": {
+                "type": "number",
+                "format": "float",
+                "description": "Serverless list price per GPU per hour, from the `pool` this GPU\nbelongs to. Multiply by `gpu.count` for the per-worker rate.\nAbsent when the GPU is not in a serverless pool available to the\ncaller. Negotiated account discounts are not reflected.\n",
+                "examples": [
+                  1.1
+                ]
               }
             }
           },
           "maxCount": {
             "type": "object",
+            "description": "The largest number of GPUs you can request on a single pod of this\ntype, quoted separately per cloud. A pod runs on one machine, so\nthis is the GPU count of the largest machine of this type Runpod\noperates in that cloud.\n\nThis is a ceiling, not a stock level — it does not mean that many\nGPUs are free right now. For current availability, request\n`include=AVAILABILITY&product=POD` and read `availability`\n(overall) or `dataCenters` (per data center).\n",
             "required": [
               "secure",
               "community"
@@ -3361,12 +3420,12 @@
             }
           },
           "availability": {
-            "description": "Overall GPU availability. Present only when requested with include=AVAILABILITY.",
+            "description": "Overall GPU availability for the requested `product` contexts. Present only when requested with include=AVAILABILITY, which also requires `product`.",
             "$ref": "#/components/schemas/AvailabilityLevel"
           },
           "dataCenters": {
             "type": "array",
-            "description": "Per-datacenter GPU availability. Present only when requested with include=AVAILABILITY.",
+            "description": "Per-datacenter GPU availability for the requested `product`\ncontexts, listing only the datacenters that offer this GPU in the\nrequested configuration. Present only when requested with\ninclude=AVAILABILITY, which also requires `product`, and omitted\nentirely when the configuration is unavailable everywhere.\n",
             "items": {
               "$ref": "#/components/schemas/DataCenterAvailability"
             }
@@ -3392,7 +3451,7 @@
       },
       "Product": {
         "type": "string",
-        "description": "Catalog product availability context.",
+        "description": "Catalog product availability context. Availability is product-specific, so this is required whenever availability is requested.",
         "enum": [
           "POD",
           "CLUSTER",
@@ -3401,7 +3460,7 @@
       },
       "CpuProduct": {
         "type": "string",
-        "description": "CPU catalog product availability context.",
+        "description": "CPU catalog product availability context. Availability is product-specific, so this is required whenever availability is requested.",
         "enum": [
           "POD",
           "SERVERLESS"
@@ -3617,12 +3676,12 @@
             }
           },
           "availability": {
-            "description": "Overall CPU availability. Present only when requested with include=AVAILABILITY.",
+            "description": "Overall CPU availability for the requested `product` contexts. Present only when requested with include=AVAILABILITY, which also requires `product`.",
             "$ref": "#/components/schemas/AvailabilityLevel"
           },
           "dataCenters": {
             "type": "array",
-            "description": "Per-datacenter CPU availability. Present only when requested with include=AVAILABILITY.",
+            "description": "Per-datacenter CPU availability for the requested `product`\ncontexts, listing only the datacenters that offer this CPU flavor.\nPresent only when requested with include=AVAILABILITY, which also\nrequires `product`, and omitted entirely when the flavor is\nunavailable everywhere.\n",
             "items": {
               "$ref": "#/components/schemas/DataCenterAvailability"
             }
@@ -3699,14 +3758,14 @@
           },
           "gpuAvailability": {
             "type": "array",
-            "description": "Per-GPU availability in this data center. Present only when requested with include=GPU_AVAILABILITY.",
+            "description": "Availability of each GPU this data center offers. Present only when\nrequested with include=GPU_AVAILABILITY, and omitted entirely when\nthe data center offers no GPUs.\n",
             "items": {
               "$ref": "#/components/schemas/CatalogResourceAvailability"
             }
           },
           "cpuAvailability": {
             "type": "array",
-            "description": "Per-CPU availability in this data center. Present only when requested with include=CPU_AVAILABILITY.",
+            "description": "Availability of each CPU flavor this data center offers. Present\nonly when requested with include=CPU_AVAILABILITY, and omitted\nentirely when the data center offers no CPU flavors.\n",
             "items": {
               "$ref": "#/components/schemas/CatalogResourceAvailability"
             }
@@ -4797,7 +4856,7 @@
                         {
                           "id": "7h9k2m4n6p",
                           "name": "pytorch-training",
-                          "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1",
+                          "image": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
                           "args": "",
                           "disk": 50,
                           "ports": [
@@ -4899,9 +4958,16 @@
       "post": {
         "operationId": "createPod",
         "summary": "Create a pod",
-        "description": "Creates a new pod. `name` is always required; supply exactly one of\n`gpu` or `cpu` to select compute (a GPU or a CPU pod). Container\nsettings come from the body, from a template referenced by\n`templateId` (body fields override the template's), or both; `image`\nis required unless `templateId` is set. See `CreatePodRequest` for\nthe full body.\n\nReturns `201` with the created pod. Provisioning is asynchronous: the\npod starts in `PROVISIONING`, transitions through `STARTING`, and\nreaches `RUNNING` once its container is healthy. Poll `getPod` (or\nwatch the pod's `status`) to observe readiness rather than assuming\nthe pod is running when this call returns.\n",
+        "description": "Creates a new pod. `name` is always required; supply exactly one of\n`gpu` or `cpu` to select compute (a GPU or a CPU pod). Container\nsettings come from the body, from a template referenced by\n`templateId` (body fields override the template's), or both; `image`\nis required unless `templateId` is set. See `CreatePodRequest` for\nthe full body.\n\nReturns `201` with the created pod. Provisioning is asynchronous: the\npod starts in `PROVISIONING`, transitions through `STARTING`, and\nreaches `RUNNING` once its container is healthy. Poll `getPod` (or\nwatch the pod's `status`) to observe readiness rather than assuming\nthe pod is running when this call returns.\n\n## Checking what you can deploy\n\nThis endpoint places one specific GPU type. It does not search for\ncapacity, and it does not fall back to a different GPU. To find out\nwhat is deployable before you call it, read the catalog:\n\n- [List GPU types](https://docs.runpod.io/api-reference-v2/catalog/list-gpu-types)\n  — GPU types with pricing, per-cloud ceilings, and, with\n  `include=AVAILABILITY&product=POD`, current pod stock.\n- [List data centers](https://docs.runpod.io/api-reference-v2/catalog/list-data-centers)\n  — locations, with `include=GPU_AVAILABILITY` for stock per data\n  center.\n\nBoth accept filters that combine, so you can narrow by location and by\ncompute in one request — for example\n`GET /v2/catalog/datacenters?regions=EUROPE&include=GPU_AVAILABILITY`\nreturns only European data centers, each carrying the GPU types\ncurrently available there.\n\n## Deploying under region and GPU constraints\n\nIf you need a particular GPU in a particular geography, the working\npattern is read-then-create: narrow the catalog to an acceptable\n(data center, GPU) set, then call this endpoint once per candidate in\nyour order of preference until one returns `201`. The runnable sample\nalongside this operation does exactly that.\n\nAvailability can change between the catalog read and the create call,\nso treat the catalog as a way to order your candidates, not as a\nreservation — a create can still fail for capacity on a GPU the\ncatalog just reported as available.\n\nWhich failures are worth retrying:\n\n| Status | Meaning | Do |\n| --- | --- | --- |\n| `422` | The body does not match the contract. `errors` lists each violation. | Fix the request. Never retry. |\n| `400` | The body matches the contract but was rejected — either it breaks a cross-field rule, or this GPU and data center combination could not be placed. | Try your next candidate. |\n| `402` | Insufficient balance. | Stop; no candidate will succeed. |\n| `403` | Your account cannot access the requested pool. | Skip this candidate, keep going. |\n| `429` | Rate limited. | Back off using `Retry-After`, then resume. |\n| `5xx` | Transient upstream failure. | Retry the same candidate with backoff. |\n\n`400` covers both \"your request breaks a rule\" and \"no capacity\",\nbecause capacity exhaustion currently carries no machine-readable code\nof its own — only a human-readable `detail`. A rule violation is\ndeterministic, so it fails identically on every candidate: if *every*\ncandidate returns `400`, read the last `detail` as a problem with the\nrequest rather than as absent capacity.\n",
         "tags": [
           "Pods"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Python",
+            "label": "Region-constrained deploy loop",
+            "source": "import os\nimport time\n\nimport requests\n\nAPI = \"https://api.runpod.io\"\nSESSION = requests.Session()\nSESSION.headers[\"Authorization\"] = f\"Bearer {os.environ['RUNPOD_API_KEY']}\"\n\n# Most preferred GPU first. The loop stops at the first one that places.\nGPU_PREFERENCE = [\n    \"NVIDIA GeForce RTX 4090\",\n    \"NVIDIA GeForce RTX 5090\",\n    \"NVIDIA H100 PCIe\",\n]\nUSABLE = {\"LOW\", \"MEDIUM\", \"HIGH\"}  # anything but NONE\n\n\ndef candidates(region):\n    \"\"\"(gpu_id, datacenter_id) pairs that the catalog reports as deployable,\n    ordered by GPU_PREFERENCE then by descending stock.\"\"\"\n    response = SESSION.get(\n        f\"{API}/v2/catalog/datacenters\",\n        params={\"regions\": region, \"include\": \"GPU_AVAILABILITY\"},\n        timeout=30,\n    )\n    response.raise_for_status()\n\n    rank = {\"HIGH\": 0, \"MEDIUM\": 1, \"LOW\": 2}\n    found = []\n    for datacenter in response.json()[\"dataCenters\"]:\n        for gpu in datacenter.get(\"gpuAvailability\", []):\n            if gpu[\"id\"] in GPU_PREFERENCE and gpu[\"availability\"] in USABLE:\n                found.append((gpu[\"id\"], datacenter[\"id\"], gpu[\"availability\"]))\n\n    found.sort(key=lambda c: (GPU_PREFERENCE.index(c[0]), rank[c[2]]))\n    return [(gpu_id, dc_id) for gpu_id, dc_id, _ in found]\n\n\ndef create(gpu_id, datacenter_id):\n    return SESSION.post(\n        f\"{API}/v2/pods\",\n        json={\n            \"name\": \"inference-worker\",\n            \"image\": \"runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404\",\n            \"gpu\": {\"id\": gpu_id, \"count\": 1},\n            \"dataCenterIds\": [datacenter_id],\n            \"disk\": 50,\n        },\n        timeout=60,\n    )\n\n\ndef create_with_backoff(gpu_id, datacenter_id, attempts=5):\n    \"\"\"Rate limits and 5xx are not the candidate's fault, so they are\n    retried in place rather than moving to the next GPU.\"\"\"\n    for attempt in range(attempts):\n        response = create(gpu_id, datacenter_id)\n        if response.status_code == 429:\n            # Retry-After is integer seconds on this API.\n            time.sleep(int(response.headers.get(\"Retry-After\", 5)))\n            continue\n        if response.status_code >= 500:\n            time.sleep(2**attempt)\n            continue\n        return response\n    raise RuntimeError(f\"{attempts} transient failures for {gpu_id}; upstream unhealthy\")\n\n\ndef deploy(region=\"EUROPE\"):\n    last_detail = None\n\n    for gpu_id, datacenter_id in candidates(region):\n        response = create_with_backoff(gpu_id, datacenter_id)\n\n        if response.status_code == 201:\n            return response.json()\n\n        problem = response.json()\n        last_detail = problem.get(\"detail\")\n\n        if response.status_code == 422:\n            # Contract violation — identical on every candidate.\n            raise SystemExit(f\"Bad request: {problem.get('errors', last_detail)}\")\n        if response.status_code == 402:\n            raise SystemExit(f\"Cannot deploy: {last_detail}\")\n        if response.status_code in (400, 403):\n            # 403: no access to this pool. 400: rule violation, or this\n            # GPU/data center could not be placed. Either way, move on.\n            continue\n\n        response.raise_for_status()\n\n    # Every candidate was refused. A rule violation fails the same way on\n    # all of them, so the last detail is the useful signal here.\n    raise SystemExit(f\"No candidate placed in {region}. Last error: {last_detail}\")\n\n\nif __name__ == \"__main__\":\n    pod = deploy()\n    print(f\"{pod['id']} placed in {pod['dataCenterId']} on {pod['gpu']['id']}\")\n"
+          }
         ],
         "requestBody": {
           "required": true,
@@ -4915,7 +4981,7 @@
                   "summary": "GPU pod",
                   "value": {
                     "name": "pytorch-training",
-                    "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1",
+                    "image": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
                     "gpu": {
                       "id": "NVIDIA GeForce RTX 4090",
                       "count": 1
@@ -4949,7 +5015,7 @@
                     "value": {
                       "id": "7h9k2m4n6p",
                       "name": "pytorch-training",
-                      "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1",
+                      "image": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
                       "args": "",
                       "disk": 50,
                       "ports": [
@@ -5082,7 +5148,7 @@
                     "value": {
                       "id": "7h9k2m4n6p",
                       "name": "pytorch-training",
-                      "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1",
+                      "image": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
                       "args": "",
                       "disk": 50,
                       "ports": [
@@ -5229,7 +5295,7 @@
                     "value": {
                       "id": "7h9k2m4n6p",
                       "name": "renamed-training-pod",
-                      "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1",
+                      "image": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
                       "args": "",
                       "disk": 50,
                       "ports": [
@@ -5577,7 +5643,7 @@
                     "value": {
                       "id": "7h9k2m4n6p",
                       "name": "pytorch-training",
-                      "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1",
+                      "image": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
                       "args": "",
                       "disk": 50,
                       "ports": [
@@ -6085,7 +6151,7 @@
                             "purgeQueue": "https://api.runpod.ai/v2/4m7x2k9q/purge-queue",
                             "health": "https://api.runpod.ai/v2/4m7x2k9q/health"
                           },
-                          "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1",
+                          "image": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
                           "args": "",
                           "disk": 20,
                           "ports": [
@@ -6160,7 +6226,7 @@
       "post": {
         "operationId": "createEndpoint",
         "summary": "Create a serverless endpoint",
-        "description": "Creates a serverless endpoint. Specify `gpu` for compute (CPU\nserverless endpoints are read-only). Container settings come from the\nbody, from a serverless template referenced by `templateId` (body\nfields override the template's), or both; `image` is required unless\n`templateId` is set. See `CreateEndpointRequest` for the full body.\n\nReturns `201` with the created endpoint. The endpoint can accept jobs\nimmediately, but starts with no active workers unless `workers.min`\nis greater than 0. Workers are provisioned on demand and autoscaled\nbetween `workers.min` and `workers.max` according to the `scaling`\npolicy, so the first request to an idle endpoint may incur cold-start\nlatency while a worker pulls its image and boots.\n",
+        "description": "Creates a serverless endpoint. Callers specify exactly one of `gpu` or\n`cpu`; neither or both returns 400. Container settings come from the\nbody, from a serverless template referenced by `templateId` (body\nfields override the template's), or both; `image` is required unless\n`templateId` is set. See `CreateEndpointRequest` for the full body.\n\n`allowedCudaVersions` is GPU-only. A non-empty explicit or\ntemplate-inherited constraint is rejected with 400 for CPU create;\nan explicit empty array is allowed on create.\n\nReturns `201` with the created endpoint. The endpoint can accept jobs\nimmediately, but starts with no active workers unless `workers.min`\nis greater than 0. Workers are provisioned on demand and autoscaled\nbetween `workers.min` and `workers.max` according to the `scaling`\npolicy, so the first request to an idle endpoint may incur cold-start\nlatency while a worker pulls its image and boots.\n\n## Checking what you can deploy\n\n`gpu.pools` takes serverless GPU **pool** IDs, not the GPU type IDs\nused for pods. `gpu.excludedTypes` takes the type IDs — it subtracts\nspecific cards from the pools you picked. Read both from the catalog\nbefore you create:\n\n- [List GPU types](https://docs.runpod.io/api-reference-v2/catalog/list-gpu-types)\n  — the `pool` field carries the pool ID for each GPU type (`null`\n  means that type is not in a serverless pool). Add\n  `include=AVAILABILITY&product=SERVERLESS` for current serverless\n  stock.\n- [List data centers](https://docs.runpod.io/api-reference-v2/catalog/list-data-centers)\n  — locations to constrain with `dataCenterIds`, with\n  `include=GPU_AVAILABILITY` for stock per data center.\n\nUnlike pod creation, you do not need to retry across GPUs yourself:\nlist every pool you are willing to run on and workers are placed on\nwhichever one has capacity. Listing more pools — and leaving\n`dataCenterIds` unset — gives the scheduler more room and reduces the\nchance of workers failing to start when a single pool is exhausted.\n\nIf your workload needs a specific card, pick the pool that holds it and\nexclude the rest of that pool with `gpu.excludedTypes`. Keep at least\none type in the selection — upstream rejects a selection that leaves\nnone.\n",
         "tags": [
           "Serverless"
         ],
@@ -6173,10 +6239,10 @@
               },
               "examples": {
                 "serverlessEndpoint": {
-                  "summary": "Serverless endpoint",
+                  "summary": "Serverless GPU endpoint",
                   "value": {
                     "name": "image-generator",
-                    "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1",
+                    "image": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
                     "type": "QUEUE",
                     "gpu": {
                       "pools": [
@@ -6196,6 +6262,34 @@
                     "dataCenterIds": [
                       "US-KS-2"
                     ],
+                    "timeout": 300000
+                  }
+                },
+                "cpuServerlessEndpoint": {
+                  "summary": "Serverless CPU endpoint with multiple configurations",
+                  "value": {
+                    "name": "cpu-inference",
+                    "image": "python:3.11-slim",
+                    "type": "QUEUE",
+                    "cpu": [
+                      {
+                        "id": "cpu5c",
+                        "vcpuCount": 4
+                      },
+                      {
+                        "id": "cpu5g",
+                        "vcpuCount": 8
+                      }
+                    ],
+                    "workers": {
+                      "min": 0,
+                      "max": 3,
+                      "idleTimeout": 10
+                    },
+                    "scaling": {
+                      "type": "QUEUE_DELAY",
+                      "queueDelay": 4
+                    },
                     "timeout": 300000
                   }
                 }
@@ -6236,7 +6330,7 @@
                         "purgeQueue": "https://api.runpod.ai/v2/4m7x2k9q/purge-queue",
                         "health": "https://api.runpod.ai/v2/4m7x2k9q/health"
                       },
-                      "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1",
+                      "image": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
                       "args": "",
                       "disk": 20,
                       "ports": [
@@ -6267,6 +6361,57 @@
                       "networkVolumes": [
                         "2q9m7x4c"
                       ],
+                      "timeout": 300000,
+                      "flashboot": "OFF",
+                      "allowedCudaVersions": [],
+                      "createdAt": "2026-06-01T12:00:00Z"
+                    }
+                  },
+                  "cpuEndpoint": {
+                    "summary": "Successful response for a CPU endpoint",
+                    "value": {
+                      "id": "7c3v1n8p",
+                      "name": "cpu-inference",
+                      "type": "QUEUE",
+                      "requestUrls": {
+                        "run": "https://api.runpod.ai/v2/7c3v1n8p/run",
+                        "runSync": "https://api.runpod.ai/v2/7c3v1n8p/runsync",
+                        "status": "https://api.runpod.ai/v2/7c3v1n8p/status/{job_id}",
+                        "stream": "https://api.runpod.ai/v2/7c3v1n8p/stream/{job_id}",
+                        "cancel": "https://api.runpod.ai/v2/7c3v1n8p/cancel/{job_id}",
+                        "retry": "https://api.runpod.ai/v2/7c3v1n8p/retry/{job_id}",
+                        "purgeQueue": "https://api.runpod.ai/v2/7c3v1n8p/purge-queue",
+                        "health": "https://api.runpod.ai/v2/7c3v1n8p/health"
+                      },
+                      "image": "python:3.11-slim",
+                      "args": "",
+                      "disk": 20,
+                      "ports": [],
+                      "env": {},
+                      "registry": null,
+                      "cpu": [
+                        {
+                          "id": "cpu5c",
+                          "vcpuCount": 4,
+                          "memory": 16
+                        },
+                        {
+                          "id": "cpu5g",
+                          "vcpuCount": 8,
+                          "memory": 16
+                        }
+                      ],
+                      "workers": {
+                        "min": 0,
+                        "max": 3,
+                        "idleTimeout": 10
+                      },
+                      "scaling": {
+                        "type": "QUEUE_DELAY",
+                        "queueDelay": 4
+                      },
+                      "dataCenterIds": [],
+                      "networkVolumes": [],
                       "timeout": 300000,
                       "flashboot": "OFF",
                       "allowedCudaVersions": [],
@@ -6363,7 +6508,7 @@
                         "base": "https://4m7x2k9q.api.runpod.ai",
                         "health": "https://4m7x2k9q.api.runpod.ai/ping"
                       },
-                      "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1",
+                      "image": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
                       "args": "",
                       "disk": 20,
                       "ports": [
@@ -6439,7 +6584,7 @@
       "patch": {
         "operationId": "updateEndpoint",
         "summary": "Update a serverless endpoint",
-        "description": "Partially updates a serverless endpoint. This is a PATCH: only the\nfields present in the body are changed; omitted fields are left\nuntouched. See `UpdateEndpointRequest` for the full body.\n\nMutable fields: `name`, `gpu`, `workers` (`min`/`max`), `scaling`\n(`type`/`value`/`idleTimeout`), `dataCenterIds`, `networkVolumes`,\n`timeout`, `flashboot`, and the container settings (`image`, `args`,\n`disk`, `ports`, `env`, `registry`).\n\nApplies to GPU endpoints only. CPU endpoints are read-only for now —\na PATCH targeting one returns `400` regardless of the body.\n\nReturns `200` with the full updated endpoint. Effect timing differs\nby field: scaling and worker-bound settings (`workers`, `scaling`,\n`timeout`) are applied to the autoscaler promptly, while\ncontainer-affecting changes (e.g. `image`, `env`) create a new\nendpoint release that rolls out as workers cycle — in-flight workers\nkeep the previous version until they are replaced. Track rollout via\n`listEndpointReleases`.\n",
+        "description": "Partially updates a serverless endpoint. This is a PATCH: only the\nfields present in the body are changed; omitted fields are left\nuntouched. See `UpdateEndpointRequest` for the full body.\n\nMutable fields: `name`, `gpu`, `cpu`, `workers` (`min`/`max`),\n`scaling` (`type`/`value`/`idleTimeout`), `dataCenterIds`,\n`networkVolumes`, `timeout`, `flashboot`, and the container settings\n(`image`, `args`, `disk`, `ports`, `env`, `registry`).\n\nOmitted compute preserves the current selection. `cpu` completely\nreplaces a CPU endpoint's selection; compute family is immutable.\n`gpu` on CPU, `cpu` on GPU, or both fields returns 400.\n\nReturns `200` with the full updated endpoint. Effect timing differs\nby field: scaling and worker-bound settings (`workers`, `scaling`,\n`timeout`) are applied to the autoscaler promptly, while\ncontainer-affecting changes (e.g. `image`, `env`) create a new\nendpoint release that rolls out as workers cycle — in-flight workers\nkeep the previous version until they are replaced. Track rollout via\n`listEndpointReleases`.\n",
         "tags": [
           "Serverless"
         ],
@@ -6502,7 +6647,7 @@
                         "purgeQueue": "https://api.runpod.ai/v2/4m7x2k9q/purge-queue",
                         "health": "https://api.runpod.ai/v2/4m7x2k9q/health"
                       },
-                      "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1",
+                      "image": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
                       "args": "",
                       "disk": 20,
                       "ports": [
@@ -6689,7 +6834,7 @@
                           "isStale": false,
                           "version": 4,
                           "gpuCount": 1,
-                          "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1",
+                          "image": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
                           "uptimeSeconds": 3600,
                           "gpuTypeId": "NVIDIA GeForce RTX 4090",
                           "dataCenterId": "US-KS-2",
@@ -6992,7 +7137,7 @@
                         {
                           "id": "9x4m2p7v",
                           "name": "PyTorch GPU Template",
-                          "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1",
+                          "image": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
                           "args": "",
                           "disk": 50,
                           "mounts": {
@@ -7070,7 +7215,7 @@
                   "summary": "Pod template",
                   "value": {
                     "name": "PyTorch GPU Template",
-                    "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1",
+                    "image": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
                     "category": "NVIDIA",
                     "disk": 50,
                     "ports": [
@@ -7115,7 +7260,7 @@
                     "value": {
                       "id": "9x4m2p7v",
                       "name": "PyTorch GPU Template",
-                      "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1",
+                      "image": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
                       "args": "",
                       "disk": 50,
                       "mounts": {
@@ -7220,7 +7365,7 @@
                     "value": {
                       "id": "9x4m2p7v",
                       "name": "PyTorch GPU Template",
-                      "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1",
+                      "image": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
                       "args": "",
                       "disk": 50,
                       "mounts": {
@@ -7327,7 +7472,7 @@
                     "value": {
                       "id": "9x4m2p7v",
                       "name": "Renamed PyTorch Template",
-                      "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1",
+                      "image": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
                       "args": "",
                       "disk": 50,
                       "mounts": {
@@ -8367,7 +8512,7 @@
       "get": {
         "operationId": "listGpuTypes",
         "summary": "List GPU types",
-        "description": "Returns available GPU types with pricing. Availability is included only when requested with include=AVAILABILITY.",
+        "description": "Returns available GPU types with pricing. Availability is included only when requested with include=AVAILABILITY, which requires `product` — stock differs by product context. With countryCodes, the list is narrowed to GPU types deployable in those countries, so \"this geography + this chip\" resolves in one read.",
         "tags": [
           "Catalog"
         ],
@@ -8383,6 +8528,9 @@
           },
           {
             "$ref": "#/components/parameters/GpuCloudFilter"
+          },
+          {
+            "$ref": "#/components/parameters/CountryCodesFilter"
           },
           {
             "$ref": "#/components/parameters/CudaVersionsFilter"
@@ -8422,7 +8570,8 @@
                           "community": true,
                           "price": {
                             "secure": 0.44,
-                            "community": 0.31
+                            "community": 0.31,
+                            "serverless": 1.1
                           },
                           "maxCount": {
                             "secure": 8,
@@ -8489,7 +8638,7 @@
       "get": {
         "operationId": "getGpuType",
         "summary": "Get a GPU type",
-        "description": "Returns a single GPU type with pricing. Availability details are included only when requested with include=AVAILABILITY.",
+        "description": "Returns a single GPU type with pricing. Availability details are included only when requested with include=AVAILABILITY, which requires `product` — stock differs by product context.",
         "tags": [
           "Catalog"
         ],
@@ -8505,6 +8654,9 @@
           },
           {
             "$ref": "#/components/parameters/GpuCloudFilter"
+          },
+          {
+            "$ref": "#/components/parameters/CountryCodesFilter"
           },
           {
             "$ref": "#/components/parameters/CudaVersionsFilter"
@@ -8542,7 +8694,8 @@
                       "community": true,
                       "price": {
                         "secure": 0.44,
-                        "community": 0.31
+                        "community": 0.31,
+                        "serverless": 1.1
                       },
                       "maxCount": {
                         "secure": 8,
@@ -8599,7 +8752,7 @@
       "get": {
         "operationId": "listCpuTypes",
         "summary": "List CPU types",
-        "description": "Returns available CPU flavors. Availability is included only when requested with include=AVAILABILITY.",
+        "description": "Returns available CPU flavors. Availability is included only when requested with include=AVAILABILITY, which requires `product` — stock differs by product context.",
         "tags": [
           "Catalog"
         ],
@@ -8709,7 +8862,7 @@
       "get": {
         "operationId": "getCpuType",
         "summary": "Get a CPU type",
-        "description": "Returns a single CPU type with pricing. Availability details are included only when requested with include=AVAILABILITY.",
+        "description": "Returns a single CPU type with pricing. Availability details are included only when requested with include=AVAILABILITY, which requires `product` — stock differs by product context.",
         "tags": [
           "Catalog"
         ],
@@ -9153,7 +9306,7 @@
                         {
                           "id": "30zmvf89kd",
                           "name": "PyTorch 2.8",
-                          "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1",
+                          "image": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
                           "args": "",
                           "disk": 50,
                           "mounts": {},
