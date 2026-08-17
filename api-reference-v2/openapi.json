@@ -18,6 +18,10 @@
   ],
   "tags": [
     {
+      "name": "Account",
+      "description": "Account-scoped settings and primitives (SSH public keys)."
+    },
+    {
       "name": "Pods",
       "description": "GPU and CPU pod lifecycle, configuration, actions, and log streaming."
     },
@@ -39,7 +43,7 @@
     },
     {
       "name": "Catalog",
-      "description": "Available GPU, CPU, and data center catalog metadata."
+      "description": "Available GPU, CPU, data center, and public template catalog metadata."
     },
     {
       "name": "Billing",
@@ -77,6 +81,14 @@
         }
       },
       "ForbiddenError": {
+        "headers": {
+          "RateLimit": {
+            "$ref": "#/components/headers/RateLimit"
+          },
+          "RateLimit-Policy": {
+            "$ref": "#/components/headers/RateLimit-Policy"
+          }
+        },
         "description": "The bearer token is valid, but it does not grant access to the requested resource or action.",
         "content": {
           "application/problem+json": {
@@ -97,6 +109,14 @@
         }
       },
       "BadRequestError": {
+        "headers": {
+          "RateLimit": {
+            "$ref": "#/components/headers/RateLimit"
+          },
+          "RateLimit-Policy": {
+            "$ref": "#/components/headers/RateLimit-Policy"
+          }
+        },
         "description": "The request could not be processed because it is malformed or conflicts with request rules.",
         "content": {
           "application/problem+json": {
@@ -117,6 +137,14 @@
         }
       },
       "NotFoundError": {
+        "headers": {
+          "RateLimit": {
+            "$ref": "#/components/headers/RateLimit"
+          },
+          "RateLimit-Policy": {
+            "$ref": "#/components/headers/RateLimit-Policy"
+          }
+        },
         "description": "The requested resource was not found or is not accessible to the caller.",
         "content": {
           "application/problem+json": {
@@ -137,6 +165,14 @@
         }
       },
       "UnprocessableEntityError": {
+        "headers": {
+          "RateLimit": {
+            "$ref": "#/components/headers/RateLimit"
+          },
+          "RateLimit-Policy": {
+            "$ref": "#/components/headers/RateLimit-Policy"
+          }
+        },
         "description": "The request body or parameters were syntactically valid but failed validation.",
         "content": {
           "application/problem+json": {
@@ -159,6 +195,12 @@
       "MethodNotAllowedError": {
         "description": "The request method is not supported for the target path.",
         "headers": {
+          "RateLimit": {
+            "$ref": "#/components/headers/RateLimit"
+          },
+          "RateLimit-Policy": {
+            "$ref": "#/components/headers/RateLimit-Policy"
+          },
           "Allow": {
             "description": "Comma-separated methods supported by the target path.",
             "schema": {
@@ -196,18 +238,10 @@
             "example": 12
           },
           "RateLimit": {
-            "description": "Live per-window state as a structured-field list — one member per window (`minute`, `hour`, `day`) with remaining count `r` and seconds-until-reset `t`.\n",
-            "schema": {
-              "type": "string"
-            },
-            "example": "\"minute\";r=0;t=12, \"hour\";r=2800;t=1812, \"day\";r=49500;t=45012"
+            "$ref": "#/components/headers/RateLimit"
           },
           "RateLimit-Policy": {
-            "description": "Static quota policy as a structured-field list — one member per window with quota `q` and window length `w` (seconds).\n",
-            "schema": {
-              "type": "string"
-            },
-            "example": "\"minute\";q=60;w=60, \"hour\";q=3000;w=3600, \"day\";q=50000;w=86400"
+            "$ref": "#/components/headers/RateLimit-Policy"
           }
         },
         "content": {
@@ -226,6 +260,18 @@
               }
             }
           }
+        }
+      }
+    },
+    "headers": {
+      "RateLimit": {
+        "schema": {
+          "$ref": "#/components/schemas/RateLimitHeader"
+        }
+      },
+      "RateLimit-Policy": {
+        "schema": {
+          "$ref": "#/components/schemas/RateLimitPolicyHeader"
         }
       }
     },
@@ -329,13 +375,33 @@
           "$ref": "#/components/schemas/GpuCloudFilter"
         }
       },
+      "CudaVersionsFilter": {
+        "name": "cudaVersions",
+        "in": "query",
+        "required": false,
+        "description": "Comma-separated CUDA versions to scope availability and lowest-price calculations to, matched exactly. Format: major.minor, e.g. 12.8 — a bare major is rejected here because it identifies no version. Valid only with include=AVAILABILITY (400 otherwise) and mutually exclusive with minCudaVersion (400 if both are sent); a malformed entry is a 422. Also narrows the returned cudaVersions array; omit it to enumerate every version offered.",
+        "style": "form",
+        "explode": false,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+$"
+          }
+        },
+        "example": [
+          "12.8",
+          "12.6"
+        ]
+      },
       "MinCudaVersionFilter": {
         "name": "minCudaVersion",
         "in": "query",
         "required": false,
-        "description": "Minimum CUDA version for availability and lowest-price calculations. Valid only with include=AVAILABILITY. Format: integer major or major.minor, e.g. 12 or 12.1.",
+        "description": "Lowest acceptable CUDA version to scope availability and lowest-price calculations to, compared numerically. Format: integer major or major.minor, e.g. 12 or 12.1 — a bare major is accepted here and means any release of that major. Valid only with include=AVAILABILITY (400 otherwise) and mutually exclusive with cudaVersions (400 if both are sent); a malformed value is a 422. Use this for an open-ended floor and cudaVersions for an exact set.",
         "schema": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^\\d+(\\.\\d+)?$"
         },
         "example": "12.1"
       },
@@ -409,9 +475,9 @@
       }
     },
     "schemas": {
-      "ContainerConfig": {
+      "BaseContainerConfig": {
         "type": "object",
-        "description": "Reusable container configuration shared across templates, pods, and serverless endpoints. Adding a field here automatically propagates to all three resources.\n",
+        "description": "Container configuration universal to every containerized resource. Compose ContainerConfig instead unless the resource cannot support private registries (clusters, until the upstream input accepts a registry credential).\n",
         "properties": {
           "image": {
             "type": "string",
@@ -459,18 +525,31 @@
                 "JUPYTER_PASSWORD": "hunter2"
               }
             ]
-          },
-          "registry": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Container registry credential ID (for private images)",
-            "examples": [
-              null
-            ]
           }
         }
+      },
+      "ContainerConfig": {
+        "description": "Reusable container configuration shared across templates, pods, and serverless endpoints. Adding a field here automatically propagates to all three resources.\n",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/BaseContainerConfig"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "registry": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Container registry credential ID (for private images)",
+                "examples": [
+                  null
+                ]
+              }
+            }
+          }
+        ]
       },
       "Mounts": {
         "type": "object",
@@ -630,14 +709,6 @@
           }
         ]
       },
-      "ScalerType": {
-        "type": "string",
-        "description": "Autoscaling strategy.\n- `QUEUE_DELAY`   — scale on seconds a request waits in queue\n- `REQUEST_COUNT` — scale on in-flight request count\n",
-        "enum": [
-          "QUEUE_DELAY",
-          "REQUEST_COUNT"
-        ]
-      },
       "FlashBoot": {
         "type": "string",
         "description": "FlashBoot cold-start acceleration mode.\n- `OFF`                — disabled\n- `FLASHBOOT`          — enabled\n- `PRIORITY_FLASHBOOT` — enabled with priority capacity\n",
@@ -649,14 +720,14 @@
       },
       "EndpointType": {
         "type": "string",
-        "description": "Request-routing semantics for a modern serverless endpoint.\n- `QUEUE_BASED` — submit asynchronous or synchronous jobs through the managed queue.\n- `LOAD_BALANCING` — send requests directly to worker-defined HTTP paths.\n",
+        "description": "Request-routing semantics for a modern serverless endpoint.\n- `QUEUE` — submit asynchronous or synchronous jobs through the managed queue.\n- `LOAD_BALANCER` — send requests directly to worker-defined HTTP paths.\n  Configure via `env`: `PORT` (server port, default 80), `PORT_HEALTH`\n  (health-check port, default 80), and `HEALTH_CHECK_PATH` (path the\n  load balancer polls for worker health, default `/ping`).\n",
         "x-enum-varnames": [
-          "EndpointTypeQueueBased",
-          "EndpointTypeLoadBalancing"
+          "EndpointTypeQueue",
+          "EndpointTypeLoadBalancer"
         ],
         "enum": [
-          "QUEUE_BASED",
-          "LOAD_BALANCING"
+          "QUEUE",
+          "LOAD_BALANCER"
         ]
       },
       "QueueBasedRequestUrls": {
@@ -664,7 +735,13 @@
         "additionalProperties": false,
         "required": [
           "run",
-          "runSync"
+          "runSync",
+          "status",
+          "stream",
+          "cancel",
+          "retry",
+          "purgeQueue",
+          "health"
         ],
         "properties": {
           "run": {
@@ -678,9 +755,57 @@
           "runSync": {
             "type": "string",
             "format": "uri",
-            "description": "URL for synchronously submitting a queued job.",
+            "description": "URL for synchronously submitting a queued job. Accepts an optional `?wait=x` query parameter to control how long the request waits for job completion, defaulting to 90 seconds.",
             "examples": [
               "https://api.runpod.ai/v2/4m7x2k9q/runsync"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "format": "uri",
+            "description": "Check the current state, execution statistics, and results of a previously submitted job.",
+            "examples": [
+              "https://api.runpod.ai/v2/4m7x2k9q/status/{job_id}"
+            ]
+          },
+          "stream": {
+            "type": "string",
+            "format": "uri",
+            "description": "Receive incremental results as they become available from a job that generates output progressively.",
+            "examples": [
+              "https://api.runpod.ai/v2/4m7x2k9q/stream/{job_id}"
+            ]
+          },
+          "cancel": {
+            "type": "string",
+            "format": "uri",
+            "description": "Stop an in-progress job or remove a queued job before it starts.",
+            "examples": [
+              "https://api.runpod.ai/v2/4m7x2k9q/cancel/{job_id}"
+            ]
+          },
+          "retry": {
+            "type": "string",
+            "format": "uri",
+            "description": "Requeue a failed or timed-out job without submitting a new request.",
+            "examples": [
+              "https://api.runpod.ai/v2/4m7x2k9q/retry/{job_id}"
+            ]
+          },
+          "purgeQueue": {
+            "type": "string",
+            "format": "uri",
+            "description": "Remove all pending jobs from the queue. Does not affect in-progress jobs.",
+            "examples": [
+              "https://api.runpod.ai/v2/4m7x2k9q/purge-queue"
+            ]
+          },
+          "health": {
+            "type": "string",
+            "format": "uri",
+            "description": "Overview of an endpoint's operational status.",
+            "examples": [
+              "https://api.runpod.ai/v2/4m7x2k9q/health"
             ]
           }
         }
@@ -689,7 +814,8 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "base"
+          "base",
+          "health"
         ],
         "properties": {
           "base": {
@@ -699,11 +825,19 @@
             "examples": [
               "https://4m7x2k9q.api.runpod.ai"
             ]
+          },
+          "health": {
+            "type": "string",
+            "format": "uri",
+            "description": "Health check endpoint the load balancer will periodically ping to decide if the worker is healthy enough to receive traffic. Configurable by setting the `HEALTH_CHECK_PATH` environment variable. Defaults to `/ping` if the variable is not set.",
+            "examples": [
+              "https://4m7x2k9q.api.runpod.ai/ping"
+            ]
           }
         }
       },
       "EndpointRequestUrls": {
-        "description": "Request submission URLs appropriate to the endpoint's top-level `type`.\nQueue-based endpoints provide `run` and `runSync`; load-balancing\nendpoints provide `base` because their paths are worker-defined.\n",
+        "description": "Request URLs appropriate to the endpoint's top-level `type`.\nQueue-based endpoints provide job submission and management URLs;\nload-balancing endpoints provide `base` and `health` because their\nremaining paths are worker-defined.\n",
         "oneOf": [
           {
             "$ref": "#/components/schemas/QueueBasedRequestUrls"
@@ -743,6 +877,108 @@
           }
         }
       },
+      "EndpointWorkers": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "min": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Minimum number of workers.",
+            "examples": [
+              0
+            ]
+          },
+          "max": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Maximum number of workers.",
+            "examples": [
+              5
+            ]
+          },
+          "idleTimeout": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3600,
+            "description": "Seconds before idle workers scale down. Not applicable to queue-based\nendpoints scaling on `requestCount` — rejected on create/update and\nomitted from responses for that combination.\n",
+            "examples": [
+              5
+            ]
+          }
+        }
+      },
+      "QueueDelayScaling": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Scale on queue wait time. Queue-based endpoints only.",
+        "required": [
+          "type",
+          "queueDelay"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Scaler discriminator. Always `QUEUE_DELAY` for this variant.",
+            "enum": [
+              "QUEUE_DELAY"
+            ]
+          },
+          "queueDelay": {
+            "type": "number",
+            "format": "float",
+            "minimum": 0.5,
+            "description": "Adjusts the number of workers based on how long requests wait in the queue.",
+            "examples": [
+              4
+            ]
+          }
+        }
+      },
+      "RequestCountScaling": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Scale on concurrent in-flight requests per worker. Required for\nload-balancing endpoints; also selectable for queue-based.\n",
+        "required": [
+          "type",
+          "requestCount"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Scaler discriminator. Always `REQUEST_COUNT` for this variant.",
+            "enum": [
+              "REQUEST_COUNT"
+            ]
+          },
+          "requestCount": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Adjusts the number of workers based on active in-flight requests.",
+            "examples": [
+              4
+            ]
+          }
+        }
+      },
+      "EndpointScaling": {
+        "description": "Autoscaling signal — a discriminated union on `type`: `QUEUE_DELAY`\n(queue-based endpoints only) or `REQUEST_COUNT`. The scaler is chosen\nindependently of the endpoint's routing `type` and can be switched on\nupdate.\n",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/QueueDelayScaling"
+          },
+          {
+            "$ref": "#/components/schemas/RequestCountScaling"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "QUEUE_DELAY": "#/components/schemas/QueueDelayScaling",
+            "REQUEST_COUNT": "#/components/schemas/RequestCountScaling"
+          }
+        }
+      },
       "Endpoint": {
         "allOf": [
           {
@@ -759,6 +995,7 @@
               "networkVolumes",
               "timeout",
               "flashboot",
+              "allowedCudaVersions",
               "createdAt"
             ],
             "properties": {
@@ -802,56 +1039,18 @@
                 ]
               },
               "workers": {
-                "type": "object",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/EndpointWorkers"
+                  }
+                ],
                 "required": [
                   "min",
                   "max"
-                ],
-                "properties": {
-                  "min": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "examples": [
-                      0
-                    ]
-                  },
-                  "max": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "examples": [
-                      5
-                    ]
-                  }
-                }
+                ]
               },
               "scaling": {
-                "type": "object",
-                "required": [
-                  "type",
-                  "value",
-                  "idleTimeout"
-                ],
-                "properties": {
-                  "type": {
-                    "$ref": "#/components/schemas/ScalerType"
-                  },
-                  "value": {
-                    "type": "number",
-                    "format": "float",
-                    "minimum": 0.5,
-                    "examples": [
-                      4
-                    ]
-                  },
-                  "idleTimeout": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "description": "Seconds before idle workers scale down",
-                    "examples": [
-                      5
-                    ]
-                  }
-                }
+                "$ref": "#/components/schemas/EndpointScaling"
               },
               "dataCenterIds": {
                 "type": "array",
@@ -884,6 +1083,16 @@
               },
               "flashboot": {
                 "$ref": "#/components/schemas/FlashBoot"
+              },
+              "allowedCudaVersions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Acceptable CUDA versions for worker placement, as `major.minor`. Empty means any version.",
+                "examples": [
+                  []
+                ]
               },
               "createdAt": {
                 "type": "string",
@@ -1298,11 +1507,26 @@
             "$ref": "#/components/schemas/ContainerConfig"
           },
           {
+            "if": {
+              "not": {
+                "required": [
+                  "templateId"
+                ]
+              }
+            },
+            "then": {
+              "required": [
+                "image"
+              ]
+            }
+          },
+          {
             "type": "object",
             "required": [
               "name",
-              "image",
-              "gpu"
+              "gpu",
+              "type",
+              "scaling"
             ],
             "properties": {
               "name": {
@@ -1311,6 +1535,22 @@
                 "examples": [
                   "my-inference"
                 ]
+              },
+              "templateId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "ID of a serverless template to base this endpoint on. The\ntemplate is resolved at create time into the same container\nsettings you could otherwise spread into this body (image,\nargs, disk, ports, env, registry); explicit body fields\noverride the template's, except `env`, which is merged per\nkey with body values winning. The template's\nallowedCudaVersions seeds the endpoint's when the body omits\nit; its pod-specific startSsh/startJupyter flags are\nignored. Later template edits do not affect the endpoint.\nThe template may be one of your own or a public catalog\ntemplate — see `GET /v2/catalog/templates` (unknown or\ninaccessible ID → 404) — and must be a serverless template\n(→ 422).\n",
+                "examples": [
+                  "30zmvf89kd"
+                ]
+              },
+              "type": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/EndpointType"
+                  }
+                ],
+                "description": "Request-routing model. Required — it determines the valid scaler\nand request URLs, so it must be chosen explicitly on every create.\n"
               },
               "gpu": {
                 "allOf": [
@@ -1321,40 +1561,28 @@
                 "unevaluatedProperties": false
               },
               "workers": {
-                "type": "object",
-                "additionalProperties": false,
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/EndpointWorkers"
+                  }
+                ],
                 "properties": {
                   "min": {
                     "type": "integer",
-                    "minimum": 0,
                     "default": 0
                   },
                   "max": {
                     "type": "integer",
-                    "minimum": 0,
                     "default": 3
+                  },
+                  "idleTimeout": {
+                    "type": "integer",
+                    "default": 10
                   }
                 }
               },
               "scaling": {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "type": {
-                    "$ref": "#/components/schemas/ScalerType"
-                  },
-                  "value": {
-                    "type": "number",
-                    "format": "float",
-                    "minimum": 0.5,
-                    "default": 4
-                  },
-                  "idleTimeout": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "default": 5
-                  }
-                }
+                "$ref": "#/components/schemas/EndpointScaling"
               },
               "dataCenterIds": {
                 "type": "array",
@@ -1380,11 +1608,42 @@
                   }
                 ],
                 "default": "OFF"
+              },
+              "allowedCudaVersions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^\\d+\\.\\d+$"
+                },
+                "description": "Acceptable CUDA versions for worker placement, as\n`major.minor`. Omit to accept any version (or inherit the\ntemplate's constraint when creating from `templateId`).\nMatching is exact — discover valid values per GPU type via\n`GET /v2/catalog/gpus?include=AVAILABILITY` (`cudaVersions`).\n",
+                "examples": [
+                  [
+                    "12.8",
+                    "12.6"
+                  ]
+                ]
               }
             }
           }
         ],
-        "unevaluatedProperties": false
+        "unevaluatedProperties": false,
+        "if": {
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "LOAD_BALANCER"
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "scaling": {
+              "$ref": "#/components/schemas/RequestCountScaling"
+            }
+          }
+        }
       },
       "UpdateEndpointRequest": {
         "allOf": [
@@ -1399,6 +1658,13 @@
                 "type": "string",
                 "minLength": 1
               },
+              "templateId": {
+                "type": "string",
+                "description": "ID of a serverless template whose container settings are\napplied as if they were provided in this PATCH body (image,\nargs, disk, ports, env, registry). Explicit body fields\noverride the template's; `env` merges template and body per\nkey (body wins) and, per PATCH semantics, replaces the\nendpoint's env. One-time application — no link to the\ntemplate is retained. Must be one of your templates or a\npublic template (unknown or inaccessible ID → 404); must be\na serverless template (→ 422).\n",
+                "examples": [
+                  "30zmvf89kd"
+                ]
+              },
               "gpu": {
                 "allOf": [
                   {
@@ -1408,36 +1674,10 @@
                 "unevaluatedProperties": false
               },
               "workers": {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "min": {
-                    "type": "integer",
-                    "minimum": 0
-                  },
-                  "max": {
-                    "type": "integer",
-                    "minimum": 0
-                  }
-                }
+                "$ref": "#/components/schemas/EndpointWorkers"
               },
               "scaling": {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "type": {
-                    "$ref": "#/components/schemas/ScalerType"
-                  },
-                  "value": {
-                    "type": "number",
-                    "format": "float",
-                    "minimum": 0.5
-                  },
-                  "idleTimeout": {
-                    "type": "integer",
-                    "minimum": 0
-                  }
-                }
+                "$ref": "#/components/schemas/EndpointScaling"
               },
               "dataCenterIds": {
                 "type": "array",
@@ -1457,6 +1697,14 @@
               },
               "flashboot": {
                 "$ref": "#/components/schemas/FlashBoot"
+              },
+              "allowedCudaVersions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^\\d+\\.\\d+$"
+                },
+                "description": "Acceptable CUDA versions for worker placement, as\n`major.minor`. An explicit `[]` clears the constraint;\nomitting the field leaves it unchanged. Takes effect as\nworkers are replaced. Rejected with 400 on CPU endpoints.\n"
               }
             }
           }
@@ -1640,6 +1888,120 @@
           }
         }
       },
+      "PodSshEndpoint": {
+        "type": "object",
+        "required": [
+          "host",
+          "port",
+          "username",
+          "command"
+        ],
+        "description": "One way to reach the pod over SSH, as both its parts and a ready-to-run invocation.",
+        "properties": {
+          "host": {
+            "type": "string",
+            "description": "Hostname or IP to connect to.",
+            "examples": [
+              "ssh.runpod.io"
+            ]
+          },
+          "port": {
+            "type": "integer",
+            "description": "TCP port to connect to.",
+            "examples": [
+              22
+            ]
+          },
+          "username": {
+            "type": "string",
+            "description": "SSH username. For the proxy this is an opaque routing token, not a user account on the pod.",
+            "examples": [
+              "7h9k2m4n6p-64411eb2"
+            ]
+          },
+          "command": {
+            "type": "string",
+            "description": "The equivalent `ssh` invocation, ready to run. Add `-i <path>` if the matching private key is not one of your default identities, and `-o StrictHostKeyChecking=no` to skip the host-key prompt on short-lived pods.",
+            "examples": [
+              "ssh 7h9k2m4n6p-64411eb2@ssh.runpod.io"
+            ]
+          }
+        }
+      },
+      "PodSsh": {
+        "type": "object",
+        "required": [
+          "proxy",
+          "direct"
+        ],
+        "description": "How to connect to this pod over SSH. Both variants authenticate with the account's registered SSH public keys (`PUT /v2/account/ssh-keys`), which reach the pod only if it was created with `startSsh` — a pod created without it has no SSH access regardless of what this block reports.",
+        "properties": {
+          "proxy": {
+            "description": "Connection through Runpod's SSH proxy. Works without exposing a port and without a public IP, but carries an interactive shell only — SCP, SFTP, rsync, and port forwarding need `direct`. Null until the pod has a machine assignment.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PodSshEndpoint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "direct": {
+            "description": "Connection straight to the pod's sshd over its published `22/tcp` mapping. Supports the full SSH feature set. Null unless `22/tcp` is in `ports` and the running pod has been assigned a public port for it — so it is absent while the pod is provisioning or stopped.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PodSshEndpoint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "SshKeys": {
+        "type": "object",
+        "required": [
+          "keys"
+        ],
+        "properties": {
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The account's registered SSH public keys, one authorized_keys-style entry per element (`<type> <base64-key> [comment]`).",
+            "examples": [
+              [
+                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILXGDN/SclOozk1xsDztpmhGiKkkrfQB9SKoO8dSIQQZ me@example.com"
+              ]
+            ]
+          }
+        }
+      },
+      "UpdateSshKeysRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "keys"
+        ],
+        "properties": {
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(ssh|ecdsa|sk)-[^\\s]+ [^\\s]+([ \\t][^\\n\\r]*)?$"
+            },
+            "description": "The full set of SSH public keys to register — this is a complete\nreplacement, not a merge. Each entry is an authorized_keys-style\nline: `<type> <base64-key> [comment]`, e.g. from\n`~/.ssh/id_ed25519.pub`. Send `[]` to remove all keys. These keys\nare provisioned into pods created with `startSsh` and\nauthenticate both SSH paths reported in the pod's `ssh` block.\n",
+            "examples": [
+              [
+                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILXGDN/SclOozk1xsDztpmhGiKkkrfQB9SKoO8dSIQQZ me@example.com"
+              ]
+            ]
+          }
+        }
+      },
       "Pod": {
         "allOf": [
           {
@@ -1661,6 +2023,7 @@
               "registry",
               "cloud",
               "dataCenterId",
+              "ssh",
               "template",
               "cost",
               "locked",
@@ -1722,6 +2085,32 @@
                 "description": "Data center where the pod is running (assigned by scheduler)",
                 "examples": [
                   "US-TX-3"
+                ]
+              },
+              "cudaVersion": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "CUDA version reported by the host machine. Retained while the pod is stopped — a stopped pod keeps its machine assignment and resumes onto the same host. Null means unknown or not applicable (CPU pods, or a host that has not reported one), not that CUDA is absent.",
+                "examples": [
+                  "12.8"
+                ]
+              },
+              "ssh": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PodSsh"
+                  }
+                ],
+                "description": "SSH connection details, via the Runpod proxy or directly to the pod's published `22/tcp` port."
+              },
+              "cluster": {
+                "description": "Cluster membership; omitted from a standalone pod. Member pods are managed through `/v2/clusters/{id}` — they are excluded from `GET /v2/pods` by default (pass `includeClusterPods=true` to include them) and cannot be modified or deleted via the pod endpoints.",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PodCluster"
+                  }
                 ]
               },
               "template": {
@@ -1792,16 +2181,23 @@
           {
             "type": "object",
             "required": [
-              "name",
-              "image"
+              "name"
             ],
-            "description": "Request body for creating a pod. Exactly one of `gpu` or `cpu`\nmust be set — enforced at the handler layer. For CPU pods, memory\nis derived by the API from the selected flavor's RAM multiplier;\nclients provide only CPU flavor and vCPU count. CPU pods support\ncontainer disk and network volumes only; `mounts.persistent` is\ninvalid when `cpu` is set.\n",
+            "description": "Request body for creating a pod. Exactly one of `gpu` or `cpu`\nmust be set — enforced at the handler layer. For CPU pods, memory\nis derived by the API from the selected flavor's RAM multiplier;\nclients provide only CPU flavor and vCPU count. CPU pods support\ncontainer disk and network volumes only; `mounts.persistent` is\ninvalid when `cpu` is set.\n\n`image` is required unless `templateId` is set.\n",
             "properties": {
               "name": {
                 "type": "string",
                 "minLength": 1,
                 "examples": [
                   "my-training-pod"
+                ]
+              },
+              "templateId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "ID of a pod template to base this pod on. The template is\nresolved at create time into the same container settings you\ncould otherwise spread into this body (image, args, disk,\nports, env, registry, persistent mount, startSsh,\nstartJupyter, allowedCudaVersions); explicit body fields\noverride the template's, except `env`, which is merged per\nkey with body values winning. Sending either CUDA field\n(`allowedCudaVersions` or `minCudaVersion`) replaces the\ntemplate's CUDA constraint entirely, and CPU pods ignore it\n(like the persistent mount). The template is a one-time\nsource of settings: later template edits do not affect the\npod, and the created pod does not retain a link to the\ntemplate (`template` stays null). The template may be one\nof your own or a public catalog template — see\n`GET /v2/catalog/templates` (unknown or inaccessible ID →\n404) — and must not be a serverless template (→ 422). CPU\npods do not inherit a template's persistent mount.\n",
+                "examples": [
+                  "30zmvf89kd"
                 ]
               },
               "mounts": {
@@ -1839,6 +2235,28 @@
                   ]
                 ]
               },
+              "allowedCudaVersions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^\\d+\\.\\d+$"
+                },
+                "description": "Acceptable CUDA versions for the host machine, as `major.minor`.\nOmit to accept any version. Matching is exact, so a version no\nmachine reports yields a capacity error rather than a fallback —\ndiscover valid values per GPU type via\n`GET /v2/catalog/gpus?include=AVAILABILITY` (`cudaVersions`).\n\nGPU pods only; rejected with 400 when `cpu` is set. Mutually\nexclusive with minCudaVersion (400 if both are sent).\n",
+                "examples": [
+                  [
+                    "12.8",
+                    "12.6"
+                  ]
+                ]
+              },
+              "minCudaVersion": {
+                "type": "string",
+                "pattern": "^\\d+(\\.\\d+)?$",
+                "description": "Lowest acceptable CUDA version for the host machine, compared\nnumerically. Format: integer major or major.minor, e.g. 12 or\n12.1 — a bare major means any release of that major. Use this\nfor an open-ended floor and allowedCudaVersions for an exact\nset.\n\nGPU pods only; rejected with 400 when `cpu` is set. Mutually\nexclusive with allowedCudaVersions (400 if both are sent).\n",
+                "examples": [
+                  "12.1"
+                ]
+              },
               "globalNetworking": {
                 "type": "boolean",
                 "default": false,
@@ -1846,11 +2264,39 @@
                 "examples": [
                   false
                 ]
+              },
+              "startSsh": {
+                "type": "boolean",
+                "default": false,
+                "description": "Create-time flag telling the provisioner to set up SSH\naccess: injects a `PUBLIC_KEY` environment variable carrying\nyour account's registered SSH public keys, unless the request\nalready sets one. **Requires registered keys** (`PUT\n/v2/account/ssh-keys`) — with none registered the flag does\nnothing and the pod has no SSH access. Only images that honor\nthe convention start sshd from it (all RunPod official images\ndo). Connect using the pod's `ssh` block; the `ssh.direct`\nvariant additionally needs a `22/tcp` entry in `ports`.\n\nNot part of the pod's readable config — never returned by\nGET and not changeable by PATCH.\n",
+                "examples": [
+                  true
+                ]
+              },
+              "startJupyter": {
+                "type": "boolean",
+                "default": false,
+                "description": "Create-time flag telling the provisioner to start JupyterLab:\ninjects a generated `JUPYTER_PASSWORD` environment variable,\nunless the request already sets one. Only images that honor\nthe convention start Jupyter from it (RunPod official images\ndo); expose `8888/http` in `ports` to reach it.\n\nNot part of the pod's readable config — never returned by\nGET and not changeable by PATCH.\n",
+                "examples": [
+                  true
+                ]
               }
             }
           }
         ],
-        "unevaluatedProperties": false
+        "unevaluatedProperties": false,
+        "if": {
+          "not": {
+            "required": [
+              "templateId"
+            ]
+          }
+        },
+        "then": {
+          "required": [
+            "image"
+          ]
+        }
       },
       "UpdatePodRequest": {
         "allOf": [
@@ -1863,6 +2309,13 @@
               "name": {
                 "type": "string",
                 "minLength": 1
+              },
+              "templateId": {
+                "type": "string",
+                "description": "ID of a pod template whose container settings are applied as\nif they were provided in this PATCH body (image, args, disk,\nports, env, registry — mounts are not applied on update).\nExplicit body fields override the template's; `env` merges\ntemplate and body per key (body wins) and, per PATCH\nsemantics, replaces the pod's env. One-time application —\nno link to the template is retained. Must be one of your\ntemplates or a public template (unknown or inaccessible ID\n→ 404); must not be a serverless template (→ 422).\n",
+                "examples": [
+                  "30zmvf89kd"
+                ]
               },
               "mounts": {
                 "$ref": "#/components/schemas/Mounts"
@@ -1906,6 +2359,353 @@
           }
         }
       },
+      "ClusterType": {
+        "type": "string",
+        "description": "Cluster type. TRAINING is the generic distributed-training cluster; SLURM provisions a managed Slurm controller/compute topology; RAY provisions a managed Ray head/worker topology; APPLICATION is a general multi-node application cluster.",
+        "enum": [
+          "APPLICATION",
+          "TRAINING",
+          "SLURM",
+          "RAY"
+        ],
+        "examples": [
+          "TRAINING"
+        ]
+      },
+      "ClusterCompute": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The homogeneous compute shape of a cluster. Every pod in the cluster is identical: `podCount` pods, each with `gpuCountPerPod` GPUs of type `gpuTypeId`. Total GPUs = `podCount` * `gpuCountPerPod`.",
+        "required": [
+          "gpuTypeId",
+          "gpuCountPerPod",
+          "podCount"
+        ],
+        "properties": {
+          "gpuTypeId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "GPU type for every pod in the cluster, as returned by GET /v2/catalog/gpus.",
+            "examples": [
+              "NVIDIA H100 80GB HBM3"
+            ]
+          },
+          "gpuCountPerPod": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Number of GPUs on each pod. Bounded above by the GPU type's per-cloud maximum (GpuType.maxCount); the upstream rejects values beyond it.",
+            "examples": [
+              8
+            ]
+          },
+          "podCount": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 250,
+            "description": "Number of pods (nodes) in the cluster.",
+            "examples": [
+              4
+            ]
+          }
+        }
+      },
+      "PodClusterRole": {
+        "type": "string",
+        "description": "A cluster member's role. Assigned for SLURM and RAY clusters; omitted for TRAINING/APPLICATION members.",
+        "enum": [
+          "SLURM_CONTROLLER",
+          "SLURM_COMPUTE",
+          "RAY_HEAD",
+          "RAY_WORKER"
+        ]
+      },
+      "PodCluster": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "A pod's membership in a cluster.",
+        "required": [
+          "id",
+          "rank"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "ID of the cluster this pod belongs to.",
+            "examples": [
+              "cluster_abc123"
+            ]
+          },
+          "rank": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The pod's node rank within the cluster (NODE_RANK), or null until the index is assigned during provisioning. Rank 0 is the cluster's entry node (`Cluster.primary`); for SLURM it is the controller.",
+            "examples": [
+              0
+            ]
+          },
+          "role": {
+            "description": "SLURM or RAY role; omitted for TRAINING/APPLICATION clusters, which do not assign roles.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PodClusterRole"
+              }
+            ]
+          },
+          "ip": {
+            "type": "string",
+            "description": "The pod's address on the cluster's private overlay network; omitted until the address is assigned.",
+            "examples": [
+              "10.65.0.2"
+            ]
+          }
+        }
+      },
+      "ClusterNetwork": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The cluster's private VXLAN overlay network (shared by all member pods).",
+        "required": [
+          "cidr"
+        ],
+        "properties": {
+          "cidr": {
+            "type": "string",
+            "description": "The overlay network's CIDR block.",
+            "examples": [
+              "10.65.0.0/16"
+            ]
+          },
+          "vxlanId": {
+            "type": "integer",
+            "description": "VXLAN network identifier; omitted until assigned.",
+            "examples": [
+              42
+            ]
+          },
+          "vxlanPort": {
+            "type": "integer",
+            "description": "UDP port carrying the VXLAN traffic; omitted until assigned.",
+            "examples": [
+              4789
+            ]
+          }
+        }
+      },
+      "ClusterPrimary": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The cluster's primary (master) node, through which the cluster is typically driven. Omitted until a primary pod has been placed.",
+        "required": [
+          "podId",
+          "status"
+        ],
+        "properties": {
+          "podId": {
+            "type": "string",
+            "description": "ID of the primary member pod.",
+            "examples": [
+              "pod_node0"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/PodStatus"
+          },
+          "sshEndpoint": {
+            "type": "string",
+            "description": "Public SSH endpoint (`host:port`) for the primary node; omitted when the primary is not yet RUNNING or does not expose SSH (22/tcp).",
+            "examples": [
+              "1.2.3.4:22001"
+            ]
+          }
+        }
+      },
+      "ClusterPodsSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "A lightweight summary of a cluster's member pods. Use `GET /v2/clusters/{id}/pods` to retrieve the full pod objects.",
+        "required": [
+          "total",
+          "byStatus"
+        ],
+        "properties": {
+          "total": {
+            "type": "integer",
+            "description": "Number of member pods currently provisioned for the cluster.",
+            "examples": [
+              4
+            ]
+          },
+          "byStatus": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Member pod counts keyed by pod status (the same values as `Pod.status`, e.g. RUNNING, PROVISIONING). Statuses with no pods are omitted.",
+            "example": {
+              "RUNNING": 3,
+              "PROVISIONING": 1
+            }
+          }
+        }
+      },
+      "Cluster": {
+        "type": "object",
+        "description": "A cluster. Cluster-level fields describe the identity and homogeneous shape; `pods` is a lightweight summary of the members. Fetch the full member pods — with their container config, mounts, and runtime state — from `GET /v2/clusters/{id}/pods`.",
+        "required": [
+          "id",
+          "name",
+          "type",
+          "compute",
+          "pods",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "examples": [
+              "cluster_abc123"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "examples": [
+              "my-training-cluster"
+            ]
+          },
+          "type": {
+            "$ref": "#/components/schemas/ClusterType"
+          },
+          "compute": {
+            "$ref": "#/components/schemas/ClusterCompute"
+          },
+          "template": {
+            "type": "string",
+            "description": "ID of the template this cluster's pods were created from; omitted when they were not created from one.",
+            "examples": [
+              "tpl_abc"
+            ]
+          },
+          "dataCenterId": {
+            "type": "string",
+            "description": "Data center the cluster is placed in (a cluster is always within a single data center). Derived from the member pods; omitted until at least one pod is placed.",
+            "examples": [
+              "US-TX-3"
+            ]
+          },
+          "pods": {
+            "$ref": "#/components/schemas/ClusterPodsSummary"
+          },
+          "network": {
+            "description": "The cluster's overlay network; omitted until the network is provisioned.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ClusterNetwork"
+              }
+            ]
+          },
+          "primary": {
+            "description": "The primary (master) node; omitted until a primary pod is placed. Its `sshEndpoint` is omitted until that pod is RUNNING with SSH exposed.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ClusterPrimary"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "examples": [
+              "2026-06-29T20:00:00Z"
+            ]
+          }
+        }
+      },
+      "CreateClusterRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/BaseContainerConfig"
+          },
+          {
+            "type": "object",
+            "required": [
+              "name",
+              "type",
+              "compute"
+            ],
+            "description": "Request body for creating a cluster. `compute` defines the\nhomogeneous pod shape; the container configuration (image, env, ports,\n…) applies to every pod and can be spread from a template response.\nPrivate registries are not yet supported for clusters — there is no\n`registry` field here, unlike the other create requests.\n",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "examples": [
+                  "my-training-cluster"
+                ]
+              },
+              "type": {
+                "$ref": "#/components/schemas/ClusterType"
+              },
+              "compute": {
+                "$ref": "#/components/schemas/ClusterCompute"
+              },
+              "startSsh": {
+                "type": "boolean",
+                "default": false,
+                "description": "Provision SSH access on every member pod: injects a PUBLIC_KEY environment variable carrying your account's registered SSH public key. Same semantics as the pod create flag."
+              },
+              "startJupyter": {
+                "type": "boolean",
+                "default": false,
+                "description": "Start Jupyter on every member pod, as on pod create."
+              },
+              "mounts": {
+                "$ref": "#/components/schemas/Mounts"
+              },
+              "dataCenterIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Preferred data centers for placement. Omit or pass an empty\narray to let the scheduler choose. A cluster is always placed\nwithin a single data center.\n",
+                "example": [
+                  "US-TX-3"
+                ]
+              }
+            }
+          }
+        ],
+        "unevaluatedProperties": false
+      },
+      "UpdateClusterRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "description": "Request body for updating a cluster. Only the cluster name can be\nchanged — this endpoint is a rename. Compute shape, type, and container\nconfiguration are fixed at creation.\n",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "examples": [
+              "renamed-cluster"
+            ]
+          }
+        }
+      },
+      "ListClustersResponse": {
+        "type": "object",
+        "required": [
+          "clusters"
+        ],
+        "properties": {
+          "clusters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Cluster"
+            }
+          }
+        }
+      },
       "Template": {
         "allOf": [
           {
@@ -1925,7 +2725,10 @@
               "registry",
               "serverless",
               "public",
-              "category"
+              "category",
+              "startSsh",
+              "startJupyter",
+              "allowedCudaVersions"
             ],
             "properties": {
               "id": {
@@ -1959,6 +2762,30 @@
               },
               "category": {
                 "$ref": "#/components/schemas/TemplateCategory"
+              },
+              "startSsh": {
+                "type": "boolean",
+                "description": "Whether containers created from this template get SSH access provisioned at startup (`PUBLIC_KEY` env injection).",
+                "examples": [
+                  true
+                ]
+              },
+              "startJupyter": {
+                "type": "boolean",
+                "description": "Whether containers created from this template start JupyterLab at startup (`JUPYTER_PASSWORD` env injection).",
+                "examples": [
+                  false
+                ]
+              },
+              "allowedCudaVersions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Acceptable CUDA versions for containers created from this template, as `major.minor`. Empty means any version. Expanded into GPU pod and serverless endpoint creates; CPU pods ignore it.",
+                "examples": [
+                  []
+                ]
               }
             }
           }
@@ -2002,6 +2829,36 @@
                   }
                 ],
                 "default": "NVIDIA"
+              },
+              "startSsh": {
+                "type": "boolean",
+                "default": true,
+                "description": "Provision SSH access in containers created from this template:\ninjects a `PUBLIC_KEY` environment variable carrying the\ndeployer's registered SSH public keys (`PUT\n/v2/account/ssh-keys` — with none registered the flag does\nnothing), unless `env` already sets one. Only images that\nhonor the convention start sshd from it (all RunPod official\nimages do); direct SSH also needs a `22/tcp` entry in\n`ports`. Defaults to `true` when omitted, matching\nconsole-created templates.\n",
+                "examples": [
+                  true
+                ]
+              },
+              "startJupyter": {
+                "type": "boolean",
+                "default": true,
+                "description": "Start JupyterLab in containers created from this template:\ninjects a generated `JUPYTER_PASSWORD` environment variable,\nunless `env` already sets one. Only images that honor the\nconvention start Jupyter from it (RunPod official images do);\nexpose `8888/http` in `ports` to reach it. Defaults to `true`\nwhen omitted, matching console-created templates.\n",
+                "examples": [
+                  false
+                ]
+              },
+              "allowedCudaVersions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^\\d+\\.\\d+$"
+                },
+                "description": "Acceptable CUDA versions for containers created from this\ntemplate, as `major.minor`. Omit to accept any version — see\nthe same field on `createPod` for matching semantics.\nExpanded into GPU pod and serverless endpoint creates; CPU\npods ignore it.\n",
+                "examples": [
+                  [
+                    "12.8",
+                    "12.6"
+                  ]
+                ]
               }
             }
           }
@@ -2031,6 +2888,22 @@
               },
               "category": {
                 "$ref": "#/components/schemas/TemplateCategory"
+              },
+              "startSsh": {
+                "type": "boolean",
+                "description": "Provision SSH access at container startup (`PUBLIC_KEY` env injection). See the create-time field for details."
+              },
+              "startJupyter": {
+                "type": "boolean",
+                "description": "Start JupyterLab at container startup (`JUPYTER_PASSWORD` env injection). See the create-time field for details."
+              },
+              "allowedCudaVersions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^\\d+\\.\\d+$"
+                },
+                "description": "Acceptable CUDA versions for pods created from this template. An explicit `[]` clears the constraint; omitting the field leaves it unchanged."
               }
             }
           }
@@ -2497,6 +3370,13 @@
             "items": {
               "$ref": "#/components/schemas/DataCenterAvailability"
             }
+          },
+          "cudaVersions": {
+            "type": "array",
+            "description": "CUDA versions offered by machines with this GPU type, each tagged\nwith current capacity. Present only when requested with\ninclude=AVAILABILITY, and scoped by the same filters as\n`availability` (`count`, `cloud`, `product`, and whichever of\n`cudaVersions` / `minCudaVersion` was supplied).\n\nMachines that report no CUDA version are skipped, so this property\nis absent entirely for a GPU type with none — AMD, for instance.\nTreat a missing `cudaVersions` the same as an empty one. A version\nabsent from a populated list is not offered for this GPU type.\n",
+            "items": {
+              "$ref": "#/components/schemas/CudaVersionAvailability"
+            }
           }
         }
       },
@@ -2609,6 +3489,30 @@
           },
           "availability": {
             "$ref": "#/components/schemas/AvailabilityLevel"
+          }
+        }
+      },
+      "CudaVersionAvailability": {
+        "type": "object",
+        "required": [
+          "version",
+          "available"
+        ],
+        "properties": {
+          "version": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+$",
+            "description": "CUDA version as `major.minor`, suitable for `allowedCudaVersions` on pod create.",
+            "examples": [
+              "12.8"
+            ]
+          },
+          "available": {
+            "type": "boolean",
+            "description": "True when at least one machine on this CUDA version has free capacity now. False means the version is offered for this GPU type but is currently full, so a pod constrained to it will fail on capacity.",
+            "examples": [
+              true
+            ]
           }
         }
       },
@@ -2988,17 +3892,17 @@
           "clusterGpuAmount": {
             "type": "number",
             "format": "double",
-            "description": "Instant Cluster GPU compute cost in USD for the bucket."
+            "description": "Cluster GPU compute cost in USD for the bucket."
           },
           "clusterDiskAmount": {
             "type": "number",
             "format": "double",
-            "description": "Instant Cluster disk cost in USD for the bucket."
+            "description": "Cluster disk cost in USD for the bucket."
           },
           "clusterNetworkingAmount": {
             "type": "number",
             "format": "double",
-            "description": "Instant Cluster inter-node networking cost in USD for the bucket."
+            "description": "Cluster inter-node networking cost in USD for the bucket."
           }
         }
       },
@@ -3199,7 +4103,7 @@
         }
       },
       "NetworkVolumeBillingRecord": {
-        "description": "A single time-bucketed network volume billing record, split into standard and high-performance storage. Returned by GET /v2/billing/networkvolumes.\n",
+        "description": "A single time-bucketed network volume billing record, split into standard and high-performance storage. Returned by GET /v2/billing/network-volumes.\n",
         "allOf": [
           {
             "$ref": "#/components/schemas/BillingTimeRange"
@@ -3226,7 +4130,7 @@
       },
       "ClusterBillingAmounts": {
         "type": "object",
-        "description": "Instant Cluster cost components (GPU-only, no CPU). Backs a record's amounts and the metadata totals.\n",
+        "description": "Cluster cost components (GPU-only, no CPU). Backs a record's amounts and the metadata totals.\n",
         "required": [
           "totalAmount",
           "gpuAmount",
@@ -3239,7 +4143,7 @@
             "format": "double",
             "description": "Total Instant Cluster cost in USD for the bucket.",
             "examples": [
-              99
+              99.0
             ]
           },
           "gpuAmount": {
@@ -3260,7 +4164,7 @@
         }
       },
       "ClusterBillingRecord": {
-        "description": "A single time-bucketed Instant Cluster billing record. Clusters are GPU-only (no CPU component). Returned by GET /v2/billing/clusters.\n",
+        "description": "A single time-bucketed cluster billing record; clusters are GPU-only (no CPU component). Returned by GET /v2/billing/clusters.\n",
         "allOf": [
           {
             "$ref": "#/components/schemas/BillingTimeRange"
@@ -3276,7 +4180,7 @@
             "properties": {
               "clusterId": {
                 "type": "string",
-                "description": "The Instant Cluster this record bills. When the clusterId filter is set every record carries that id; otherwise one record is emitted per cluster per bucket.\n",
+                "description": "The cluster this record bills. When the clusterId filter is set every record carries that id; otherwise one record is emitted per cluster per bucket.\n",
                 "examples": [
                   "cluster_abc123"
                 ]
@@ -3616,7 +4520,7 @@
       },
       "ListClusterBillingResponse": {
         "type": "object",
-        "description": "Time-bucketed Instant Cluster billing records plus metadata for the resolved query, record count, distinct cluster count, and compute totals.\n",
+        "description": "Time-bucketed Cluster billing records plus metadata for the resolved query, record count, distinct cluster count, and compute totals.\n",
         "required": [
           "records",
           "metadata"
@@ -3675,20 +4579,210 @@
             ]
           }
         }
+      },
+      "RateLimitHeader": {
+        "type": "string",
+        "description": "Live per-window quota state. Optional — omitted for rate-limit-exempt\ncallers.\n\nA structured-field list with one member per window (`minute`, `hour`,\n`day`), each carrying the remaining request count `r` and seconds until\nthe window resets `t`. Returned on responses to authenticated requests,\nnot only on 429s.\n",
+        "examples": [
+          "\"minute\";r=0;t=12, \"hour\";r=2800;t=1812, \"day\";r=49500;t=45012"
+        ]
+      },
+      "RateLimitPolicyHeader": {
+        "type": "string",
+        "description": "Static per-window quota policy. Optional — omitted for rate-limit-exempt\ncallers.\n\nA structured-field list with one member per window (`minute`, `hour`,\n`day`), each carrying the quota `q` and the window length in seconds `w`.\nReturned on responses to authenticated requests, not only on 429s.\n",
+        "examples": [
+          "\"minute\";q=60;w=60, \"hour\";q=3000;w=3600, \"day\";q=50000;w=86400"
+        ]
       }
     }
   },
   "paths": {
+    "/v2/account/ssh-keys": {
+      "get": {
+        "operationId": "getSshKeys",
+        "summary": "List registered SSH public keys",
+        "description": "Returns the account's registered SSH public keys — the keys provisioned into pods created with `startSsh` and used to authenticate the SSH connections reported in a pod's `ssh` block.",
+        "tags": [
+          "Account"
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SshKeys"
+                },
+                "examples": {
+                  "keys": {
+                    "summary": "Successful response",
+                    "value": {
+                      "keys": [
+                        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILXGDN/SclOozk1xsDztpmhGiKkkrfQB9SKoO8dSIQQZ me@example.com"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateSshKeys",
+        "summary": "Replace registered SSH public keys",
+        "description": "Replaces the account's full set of registered SSH public keys. Existing keys not present in the request are removed; send `[]` to remove all keys. Keys take effect for pods created afterwards with `startSsh` — running pods are not updated.",
+        "tags": [
+          "Account"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSshKeysRequest"
+              },
+              "examples": {
+                "replaceKeys": {
+                  "summary": "Register a single key",
+                  "value": {
+                    "keys": [
+                      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILXGDN/SclOozk1xsDztpmhGiKkkrfQB9SKoO8dSIQQZ me@example.com"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK — the updated key set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SshKeys"
+                },
+                "examples": {
+                  "keys": {
+                    "summary": "Successful response",
+                    "value": {
+                      "keys": [
+                        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILXGDN/SclOozk1xsDztpmhGiKkkrfQB9SKoO8dSIQQZ me@example.com"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v2/pods": {
       "get": {
         "operationId": "listPods",
         "summary": "List pods",
-        "description": "Returns all pods owned by the authenticated user.",
+        "description": "Returns pods owned by the authenticated user. Cluster member\npods are excluded by default; set `includeClusterPods=true` to include\nthem (each carries a non-null `cluster` membership block).\n",
         "tags": [
           "Pods"
         ],
+        "parameters": [
+          {
+            "name": "includeClusterPods",
+            "in": "query",
+            "required": false,
+            "description": "Include cluster member pods in the result. Defaults to false.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "example": false
+          }
+        ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -3732,6 +4826,20 @@
                           },
                           "cloud": "SECURE",
                           "dataCenterId": "US-KS-2",
+                          "ssh": {
+                            "proxy": {
+                              "host": "ssh.runpod.io",
+                              "port": 22,
+                              "username": "7h9k2m4n6p-64411eb2",
+                              "command": "ssh 7h9k2m4n6p-64411eb2@ssh.runpod.io"
+                            },
+                            "direct": {
+                              "host": "195.26.233.3",
+                              "port": 34446,
+                              "username": "root",
+                              "command": "ssh root@195.26.233.3 -p 34446"
+                            }
+                          },
                           "template": "9x4m2p7v",
                           "cost": 0.44,
                           "locked": false,
@@ -3739,7 +4847,15 @@
                             "enabled": false
                           },
                           "runtime": {
-                            "uptime": 3600
+                            "uptime": 3600,
+                            "ports": [
+                              {
+                                "private": 22,
+                                "public": 34446,
+                                "type": "tcp",
+                                "ip": "195.26.233.3"
+                              }
+                            ]
                           },
                           "createdAt": "2026-06-01T12:00:00Z",
                           "startedAt": "2026-06-01T12:02:00Z"
@@ -3761,6 +4877,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -3775,7 +4899,7 @@
       "post": {
         "operationId": "createPod",
         "summary": "Create a pod",
-        "description": "Creates a new pod. `name` and `image` are always required; supply\nexactly one of `gpu` or `cpu` to select compute (a GPU or a CPU pod).\nRemaining container settings can be spread from a template response —\nsee `CreatePodRequest` for the full body.\n\nReturns `201` with the created pod. Provisioning is asynchronous: the\npod starts in `PROVISIONING`, transitions through `STARTING`, and\nreaches `RUNNING` once its container is healthy. Poll `getPod` (or\nwatch the pod's `status`) to observe readiness rather than assuming\nthe pod is running when this call returns.\n",
+        "description": "Creates a new pod. `name` is always required; supply exactly one of\n`gpu` or `cpu` to select compute (a GPU or a CPU pod). Container\nsettings come from the body, from a template referenced by\n`templateId` (body fields override the template's), or both; `image`\nis required unless `templateId` is set. See `CreatePodRequest` for\nthe full body.\n\nReturns `201` with the created pod. Provisioning is asynchronous: the\npod starts in `PROVISIONING`, transitions through `STARTING`, and\nreaches `RUNNING` once its container is healthy. Poll `getPod` (or\nwatch the pod's `status`) to observe readiness rather than assuming\nthe pod is running when this call returns.\n",
         "tags": [
           "Pods"
         ],
@@ -3805,6 +4929,14 @@
         },
         "responses": {
           "201": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Created",
             "content": {
               "application/json": {
@@ -3845,6 +4977,15 @@
                       },
                       "cloud": "SECURE",
                       "dataCenterId": "US-KS-2",
+                      "ssh": {
+                        "proxy": {
+                          "host": "ssh.runpod.io",
+                          "port": 22,
+                          "username": "7h9k2m4n6p-64411eb2",
+                          "command": "ssh 7h9k2m4n6p-64411eb2@ssh.runpod.io"
+                        },
+                        "direct": null
+                      },
                       "template": "9x4m2p7v",
                       "cost": 0.44,
                       "locked": false,
@@ -3860,14 +5001,17 @@
               }
             }
           },
-          "400": {
-            "$ref": "#/components/responses/BadRequestError"
-          },
           "401": {
             "$ref": "#/components/responses/UnauthorizedError"
           },
           "403": {
             "$ref": "#/components/responses/ForbiddenError"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
@@ -3876,6 +5020,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -3910,6 +5062,14 @@
         ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -3951,6 +5111,20 @@
                       },
                       "cloud": "SECURE",
                       "dataCenterId": "US-KS-2",
+                      "ssh": {
+                        "proxy": {
+                          "host": "ssh.runpod.io",
+                          "port": 22,
+                          "username": "7h9k2m4n6p-64411eb2",
+                          "command": "ssh 7h9k2m4n6p-64411eb2@ssh.runpod.io"
+                        },
+                        "direct": {
+                          "host": "195.26.233.3",
+                          "port": 34446,
+                          "username": "root",
+                          "command": "ssh root@195.26.233.3 -p 34446"
+                        }
+                      },
                       "template": "9x4m2p7v",
                       "cost": 0.44,
                       "locked": false,
@@ -3958,7 +5132,15 @@
                         "enabled": false
                       },
                       "runtime": {
-                        "uptime": 3600
+                        "uptime": 3600,
+                        "ports": [
+                          {
+                            "private": 22,
+                            "public": 34446,
+                            "type": "tcp",
+                            "ip": "195.26.233.3"
+                          }
+                        ]
                       },
                       "createdAt": "2026-06-01T12:00:00Z",
                       "startedAt": "2026-06-01T12:02:00Z"
@@ -3981,6 +5163,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -3995,7 +5185,7 @@
       "patch": {
         "operationId": "updatePod",
         "summary": "Update a pod",
-        "description": "Partially updates a pod's configuration. This is a PATCH: only the\nfields present in the body are changed, and omitted fields are left\nuntouched. Use empty values only when you explicitly mean to clear a\nfield (for example, set `registry` to `null` or set `ports` to `[]`).\nSee `UpdatePodRequest` for the full body.\n\nMutable fields: `name`, `image`, `args`, `disk`, `ports`, `env`,\n`registry`, `mounts`, `locked`, and `globalNetworking`. Some changes\napply immediately while others (e.g. `globalNetworking`) take effect\non the pod's next start/restart, as noted on the individual fields.\n\nReturns `200` with the full updated pod.\n",
+        "description": "Partially updates a pod's configuration. This is a PATCH: only the\nfields present in the body are changed, and omitted fields are left\nuntouched. Use empty values only when you explicitly mean to clear a\nfield (for example, set `registry` to `null` or set `ports` to `[]`).\nSee `UpdatePodRequest` for the full body.\n\nMutable fields: `name`, `image`, `args`, `disk`, `ports`, `env`,\n`registry`, `mounts`, `locked`, and `globalNetworking`. Some changes\napply immediately while others (e.g. `globalNetworking`) take effect\non the pod's next start/restart, as noted on the individual fields.\n\nPods that belong to a Cluster cannot be updated here — manage them\nthrough `/v2/clusters/{id}`.\n\nReturns `200` with the full updated pod.\n",
         "tags": [
           "Pods"
         ],
@@ -4019,6 +5209,14 @@
         },
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -4060,6 +5258,20 @@
                       },
                       "cloud": "SECURE",
                       "dataCenterId": "US-KS-2",
+                      "ssh": {
+                        "proxy": {
+                          "host": "ssh.runpod.io",
+                          "port": 22,
+                          "username": "7h9k2m4n6p-64411eb2",
+                          "command": "ssh 7h9k2m4n6p-64411eb2@ssh.runpod.io"
+                        },
+                        "direct": {
+                          "host": "195.26.233.3",
+                          "port": 34446,
+                          "username": "root",
+                          "command": "ssh root@195.26.233.3 -p 34446"
+                        }
+                      },
                       "template": "9x4m2p7v",
                       "cost": 0.44,
                       "locked": false,
@@ -4067,7 +5279,15 @@
                         "enabled": false
                       },
                       "runtime": {
-                        "uptime": 3600
+                        "uptime": 3600,
+                        "ports": [
+                          {
+                            "private": 22,
+                            "public": 34446,
+                            "type": "tcp",
+                            "ip": "195.26.233.3"
+                          }
+                        ]
                       },
                       "createdAt": "2026-06-01T12:00:00Z",
                       "startedAt": "2026-06-01T12:02:00Z"
@@ -4076,9 +5296,6 @@
                 }
               }
             }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequestError"
           },
           "401": {
             "$ref": "#/components/responses/UnauthorizedError"
@@ -4089,6 +5306,19 @@
           "404": {
             "$ref": "#/components/responses/NotFoundError"
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "409": {
+            "description": "Pod belongs to a cluster and cannot be modified via the pod endpoints.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
           },
@@ -4096,6 +5326,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -4110,12 +5348,20 @@
       "delete": {
         "operationId": "deletePod",
         "summary": "Terminate a pod",
-        "description": "Permanently terminates and deletes a pod. This is irreversible:\ncompute is released, any `mounts.persistent` host-local storage is\ndestroyed with it (a `mounts.network` volume is only detached — the\nvolume itself is not deleted), and the pod no longer appears in\n`listPods`.\n",
+        "description": "Permanently terminates and deletes a pod. This is irreversible:\ncompute is released, any `mounts.persistent` host-local storage is\ndestroyed with it (a `mounts.network` volume is only detached — the\nvolume itself is not deleted), and the pod no longer appears in\n`listPods`.\n\nPods that belong to a Cluster cannot be terminated here — delete the\ncluster via `DELETE /v2/clusters/{id}`.\n",
         "tags": [
           "Pods"
         ],
         "responses": {
           "204": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Deleted. Response has no body."
           },
           "401": {
@@ -4127,10 +5373,28 @@
           "404": {
             "$ref": "#/components/responses/NotFoundError"
           },
+          "409": {
+            "description": "Pod belongs to a cluster and cannot be terminated via the pod endpoints.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -4181,6 +5445,12 @@
           "200": {
             "description": "Pod log event stream",
             "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
               "Cache-Control": {
                 "schema": {
                   "type": "string"
@@ -4228,6 +5498,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -4279,6 +5557,14 @@
         },
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Action applied — returns updated pod",
             "content": {
               "application/json": {
@@ -4320,6 +5606,20 @@
                       },
                       "cloud": "SECURE",
                       "dataCenterId": "US-KS-2",
+                      "ssh": {
+                        "proxy": {
+                          "host": "ssh.runpod.io",
+                          "port": 22,
+                          "username": "7h9k2m4n6p-64411eb2",
+                          "command": "ssh 7h9k2m4n6p-64411eb2@ssh.runpod.io"
+                        },
+                        "direct": {
+                          "host": "195.26.233.3",
+                          "port": 34446,
+                          "username": "root",
+                          "command": "ssh root@195.26.233.3 -p 34446"
+                        }
+                      },
                       "template": "9x4m2p7v",
                       "cost": 0.44,
                       "locked": false,
@@ -4327,7 +5627,15 @@
                         "enabled": false
                       },
                       "runtime": {
-                        "uptime": 3600
+                        "uptime": 3600,
+                        "ports": [
+                          {
+                            "private": 22,
+                            "public": 34446,
+                            "type": "tcp",
+                            "ip": "195.26.233.3"
+                          }
+                        ]
                       },
                       "createdAt": "2026-06-01T12:00:00Z",
                       "startedAt": "2026-06-01T12:02:00Z"
@@ -4338,10 +5646,15 @@
             }
           },
           "204": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Only returned when `action=terminate`; response has no body."
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequestError"
           },
           "401": {
             "$ref": "#/components/responses/UnauthorizedError"
@@ -4353,6 +5666,14 @@
             "$ref": "#/components/responses/NotFoundError"
           },
           "409": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Action not valid for current pod status",
             "content": {
               "application/problem+json": {
@@ -4362,8 +5683,348 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/clusters": {
+      "get": {
+        "operationId": "listClusters",
+        "summary": "List clusters",
+        "description": "Returns all clusters owned by the authenticated user.",
+        "tags": [
+          "Clusters"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListClustersResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createCluster",
+        "summary": "Create a cluster",
+        "description": "Creates a multi-node cluster. `compute` sets the homogeneous\npod shape; the container configuration applies to every pod and can be spread\nfrom a template response.\n",
+        "tags": [
+          "Clusters"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClusterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cluster"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/clusters/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Cluster identifier",
+          "example": "cluster_abc123"
+        }
+      ],
+      "get": {
+        "operationId": "getCluster",
+        "summary": "Get a cluster",
+        "description": "Returns a single cluster by ID. The pods field is an aggregate summary (total + count by status); fetch the member pods themselves from /v2/clusters/{id}/pods.",
+        "tags": [
+          "Clusters"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cluster"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Cluster not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateCluster",
+        "summary": "Rename a cluster",
+        "description": "Renames a cluster. This endpoint only changes the cluster\nname — compute shape, type, and container configuration are fixed at\ncreation and cannot be updated.\n",
+        "tags": [
+          "Clusters"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateClusterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cluster"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Cluster not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteCluster",
+        "summary": "Delete a cluster",
+        "description": "Permanently deletes a cluster and terminates all of its member pods.",
+        "tags": [
+          "Clusters"
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "Cluster not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/clusters/{id}/pods": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Cluster identifier",
+          "example": "cluster_abc123"
+        }
+      ],
+      "get": {
+        "operationId": "listClusterPods",
+        "summary": "List a cluster's pods",
+        "description": "Returns the full member pods of a cluster. The cluster summary (`GET /v2/clusters/{id}`) carries only aggregate pod counts; this endpoint returns each member as a complete Pod object.",
+        "tags": [
+          "Clusters"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListPodsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Cluster not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequestsError"
@@ -4391,6 +6052,14 @@
         ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -4405,10 +6074,16 @@
                         {
                           "id": "4m7x2k9q",
                           "name": "image-generator",
-                          "type": "QUEUE_BASED",
+                          "type": "QUEUE",
                           "requestUrls": {
                             "run": "https://api.runpod.ai/v2/4m7x2k9q/run",
-                            "runSync": "https://api.runpod.ai/v2/4m7x2k9q/runsync"
+                            "runSync": "https://api.runpod.ai/v2/4m7x2k9q/runsync",
+                            "status": "https://api.runpod.ai/v2/4m7x2k9q/status/{job_id}",
+                            "stream": "https://api.runpod.ai/v2/4m7x2k9q/stream/{job_id}",
+                            "cancel": "https://api.runpod.ai/v2/4m7x2k9q/cancel/{job_id}",
+                            "retry": "https://api.runpod.ai/v2/4m7x2k9q/retry/{job_id}",
+                            "purgeQueue": "https://api.runpod.ai/v2/4m7x2k9q/purge-queue",
+                            "health": "https://api.runpod.ai/v2/4m7x2k9q/health"
                           },
                           "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1",
                           "args": "",
@@ -4428,12 +6103,12 @@
                           },
                           "workers": {
                             "min": 0,
-                            "max": 5
+                            "max": 5,
+                            "idleTimeout": 5
                           },
                           "scaling": {
                             "type": "QUEUE_DELAY",
-                            "value": 4,
-                            "idleTimeout": 5
+                            "queueDelay": 4
                           },
                           "dataCenterIds": [
                             "US-KS-2"
@@ -4443,6 +6118,7 @@
                           ],
                           "timeout": 300000,
                           "flashboot": "OFF",
+                          "allowedCudaVersions": [],
                           "createdAt": "2026-06-01T12:00:00Z"
                         }
                       ]
@@ -4462,6 +6138,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -4476,7 +6160,7 @@
       "post": {
         "operationId": "createEndpoint",
         "summary": "Create a serverless endpoint",
-        "description": "Creates a serverless endpoint. Specify `gpu` for compute (CPU\nserverless endpoints are read-only). Container settings can be spread\nfrom a template response — see `CreateEndpointRequest` for the full\nbody.\n\nReturns `201` with the created endpoint. The endpoint can accept jobs\nimmediately, but starts with no active workers unless `workers.min`\nis greater than 0. Workers are provisioned on demand and autoscaled\nbetween `workers.min` and `workers.max` according to the `scaling`\npolicy, so the first request to an idle endpoint may incur cold-start\nlatency while a worker pulls its image and boots.\n",
+        "description": "Creates a serverless endpoint. Specify `gpu` for compute (CPU\nserverless endpoints are read-only). Container settings come from the\nbody, from a serverless template referenced by `templateId` (body\nfields override the template's), or both; `image` is required unless\n`templateId` is set. See `CreateEndpointRequest` for the full body.\n\nReturns `201` with the created endpoint. The endpoint can accept jobs\nimmediately, but starts with no active workers unless `workers.min`\nis greater than 0. Workers are provisioned on demand and autoscaled\nbetween `workers.min` and `workers.max` according to the `scaling`\npolicy, so the first request to an idle endpoint may incur cold-start\nlatency while a worker pulls its image and boots.\n",
         "tags": [
           "Serverless"
         ],
@@ -4493,6 +6177,7 @@
                   "value": {
                     "name": "image-generator",
                     "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1",
+                    "type": "QUEUE",
                     "gpu": {
                       "pools": [
                         "ADA_24"
@@ -4501,12 +6186,12 @@
                     },
                     "workers": {
                       "min": 0,
-                      "max": 5
+                      "max": 5,
+                      "idleTimeout": 5
                     },
                     "scaling": {
                       "type": "QUEUE_DELAY",
-                      "value": 4,
-                      "idleTimeout": 5
+                      "queueDelay": 4
                     },
                     "dataCenterIds": [
                       "US-KS-2"
@@ -4520,6 +6205,14 @@
         },
         "responses": {
           "201": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Created",
             "content": {
               "application/json": {
@@ -4532,10 +6225,16 @@
                     "value": {
                       "id": "4m7x2k9q",
                       "name": "image-generator",
-                      "type": "QUEUE_BASED",
+                      "type": "QUEUE",
                       "requestUrls": {
                         "run": "https://api.runpod.ai/v2/4m7x2k9q/run",
-                        "runSync": "https://api.runpod.ai/v2/4m7x2k9q/runsync"
+                        "runSync": "https://api.runpod.ai/v2/4m7x2k9q/runsync",
+                        "status": "https://api.runpod.ai/v2/4m7x2k9q/status/{job_id}",
+                        "stream": "https://api.runpod.ai/v2/4m7x2k9q/stream/{job_id}",
+                        "cancel": "https://api.runpod.ai/v2/4m7x2k9q/cancel/{job_id}",
+                        "retry": "https://api.runpod.ai/v2/4m7x2k9q/retry/{job_id}",
+                        "purgeQueue": "https://api.runpod.ai/v2/4m7x2k9q/purge-queue",
+                        "health": "https://api.runpod.ai/v2/4m7x2k9q/health"
                       },
                       "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1",
                       "args": "",
@@ -4555,12 +6254,12 @@
                       },
                       "workers": {
                         "min": 0,
-                        "max": 5
+                        "max": 5,
+                        "idleTimeout": 5
                       },
                       "scaling": {
                         "type": "QUEUE_DELAY",
-                        "value": 4,
-                        "idleTimeout": 5
+                        "queueDelay": 4
                       },
                       "dataCenterIds": [
                         "US-KS-2"
@@ -4570,6 +6269,7 @@
                       ],
                       "timeout": 300000,
                       "flashboot": "OFF",
+                      "allowedCudaVersions": [],
                       "createdAt": "2026-06-01T12:00:00Z"
                     }
                   }
@@ -4577,14 +6277,17 @@
               }
             }
           },
-          "400": {
-            "$ref": "#/components/responses/BadRequestError"
-          },
           "401": {
             "$ref": "#/components/responses/UnauthorizedError"
           },
           "403": {
             "$ref": "#/components/responses/ForbiddenError"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
@@ -4593,6 +6296,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -4627,6 +6338,14 @@
         ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -4639,9 +6358,10 @@
                     "value": {
                       "id": "4m7x2k9q",
                       "name": "image-generator",
-                      "type": "LOAD_BALANCING",
+                      "type": "LOAD_BALANCER",
                       "requestUrls": {
-                        "base": "https://4m7x2k9q.api.runpod.ai"
+                        "base": "https://4m7x2k9q.api.runpod.ai",
+                        "health": "https://4m7x2k9q.api.runpod.ai/ping"
                       },
                       "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1",
                       "args": "",
@@ -4661,12 +6381,12 @@
                       },
                       "workers": {
                         "min": 0,
-                        "max": 5
+                        "max": 5,
+                        "idleTimeout": 5
                       },
                       "scaling": {
-                        "type": "QUEUE_DELAY",
-                        "value": 4,
-                        "idleTimeout": 5
+                        "type": "REQUEST_COUNT",
+                        "requestCount": 4
                       },
                       "dataCenterIds": [
                         "US-KS-2"
@@ -4676,6 +6396,7 @@
                       ],
                       "timeout": 300000,
                       "flashboot": "OFF",
+                      "allowedCudaVersions": [],
                       "createdAt": "2026-06-01T12:00:00Z"
                     }
                   }
@@ -4696,6 +6417,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -4710,7 +6439,7 @@
       "patch": {
         "operationId": "updateEndpoint",
         "summary": "Update a serverless endpoint",
-        "description": "Partially updates a serverless endpoint. This is a PATCH: only the\nfields present in the body are changed; omitted fields are left\nuntouched. See `UpdateEndpointRequest` for the full body.\n\nMutable fields: `name`, `gpu`, `workers` (`min`/`max`), `scaling`\n(`type`/`value`/`idleTimeout`), `dataCenterIds`, `networkVolumes`,\n`timeout`, `flashboot`, and the container settings (`image`, `args`,\n`disk`, `ports`, `env`, `registry`).\n\nReturns `200` with the full updated endpoint. Effect timing differs\nby field: scaling and worker-bound settings (`workers`, `scaling`,\n`timeout`) are applied to the autoscaler promptly, while\ncontainer-affecting changes (e.g. `image`, `env`) create a new\nendpoint release that rolls out as workers cycle — in-flight workers\nkeep the previous version until they are replaced. Track rollout via\n`listEndpointReleases`.\n",
+        "description": "Partially updates a serverless endpoint. This is a PATCH: only the\nfields present in the body are changed; omitted fields are left\nuntouched. See `UpdateEndpointRequest` for the full body.\n\nMutable fields: `name`, `gpu`, `workers` (`min`/`max`), `scaling`\n(`type`/`value`/`idleTimeout`), `dataCenterIds`, `networkVolumes`,\n`timeout`, `flashboot`, and the container settings (`image`, `args`,\n`disk`, `ports`, `env`, `registry`).\n\nApplies to GPU endpoints only. CPU endpoints are read-only for now —\na PATCH targeting one returns `400` regardless of the body.\n\nReturns `200` with the full updated endpoint. Effect timing differs\nby field: scaling and worker-bound settings (`workers`, `scaling`,\n`timeout`) are applied to the autoscaler promptly, while\ncontainer-affecting changes (e.g. `image`, `env`) create a new\nendpoint release that rolls out as workers cycle — in-flight workers\nkeep the previous version until they are replaced. Track rollout via\n`listEndpointReleases`.\n",
         "tags": [
           "Serverless"
         ],
@@ -4727,12 +6456,12 @@
                   "value": {
                     "workers": {
                       "min": 1,
-                      "max": 10
+                      "max": 10,
+                      "idleTimeout": 10
                     },
                     "scaling": {
-                      "type": "REQUEST_COUNT",
-                      "value": 8,
-                      "idleTimeout": 10
+                      "type": "QUEUE_DELAY",
+                      "queueDelay": 8
                     }
                   }
                 }
@@ -4742,6 +6471,14 @@
         },
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -4754,10 +6491,16 @@
                     "value": {
                       "id": "4m7x2k9q",
                       "name": "image-generator",
-                      "type": "QUEUE_BASED",
+                      "type": "QUEUE",
                       "requestUrls": {
                         "run": "https://api.runpod.ai/v2/4m7x2k9q/run",
-                        "runSync": "https://api.runpod.ai/v2/4m7x2k9q/runsync"
+                        "runSync": "https://api.runpod.ai/v2/4m7x2k9q/runsync",
+                        "status": "https://api.runpod.ai/v2/4m7x2k9q/status/{job_id}",
+                        "stream": "https://api.runpod.ai/v2/4m7x2k9q/stream/{job_id}",
+                        "cancel": "https://api.runpod.ai/v2/4m7x2k9q/cancel/{job_id}",
+                        "retry": "https://api.runpod.ai/v2/4m7x2k9q/retry/{job_id}",
+                        "purgeQueue": "https://api.runpod.ai/v2/4m7x2k9q/purge-queue",
+                        "health": "https://api.runpod.ai/v2/4m7x2k9q/health"
                       },
                       "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1",
                       "args": "",
@@ -4777,12 +6520,12 @@
                       },
                       "workers": {
                         "min": 1,
-                        "max": 10
+                        "max": 10,
+                        "idleTimeout": 10
                       },
                       "scaling": {
-                        "type": "REQUEST_COUNT",
-                        "value": 8,
-                        "idleTimeout": 10
+                        "type": "QUEUE_DELAY",
+                        "queueDelay": 8
                       },
                       "dataCenterIds": [
                         "US-KS-2"
@@ -4792,15 +6535,13 @@
                       ],
                       "timeout": 300000,
                       "flashboot": "OFF",
+                      "allowedCudaVersions": [],
                       "createdAt": "2026-06-01T12:00:00Z"
                     }
                   }
                 }
               }
             }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequestError"
           },
           "401": {
             "$ref": "#/components/responses/UnauthorizedError"
@@ -4811,6 +6552,9 @@
           "404": {
             "$ref": "#/components/responses/NotFoundError"
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
           },
@@ -4818,6 +6562,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -4838,6 +6590,14 @@
         ],
         "responses": {
           "204": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Deleted. Response has no body."
           },
           "401": {
@@ -4853,6 +6613,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -4887,6 +6655,14 @@
         ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -4939,6 +6715,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -4973,6 +6757,14 @@
         ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -5027,6 +6819,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -5087,6 +6887,12 @@
           "200": {
             "description": "Worker log event stream",
             "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
               "Cache-Control": {
                 "schema": {
                   "type": "string"
@@ -5134,6 +6940,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -5156,6 +6970,14 @@
         ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -5188,7 +7010,10 @@
                           "registry": null,
                           "serverless": false,
                           "public": false,
-                          "category": "NVIDIA"
+                          "category": "NVIDIA",
+                          "startSsh": true,
+                          "startJupyter": false,
+                          "allowedCudaVersions": []
                         }
                       ]
                     }
@@ -5207,6 +7032,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -5221,7 +7054,7 @@
       "post": {
         "operationId": "createTemplate",
         "summary": "Create a template",
-        "description": "Creates a reusable container-configuration preset — image, disk,\nports, env, registry, and mount settings — for pods and serverless\nendpoints. `createPod` and `createEndpoint` don't take a template ID;\ninstead, spread a template's fields into the request body directly.\nReturns the created template.\n",
+        "description": "Creates a reusable container-configuration preset — image, disk,\nports, env, registry, and mount settings — for pods and serverless\nendpoints. Pass its ID as `templateId` to `createPod` or\n`createEndpoint`, or spread its fields into the request body\ndirectly. Returns the created template.\n",
         "tags": [
           "Templates"
         ],
@@ -5262,6 +7095,14 @@
         },
         "responses": {
           "201": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Created",
             "content": {
               "application/json": {
@@ -5292,21 +7133,24 @@
                       "registry": null,
                       "serverless": false,
                       "public": false,
-                      "category": "NVIDIA"
+                      "category": "NVIDIA",
+                      "startSsh": true,
+                      "startJupyter": false,
+                      "allowedCudaVersions": []
                     }
                   }
                 }
               }
             }
           },
-          "400": {
-            "$ref": "#/components/responses/BadRequestError"
-          },
           "401": {
             "$ref": "#/components/responses/UnauthorizedError"
           },
           "403": {
             "$ref": "#/components/responses/ForbiddenError"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
@@ -5315,6 +7159,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -5342,12 +7194,20 @@
       "get": {
         "operationId": "getTemplate",
         "summary": "Get a template",
-        "description": "Returns the full configuration of a single template by ID.",
+        "description": "Returns the full configuration of a single template by ID. Serves\nboth templates you own and public catalog templates — everything you\ncan read. Updates and deletes remain restricted to templates you own.\n",
         "tags": [
           "Templates"
         ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -5378,7 +7238,10 @@
                       "registry": null,
                       "serverless": false,
                       "public": false,
-                      "category": "NVIDIA"
+                      "category": "NVIDIA",
+                      "startSsh": true,
+                      "startJupyter": false,
+                      "allowedCudaVersions": []
                     }
                   }
                 }
@@ -5398,6 +7261,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -5412,7 +7283,7 @@
       "patch": {
         "operationId": "updateTemplate",
         "summary": "Update a template",
-        "description": "Partially updates a template. This is a PATCH: only the fields\npresent in the body are changed; omitted fields are left untouched.\nSee `UpdateTemplateRequest` for the full body.\n\nMutable fields: `name`, `image`, `args`, `disk`, `ports`, `env`,\n`registry`, `mounts`, `serverless`, `public`, and `category`.\n\nOnly the template's owner can update it (authenticated via the\nrequest's API key); other users' templates are neither visible nor\nmutable. Returns `200` with the full updated template. Pods and\nendpoints already created from this template are not changed\nretroactively — the template is a snapshot applied at creation time.\n",
+        "description": "Partially updates a template. This is a PATCH: only the fields\npresent in the body are changed; omitted fields are left untouched.\nSee `UpdateTemplateRequest` for the full body.\n\nMutable fields: `name`, `image`, `args`, `disk`, `ports`, `env`,\n`registry`, `mounts`, `serverless`, `public`, and `category`.\n\nOnly the template's owner can update it (authenticated via the\nrequest's API key); public catalog templates are readable via GET\nbut return `404` here. Returns `200` with the full updated template. Pods and\nendpoints already created from this template are not changed\nretroactively — the template is a snapshot applied at creation time.\n",
         "tags": [
           "Templates"
         ],
@@ -5436,6 +7307,14 @@
         },
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -5466,15 +7345,15 @@
                       "registry": null,
                       "serverless": false,
                       "public": false,
-                      "category": "NVIDIA"
+                      "category": "NVIDIA",
+                      "startSsh": true,
+                      "startJupyter": false,
+                      "allowedCudaVersions": []
                     }
                   }
                 }
               }
             }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequestError"
           },
           "401": {
             "$ref": "#/components/responses/UnauthorizedError"
@@ -5485,6 +7364,9 @@
           "404": {
             "$ref": "#/components/responses/NotFoundError"
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
           },
@@ -5492,6 +7374,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -5506,15 +7396,37 @@
       "delete": {
         "operationId": "deleteTemplate",
         "summary": "Delete a template",
-        "description": "Permanently deletes a template by ID. Rejected if the template is\ncurrently referenced by a pod (see that pod's `template` field) or\nbound to a serverless endpoint.\n",
+        "description": "Permanently deletes a template by ID. Only the template's owner can\ndelete it — public catalog templates return `404` here. Rejected if\nthe template is currently referenced by a pod (see that pod's\n`template` field) or bound to a serverless endpoint.\n",
         "tags": [
           "Templates"
         ],
         "responses": {
           "204": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Deleted. Response has no body."
           },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
           "400": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Template is in use by a pod or serverless endpoint and cannot be deleted",
             "content": {
               "application/problem+json": {
@@ -5524,12 +7436,6 @@
               }
             }
           },
-          "401": {
-            "$ref": "#/components/responses/UnauthorizedError"
-          },
-          "403": {
-            "$ref": "#/components/responses/ForbiddenError"
-          },
           "404": {
             "$ref": "#/components/responses/NotFoundError"
           },
@@ -5537,6 +7443,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -5559,6 +7473,14 @@
         ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -5594,6 +7516,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -5635,6 +7565,14 @@
         },
         "responses": {
           "201": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Created",
             "content": {
               "application/json": {
@@ -5656,14 +7594,14 @@
               }
             }
           },
-          "400": {
-            "$ref": "#/components/responses/BadRequestError"
-          },
           "401": {
             "$ref": "#/components/responses/UnauthorizedError"
           },
           "403": {
             "$ref": "#/components/responses/ForbiddenError"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
@@ -5672,6 +7610,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -5706,6 +7652,14 @@
         ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -5740,6 +7694,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -5778,6 +7740,14 @@
         },
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -5799,7 +7769,21 @@
               }
             }
           },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
           "400": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Invalid request body or size decrease attempted",
             "content": {
               "application/problem+json": {
@@ -5808,12 +7792,6 @@
                 }
               }
             }
-          },
-          "401": {
-            "$ref": "#/components/responses/UnauthorizedError"
-          },
-          "403": {
-            "$ref": "#/components/responses/ForbiddenError"
           },
           "404": {
             "$ref": "#/components/responses/NotFoundError"
@@ -5825,6 +7803,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -5845,6 +7831,14 @@
         ],
         "responses": {
           "204": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Deleted. Response has no body."
           },
           "401": {
@@ -5860,6 +7854,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -5882,6 +7884,14 @@
         ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -5914,6 +7924,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -5954,6 +7972,14 @@
         },
         "responses": {
           "201": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Created",
             "content": {
               "application/json": {
@@ -5972,14 +7998,14 @@
               }
             }
           },
-          "400": {
-            "$ref": "#/components/responses/BadRequestError"
-          },
           "401": {
             "$ref": "#/components/responses/UnauthorizedError"
           },
           "403": {
             "$ref": "#/components/responses/ForbiddenError"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
@@ -5988,6 +8014,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -6021,6 +8055,14 @@
         ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -6052,6 +8094,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -6072,9 +8122,31 @@
         ],
         "responses": {
           "204": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Deleted. Response has no body."
           },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
           "400": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Registry credential is in use by a pod and cannot be deleted",
             "content": {
               "application/problem+json": {
@@ -6084,12 +8156,6 @@
               }
             }
           },
-          "401": {
-            "$ref": "#/components/responses/UnauthorizedError"
-          },
-          "403": {
-            "$ref": "#/components/responses/ForbiddenError"
-          },
           "404": {
             "$ref": "#/components/responses/NotFoundError"
           },
@@ -6097,6 +8163,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -6118,6 +8192,14 @@
         ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -6131,6 +8213,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -6160,6 +8250,14 @@
         },
         "responses": {
           "201": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Delegation created",
             "content": {
               "application/json": {
@@ -6173,6 +8271,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -6205,9 +8311,25 @@
         ],
         "responses": {
           "204": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Delegation revoked"
           },
           "404": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Delegation not found",
             "content": {
               "application/problem+json": {
@@ -6221,6 +8343,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -6255,11 +8385,22 @@
             "$ref": "#/components/parameters/GpuCloudFilter"
           },
           {
+            "$ref": "#/components/parameters/CudaVersionsFilter"
+          },
+          {
             "$ref": "#/components/parameters/MinCudaVersionFilter"
           }
         ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -6313,6 +8454,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -6358,11 +8507,22 @@
             "$ref": "#/components/parameters/GpuCloudFilter"
           },
           {
+            "$ref": "#/components/parameters/CudaVersionsFilter"
+          },
+          {
             "$ref": "#/components/parameters/MinCudaVersionFilter"
           }
         ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -6415,6 +8575,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -6448,6 +8616,14 @@
         ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -6498,6 +8674,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -6542,6 +8726,14 @@
         ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -6591,6 +8783,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -6696,6 +8896,14 @@
         ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -6752,6 +8960,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -6804,6 +9020,14 @@
         ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -6859,6 +9083,118 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/catalog/templates": {
+      "get": {
+        "operationId": "listPublicTemplates",
+        "summary": "List public templates",
+        "description": "Returns the public template catalog. `source` selects which slice:\n`official` (the default) is Runpod-curated templates, `verified` is\ncommunity templates Runpod has verified, and `community` is everything\nelse other users have shared publicly. Both pod and serverless\ntemplates appear — use each entry's `serverless` flag to tell them\napart. `registry` is always null for templates you don't own. Your own\ntemplates (public or private) are managed under `/v2/templates`; fetch\nany individual template — catalog or owned — via `/v2/templates/{id}`.\n\nAt most 100 templates are returned. Pagination is not yet supported.\n",
+        "tags": [
+          "Catalog"
+        ],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "official",
+                "verified",
+                "community"
+              ],
+              "default": "official"
+            },
+            "description": "Which slice of the catalog to return: `official` for\nRunpod-curated templates (default), `verified` for\nRunpod-verified community templates, or `community` for all other\npublicly shared templates.\n",
+            "example": "official"
+          }
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListTemplatesResponse"
+                },
+                "examples": {
+                  "templates": {
+                    "summary": "Successful response",
+                    "value": {
+                      "templates": [
+                        {
+                          "id": "30zmvf89kd",
+                          "name": "PyTorch 2.8",
+                          "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1",
+                          "args": "",
+                          "disk": 50,
+                          "mounts": {},
+                          "ports": [
+                            "8888/http",
+                            "22/tcp"
+                          ],
+                          "env": {},
+                          "registry": null,
+                          "serverless": false,
+                          "public": true,
+                          "category": "NVIDIA",
+                          "startSsh": true,
+                          "startJupyter": true,
+                          "allowedCudaVersions": []
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -6895,6 +9231,14 @@
         ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -6965,6 +9309,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -7011,6 +9363,14 @@
         ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -7064,6 +9424,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -7110,6 +9478,14 @@
         ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -7129,7 +9505,7 @@
                           "gpuAmount": 7.5,
                           "cpuAmount": 0,
                           "diskAmount": 0.4,
-                          "feeAmount": 1
+                          "feeAmount": 1.0
                         }
                       ],
                       "metadata": {
@@ -7145,7 +9521,7 @@
                           "gpuAmount": 7.5,
                           "cpuAmount": 0,
                           "diskAmount": 0.4,
-                          "feeAmount": 1
+                          "feeAmount": 1.0
                         },
                         "uniqueServerlessCount": 1
                       }
@@ -7165,6 +9541,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -7201,6 +9585,14 @@
         ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -7245,6 +9637,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -7257,7 +9657,7 @@
         }
       }
     },
-    "/v2/billing/networkvolumes": {
+    "/v2/billing/network-volumes": {
       "get": {
         "operationId": "listNetworkVolumeBilling",
         "summary": "Get network volume billing history",
@@ -7291,6 +9691,14 @@
         ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -7342,6 +9750,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
@@ -7357,8 +9773,8 @@
     "/v2/billing/clusters": {
       "get": {
         "operationId": "listClusterBilling",
-        "summary": "Get Instant Cluster billing history",
-        "description": "Returns Instant Cluster billing history for the authenticated user, split into time buckets by startTime/endTime with bucketSize or by lastN recent buckets. Use clusterId to filter to one cluster; without it, records are emitted per cluster per bucket. Each record includes GPU compute, disk, inter-node networking, and total amounts. Instant Clusters are GPU-only, so no CPU cost component is returned.\n",
+        "summary": "Get cluster billing history",
+        "description": "Returns Cluster billing history for the authenticated user, split into time buckets by startTime/endTime with bucketSize or by lastN recent buckets. Use clusterId to filter to one cluster; without it, records are emitted per cluster per bucket. Each record includes GPU compute, disk, inter-node networking, and total amounts. Clusters are GPU-only, so no CPU cost component is returned.\n",
         "tags": [
           "Billing"
         ],
@@ -7379,7 +9795,7 @@
             "name": "clusterId",
             "in": "query",
             "required": false,
-            "description": "Filter to a specific Instant Cluster.",
+            "description": "Filter to a specific cluster.",
             "schema": {
               "type": "string"
             },
@@ -7388,6 +9804,14 @@
         ],
         "responses": {
           "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "OK",
             "content": {
               "application/json": {
@@ -7403,10 +9827,10 @@
                           "startTime": "2026-06-01T00:00:00Z",
                           "endTime": "2026-06-02T00:00:00Z",
                           "clusterId": "5c2n8m4q",
-                          "totalAmount": 99,
-                          "gpuAmount": 95,
-                          "diskAmount": 3,
-                          "networkingAmount": 1
+                          "totalAmount": 99.0,
+                          "gpuAmount": 95.0,
+                          "diskAmount": 3.0,
+                          "networkingAmount": 1.0
                         }
                       ],
                       "metadata": {
@@ -7418,10 +9842,10 @@
                         },
                         "recordCount": 1,
                         "totals": {
-                          "totalAmount": 99,
-                          "gpuAmount": 95,
-                          "diskAmount": 3,
-                          "networkingAmount": 1
+                          "totalAmount": 99.0,
+                          "gpuAmount": 95.0,
+                          "diskAmount": 3.0,
+                          "networkingAmount": 1.0
                         },
                         "uniqueClusterCount": 1
                       }
@@ -7441,6 +9865,14 @@
             "$ref": "#/components/responses/TooManyRequestsError"
           },
           "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "description": "Error",
             "content": {
               "application/problem+json": {
