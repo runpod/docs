@@ -417,7 +417,7 @@
         "name": "minCudaVersion",
         "in": "query",
         "required": false,
-        "description": "Lowest acceptable CUDA version to scope availability and lowest-price calculations to, compared numerically. Format: integer major or major.minor, e.g. 12 or 12.1 — a bare major is accepted here and means any release of that major. Valid only with include=AVAILABILITY (400 otherwise) and mutually exclusive with cudaVersions (400 if both are sent); a malformed value is a 422. Use this for an open-ended floor and cudaVersions for an exact set.",
+        "description": "Lowest acceptable CUDA version to scope availability and lowest-price calculations to, compared numerically. Format: integer major or major.minor, e.g. 12 or 12.1 — unlike the `gpu.minCudaVersion` body field on pod and endpoint create, a bare major is accepted here and means any release of that major, because this filter only widens a read. Valid only with include=AVAILABILITY (400 otherwise) and mutually exclusive with cudaVersions (400 if both are sent); a malformed value is a 422. Use this for an open-ended floor and cudaVersions for an exact set.",
         "schema": {
           "type": "string",
           "pattern": "^\\d+(\\.\\d+)?$"
@@ -674,6 +674,42 @@
           }
         }
       },
+      "CreateGpuConfig": {
+        "description": "GPU request for a pod create. Carries the CUDA host constraints, which\nlive here rather than at the body's top level so they are\nunrepresentable on a CPU pod.\n",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/GpuConfig"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "allowedCudaVersions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^\\d+\\.\\d+$"
+                },
+                "description": "Acceptable CUDA versions for the host machine, as `major.minor`.\nOmit to accept any version. Matching is exact, so a version no\nmachine reports yields a capacity error rather than a fallback —\ndiscover valid values per GPU type via\n`GET /v2/catalog/gpus?include=AVAILABILITY&product=POD`\n(`cudaVersions`).\n\nA non-empty set is mutually exclusive with minCudaVersion (400\nif both are sent). An explicit `[]` states no constraint, so it\nmay accompany a floor.\n",
+                "examples": [
+                  [
+                    "12.8",
+                    "12.6"
+                  ]
+                ]
+              },
+              "minCudaVersion": {
+                "type": "string",
+                "pattern": "^\\d+\\.\\d+$",
+                "description": "Lowest acceptable CUDA version for the host machine, as\n`major.minor`, compared numerically rather than as a decimal —\nso 12.11 is above 12.2. Use this for an open-ended floor and\nallowedCudaVersions for an exact set.\n\nMutually exclusive with a non-empty allowedCudaVersions (400 if\nboth are sent); an explicit `[]` there states no constraint and\nmay accompany this floor.\n",
+                "examples": [
+                  "12.1"
+                ]
+              }
+            }
+          }
+        ],
+        "unevaluatedProperties": false
+      },
       "BaseCpuConfig": {
         "type": "object",
         "required": [
@@ -868,11 +904,8 @@
           }
         ]
       },
-      "EndpointGpuConfig": {
+      "BaseEndpointGpuConfig": {
         "type": "object",
-        "required": [
-          "pools"
-        ],
         "properties": {
           "pools": {
             "type": "array",
@@ -890,7 +923,7 @@
           "excludedTypes": {
             "type": "array",
             "uniqueItems": true,
-            "description": "GPU **type** IDs to subtract from the selected pools — the `id`\nfield of `GET /v2/catalog/gpus`, the same identifiers pods take in\n`gpu.id`. Workers run on every type in `pools` except these. Omit to\nuse the whole pool.\n\nPools stay the unit of selection; types are the unit of\nsubtraction. There is no inclusive allowlist: a card later added to\none of your pools becomes eligible, which is the honest reading of\n\"this pool, minus these\".\n\nReplaced wholesale whenever `gpu` is supplied. A `PATCH` that sends\n`gpu` **without `excludedTypes`** therefore **clears** them —\nrestate them to keep them. A `PATCH` that omits `gpu` entirely\nleaves the selection untouched.\n\nRejected with 400 if a value is not a GPU type in one of `pools`;\nupstream accepts unrecognized exclusions silently, so a typo would\notherwise produce a filter that does nothing. Surrounding whitespace\nis trimmed, so `\" NVIDIA L40\"` and `\"NVIDIA L40\"` mean the same card.\n",
+            "description": "GPU **type** IDs to subtract from the selected pools — the `id`\nfield of `GET /v2/catalog/gpus`, the same identifiers pods take in\n`gpu.id`. Workers run on every type in `pools` except these. Omit to\nuse the whole pool.\n\nPools stay the unit of selection; types are the unit of\nsubtraction. There is no inclusive allowlist: a card later added to\none of your pools becomes eligible, which is the honest reading of\n\"this pool, minus these\".\n\nTied to `pools`, because the two together are one selection:\nsupplying `pools` replaces that selection wholesale, so a `PATCH`\nsending `pools` **without `excludedTypes`** **clears** them —\nrestate them to keep them. A `PATCH` that omits `pools` leaves both\nthe pools and the exclusions untouched, so changing only a CUDA\nconstraint cannot widen a pinned endpoint.\n\nRejected with 400 if a value is not a GPU type in one of `pools`;\nupstream accepts unrecognized exclusions silently, so a typo would\notherwise produce a filter that does nothing. Surrounding whitespace\nis trimmed, so `\" NVIDIA L40\"` and `\"NVIDIA L40\"` mean the same card.\n",
             "items": {
               "type": "string",
               "pattern": "^\\s*[^-\\s]"
@@ -911,6 +944,117 @@
             ]
           }
         }
+      },
+      "EndpointGpuConfig": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/BaseEndpointGpuConfig"
+          },
+          {
+            "type": "object",
+            "required": [
+              "pools",
+              "allowedCudaVersions",
+              "minCudaVersion"
+            ],
+            "properties": {
+              "allowedCudaVersions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Acceptable CUDA versions for worker placement, as `major.minor`. Empty means any version.",
+                "examples": [
+                  []
+                ]
+              },
+              "minCudaVersion": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Lowest acceptable CUDA version for worker placement, as `major.minor`. Null means no floor.",
+                "examples": [
+                  null
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "CreateEndpointGpuConfig": {
+        "description": "GPU request for an endpoint create. Carries the CUDA constraints, which\nlive here rather than at the body's top level so they are\nunrepresentable on a CPU endpoint.\n",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/BaseEndpointGpuConfig"
+          },
+          {
+            "type": "object",
+            "required": [
+              "pools"
+            ],
+            "properties": {
+              "allowedCudaVersions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^\\d+\\.\\d+$"
+                },
+                "description": "Acceptable CUDA versions for worker placement, as\n`major.minor`. Omit to accept any version (or inherit the\ntemplate's constraint when creating from `templateId`).\nMatching is exact — discover valid values per GPU type via\n`GET /v2/catalog/gpus?include=AVAILABILITY&product=SERVERLESS`\n(`cudaVersions`).\n\nA non-empty set is mutually exclusive with minCudaVersion (400\nif both are sent). An explicit `[]` states no constraint, so it\nmay accompany a floor.\n",
+                "examples": [
+                  [
+                    "12.8",
+                    "12.6"
+                  ]
+                ]
+              },
+              "minCudaVersion": {
+                "type": "string",
+                "pattern": "^\\d+\\.\\d+$",
+                "description": "Lowest acceptable CUDA version for worker placement, as\n`major.minor`, compared numerically rather than as a decimal —\nso 12.11 is above 12.2. Use this for an open-ended floor and\nallowedCudaVersions for an exact set.\n\nMutually exclusive with a non-empty allowedCudaVersions (400 if\nboth are sent); an explicit `[]` there states no constraint and\nmay accompany this floor.\n",
+                "examples": [
+                  "12.1"
+                ]
+              }
+            }
+          }
+        ],
+        "unevaluatedProperties": false
+      },
+      "UpdateEndpointGpuConfig": {
+        "description": "Partial GPU update — every field is optional and an omitted one is left\nunchanged. Unlike create, `pools` is optional, so changing only a CUDA\nconstraint does not require resending the pool list.\n\n`excludedTypes` requires `pools`, because the two are one selection and\nonly a supplied `pools` replaces it — an exclusion on its own would\notherwise be silently dropped.\n",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/BaseEndpointGpuConfig"
+          },
+          {
+            "type": "object",
+            "dependentRequired": {
+              "excludedTypes": [
+                "pools"
+              ]
+            },
+            "properties": {
+              "allowedCudaVersions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^\\d+\\.\\d+$"
+                },
+                "description": "Acceptable CUDA versions for worker placement, as\n`major.minor`. An explicit `[]` clears the constraint;\nomitting the field leaves it unchanged. Takes effect as\nworkers are replaced.\n\nA non-empty set is mutually exclusive with minCudaVersion (400\nif both are sent). An explicit `[]` states no constraint, so it\nmay accompany a floor.\nSetting one does not clear the other — clear it explicitly in\nthe same patch if the endpoint already carries it.\n"
+              },
+              "minCudaVersion": {
+                "type": "string",
+                "pattern": "^$|^\\d+\\.\\d+$",
+                "description": "Lowest acceptable CUDA version for worker placement, as\n`major.minor`. An explicit `\"\"` clears the floor; omitting the\nfield leaves it unchanged. Takes effect as workers are\nreplaced.\n\nMutually exclusive with a non-empty allowedCudaVersions (400 if\nboth are sent); an explicit `[]` there states no constraint and\nmay accompany this floor.\n",
+                "examples": [
+                  "12.1"
+                ]
+              }
+            }
+          }
+        ],
+        "unevaluatedProperties": false
       },
       "EndpointWorkers": {
         "type": "object",
@@ -1030,7 +1174,6 @@
               "networkVolumes",
               "timeout",
               "flashboot",
-              "allowedCudaVersions",
               "createdAt"
             ],
             "properties": {
@@ -1115,16 +1258,6 @@
               },
               "flashboot": {
                 "$ref": "#/components/schemas/FlashBoot"
-              },
-              "allowedCudaVersions": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                },
-                "description": "Acceptable CUDA versions for worker placement, as `major.minor`. Empty means any version.",
-                "examples": [
-                  []
-                ]
               },
               "createdAt": {
                 "type": "string",
@@ -1560,6 +1693,9 @@
               "scaling"
             ],
             "properties": {
+              "gpu": {
+                "$ref": "#/components/schemas/CreateEndpointGpuConfig"
+              },
               "name": {
                 "type": "string",
                 "minLength": 1,
@@ -1577,20 +1713,6 @@
                   }
                 ],
                 "description": "Request-routing model. Required — it determines the valid scaler\nand request URLs, so it must be chosen explicitly on every create.\n"
-              },
-              "allowedCudaVersions": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "pattern": "^\\d+\\.\\d+$"
-                },
-                "description": "Acceptable CUDA versions for worker placement, as\n`major.minor`. GPU-only: a non-empty explicit or\ntemplate-inherited constraint is rejected with 400 for CPU\ncreate. An explicit empty array is allowed on create. Omit to\naccept any version (or inherit the template's constraint when\ncreating from `templateId`). Matching is exact — discover\nvalid values per GPU type via\n`GET /v2/catalog/gpus?include=AVAILABILITY&product=SERVERLESS`\n(`cudaVersions`).\n",
-                "examples": [
-                  [
-                    "12.8",
-                    "12.6"
-                  ]
-                ]
               },
               "cpu": {
                 "type": "array",
@@ -1616,14 +1738,6 @@
                 ],
                 "default": "OFF"
               },
-              "gpu": {
-                "allOf": [
-                  {
-                    "$ref": "#/components/schemas/EndpointGpuConfig"
-                  }
-                ],
-                "unevaluatedProperties": false
-              },
               "networkVolumes": {
                 "type": "array",
                 "items": {
@@ -1633,7 +1747,7 @@
               "templateId": {
                 "type": "string",
                 "minLength": 1,
-                "description": "ID of a serverless template to base this endpoint on. The\ntemplate is resolved at create time into the same container\nsettings you could otherwise spread into this body (image,\nargs, disk, ports, env, registry); explicit body fields\noverride the template's, except `env`, which is merged per\nkey with body values winning. The template's\nallowedCudaVersions seeds the endpoint's when the body omits\nit; its pod-specific startSsh/startJupyter flags are\nignored. Later template edits do not affect the endpoint.\nThe template may be one of your own or a public catalog\ntemplate — see `GET /v2/catalog/templates` (unknown or\ninaccessible ID → 404) — and must be a serverless template\n(→ 422).\n",
+                "description": "ID of a serverless template to base this endpoint on. The\ntemplate is resolved at create time into the same container\nsettings you could otherwise spread into this body (image,\nargs, disk, ports, env, registry); explicit body fields\noverride the template's, except `env`, which is merged per\nkey with body values winning. The template's\nallowedCudaVersions seeds `gpu.allowedCudaVersions` when the\nbody omits it — but only for a GPU create, since a CPU endpoint\nhas no gpu block to seed into, and not when the body sets\n`gpu.minCudaVersion`, since seeding a set beside a floor would\nmanufacture the mutual-exclusion 400 from a valid request. Its\npod-specific startSsh/startJupyter flags are\nignored. Later template edits do not affect the endpoint.\nThe template may be one of your own or a public catalog\ntemplate — see `GET /v2/catalog/templates` (unknown or\ninaccessible ID → 404) — and must be a serverless template\n(→ 422).\n",
                 "examples": [
                   "30zmvf89kd"
                 ]
@@ -1694,14 +1808,6 @@
             "type": "object",
             "description": "Only provided fields are changed.",
             "properties": {
-              "allowedCudaVersions": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "pattern": "^\\d+\\.\\d+$"
-                },
-                "description": "Acceptable CUDA versions for worker placement, as\n`major.minor`. An explicit `[]` clears the constraint;\nomitting the field leaves it unchanged. Takes effect as\nworkers are replaced. Rejected with 400 on CPU endpoints.\n"
-              },
               "cpu": {
                 "type": "array",
                 "minItems": 1,
@@ -1722,12 +1828,7 @@
                 "$ref": "#/components/schemas/FlashBoot"
               },
               "gpu": {
-                "allOf": [
-                  {
-                    "$ref": "#/components/schemas/EndpointGpuConfig"
-                  }
-                ],
-                "unevaluatedProperties": false
+                "$ref": "#/components/schemas/UpdateEndpointGpuConfig"
               },
               "name": {
                 "type": "string",
@@ -2072,6 +2173,7 @@
               "registry",
               "cloud",
               "dataCenterId",
+              "cudaVersion",
               "ssh",
               "template",
               "cost",
@@ -2241,20 +2343,6 @@
                   "my-training-pod"
                 ]
               },
-              "allowedCudaVersions": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "pattern": "^\\d+\\.\\d+$"
-                },
-                "description": "Acceptable CUDA versions for the host machine, as `major.minor`.\nOmit to accept any version. Matching is exact, so a version no\nmachine reports yields a capacity error rather than a fallback —\ndiscover valid values per GPU type via\n`GET /v2/catalog/gpus?include=AVAILABILITY&product=POD`\n(`cudaVersions`).\n\nGPU pods only; rejected with 400 when `cpu` is set. Mutually\nexclusive with minCudaVersion (400 if both are sent).\n",
-                "examples": [
-                  [
-                    "12.8",
-                    "12.6"
-                  ]
-                ]
-              },
               "cloud": {
                 "allOf": [
                   {
@@ -2288,20 +2376,7 @@
                 ]
               },
               "gpu": {
-                "allOf": [
-                  {
-                    "$ref": "#/components/schemas/GpuConfig"
-                  }
-                ],
-                "unevaluatedProperties": false
-              },
-              "minCudaVersion": {
-                "type": "string",
-                "pattern": "^\\d+(\\.\\d+)?$",
-                "description": "Lowest acceptable CUDA version for the host machine, compared\nnumerically. Format: integer major or major.minor, e.g. 12 or\n12.1 — a bare major means any release of that major. Use this\nfor an open-ended floor and allowedCudaVersions for an exact\nset.\n\nGPU pods only; rejected with 400 when `cpu` is set. Mutually\nexclusive with allowedCudaVersions (400 if both are sent).\n",
-                "examples": [
-                  "12.1"
-                ]
+                "$ref": "#/components/schemas/CreateGpuConfig"
               },
               "mounts": {
                 "$ref": "#/components/schemas/Mounts"
@@ -2325,7 +2400,7 @@
               "templateId": {
                 "type": "string",
                 "minLength": 1,
-                "description": "ID of a pod template to base this pod on. The template is\nresolved at create time into the same container settings you\ncould otherwise spread into this body (image, args, disk,\nports, env, registry, persistent mount, startSsh,\nstartJupyter, allowedCudaVersions); explicit body fields\noverride the template's, except `env`, which is merged per\nkey with body values winning. Sending either CUDA field\n(`allowedCudaVersions` or `minCudaVersion`) replaces the\ntemplate's CUDA constraint entirely, and CPU pods ignore it\n(like the persistent mount). The template is a one-time\nsource of settings: later template edits do not affect the\npod, and the created pod does not retain a link to the\ntemplate (`template` stays null). The template may be one\nof your own or a public catalog template — see\n`GET /v2/catalog/templates` (unknown or inaccessible ID →\n404) — and must not be a serverless template (→ 422). CPU\npods do not inherit a template's persistent mount.\n",
+                "description": "ID of a pod template to base this pod on. The template is\nresolved at create time into the same container settings you\ncould otherwise spread into this body (image, args, disk,\nports, env, registry, persistent mount, startSsh,\nstartJupyter, allowedCudaVersions); explicit body fields\noverride the template's, except `env`, which is merged per\nkey with body values winning. Sending either CUDA field\n(`gpu.allowedCudaVersions` or `gpu.minCudaVersion`) replaces\nthe template's CUDA constraint entirely, and CPU pods ignore\nit (like the persistent mount). The template is a one-time\nsource of settings: later template edits do not affect the\npod, and the created pod does not retain a link to the\ntemplate (`template` stays null). The template may be one\nof your own or a public catalog template — see\n`GET /v2/catalog/templates` (unknown or inaccessible ID →\n404) — and must not be a serverless template (→ 422). CPU\npods do not inherit a template's persistent mount.\n",
                 "examples": [
                   "30zmvf89kd"
                 ]
@@ -3561,7 +3636,7 @@
           "version": {
             "type": "string",
             "pattern": "^\\d+\\.\\d+$",
-            "description": "CUDA version as `major.minor`, suitable for `allowedCudaVersions` on pod create.",
+            "description": "CUDA version as `major.minor`, suitable for `gpu.allowedCudaVersions` on pod create.",
             "examples": [
               "12.8"
             ]
@@ -4885,6 +4960,7 @@
                           },
                           "cloud": "SECURE",
                           "dataCenterId": "US-KS-2",
+                          "cudaVersion": "12.8",
                           "ssh": {
                             "proxy": {
                               "host": "ssh.runpod.io",
@@ -5043,6 +5119,7 @@
                       },
                       "cloud": "SECURE",
                       "dataCenterId": "US-KS-2",
+                      "cudaVersion": "12.8",
                       "ssh": {
                         "proxy": {
                           "host": "ssh.runpod.io",
@@ -5177,6 +5254,7 @@
                       },
                       "cloud": "SECURE",
                       "dataCenterId": "US-KS-2",
+                      "cudaVersion": "12.8",
                       "ssh": {
                         "proxy": {
                           "host": "ssh.runpod.io",
@@ -5324,6 +5402,7 @@
                       },
                       "cloud": "SECURE",
                       "dataCenterId": "US-KS-2",
+                      "cudaVersion": "12.8",
                       "ssh": {
                         "proxy": {
                           "host": "ssh.runpod.io",
@@ -5672,6 +5751,7 @@
                       },
                       "cloud": "SECURE",
                       "dataCenterId": "US-KS-2",
+                      "cudaVersion": "12.8",
                       "ssh": {
                         "proxy": {
                           "host": "ssh.runpod.io",
@@ -6165,7 +6245,9 @@
                             "pools": [
                               "ADA_24"
                             ],
-                            "count": 1
+                            "count": 1,
+                            "allowedCudaVersions": [],
+                            "minCudaVersion": null
                           },
                           "workers": {
                             "min": 0,
@@ -6184,7 +6266,6 @@
                           ],
                           "timeout": 300000,
                           "flashboot": "OFF",
-                          "allowedCudaVersions": [],
                           "createdAt": "2026-06-01T12:00:00Z"
                         }
                       ]
@@ -6226,7 +6307,7 @@
       "post": {
         "operationId": "createEndpoint",
         "summary": "Create a serverless endpoint",
-        "description": "Creates a serverless endpoint. Callers specify exactly one of `gpu` or\n`cpu`; neither or both returns 400. Container settings come from the\nbody, from a serverless template referenced by `templateId` (body\nfields override the template's), or both; `image` is required unless\n`templateId` is set. See `CreateEndpointRequest` for the full body.\n\n`allowedCudaVersions` is GPU-only. A non-empty explicit or\ntemplate-inherited constraint is rejected with 400 for CPU create;\nan explicit empty array is allowed on create.\n\nReturns `201` with the created endpoint. The endpoint can accept jobs\nimmediately, but starts with no active workers unless `workers.min`\nis greater than 0. Workers are provisioned on demand and autoscaled\nbetween `workers.min` and `workers.max` according to the `scaling`\npolicy, so the first request to an idle endpoint may incur cold-start\nlatency while a worker pulls its image and boots.\n\n## Checking what you can deploy\n\n`gpu.pools` takes serverless GPU **pool** IDs, not the GPU type IDs\nused for pods. `gpu.excludedTypes` takes the type IDs — it subtracts\nspecific cards from the pools you picked. Read both from the catalog\nbefore you create:\n\n- [List GPU types](https://docs.runpod.io/api-reference-v2/catalog/list-gpu-types)\n  — the `pool` field carries the pool ID for each GPU type (`null`\n  means that type is not in a serverless pool). Add\n  `include=AVAILABILITY&product=SERVERLESS` for current serverless\n  stock.\n- [List data centers](https://docs.runpod.io/api-reference-v2/catalog/list-data-centers)\n  — locations to constrain with `dataCenterIds`, with\n  `include=GPU_AVAILABILITY` for stock per data center.\n\nUnlike pod creation, you do not need to retry across GPUs yourself:\nlist every pool you are willing to run on and workers are placed on\nwhichever one has capacity. Listing more pools — and leaving\n`dataCenterIds` unset — gives the scheduler more room and reduces the\nchance of workers failing to start when a single pool is exhausted.\n\nIf your workload needs a specific card, pick the pool that holds it and\nexclude the rest of that pool with `gpu.excludedTypes`. Keep at least\none type in the selection — upstream rejects a selection that leaves\nnone.\n",
+        "description": "Creates a serverless endpoint. Callers specify exactly one of `gpu` or\n`cpu`; neither or both returns 400. Container settings come from the\nbody, from a serverless template referenced by `templateId` (body\nfields override the template's), or both; `image` is required unless\n`templateId` is set. See `CreateEndpointRequest` for the full body.\n\nThe CUDA constraints live on `gpu` — `gpu.allowedCudaVersions` and\n`gpu.minCudaVersion` — so a CPU create cannot express them and the\nschema rejects the attempt with a 422. A non-empty set and a floor are\nmutually exclusive (400 if both are sent); an explicit empty set states\nno constraint and may accompany a floor.\n\nReturns `201` with the created endpoint. The endpoint can accept jobs\nimmediately, but starts with no active workers unless `workers.min`\nis greater than 0. Workers are provisioned on demand and autoscaled\nbetween `workers.min` and `workers.max` according to the `scaling`\npolicy, so the first request to an idle endpoint may incur cold-start\nlatency while a worker pulls its image and boots.\n\n## Checking what you can deploy\n\n`gpu.pools` takes serverless GPU **pool** IDs, not the GPU type IDs\nused for pods. `gpu.excludedTypes` takes the type IDs — it subtracts\nspecific cards from the pools you picked. Read both from the catalog\nbefore you create:\n\n- [List GPU types](https://docs.runpod.io/api-reference-v2/catalog/list-gpu-types)\n  — the `pool` field carries the pool ID for each GPU type (`null`\n  means that type is not in a serverless pool). Add\n  `include=AVAILABILITY&product=SERVERLESS` for current serverless\n  stock.\n- [List data centers](https://docs.runpod.io/api-reference-v2/catalog/list-data-centers)\n  — locations to constrain with `dataCenterIds`, with\n  `include=GPU_AVAILABILITY` for stock per data center.\n\nUnlike pod creation, you do not need to retry across GPUs yourself:\nlist every pool you are willing to run on and workers are placed on\nwhichever one has capacity. Listing more pools — and leaving\n`dataCenterIds` unset — gives the scheduler more room and reduces the\nchance of workers failing to start when a single pool is exhausted.\n\nIf your workload needs a specific card, pick the pool that holds it and\nexclude the rest of that pool with `gpu.excludedTypes`. Keep at least\none type in the selection — upstream rejects a selection that leaves\nnone.\n",
         "tags": [
           "Serverless"
         ],
@@ -6344,7 +6425,9 @@
                         "pools": [
                           "ADA_24"
                         ],
-                        "count": 1
+                        "count": 1,
+                        "allowedCudaVersions": [],
+                        "minCudaVersion": null
                       },
                       "workers": {
                         "min": 0,
@@ -6363,7 +6446,6 @@
                       ],
                       "timeout": 300000,
                       "flashboot": "OFF",
-                      "allowedCudaVersions": [],
                       "createdAt": "2026-06-01T12:00:00Z"
                     }
                   },
@@ -6414,7 +6496,6 @@
                       "networkVolumes": [],
                       "timeout": 300000,
                       "flashboot": "OFF",
-                      "allowedCudaVersions": [],
                       "createdAt": "2026-06-01T12:00:00Z"
                     }
                   }
@@ -6522,7 +6603,9 @@
                         "pools": [
                           "ADA_24"
                         ],
-                        "count": 1
+                        "count": 1,
+                        "allowedCudaVersions": [],
+                        "minCudaVersion": null
                       },
                       "workers": {
                         "min": 0,
@@ -6541,7 +6624,6 @@
                       ],
                       "timeout": 300000,
                       "flashboot": "OFF",
-                      "allowedCudaVersions": [],
                       "createdAt": "2026-06-01T12:00:00Z"
                     }
                   }
@@ -6661,7 +6743,9 @@
                         "pools": [
                           "ADA_24"
                         ],
-                        "count": 1
+                        "count": 1,
+                        "allowedCudaVersions": [],
+                        "minCudaVersion": null
                       },
                       "workers": {
                         "min": 1,
@@ -6680,7 +6764,6 @@
                       ],
                       "timeout": 300000,
                       "flashboot": "OFF",
-                      "allowedCudaVersions": [],
                       "createdAt": "2026-06-01T12:00:00Z"
                     }
                   }
