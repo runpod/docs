@@ -57,6 +57,74 @@ Include template information in the output.
 Include workers information in the output.
 </ResponseField>
 
+### Read worker logs
+
+Read a Serverless endpoint's worker logs. Logs belong to a worker, not to the endpoint.
+
+Without `--worker`, the command resolves every worker backing the endpoint and reads them concurrently, tagging each line with its `workerId`. The record shape is `{source, line, ts, workerId}`.
+
+The worker set is resolved once when the command starts, so you need to re-run the command to pick up a worker that appears later. Under `--follow`, newly discovered workers are attached automatically.
+
+The `source` values (`container` and `system`) and the JSON Lines pipeable output are the same as for [`runpodctl pod logs`](/runpodctl/reference/runpodctl-pod).
+
+```bash
+# Read logs across all workers backing an endpoint
+runpodctl serverless logs <endpoint-id>
+
+# Follow a single worker (works even for a crash-looping worker)
+runpodctl serverless logs <endpoint-id> --worker <worker-id> --follow
+
+# Read system logs from the last 30 minutes
+runpodctl serverless logs <endpoint-id> --since 30m --source system
+```
+
+```json
+{"source":"container","line":"Handler ready","ts":"2026-08-18T12:00:02Z","workerId":"abc456"}
+{"source":"container","line":"Job complete","ts":"2026-08-18T12:00:05Z","workerId":"xyz789"}
+```
+
+#### Read flags
+
+<ResponseField name="--worker" type="string">
+Read a single worker instead of all workers backing the endpoint. This works even for a worker ID the endpoint listing no longer reports, which is useful for a crash-looping worker because it keeps its ID across restarts.
+</ResponseField>
+
+<ResponseField name="--tail" type="int" default="100">
+Number of historical lines to replay before live output. The range is 0 to 5000, and `0` streams live output only. This limit applies per source per worker, so `--tail 5` on a worker writing both kinds returns up to 5 container lines and up to 5 system lines, not 5 in total.
+</ResponseField>
+
+<ResponseField name="--since" type="string">
+Return only logs after this point. Accepts a duration such as `30m`, `2h`, or `7d`, or an RFC3339 timestamp. Overrides `--tail`.
+</ResponseField>
+
+<ResponseField name="--source" type="string" default="both">
+Which log source to read: `container`, `system`, or `both`.
+</ResponseField>
+
+<ResponseField name="--follow, -f" type="bool" default="false">
+Keep streaming new lines until you interrupt the command (Ctrl-C). The stream reconnects automatically and resumes without duplicating or skipping lines.
+</ResponseField>
+
+<ResponseField name="--max-wait" type="duration" default="5s">
+When not following, how long to wait for output before exiting. The command exits earlier once the replayed lines stop arriving. Ignored when `--follow` is set.
+</ResponseField>
+
+<ResponseField name="--output, -o" type="string" default="json">
+Output format, `json` or `yaml`. With `yaml`, records are separated by `---`.
+</ResponseField>
+
+<Note>
+The API sends nothing until it has a line to send. So a filter that matches no logs — for example, a `--since` time after the last log line, or a `--source` that produced no output — makes the command time out instead of exiting silently, and the timeout message names both possible causes.
+</Note>
+
+<Note>
+An endpoint with no workers currently running returns an error directing you to check endpoint health with `runpodctl serverless health <endpoint-id>`.
+</Note>
+
+<Note>
+Without `--worker`, the command reads at most 32 workers at once. If the endpoint has more, it reads the first 32 and prints a note on stderr suggesting you pass `--worker <worker-id>` to target one.
+</Note>
+
 ### Create an endpoint
 
 Create a new Serverless endpoint from a template or from a Hub repo:

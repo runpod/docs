@@ -78,6 +78,62 @@ Get detailed information about a specific Pod, including SSH connection info:
 runpodctl pod get <pod-id>
 ```
 
+### Read Pod logs
+
+Read a Pod's container and system logs.
+
+Output is JSON Lines: one JSON object per line, shaped `{source, line, ts}`, so it pipes cleanly into `jq` or is read by an agent. The `source` field is either `container` (your workload's stdout/stderr) or `system` (platform lifecycle events such as image pull and container create, start, and stop).
+
+Logs outlive the workload: a stopped Pod still returns its full history, including the container-stop lines, so you can debug a Pod after it has stopped.
+
+```bash
+# Read a Pod's recent logs
+runpodctl pod logs abc123
+
+# Stream only new lines as they arrive (no history)
+runpodctl pod logs abc123 --tail 0 --follow
+
+# Read system logs from the last 30 minutes
+runpodctl pod logs abc123 --since 30m --source system
+```
+
+```json
+{"source":"system","line":"Container started","ts":"2026-08-18T12:00:00Z"}
+{"source":"container","line":"Model loaded","ts":"2026-08-18T12:00:01Z"}
+```
+
+Only the JSON Lines log records go to stdout; reconnection notices and errors go to stderr, so stdout stays clean for piping.
+
+#### Read flags
+
+<ResponseField name="--tail" type="int" default="100">
+Number of historical lines to replay before live output. The range is 0 to 5000, and `0` streams live output only. This limit applies per source, so `--tail 5` on a Pod writing both kinds returns up to 5 container lines and up to 5 system lines, not 5 in total.
+</ResponseField>
+
+<ResponseField name="--since" type="string">
+Return only logs after this point. Accepts a duration such as `30m`, `2h`, or `7d`, or an RFC3339 timestamp. Overrides `--tail`.
+</ResponseField>
+
+<ResponseField name="--source" type="string" default="both">
+Which log source to read: `container`, `system`, or `both`.
+</ResponseField>
+
+<ResponseField name="--follow, -f" type="bool" default="false">
+Keep streaming new lines until you interrupt the command (Ctrl-C). The stream reconnects automatically and resumes without duplicating or skipping lines.
+</ResponseField>
+
+<ResponseField name="--max-wait" type="duration" default="5s">
+When not following, how long to wait for output before exiting. The command exits earlier once the replayed lines stop arriving. Ignored when `--follow` is set.
+</ResponseField>
+
+<ResponseField name="--output, -o" type="string" default="json">
+Output format, `json` or `yaml`. With `yaml`, records are separated by `---`.
+</ResponseField>
+
+<Note>
+The API sends nothing until it has a line to send. So a filter that matches no logs — for example, a `--since` time after the last log line, or a `--source` that produced no output — makes the command time out instead of exiting silently, and the timeout message names both possible causes.
+</Note>
+
 ### Create a Pod
 
 Create a new Pod from a template:
