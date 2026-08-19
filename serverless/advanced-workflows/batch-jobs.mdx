@@ -24,16 +24,13 @@ Choose batch when your workload can tolerate multi-hour latency — for example,
 A batch moves through the following states:
 
 ```
-DRAFT → FINALIZED → RUNNING → COMPLETED
-                            → FAILED
-                            → CANCELLED
+DRAFT → FINALIZED → FAILED
+                  → CANCELLED
 ```
 
 - **DRAFT** — The batch is a draft. You can add, update, or remove individual requests. Batch workers have not started any work.
-- **FINALIZED** — The batch is locked. No further requests can be added or removed. The batch is now eligible for execution and will be picked up by batch workers.
-- **RUNNING** — At least one request in the batch is being processed by a worker.
-- **COMPLETED** — All requests have reached a terminal state (completed or failed).
-- **FAILED** — The batch itself failed before or during execution (distinct from individual request failures within an otherwise-completed batch).
+- **FINALIZED** — The batch is locked; no further requests can be added or removed. Batch workers process the requests while the batch stays in this state, and there is no separate `RUNNING` or `COMPLETED` batch status. Track progress through the `requestTotal`, `requestInProgress`, `requestCompleted`, and `requestFailed` counts — all requests have finished when `requestCompleted + requestFailed` equals `requestTotal`.
+- **FAILED** — The batch itself failed before or during execution (distinct from individual request failures in a batch whose other requests finished successfully).
 - **CANCELLED** — You cancelled the batch. See [Cancellation](#cancellation) for details.
 
 You must call `/finalize` before the batch begins processing. A DRAFT batch will not be executed.
@@ -113,19 +110,17 @@ Authorization: Bearer {api_key}
 ```json
 {
   "id": "batch_01j9abc123",
-  "status": "RUNNING",
-  "itemCount": 1000,
-  "queuedCount": 742,
-  "inProgressCount": 8,
-  "completedCount": 244,
-  "failedCount": 6,
-  "progress": 0.25,
-  "createdAt": "2026-07-09T08:00:00Z",
-  "finalizedAt": "2026-07-09T08:01:00Z"
+  "endpointId": "abc123xyz",
+  "status": "FINALIZED",
+  "requestTotal": 1000,
+  "requestInProgress": 8,
+  "requestCompleted": 244,
+  "requestFailed": 6,
+  "createdAt": 1783584000000
 }
 ```
 
-Poll this endpoint at whatever interval suits your workflow. When `status` is `COMPLETED`, `FAILED`, or `CANCELLED`, the batch has reached a terminal state.
+Poll this endpoint at whatever interval suits your workflow. A batch that is still processing reports `status: FINALIZED`; there is no `RUNNING` or `COMPLETED` status. All requests have finished when `requestCompleted + requestFailed` equals `requestTotal`. The batch reaches a terminal state only when `status` is `FAILED` or `CANCELLED`. The `createdAt` field is a Unix epoch timestamp in milliseconds.
 
 ### 5. Retrieve results
 
@@ -175,7 +170,7 @@ The results are paginated. Pass the `offset` and `limit` query parameters to pag
 | `PUT` | `/v2/{endpoint_id}/batch/{id}` | Update batch attributes (e.g. display name) |
 | `DELETE` | `/v2/{endpoint_id}/batch/{id}/requests/{requestId}` | Remove a single request from a DRAFT batch |
 | `GET` | `/v2/{endpoint_id}/batch` | List all batches for an endpoint, newest first |
-| `GET` | `/v2/{endpoint_id}/batch/{id}` | Batch summary with counts and progress |
+| `GET` | `/v2/{endpoint_id}/batch/{id}` | Batch summary with request counts |
 | `POST` | `/v2/{endpoint_id}/batch/{id}/cancel` | Cancel a batch |
 | `GET` | `/v2/{endpoint_id}/batch/{id}/requests` | Paginated child request list |
 
@@ -195,7 +190,7 @@ The child request list is sorted by failures first, then in-progress, then queue
 
 ## Notifications
 
-When a batch reaches a terminal state (COMPLETED, FAILED, or CANCELLED), Runpod sends:
+When a batch reaches a terminal state (`FAILED` or `CANCELLED`), Runpod sends:
 
 - **Console Inbox notification** — includes batch ID, endpoint name, terminal status, and item counts (completed / failed / total)
 - **Webhook event** — if your account has a webhook subscription configured for batch events
@@ -234,7 +229,7 @@ Batch jobs are billed at the same rate as standard serverless requests on your e
 
 ## Error handling
 
-**Individual request failures** — A failed child request does not fail the entire batch. The batch continues processing remaining requests and reaches COMPLETED status. Inspect failed requests via the console or the `GET .../requests` endpoint; each failed request includes an error message from the handler.
+**Individual request failures** — A failed child request does not fail the entire batch. The batch stays `FINALIZED` and continues processing the remaining requests; overall completion is inferred from the request counts (all requests are done when `requestCompleted + requestFailed` equals `requestTotal`). Inspect failed requests via the console or the `GET .../requests` endpoint; each failed request includes an error message from the handler.
 
 **Batch-level failure** — If the batch itself fails (status `FAILED`), it indicates a systemic problem rather than individual handler errors. Contact support if you see this state and cannot explain it from request-level errors.
 
