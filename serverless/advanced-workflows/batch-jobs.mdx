@@ -21,19 +21,19 @@ Choose batch when your workload can tolerate multi-hour latency — for example,
 A batch moves through the following states:
 
 ```
-OPEN → FINALIZED → RUNNING → COMPLETED
-                           → FAILED
-                           → CANCELLED
+DRAFT → FINALIZED → RUNNING → COMPLETED
+                            → FAILED
+                            → CANCELLED
 ```
 
-- **OPEN** — The batch is a draft. You can add, update, or remove individual requests. Batch workers have not started any work.
+- **DRAFT** — The batch is a draft. You can add, update, or remove individual requests. Batch workers have not started any work.
 - **FINALIZED** — The batch is locked. No further requests can be added or removed. The batch is now eligible for execution and will be picked up by batch workers.
 - **RUNNING** — At least one request in the batch is being processed by a worker.
 - **COMPLETED** — All requests have reached a terminal state (completed or failed).
 - **FAILED** — The batch itself failed before or during execution (distinct from individual request failures within an otherwise-completed batch).
 - **CANCELLED** — You cancelled the batch. See [Cancellation](#cancellation) for details.
 
-You must call `/finalize` before the batch begins processing. An OPEN batch will not be executed.
+You must call `/finalize` before the batch begins processing. A DRAFT batch will not be executed.
 
 ## API walkthrough
 
@@ -45,16 +45,13 @@ Authorization: Bearer {api_key}
 Content-Type: application/json
 ```
 
-You can create an empty batch and add requests later, or include an initial list of requests in the same call. Each request in the `requests` array uses the same shape as a standard `/run` call — a JSON object with an `input` field.
+The request body is a top-level JSON array. Send an empty array `[]` to create a batch and add requests later, or send a populated array to include an initial list of requests. Each element uses the same shape as a standard `/run` call — a JSON object with an `input` field.
 
 ```json
-{
-  "name": "nightly-embeddings-2026-07-09",
-  "requests": [
-    { "input": { "text": "The quick brown fox" } },
-    { "input": { "text": "Jumped over the lazy dog" } }
-  ]
-}
+[
+  { "input": { "text": "The quick brown fox" } },
+  { "input": { "text": "Jumped over the lazy dog" } }
+]
 ```
 
 **Response:**
@@ -62,17 +59,13 @@ You can create an empty batch and add requests later, or include an initial list
 ```json
 {
   "id": "batch_01j9abc123",
-  "status": "OPEN",
-  "name": "nightly-embeddings-2026-07-09",
-  "endpointId": "abc123xyz",
-  "itemCount": 2,
-  "createdAt": "2026-07-09T08:00:00Z"
+  "status": "DRAFT"
 }
 ```
 
 ### 2. Add more requests
 
-While the batch is OPEN, append additional requests:
+While the batch is DRAFT, append additional requests:
 
 ```bash
 POST /v2/{endpoint_id}/batch/{batch_id}/requests
@@ -89,8 +82,8 @@ Content-Type: application/json
   ]
 }
 ```
-Each call accepts up to 100 requests in a single array. You can call this 
-endpoint multiple times to build up large batches incrementally.
+
+Request body size is limited to 10 MiB per call. You can call this endpoint multiple times to build up large batches incrementally.
 
 ### 3. Finalize the batch
 
@@ -118,7 +111,6 @@ Authorization: Bearer {api_key}
 {
   "id": "batch_01j9abc123",
   "status": "RUNNING",
-  "name": "nightly-embeddings-2026-07-09",
   "itemCount": 1000,
   "queuedCount": 742,
   "inProgressCount": 8,
@@ -161,21 +153,24 @@ Authorization: Bearer {api_key}
       "completedAt": "2026-07-09T09:15:10Z"
     }
   ],
-  "nextCursor": "cursor_xyz"
+  "total": 1000,
+  "offset": 0,
+  "limit": 50,
+  "hasMore": true
 }
 ```
 
-The results are paginated. Pass `nextCursor` as a query parameter to retrieve the next page.
+The results are paginated. Pass the `offset` and `limit` query parameters to page through results. The `hasMore` field indicates whether more pages remain.
 
 ## Full API reference
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/v2/{endpoint_id}/batch` | Create a new batch, optionally with initial requests |
-| `POST` | `/v2/{endpoint_id}/batch/{id}/requests` | Append requests to an OPEN batch |
+| `POST` | `/v2/{endpoint_id}/batch/{id}/requests` | Append requests to a DRAFT batch |
 | `POST` | `/v2/{endpoint_id}/batch/{id}/finalize` | Lock the batch and make it eligible for execution |
 | `PUT` | `/v2/{endpoint_id}/batch/{id}` | Update batch attributes (e.g. display name) |
-| `DELETE` | `/v2/{endpoint_id}/batch/{id}/requests/{requestId}` | Remove a single request from an OPEN batch |
+| `DELETE` | `/v2/{endpoint_id}/batch/{id}/requests/{requestId}` | Remove a single request from a DRAFT batch |
 | `GET` | `/v2/{endpoint_id}/batch` | List all batches for an endpoint, newest first |
 | `GET` | `/v2/{endpoint_id}/batch/{id}` | Batch summary with counts and progress |
 | `POST` | `/v2/{endpoint_id}/batch/{id}/cancel` | Cancel a batch |
@@ -224,10 +219,11 @@ The batch status transitions to `CANCELLED` once all in-progress work has draine
 
 | Limit | Value |
 |-------|-------|
-| Queued items per endpoint | 50,000 |
-| Open (draft) batches per user | 100 |
+| Active batches per endpoint | 10 |
+| Requests per batch | 5,000 |
+| Queued requests per endpoint | 50,000 |
 
-If you need to exceed these limits, [contact support](https://www.runpod.io/contact).
+Limits are configurable for enterprise accounts. Contact sales for custom limits.
 
 ## Billing
 
