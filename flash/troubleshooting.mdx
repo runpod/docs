@@ -1,7 +1,7 @@
 ---
 title: "Troubleshooting"
 sidebarTitle: "Troubleshooting"
-description: "Monitor, debug, and troubleshoot Flash deployments."
+description: "Monitor, debug, and troubleshoot Flash deployments. Review setup, configuration, deployment, and usage guidance for Runpod Flash."
 ---
 
 This guide covers how to monitor your Flash deployments, debug issues, and resolve common errors.
@@ -32,7 +32,7 @@ Available levels: `DEBUG`, `INFO`, `WARNING`, `ERROR`.
 
 ### Runpod console
 
-View detailed metrics and logs in the [Runpod console](https://www.runpod.io/console/serverless):
+View detailed metrics and logs in the [Runpod console](https://console.runpod.io/serverless):
 
 1. Navigate to the **Serverless** section.
 2. Click on your endpoint to view:
@@ -46,7 +46,7 @@ The console provides metrics including request rate, queue depth, latency, worke
 
 Access detailed logs for specific workers:
 
-1. Go to the [Serverless console](https://www.runpod.io/console/serverless).
+1. Go to the [Serverless console](https://console.runpod.io/serverless).
 2. Select your endpoint.
 3. Click on a worker to view its logs.
 
@@ -73,7 +73,7 @@ async def process(data: dict) -> dict:
 
 **Error:**
 ```
-No RunPod API key found. Set one with:
+No Runpod API key found. Set one with:
 
   flash login                              # interactive setup
                  or
@@ -88,7 +88,7 @@ Get a key: https://docs.runpod.io/get-started/api-keys
 
 **Solution:**
 
-1. Generate an API key from [Settings > API Keys](https://www.runpod.io/console/user/settings) in the Runpod console. The key needs **All** access permissions.
+1. Generate an API key from [Settings > API Keys](https://console.runpod.io/user/settings) in the Runpod console. The key needs **All** access permissions.
 
 2. Authenticate using one of these methods:
 
@@ -244,6 +244,36 @@ You have three options:
 Python 3.12 is recommended for best performance with no cold-start overhead. Python 3.10, 3.11, and 3.13 incur additional cold-start overhead on GPU workers because an alternative Python interpreter must be installed.
 </Tip>
 
+### Local module could not be resolved
+
+**Error:**
+```
+endpoint.py: relative import (level=1, module='helpers') could not be resolved to a local file under /path/to/project
+```
+
+Or, for an ignore-excluded import:
+
+```
+Shipped code imports local modules that the build ignore rules (.gitignore or built-in defaults) exclude:
+  utils/helpers.py (imported by endpoint.py)
+
+Shipping them would silently override a deliberate exclusion, and omitting them would break the worker with ModuleNotFoundError. Remove the matching ignore pattern or stop importing these modules from shipped code.
+```
+
+**Cause:** This `LocalModuleResolutionError` has two variants: an `@Endpoint` file imports a local module that Flash can't resolve, or shipped code imports a local module that an ignore pattern excludes.
+
+**Solution:**
+
+For an unresolvable import:
+
+1. Fix the import so it points to a file that exists under your project root.
+2. Move the imported module under the project directory if it lives outside it.
+3. Confirm that package imports have an `__init__.py` file.
+
+For an ignore-excluded import, remove the matching ignore pattern, or stop importing that module from your shipped code.
+
+For how Flash resolves and bundles local imports, see [Import local modules](/flash/create-endpoints#import-local-modules).
+
 ## Deployment errors
 
 ### Tarball too large
@@ -343,7 +373,7 @@ Endpoint URL not available - endpoint may not be deployed
 
 2. **For Flash apps**: Deploy the app first with `flash deploy`, then call the endpoint.
 
-3. **Check endpoint status**: View your endpoints in the [Serverless console](https://www.runpod.io/console/serverless).
+3. **Check endpoint status**: View your endpoints in the [Serverless console](https://console.runpod.io/serverless).
 
 ### Execution timeout
 
@@ -382,7 +412,7 @@ Failed to connect to endpoint [name] ([url])
 
 1. **Check internet connection**: Verify you have network access.
 2. **Retry**: Transient network issues often resolve on retry. Flash includes automatic retry logic.
-3. **Check endpoint status**: Verify the endpoint is running in the [Serverless console](https://www.runpod.io/console/serverless).
+3. **Check endpoint status**: Verify the endpoint is running in the [Serverless console](https://console.runpod.io/serverless).
 
 ### HTTP errors from endpoint
 
@@ -395,7 +425,7 @@ HTTP error from endpoint [name]: 500 - Internal Server Error
 
 **Solutions:**
 
-1. **Check logs**: View worker logs in the [Serverless console](https://www.runpod.io/console/serverless) for detailed error messages.
+1. **Check logs**: View worker logs in the [Serverless console](https://console.runpod.io/serverless) for detailed error messages.
 
 2. **Test locally**: Use `flash dev` to test your function locally before deploying.
 
@@ -464,6 +494,27 @@ Payload size X MB exceeds limit of 10.0 MB
 
 3. **Split large requests**: Break large datasets into smaller chunks and process them in multiple requests.
 
+### Local module payload too large
+
+**Error:**
+```
+Inline module payload is X bytes, over the 8388608-byte live-serverless cap.
+Use `flash deploy` for endpoints with large local dependencies.
+```
+
+**Cause:** On the live execution path (calling an `@Endpoint` function directly or during `flash dev`), Flash ships your local module source inline with the request, and the combined source exceeds the 8 MiB cap.
+
+**Solution:** Deploy the app with `flash deploy`, which bundles local modules into the build artifact instead of the request payload:
+
+```bash
+flash deploy
+
+# If using uv:
+uv run flash deploy
+```
+
+See [Live execution size limit](/flash/create-endpoints#live-execution-size-limit) for details on how local module source is shipped.
+
 ### Deserialization timeout
 
 **Error:**
@@ -519,7 +570,7 @@ Circuit breaker is open. Retry in [N] seconds
    gpu=GpuGroup.ANY
    ```
 
-3. **Check availability**: View GPU availability in the [Serverless console](https://www.runpod.io/console/serverless).
+3. **Check availability**: View GPU availability in the [Serverless console](https://console.runpod.io/serverless).
 
 4. **Contact support**: For guaranteed capacity, contact [Runpod support](https://www.runpod.io/contact).
 
@@ -571,6 +622,6 @@ async def process(data: dict) -> dict:
 
 If you're still stuck:
 
-1. **Discord**: Join the [Runpod Discord](https://discord.gg/cUpRmau42V) for community support.
+1. **Discord**: Join the [Runpod Discord](https://discord.com/invite/cUpRmau42V) for community support.
 2. **GitHub Issues**: Report bugs or request features on the [Flash repository](https://github.com/runpod/flash).
 3. **Support**: Contact [Runpod support](https://www.runpod.io/contact) for account-specific issues.
