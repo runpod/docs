@@ -4,7 +4,7 @@ This website is built using [Mintlify](https://mintlify.com/).
 
 ## Publishing Changes
 
-Create a pull request to make document changes, and request a review from [@muhsinking](https://github.com/muhsinking). Changes will be deployed to production automatically after they are pushed to the `main` branch.
+Create a pull request to make document changes, and request a review from [@lavanya-gunreddi](https://github.com/lavanya-gunreddi). Changes will be deployed to production automatically after they are pushed to the `main` branch.
 
 ## Running the docs locally
 
