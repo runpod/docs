@@ -166,13 +166,28 @@ if health_check_with_retry("https://ENDPOINT_ID.api.runpod.ai", "RUNPOD_API_KEY"
 
 Use at least 3 retries with 5-10 second delays.
 
+## When to use queue-based endpoints
+
+Use queue-based endpoints when you need:
+
+- **Job-based or long-running workloads** — queue-based is the right choice for jobs that run for extended periods. Load balancing is not suited for long-running tasks and would time out or drop the request.
+- **Guaranteed execution** — every request is queued and processed, even during traffic spikes. No requests are dropped when workers are busy.
+- **Batch or offline workloads** — processing large volumes of requests asynchronously where latency is not critical, such as nightly dataset processing, pre-computing embeddings, or running evaluations.
+- **Automatic retries** — failed requests are automatically retried without any client-side logic.
+- **Low-concurrency workloads** — tasks that run one at a time per worker and don't need multiple simultaneous connections.
+
+Choose queue-based when your workload can tolerate higher latency in exchange for reliability and guaranteed delivery. If your use case is a short, real-time request/response transaction, use a load balancing endpoint instead.
+
+## When to use load balancing endpoints
 
 ## When to use load balancing endpoints
 
 Use load balancing endpoints when you need:
 
-- Direct access to your model's HTTP server.
-- Internal batching systems (like vLLM).
-- Non-JSON payloads.
-- Multiple endpoints within a single worker.
-- Lower latency for real-time applications.
+- **Direct server access** — route requests straight to your model's HTTP server without queueing overhead.
+- **Internal batching systems** — frameworks like vLLM manage their own request batching internally and work best with direct access.
+- **Non-JSON payloads** — send binary data, multipart uploads, or any payload format your HTTP server supports.
+- **Multiple endpoints within a single worker** — expose custom URL paths and API contracts using any HTTP framework.
+- **Low-latency real-time applications** — short, quick request/response transactions where the output is ephemeral, such as serving a file download or returning page stats.
+
+Choose load balancing when your workload is latency-sensitive and responses are immediate. If your use case involves long-running jobs or requires guaranteed delivery, use a queue-based endpoint instead.
