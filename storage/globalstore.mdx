@@ -1,142 +1,66 @@
 ---
-title: "GlobalStore"
-sidebarTitle: "GlobalStore"
-description: "Mount your own S3-compatible bucket directly into Runpod pods."
-tag: "BETA"
+title: "Global volumes"
+sidebarTitle: "Global volumes"
+description: "Store data once and access it from Pods across all Runpod data centers."
+tag: "Beta"
 ---
 
 <Note>
-GlobalStore is currently in early access. [Contact support](https://www.runpod.io/contact) to enable it for your account.
+Global volumes are in beta. Features and behavior may change before general availability.
 </Note>
 
-GlobalStore lets you attach your own S3-compatible object storage bucket to Runpod pods. Files in your bucket are accessible inside the container as a mounted directory, without needing to bake them into a Docker image or copy them at startup.
+A global volume is elastic, region-independent storage you can attach to any Pod. Unlike a network volume, a global volume is not tied to a specific data center. You create it once and any Pod, anywhere, can mount it at startup.
 
-GlobalStore is designed for **read-heavy, object-backed workloads** — primarily model serving and inference. It is not a replacement for [Network Volumes](/storage/network-volumes) or high-performance distributed file storage.
+Global volumes are designed for read-heavy workloads such as model serving and inference. They are not a replacement for network volumes or high-throughput distributed file storage.
 
----
+## Create a global volume
 
-## How it works
+1. In the left nav, go to **Storage**.
+2. Click **+ New storage**.
+3. Under **Storage type**, select **Global volume**.
+4. Enter a **Name** for the volume.
+5. Click **Create global volume**.
 
-GlobalStore uses two resources that work together:
+The volume appears in your Storage list with a **Global** badge. Storage grows automatically as you add data. There is no capacity to provision upfront.
 
-**ObjectStore** is a registered S3-compatible bucket. You provide Runpod with your bucket credentials once, and Runpod stores them securely. Your credentials are never logged or returned on user-facing API channels.
+## Attach a global volume to a Pod
 
-**ObjectMount** is a configuration that attaches an ObjectStore to a specific pod at a specific path. When you create a pod with an ObjectMount, Runpod mounts the bucket (or a prefix within it) at the path you specify. Files appear in the container as a local directory.
+You can attach a global volume when deploying a new Pod.
 
-A single pod can have multiple ObjectMounts, as long as each mount uses a unique path.
+**From the volume detail page:** Go to **Storage**, click your global volume, then click **Configure Pod with volume**. This opens the Pod deployment page with the volume pre-selected.
 
----
+**During Pod deployment:**
 
-## Quickstart
+1. Go to **Pods** and click **+ Deploy**.
+2. Select a template and GPU.
+3. Scroll to the **Storage** section.
+4. Under **Persistent storage**, set the type to **Storage volume**.
+5. Click the volume dropdown and select your volume from the **Global volumes** section.
+6. Click **Deploy Pod**.
 
-### Step 1: Register an ObjectStore
+The volume mounts at `/workspace` inside the container.
 
-You will need the following from your S3-compatible storage provider:
+## Access your files
 
-- **Endpoint URL** — the provider's S3-compatible API endpoint
-- **Bucket name** — the bucket to mount
-- **Access key** and **secret key** — credentials with read (and optionally write) access to the bucket
+Once the Pod is running, your files are available at `/workspace`. You can verify this from the Pod's **Console** tab:
 
-{/* [CONFIRM: Console path for registering an ObjectStore. Is it Storage > GlobalStore > Add ObjectStore, or a different location?] */}
-
-To register an ObjectStore in the Runpod console:
-
-1. Navigate to **Storage** in the left sidebar.
-2. Select **GlobalStore** and click **Add ObjectStore**.
-3. Enter a name for the ObjectStore, then fill in your endpoint URL, bucket name, access key, and secret key.
-4. Click **Save**. Runpod validates your credentials and stores the ObjectStore.
-
-Note the **ObjectStore ID** — you will need it when creating a pod.
-
-### Step 2: Create a pod with an ObjectMount
-
-When creating a pod, add one or more ObjectMounts to specify which bucket to mount and where to mount it inside the container.
-
-{/* [CONFIRM: UI flow for attaching an ObjectMount during pod creation. Does it appear as an "Add ObjectMount" section in the pod creation form?] */}
-
-1. Open the [Pods page](https://console.runpod.io/pods) and click **+ Deploy**.
-2. Configure your pod (GPU, image, disk).
-3. In the **Storage** section, click **Add ObjectMount**.
-4. Select your ObjectStore, enter a mount path (for example, `/mnt/models`), and optionally provide a prefix to mount only a subdirectory of the bucket.
-5. Toggle **Read-only** if the pod should not write to the bucket.
-6. Deploy the pod.
-
-### Step 3: Access your files
-
-Once the pod is running, your bucket contents are available at the mount path you configured. Mount status transitions from `pending` to `mounting` to `ready` — wait until the status is `ready` before your workload tries to read files.
-
-```python
-import os
-
-# If mounted at /mnt/models
-model_path = "/mnt/models/your-model.safetensors"
-print(os.path.exists(model_path))  # True once mount is ready
+```bash
+ls /workspace
 ```
-
----
-
-## Supported providers
-
-GlobalStore works with **Tigris** and **Cloudflare R2**. These providers are tested and supported.
-
-Other S3-compatible providers may work but are not tested and are not officially supported. If you use an unsupported provider and encounter issues, Runpod cannot guarantee compatibility.
-
-### Tigris
-
-[Tigris](https://www.tigrisdata.com/) is a globally distributed S3-compatible object store. It is the recommended provider for GlobalStore workloads because of its low-latency access patterns and compatibility with Runpod's infrastructure.
-
-To get your Tigris credentials:
-
-1. Create a bucket in the [Tigris console](https://console.tigrisdata.com/).
-2. Generate an access key with read (or read/write) permissions scoped to that bucket.
-3. Use `https://fly.storage.tigris.dev` as your endpoint URL.
-
-### Cloudflare R2
-
-[Cloudflare R2](https://www.cloudflare.com/developer-platform/products/r2/) is an S3-compatible object store with no egress fees. It is supported for GlobalStore workloads.
-
-To get your R2 credentials:
-
-1. Create a bucket in the [Cloudflare dashboard](https://dash.cloudflare.com/).
-2. Navigate to **R2 > Manage API tokens** and generate a token with **Object Read** (or **Object Read & Write**) permissions for the bucket.
-3. Use your account's S3 API endpoint as the endpoint URL: `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`
-
----
 
 ## Recommended workloads
 
-GlobalStore is well-suited for workloads that primarily read large files from object storage and do not require POSIX file system semantics or high-throughput concurrent writes.
+Global volumes work best for workloads that primarily read large files and do not require high-throughput concurrent writes.
 
-**Model serving and inference** — load model weights, tokenizer files, and configuration from a central bucket at pod startup. This avoids baking large files into your Docker image and lets you update model files without rebuilding the image.
-
-**Inference artifact reads** — serve LoRA adapters, prompt templates, embedding indices, or other read-heavy assets that are shared across multiple pods.
-
-**Configuration and script distribution** — mount read-only configuration files, shell scripts, or small datasets that need to be consistent across a fleet of pods.
-
----
+- **Model serving and inference**: Load model weights, tokenizer files, and configuration from a shared volume at Pod startup, without baking large files into your Docker image.
+- **Shared assets across Pods**: Serve LoRA adapters, embedding indices, or prompt templates that multiple Pods need to read from a central location.
+- **Read-only configuration**: Distribute scripts, config files, or small datasets consistently across a fleet of Pods.
 
 ## Limitations
 
-GlobalStore is an object-backed mount, not a POSIX file system. It is not a replacement for [Network Volumes](/storage/network-volumes) or high-performance distributed file storage (such as VAST or MFS). Before using GlobalStore, review the following limitations.
+Global volumes use object-backed storage, not a POSIX file system. Review the following before using global volumes in production.
 
-**Not suitable for high-throughput training writes.** Writing large volumes of data (checkpoints, logs, activations) to an object-backed mount during training is not supported. Use a Network Volume for training workloads that write frequently.
-
-**No POSIX semantics.** GlobalStore does not support file locking, atomic rename, hard links, or other POSIX operations. Applications that depend on POSIX behavior may fail or produce unexpected results.
-
-**No active-active writes.** Multiple pods writing to the same bucket prefix concurrently can cause data corruption or overwrite conflicts. If you need shared mutable storage across pods, use a Network Volume.
-
-**Object storage consistency model.** Reads reflect the state of the bucket at mount time. If you update files in the bucket after the pod starts, those updates may not be immediately visible inside the container.
-
-**Mount readiness.** The mount transitions through `pending → mounting → ready` states at pod startup. Do not attempt to read files until the mount status is `ready`.
-
----
-
-## Security
-
-Your ObjectStore credentials (access key and secret key) are stored encrypted and are only transmitted to the machine running your pod via a secure host-only channel. Credentials are never returned on user-facing API responses and are never logged.
-
-Runpod recommends scoping your credentials to the minimum required permissions:
-
-- Use **read-only** credentials whenever the pod does not need to write to the bucket.
-- Scope credentials to a single bucket rather than your entire storage account.
-- Rotate credentials periodically and update your ObjectStore configuration accordingly.
+- **Not suitable for training writes:** Writing large volumes of data such as checkpoints, logs, and activations to a global volume during training is not supported. Use a network volume for workloads that write frequently.
+- **No POSIX semantics:** Global volumes do not support file locking, atomic rename, or hard links. Applications that depend on POSIX behavior may fail or produce unexpected results.
+- **No concurrent writes across Pods:** Multiple Pods writing to the same global volume concurrently can cause data corruption or overwrite conflicts. Use a network volume for shared mutable storage.
+- **Object consistency:** Reads reflect the state of the volume at mount time. Updates made to the volume after the Pod starts may not be immediately visible inside the container.
