@@ -71,7 +71,11 @@ result = await ep.post("/inference", {"data": "..."})
 **Type**: `GpuGroup`, `GpuType`, or `list[GpuGroup | GpuType]`
 **Default**: `GpuGroup.ANY` (if neither `gpu` nor `cpu` is specified)
 
-Specifies GPU hardware for the endpoint. Accepts a single GPU type/group or a list for fallback strategies.
+Specifies GPU hardware for the endpoint. Accepts a single GPU pool/type or a list of pools and types:
+
+- A single `GpuType` requests that exact GPU model. This is the only form guaranteed to pin workers to a specific card.
+- A single `GpuGroup` requests any card in that pool.
+- A list requests any of the listed options. The SDK converts each `GpuType` in a list to its GPU pool, so list placement is advisory at the pool/VRAM-tier level: workers may run on a different card with equivalent VRAM rather than one of the exact models you listed, and list order is not preserved.
 
 ```python
 from runpod_flash import Endpoint, GpuType, GpuGroup
@@ -84,12 +88,16 @@ async def infer(data): ...
 @Endpoint(name="rtx-worker", gpu=GpuType.NVIDIA_GEFORCE_RTX_4090)
 async def process(data): ...
 
-# Multiple types for fallback
+# Multiple types: requests any card in the set
 @Endpoint(name="flexible", gpu=[GpuType.NVIDIA_A100_80GB_PCIe, GpuType.NVIDIA_RTX_A6000, GpuType.NVIDIA_GEFORCE_RTX_4090])
 async def flexible_infer(data): ...
 ```
 
-See [GPU types](/flash/configuration/gpu-types) for all available options.
+<Note>
+There is currently no API field that reports which GPU model a worker was actually placed on — the endpoint configuration reflects what you requested, not where workers ran. To verify placement, query the GPU from inside the worker (for example, with `nvidia-smi`).
+</Note>
+
+See [GPU types](/flash/configuration/gpu-types) for all available options, including [GPU selection behavior](/flash/configuration/gpu-types#gpu-selection-behavior).
 
 ### cpu
 
