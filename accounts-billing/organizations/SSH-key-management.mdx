@@ -1,0 +1,202 @@
+---
+title: "SSH key management"
+sidebarTitle: "SSH key management"
+description: "Centrally manage SSH public keys for your organization so members can securely connect to Pods."
+tag: "NEW"
+---
+
+Organization-level SSH key management lets org admins store and manage SSH public keys in one place. When a member launches a Pod, org-managed keys are automatically injected into it. No per-member SSH setup required.
+
+This is useful for teams that need consistent, auditable SSH access across all Pods, and makes it easy to revoke access org-wide when a member leaves.
+
+---
+
+## Roles and permissions
+
+SSH key management is controlled by org roles.
+
+{/* [CONFIRM: Exact role permissions for SSH key management. Which roles can add/delete org keys vs. which roles can only use them? Align with DOCS-481 role matrix before publishing.] */}
+
+| Action | Owner/Admin | Member | Billing | Read-only |
+|---|---|---|---|---|
+| Add an org SSH key | ✅ | ❌ | ❌ | ❌ |
+| Delete an org SSH key | ✅ | ❌ | ❌ | ❌ |
+| Rename/manage org keys | ✅ | ❌ | ❌ | ❌ |
+| Use org keys to connect to Pods | ✅ | ✅ | ❌ | ❌ |
+
+<Note>
+Members can still add personal SSH keys to their own account in addition to org-managed keys. See [Personal vs. org keys](#personal-vs-org-keys) for how these interact.
+</Note>
+
+---
+
+## Adding an SSH key
+
+### Step 1: Generate a key pair
+
+If you don't already have an SSH key pair, generate one on your local machine. Runpod only stores the **public key**. Never paste your private key anywhere.
+
+<Tabs>
+<Tab title="macOS / Linux">
+```bash
+ssh-keygen -t ed25519 -C "your-name@yourorg.com"
+```
+
+When prompted, accept the default file location (`~/.ssh/id_ed25519`) or specify a custom path. To view your public key:
+
+```bash
+cat ~/.ssh/id_ed25519.pub
+```
+</Tab>
+<Tab title="Windows (PowerShell)">
+```powershell
+ssh-keygen -t ed25519 -C "your-name@yourorg.com"
+```
+
+When prompted, accept the default file location. To view your public key:
+
+```powershell
+Get-Content "$env:USERPROFILE\.ssh\id_ed25519.pub"
+```
+
+If `ssh-keygen` is not available, install [OpenSSH for Windows](https://learn.microsoft.com/en-us/windows-server/administration/openssh/openssh_install_firstuse) or use [PuTTYgen](https://www.puttygen.com/).
+</Tab>
+</Tabs>
+
+Your public key will look like:
+
+```
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... your-name@yourorg.com
+```
+
+### Step 2: Add the public key to your org
+
+{/* [CONFIRM: Exact navigation path to SSH key management in org settings. E.g., Settings > Organization > SSH Keys? Please verify.] */}
+
+1. Open the [Runpod console](https://console.runpod.io) and navigate to **Settings → Organization → SSH Keys**.
+2. Click **Add SSH key**.
+3. Paste your public key into the field.
+4. Give the key a name (for example, `alice-macbook` or `ci-deploy-key`) so it's easy to identify later.
+5. Click **Save**.
+
+The key is now available to all Pods launched by members of your org.
+
+---
+
+## Managing keys
+
+To view, rename, or delete org SSH keys:
+
+{/* [CONFIRM: Exact UI path and available actions (rename, delete) for managing org SSH keys.] */}
+
+1. Navigate to **Settings → Organization → SSH Keys**.
+2. Find the key you want to manage.
+3. To rename it, click the key name and edit it inline.
+4. To delete it, click the three-dot menu next to the key and select **Delete**.
+
+<Warning>
+Deleting an org SSH key immediately revokes access for all org members using that key. Members connected to a running Pod via that key will be disconnected. New Pods will not have the key injected.
+</Warning>
+
+{/* [CONFIRM: Does deleting a key affect currently running pods immediately, or only new pods going forward? The above assumes immediate revocation — please verify.] */}
+
+---
+
+## Key scope and membership
+
+**New Pods** launched after a key is added automatically have all current org SSH keys injected at startup.
+
+**Existing running Pods** do not receive newly added keys unless they are restarted.
+
+{/* [CONFIRM: Confirm whether org keys are injected into existing running pods or only at pod creation time.] */}
+
+### Personal vs. org keys
+
+Members can maintain personal SSH keys in their individual account settings in addition to org keys. Both sets of keys are injected into Pods the member launches. Either key can be used to connect.
+
+If a member is removed from the org, their org key access is revoked, but their personal keys are unaffected.
+
+---
+
+## Connecting to a Pod
+
+Once an org SSH key is set up, any member whose private key matches an org public key can connect to a Pod.
+
+### Find the connection details
+
+1. Open the [Pods page](https://console.runpod.io/pods) and expand the Pod you want to connect to.
+2. Click **Connect** to view the SSH connection string.
+
+### Basic SSH
+
+```bash
+ssh root@<pod-ip> -p <port> -i ~/.ssh/id_ed25519
+```
+
+Replace `<pod-ip>` and `<port>` with the values shown in the console.
+
+### SSH over exposed TCP
+
+If the Pod exposes SSH over a TCP proxy (common for Secure Cloud Pods):
+
+```bash
+ssh root@<proxy-host> -p <proxy-port> -i ~/.ssh/id_ed25519
+```
+
+The proxy host and port are shown in the **Connect** dialog in the console.
+
+<Tip>
+To avoid specifying the identity file every time, add an entry to your `~/.ssh/config`:
+
+```
+Host runpod-mypod
+HostName <pod-ip>
+Port <port>
+User root
+IdentityFile ~/.ssh/id_ed25519
+```
+
+Then connect with: `ssh runpod-mypod`
+</Tip>
+
+---
+
+## Troubleshooting
+
+**Permission denied (publickey)**
+
+- Confirm that the private key on your machine matches a public key stored in org settings.
+- Verify the key was added before the Pod was launched. Org keys are only injected at Pod startup. Restart the Pod if you added the key after it was created.
+- Check that you're using the correct private key file with `-i ~/.ssh/id_ed25519`.
+
+**Connected to wrong Pod / unexpected behavior**
+
+- Double-check the IP and port from the console. These change each time a Pod is restarted.
+
+**Key not propagated to Pod**
+
+- Org SSH keys are injected at Pod creation time. If you added the key to org settings after the Pod launched, you must restart the Pod for the key to take effect.
+
+**Member cannot connect after joining the org**
+
+- The member needs to provide the private key for one of the org's public keys. Verify they have the corresponding private key for a key stored in org settings.
+
+**Access not revoked after removing a member**
+
+- Removing a member from the org revokes their org key access. However, if the member had a personal SSH key added to a Pod before joining the org, that key remains on the Pod. Audit Pod-level keys if you need to ensure full revocation.
+
+{/* [CONFIRM: How exactly does member removal interact with key injection? Is org access revoked from running pods immediately, or only for new pods?] */}
+
+---
+
+## Security notes
+
+**Only store public keys.** Never paste a private key into Runpod. Your private key should remain only on the machine you use to connect.
+
+**Use strong key types.** Ed25519 (`-t ed25519`) is recommended. RSA keys should be at least 4096 bits (`-t rsa -b 4096`). Avoid DSA and ECDSA with short curves.
+
+**Rotate keys regularly.** If a key may be compromised, delete it from org settings immediately and generate a new key pair. Affected members will need to add their new public key.
+
+**Offboarding members.** When a member leaves the org, remove their key from org settings to revoke SSH access. If they shared a key with others, replace it with a fresh key pair distributed only to current members.
+
+**Audit keys periodically.** Review your org's SSH keys in **Settings → Organization → SSH Keys** and remove any keys that are no longer in active use.
