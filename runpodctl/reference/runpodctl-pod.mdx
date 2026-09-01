@@ -99,6 +99,14 @@ Create a CPU-only Pod:
 runpodctl pod create --compute-type cpu --image ubuntu:22.04
 ```
 
+Block until the Pod's SSH is reachable, then print the same output as `pod get` (including the live `ssh` block):
+
+```bash
+runpodctl pod create --image "runpod/pytorch:1.0.3-cu1281-torch291-ubuntu2404" --gpu-id "NVIDIA GeForce RTX 4090" --wait
+```
+
+See [Wait for the Pod to be usable](#wait-for-the-pod-to-be-usable) for details on `--wait` and `--wait-timeout`.
+
 #### Create flags
 
 <ResponseField name="--template-id" type="string">
@@ -196,6 +204,31 @@ Automatically terminate the Pod after the specified duration (e.g., `1h`, `24h`,
 <ResponseField name="--compliance" type="string">
 Compliance settings for the Pod (e.g., regulatory requirements for data handling).
 </ResponseField>
+
+<ResponseField name="--wait" type="bool">
+Block until the Pod is actually usable, not just scheduled. See [Wait for the Pod to be usable](#wait-for-the-pod-to-be-usable).
+</ResponseField>
+
+<ResponseField name="--wait-timeout" type="string" default="10m">
+Maximum time to wait when `--wait` is set. Accepts values like `90s`, `10m`, `1h`, `2d`. On timeout the Pod is kept (it is billing) and the error carries its `id`.
+</ResponseField>
+
+#### Wait for the Pod to be usable
+
+By default, `pod create` returns as soon as the Pod is scheduled. Its container image may still be pulling and sshd may not be running yet. Pass `--wait` to block until the Pod is reachable over SSH before the command returns:
+
+```bash
+runpodctl pod create --image <image> --gpu-id "NVIDIA GeForce RTX 4090" --wait
+```
+
+**Readiness predicate.** With `--wait`, the CLI polls the Pod's public port `22` and considers it ready once a TCP connection succeeds and the server replies with an SSH protocol banner. There is no key check or full handshake, so the wait can succeed against an image whose sshd never received your key. When ready, `pod create` prints the same shape as [`runpodctl pod get`](#get-pod-details) rather than the plain create response, so the payload includes the live `ssh` block.
+
+**Timeout behavior.** `--wait-timeout` defaults to `10m` and shares the CLI's duration parser (`90s`, `10m`, `1h`, `2d`). If the wait times out or you cancel with `Ctrl-C`, **the Pod is not deleted** — you are still billed for it. The command exits non-zero, and the error object carries an `id` field with the Pod ID plus a `code` of `wait_timeout` or `wait_interrupted` so you can clean up with [`runpodctl pod delete`](#delete-a-pod).
+
+**Flag compatibility.** `--wait` requires SSH, so it cannot be combined with `--ssh=false`. Two other combinations still work but print a warning on stderr because they often fail to produce a reachable SSH port:
+
+- `--compute-type CPU` — CPU Pods are created over REST and do not get Runpod-managed SSH, so only images that start their own sshd become reachable.
+- `--cloud-type COMMUNITY` without `--public-ip` — Community Cloud only maps a public SSH port when the machine has a public IP.
 
 ### Start a Pod
 
