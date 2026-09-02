@@ -233,6 +233,96 @@ Delete an endpoint:
 runpodctl serverless delete <endpoint-id>
 ```
 
+### Run a job
+
+Submit a job to an endpoint, poll until the job reaches a terminal status (such as `COMPLETED`, `FAILED`, `CANCELLED`, or `TIMED_OUT`), then print the job's response:
+
+```bash
+# Submit a job with an inline JSON payload and wait for it to finish
+runpodctl serverless run <endpoint-id> --input '{"prompt": "hello"}'
+
+# Read the payload from a file
+runpodctl serverless run <endpoint-id> --input-file ./payload.json
+
+# Read the payload from stdin
+echo '{"prompt": "hello"}' | runpodctl serverless run <endpoint-id> --input -
+
+# Submit without waiting; print the queued job and return
+runpodctl serverless run <endpoint-id> --input '{"prompt": "hello"}' --no-wait
+
+# Wait up to 90 seconds for a terminal status
+runpodctl serverless run <endpoint-id> --input '{"prompt": "hello"}' --wait 90s
+```
+
+`run`, `status`, and `health` call the endpoint's `/run`, `/status`, and `/health` URLs (listed under [Serverless URLs](#serverless-urls) below).
+
+You must provide one of `--input` or `--input-file`, and they're mutually exclusive. The payload must be a JSON object. `runpodctl` rejects arrays, scalars, `null`, and any payload whose compacted `{"input": ...}` request body exceeds 10 MiB locally as a usage error, before it sends any request.
+
+`runpodctl` automatically nests the payload under an `input` key, so provide only the handler input, not a wrapper. If you include your own top-level `input` key, `runpodctl` warns you about the likely double-wrapping but still submits the request, so remove the extra key to avoid nesting your input twice.
+
+The job's response always prints to stdout, including a failed job's error and the last-known response when the wait budget runs out. Progress notes and errors go to stderr.
+
+| Exit code | Meaning |
+|-----------|---------|
+| `0` | The job completed successfully, or (with `--no-wait` or `--wait 0`) the job was submitted successfully and is still queued or running. |
+| `1` | The request failed, the wait budget ran out (a `timeout` error), or the job ended in a `FAILED`, `CANCELLED`, or `TIMED_OUT` state (a `job_failed` error). |
+
+The `timeout` error means `runpodctl` stopped waiting, either because the `--wait` budget ran out while the job was still running server-side, or because a single API call exceeded its per-call timeout. If the budget ran out while the job is still running, use `runpodctl serverless status` to keep polling rather than resubmitting the job. The `job_failed` error means the job reached a terminal status other than completed. Because all three failures share exit code `1`, use the error code printed in the stderr error object (`timeout` or `job_failed`) to tell a wait or job failure apart from a request failure.
+
+#### Run flags
+
+<ResponseField name="--input" type="string">
+JSON payload for the handler. Use `-` to read the payload from stdin. Mutually exclusive with `--input-file`.
+</ResponseField>
+
+<ResponseField name="--input-file" type="string">
+Read the JSON payload from a file. Use `-` to read from stdin. Mutually exclusive with `--input`.
+</ResponseField>
+
+<ResponseField name="--wait" type="string" default="5m">
+How long to wait for a terminal job status (for example, `90s` or `10m`). Set to `0` to submit without waiting.
+</ResponseField>
+
+<ResponseField name="--no-wait" type="bool">
+Submit the job and print its ID without waiting. Equivalent to `--wait 0`. Cannot be combined with an explicit `--wait`; passing both is rejected locally as a usage error.
+</ResponseField>
+
+### Check job status
+
+Get the current status and payload of a previously submitted job:
+
+```bash
+# Check the status once
+runpodctl serverless status <endpoint-id> <job-id>
+
+# Keep polling for up to 5 minutes until the job is terminal
+runpodctl serverless status <endpoint-id> <job-id> --wait 5m
+```
+
+This command takes exactly two arguments: the endpoint ID and the job ID. By default it checks once and prints the current job response. This is how you resume watching a job started with `run --no-wait`, or one whose `--wait` budget expired.
+
+#### Check flags
+
+<ResponseField name="--wait" type="string" default="0s">
+Keep polling until the job reaches a terminal status, up to this long. `0` checks once and returns.
+</ResponseField>
+
+### Check endpoint health
+
+Print the health check response for an endpoint:
+
+```bash
+runpodctl serverless health <endpoint-id>
+```
+
+This command takes exactly one argument: the endpoint ID. Use it to check whether an endpoint's workers are available before assuming a problem with your own request.
+
+<Note>
+
+Health can still return a response for a recently deleted endpoint because of invoke-side caching, so it is not a reliable existence check. Use `runpodctl serverless get` for that.
+
+</Note>
+
 ## Serverless URLs
 
 Access your Serverless endpoint using these URL patterns:
