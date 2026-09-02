@@ -1,0 +1,151 @@
+---
+title: "model"
+sidebarTitle: "model"
+---
+
+Manage models in the Runpod model repository. Use these subcommands to upload model files, list your models, and remove models or individual model versions.
+
+<RequestExample>
+```bash Command
+runpodctl model <subcommand> [flags]
+```
+</RequestExample>
+
+## Subcommands
+
+### Add a model
+
+Add a model to the model repository. You can add a model in two ways: by uploading model files from your local machine, or by mirroring an existing Hugging Face model server-side.
+
+To upload model files from your local machine, point `--model-path` at the directory that contains them:
+
+```bash
+runpodctl model add --name "my-model" --owner "my-team" --model-path ./model
+```
+
+When you upload from a directory in a terminal, `runpodctl` shows a progress bar with upload progress and estimated time remaining, then prints the total model size once the upload finishes.
+
+If you reuse one local directory across model versions without this flag, a later upload can include a mix of old and new files. Add `--delete-my-model-files-after-upload` to remove exactly the files this run uploaded from `--model-path` once the model version hash is confirmed server-side. It never touches unrelated files, and it runs only on confirmed success, so a failed or timed-out upload leaves your files in place. This flag requires both `--model-path` and `--wait-for-hash`.
+
+```bash
+runpodctl model add --name "my-model" --owner "my-team" --model-path ./model --wait-for-hash --delete-my-model-files-after-upload
+```
+
+To mirror an existing Hugging Face model into the Runpod model repository, use `--huggingface-model` with the source model in `owner/repo` form. `--name` sets the destination model name in the Runpod repository, and `--owner` is optional when mirroring.
+
+The transfer runs server-side, so there is no local upload session, file upload, or progress bar. Runpod creates the new model version right away and transfers the files from Hugging Face in the background.
+
+Mirroring cannot be combined with the local-upload flags (`--model-path`, `--create-upload`, `--file-name`, `--file-size`, `--part-size`, `--content-type`, and `--wait-for-hash`). Uploading and mirroring are two separate ways to add a model.
+
+```bash
+runpodctl model add --name tiny-llm --huggingface-model arnir0/Tiny-LLM
+```
+
+#### Add flags
+
+<ResponseField name="--name" type="string">
+Model name.
+</ResponseField>
+
+<ResponseField name="--owner" type="string">
+Model owner namespace (a user or team owner ID).
+</ResponseField>
+
+<ResponseField name="--model-path" type="string">
+Directory containing the model files to upload.
+</ResponseField>
+
+<ResponseField name="--huggingface-model" type="string">
+Hugging Face model to mirror into the Runpod model repository, in `owner/repo` form. Cannot be combined with the local-upload flags (`--model-path`, `--create-upload`, `--file-name`, `--file-size`, `--part-size`, `--content-type`, and `--wait-for-hash`).
+</ResponseField>
+
+<ResponseField name="--wait-for-hash" type="bool" default="false">
+Wait for uploaded model files to finish hashing before the command returns. Requires `--model-path`. When hashing completes, `runpodctl` prints a message confirming the model is ready to deploy along with its model URL.
+</ResponseField>
+
+<ResponseField name="--hash-timeout" type="duration" default="30m0s">
+Maximum time to wait when `--wait-for-hash` is set. Set to `0` to wait indefinitely.
+</ResponseField>
+
+<ResponseField name="--delete-my-model-files-after-upload" type="bool" default="false">
+Delete the uploaded `--model-path` files after the model version hash is confirmed server-side. Only the files this run uploaded are deleted, including nested subdirectories, and only after the hash is confirmed. If hash confirmation times out or fails, no files are deleted.
+
+Requires both `--model-path` and `--wait-for-hash`. Both are validated before the upload begins, so the command fails immediately if either is missing.
+
+If a specific file cannot be deleted, the command exits non-zero and names that file, so there is no silent partial success. A stderr confirmation line prints once at least one file has been deleted. The `deletedModelFiles` (count) and `deletedModelFilesBytes` (bytes) fields are added to the JSON output only when `--verbose`, `-v` is set.
+</ResponseField>
+
+<ResponseField name="--verbose, -v" type="bool" default="false">
+Include the full upload details in the `--wait-for-hash` output. Without this flag, a compact summary is printed instead.
+</ResponseField>
+
+<Note>
+
+`runpodctl model add` also accepts lower-level flags for configuring uploads directly, such as `--content-type`, `--file-name`, `--file-size`, `--part-size`, `--metadata`, and `--model-status`. Run `runpodctl model add --help` to see the complete list.
+
+</Note>
+
+### List models
+
+List the models in your model repository:
+
+```bash
+runpodctl model list
+```
+
+#### List flags
+
+<ResponseField name="--name" type="string">
+Filter the results by model name.
+</ResponseField>
+
+<ResponseField name="--provider" type="string">
+Filter the results by provider.
+</ResponseField>
+
+### Remove a model
+
+Remove a model from the model repository:
+
+```bash
+runpodctl model remove --name "my-model" --owner "my-team"
+```
+
+To remove a single model version instead of the entire model, pass either `--hash` or `--version`. This marks that version as removed and leaves the rest of the model in place.
+
+```bash
+runpodctl model remove --name "my-model" --owner "my-team" --version "<version-uuid>"
+```
+
+<Warning>
+
+`runpodctl model remove` refuses to remove a model or version that a Serverless endpoint still references. Removing the whole model is refused if any version is referenced; removing a specific version with `--hash` or `--version` is refused only when that exact version is referenced. The command reports which endpoints block the removal, and nothing is deleted when a removal is refused.
+
+There is no override or force flag. A model or version in active use cannot be removed until you detach or replace it on the referencing endpoint. If the dependency check cannot complete, for example when the API is unreachable, the removal is also refused, because Runpod treats an unverifiable dependency check as unsafe.
+
+</Warning>
+
+To clear a blocked removal, detach or replace the model on the referencing endpoint, then retry the removal. Detach the model with `runpodctl serverless update <endpoint-id> --clear-models`, or replace it with `runpodctl serverless update <endpoint-id> --model-reference <model-reference-url>`. See the [Update an endpoint](/runpodctl/reference/runpodctl-serverless#update-an-endpoint) section for details. If the referencing endpoint is a GPU endpoint, this update currently fails until the pending fix ships; see the [limitation on `--model-reference` and `--clear-models`](/runpodctl/reference/runpodctl-serverless#update-flags).
+
+#### Remove flags
+
+<ResponseField name="--name" type="string">
+Model name.
+</ResponseField>
+
+<ResponseField name="--owner" type="string">
+Model owner.
+</ResponseField>
+
+<ResponseField name="--hash" type="string">
+Hash of the model version to remove. Cannot be combined with `--version`.
+</ResponseField>
+
+<ResponseField name="--version" type="string">
+UUID of the model version to remove. Cannot be combined with `--hash`.
+</ResponseField>
+
+## Related commands
+
+- [`runpodctl serverless`](/runpodctl/reference/runpodctl-serverless)
+- [`runpodctl config`](/runpodctl/reference/runpodctl-config)
