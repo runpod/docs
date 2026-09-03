@@ -141,6 +141,7 @@ Run all smoke tests using local docs
 | ID | Goal | Expected Outcome |
 |----|------|------------------|
 | vllm-deploy | Deploy a vLLM endpoint | Endpoint responds to /health |
+| vllm-load-balancer | Deploy the official vLLM Docker image on a load balancing endpoint | Chat completion request succeeds at the endpoint's public URL |
 | vllm-openai-compat | Use the OpenAI Python client with a vLLM endpoint | OpenAI client call succeeds |
 | vllm-chat-completion | Send a chat completion request to vLLM | Chat response returned |
 | vllm-streaming | Stream responses from a vLLM endpoint | Streamed tokens received |
