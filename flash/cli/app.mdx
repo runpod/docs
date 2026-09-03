@@ -1,7 +1,7 @@
 ---
 title: "app"
 sidebarTitle: "app"
-description: "Create, inspect, list, and delete Runpod Flash applications and their deployment environments."
+description: "Create, inspect, list, and delete Flash applications that organize deployment environments, build artifacts, and configuration."
 ---
 
 Manage Flash applications. An app is the top-level container that groups your deployment environments, build artifacts, and configuration.
@@ -144,7 +144,18 @@ Name of the Flash app to delete.
 2. Prompts for confirmation (required).
 3. Deletes all environments and their resources.
 4. Deletes all builds.
-5. Deletes the app.
+5. Tears down the app's Serverless endpoints. Flash discovers them per Flash environment on Runpod's backend, so teardown works even when no local resource tracking exists (for example, in CI).
+6. If every endpoint was removed, deletes the app record.
+
+If any endpoint cannot be removed, the app record is not deleted and the command exits with a non-zero status; see [app delete fails to remove an endpoint](#app-delete-fails-to-remove-an-endpoint).
+
+### Output
+
+Each removed endpoint prints a confirmation line, where `<endpoint-name>` and `<endpoint-id>` are the endpoint's name and ID:
+
+```text
+✓ deleted endpoint <endpoint-name>  <endpoint-id>
+```
 
 <Warning>
 
@@ -174,6 +185,26 @@ Override with the `--app` flag:
 flash deploy --app other-project
 flash env list --app other-project
 ```
+
+## Troubleshooting
+
+### app delete fails to remove an endpoint
+
+When any endpoint cannot be removed, `flash app delete` does not delete the app record and exits with a non-zero status (exit code 1). It names each endpoint that survived teardown. When the endpoint still has an ID, the message gives the command to remove it:
+
+```text
+endpoint <endpoint-id> not removed; delete it with runpodctl serverless delete <endpoint-id>
+```
+
+Remove the surviving endpoint with [`runpodctl serverless delete`](/runpodctl/reference/runpodctl-serverless#delete-an-endpoint):
+
+```bash
+runpodctl serverless delete <endpoint-id>
+```
+
+If an endpoint is reported without an ID, it cannot be removed this way; delete it from the Runpod console instead.
+
+Re-running `flash app delete <NAME>` after a partial teardown is safe: endpoints that were already removed count as removed, so the command retries only the survivors.
 
 ## Related commands
 
