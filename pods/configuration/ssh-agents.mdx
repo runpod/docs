@@ -4,7 +4,7 @@ sidebarTitle: "SSH for agents"
 description: "Set up SSH access so coding agents like Claude Code and Cursor can connect to your Runpod Pod over a secure shell connection."
 ---
 
-Coding agents like Claude Code and Cursor connect to Pods over SSH. The most common setup failure is forgetting to expose TCP port 22 when the Pod is launched. This must be set at deploy time and cannot be added to a running Pod.
+Coding agents like Claude Code and Cursor connect to Pods over SSH. The most common setup failure is forgetting to expose TCP port 22 when the Pod is launched. You can't add the port to a Pod while it's running, but you can add it by stopping the Pod, editing its template to expose TCP port 22, and restarting.
 
 This page walks through the complete setup from scratch.
 
@@ -19,7 +19,7 @@ If you haven't done this yet, see [Connect to a Pod with SSH](/pods/configuratio
 
 <Warning>
 
-This step must be completed before the Pod starts. You cannot expose TCP port 22 on a running Pod.
+Expose TCP port 22 before you start the Pod. If the Pod is already running, you can't add the port while it's running, so stop the Pod, edit the template to expose TCP port 22, and restart.
 
 </Warning>
 
@@ -49,7 +49,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install openssh-server -y; \
 mkdir -p ~/.ssh; \
 chmod 700 ~/.ssh; \
 echo "$PUBLIC_KEY" >> ~/.ssh/authorized_keys; \
-chmod 700 ~/.ssh/authorized_keys; \
+chmod 600 ~/.ssh/authorized_keys; \
 service ssh start; \
 sleep infinity'
 ```
@@ -58,15 +58,24 @@ If you already have a start command, replace `sleep infinity` at the end with th
 
 ## Step 3: Connect your agent
 
+Cursor runs on your local machine and connects to the Pod, while Claude Code runs on the Pod itself, so SSH is just how you open the terminal session to reach it.
+
 ### Claude Code
 
-Run Claude Code pointing to the public IP and port from Step 1:
+SSH into the Pod, install Claude Code there, then start it from your project directory:
 
 ```bash
-claude --ssh root@POD_IP_ADDRESS -p SSH_PORT
+# From your local machine, SSH into the Pod using the IP and port from Step 1
+ssh root@POD_IP_ADDRESS -p SSH_PORT -i ~/.ssh/id_ed25519
+
+# On the Pod, install Claude Code using the native installer
+curl -fsSL https://claude.ai/install.sh | bash
+
+# Start Claude Code from your project directory on the Pod
+claude
 ```
 
-Replace `POD_IP_ADDRESS` and `SSH_PORT` with the values from your Pod's **Connect** tab.
+Use the native installer rather than `npm install -g` because official Runpod templates don't ship Node.js.
 
 ### Cursor
 
