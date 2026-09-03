@@ -58,6 +58,52 @@ Include template information in the output.
 Include workers information in the output.
 </ResponseField>
 
+### Get model status
+
+Show a model-backed endpoint's configured model references and each worker's model version diagnostics. Use this to diagnose why an endpoint is stuck loading or failing to mount a model, without needing SSH access or internal logs:
+
+```bash
+runpodctl serverless model-status <endpoint-id>
+```
+
+This command takes no local flags. The inherited `-o, --output` option controls the format, either `json` (the default) or `yaml`. This command only reads status, so it is safe to run repeatedly while a model is loading. `serverless get --include-workers` returns endpoint and worker metadata, whereas `model-status` reports each worker's model version diagnostics.
+
+For example, the output looks like:
+
+```json
+{
+  "endpointId": "endpoint-abc12345",
+  "modelReferences": [
+    "https://huggingface.co/example-org/example-model:main"
+  ],
+  "workers": [
+    {
+      "workerId": "worker-11111111",
+      "workerStatus": "RUNNING",
+      "modelVersions": [
+        {
+          "modelVersionUuid": "00000000-0000-0000-0000-000000000000",
+          "modelVersionHash": "sha256:0000exampleplaceholderhash0000",
+          "machineAssignmentStatus": "FAILED",
+          "failurePhase": "mount_failed",
+          "failureReason": "model volume could not be mounted",
+          "mountPath": "/runpod/model-store/example-model"
+        }
+      ]
+    },
+    {
+      "workerId": "worker-22222222",
+      "workerStatus": "RUNNING",
+      "error": "could not look up model versions for this worker"
+    }
+  ]
+}
+```
+
+Each worker reports its `workerId` and `workerStatus` along with its model version entries. `workerStatus` and `machineAssignmentStatus` are independent signals: a worker can report a running `workerStatus` while its model assignment has failed, so check each worker's `machineAssignmentStatus` (and `error`) to judge whether a model mounted successfully, rather than relying on `workerStatus`. The diagnostics fields `machineAssignmentStatus`, `failurePhase`, `failureReason`, and `mountPath` may be empty until Runpod has reported model diagnostics for that worker. `failurePhase` and `failureReason` are populated only when a worker's assignment status is failed. `failurePhase` is one of `download_failed`, `mount_failed`, `startup_failed`, or `cuda_failed`. A worker whose lookup fails shows an `error` field for that worker while the other workers still return normally.
+
+This command does not report download or mount progress percentages, or the effective `MODEL_NAME` or `MODEL_REVISION` environment variable values. For the full free-text failure detail, use `runpodctl serverless logs <endpoint-id> --source system`.
+
 ### Create an endpoint
 
 Create a new Serverless endpoint from a template or from a Hub repo:
