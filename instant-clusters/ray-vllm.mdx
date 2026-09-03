@@ -5,7 +5,7 @@ description: "Deploy a Runpod Cluster with Ray and vLLM to serve distributed inf
 tag: BETA
 ---
 
-This tutorial shows how to use Instant Clusters with Ray to run distributed inference on large language models. By combining Ray's cluster management with vLLM's tensor and pipeline parallelism, you can serve models that exceed the memory of a single node — for example, a 70B parameter model across multiple 8×H100 pods.
+This tutorial shows how to use Instant Clusters with Ray to run distributed inference on large language models. By combining Ray's cluster management with vLLM's tensor and pipeline parallelism, you can serve models that exceed the memory of a single node. For example, you can serve a 70B parameter model across multiple 8×H100 Pods.
 
 Ray handles the cluster topology; vLLM uses it to split the model across GPUs both within each node (tensor parallelism) and across nodes (pipeline parallelism).
 
@@ -17,8 +17,8 @@ Ray handles the cluster topology; vLLM uses it to split the model across GPUs bo
 
 ## Requirements
 
-- A Runpod account with sufficient credits for a multi-node cluster
-- Basic familiarity with large language model inference and distributed GPU setups
+- A Runpod account with sufficient credits for a multi-node cluster.
+- Basic familiarity with large language model inference and distributed GPU setups.
 
 ---
 
@@ -26,10 +26,10 @@ Ray handles the cluster topology; vLLM uses it to split the model across GPUs bo
 
 1. Open the [Instant Clusters page](https://console.runpod.io/instant-clusters).
 2. Click **Create Cluster**.
-3. Name your cluster and configure it. For this walkthrough, set **Pod Count** to **2** and select **8× H100 SXM GPUs** per pod. Use the **Runpod PyTorch** template as your base image.
+3. Name your cluster and configure it. For this walkthrough, set **Pod Count** to **2** and select **8× H100 SXM GPUs** per Pod. Use the **Runpod PyTorch** template as your base image.
 
    <Note>
-   Increase `/dev/shm` when configuring your pod. The default (64 MB) is too small for large tensor-parallel workloads. Set it to at least 8 GB. In the pod configuration, add the environment variable `MALLOC_ARENA_MAX=1` and set `--shm-size` to `8g` in your Docker run options.
+   Increase `/dev/shm` when configuring your Pod. The default (64 MB) is too small for large tensor-parallel workloads. Set it to at least 8 GB. In the Pod configuration, add the environment variable `MALLOC_ARENA_MAX=1` and set `--shm-size` to `8g` in your Docker run options.
    </Note>
 
 4. Click **Deploy Cluster**. You are redirected to the Instant Clusters page.
@@ -38,9 +38,9 @@ Ray handles the cluster topology; vLLM uses it to split the model across GPUs bo
 
 ## Step 2: Start the Ray head on pod-0
 
-The first pod (`CLUSTERNAME-pod-0`) runs the Ray head node. All other pods connect to it as workers.
+The first Pod (`CLUSTERNAME-pod-0`) runs the Ray head node. All other Pods connect to it as workers.
 
-1. Click your cluster to expand the pod list.
+1. Click your cluster to expand the Pod list.
 2. Click **CLUSTERNAME-pod-0**, then click **Connect → Web Terminal**.
 3. In the terminal, clone the reference scripts:
 
@@ -69,16 +69,16 @@ The first pod (`CLUSTERNAME-pod-0`) runs the Ray head node. All other pods conne
    ```
 
    <Note>
-   `RAY_NODE_IP_ADDRESS` and `VLLM_HOST_IP` must be set to the pod's internal network IP — not `0.0.0.0`. Setting them prevents Ray and vLLM from binding to the wrong interface on multi-NIC pods.
+   `RAY_NODE_IP_ADDRESS` and `VLLM_HOST_IP` must be set to the Pod's internal network IP, not `0.0.0.0`. Setting them prevents Ray and vLLM from binding to the wrong interface on multi-NIC Pods.
    </Note>
 
 ---
 
-## Step 3: Join the worker pods to the cluster
+## Step 3: Join the worker Pods to the cluster
 
-Repeat this for each remaining pod in the cluster (`pod-1`, `pod-2`, …).
+Repeat this for each remaining Pod in the cluster (`pod-1`, `pod-2`, …).
 
-1. In the Instant Clusters page, click the next pod and open its **Web Terminal**.
+1. In the Instant Clusters page, click the next Pod and open its **Web Terminal**.
 2. Clone the same scripts:
 
    ```bash
@@ -111,7 +111,7 @@ Repeat this for each remaining pod in the cluster (`pod-1`, `pod-2`, …).
      --num-gpus=$NUM_TRAINERS
    ```
 
-   `$MASTER_ADDR` is injected automatically by Runpod into all pods in the cluster — it resolves to `pod-0`.
+   Runpod injects `$MASTER_ADDR` automatically into all Pods in the cluster. It resolves to `pod-0`.
 
 ---
 
@@ -123,7 +123,7 @@ Run this on `pod-0` to confirm all nodes have joined:
 ray status
 ```
 
-Expected output for a two-pod cluster with 8 GPUs each:
+Expected output for a two-Pod cluster with 8 GPUs each:
 
 ```
 ======== Autoscaler status: ... ========
@@ -198,37 +198,37 @@ When you are done, return to the [Instant Clusters page](https://console.runpod.
 
 ## Environment variables reference
 
-Runpod injects these environment variables into every pod in the cluster. The startup scripts rely on them.
+Runpod injects these environment variables into every Pod in the cluster. The startup scripts rely on them.
 
 | Variable | Description |
 |---|---|
 | `MASTER_ADDR` | Hostname of `pod-0`, the Ray head node |
 | `MASTER_PORT` | Port for inter-node communication (default: `29500`) |
-| `NUM_NODES` | Total number of pods in the cluster |
-| `NUM_TRAINERS` | Number of GPUs per pod |
-| `NODE_RANK` | Index of this pod (`0` for head, `1+` for workers) |
+| `NUM_NODES` | Total number of Pods in the cluster |
+| `NUM_TRAINERS` | Number of GPUs per Pod |
+| `NODE_RANK` | Index of this Pod (`0` for head, `1+` for workers) |
 
 ---
 
 ## Common issues
 
 **Ray workers don't join**
-Confirm `$MASTER_ADDR` resolves from each worker pod. Run `ping $MASTER_ADDR` in a worker terminal. If it fails, the cluster network may still be initializing — wait 30 seconds and try again.
+Confirm `$MASTER_ADDR` resolves from each worker Pod. Run `ping $MASTER_ADDR` in a worker terminal. If it fails, the cluster network may still be initializing. Wait 30 seconds and try again.
 
 **vLLM OOM during model load**
-Check that `/dev/shm` is large enough (at least 8 GB for 70B models). Also verify that `--tensor-parallel-size` matches the number of GPUs per node — a mismatch causes uneven shard sizes.
+Check that `/dev/shm` is large enough (at least 8 GB for 70B models). Also verify that `--tensor-parallel-size` matches the number of GPUs per node. A mismatch causes uneven shard sizes.
 
 **`VLLM_HOST_IP` binding error**
-This error occurs when vLLM tries to bind to `0.0.0.0` on a pod with multiple network interfaces. Make sure `VLLM_HOST_IP` is set to the internal IP (`hostname -I | awk '{print $1}'`) before starting the server.
+This error occurs when vLLM tries to bind to `0.0.0.0` on a Pod with multiple network interfaces. Make sure `VLLM_HOST_IP` is set to the internal IP (`hostname -I | awk '{print $1}'`) before starting the server.
 
 **Stale Ray cluster after restart**
-If you restart a pod, Ray does not automatically rejoin the cluster. Rerun `head.sh` on `pod-0` first, then `worker.sh` on all other pods.
+If you restart a Pod, Ray does not automatically rejoin the cluster. Rerun `head.sh` on `pod-0` first, then `worker.sh` on all other Pods.
 
 ---
 
 ## Next steps
 
 - Adapt the serve script to load your own model from a [Network Volume](/storage/network-volumes) mount.
-- Scale up by increasing the pod count and adjusting `--pipeline-parallel-size` accordingly.
+- Scale up by increasing the Pod count and adjusting `--pipeline-parallel-size` accordingly.
 - Try [Axolotl on an Instant Cluster](/instant-clusters/axolotl) for distributed fine-tuning.
 - Review the [Instant Cluster configuration reference](/instant-clusters/configuration) for full details on environment variables and networking.
