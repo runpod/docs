@@ -511,6 +511,20 @@ Files larger than 500MB must be uploaded using multipart uploads. The AWS CLI pe
 
 <AccordionGroup>
 
+<Accordion title="403 Forbidden on HeadObject, GetObject, or CopyObject">
+
+A `403 Forbidden` response usually means the request authenticated to the S3 API but wasn't allowed to act on the target object. Check the following:
+
+- **Access Key ID must be your Runpod user ID.** The AWS Access Key ID field takes the Runpod user ID shown in your S3 API key description (e.g., `user_2f21CfO73Mm2Uq2lEGFiEF24IPw`), not the key's secret and not another identifier. See [Setup and authentication](#setup-and-authentication).
+- **Secret Access Key must be the S3 API key secret** (e.g., `rps_***...`), not your Runpod API key.
+- **You can only access network volumes owned by your account.** Requests against another user's volume ID return `403`.
+- **Region and endpoint URL must match the volume's datacenter.** For a volume in `US-GA-2`, use `--region US-GA-2` and `--endpoint-url https://s3api-us-ga-2.runpod.io/`. A mismatch between region, endpoint, and volume datacenter can surface as `403` rather than a routing error.
+- **`aws s3 sync` can return intermittent `AccessDenied` errors** even when credentials are correct. See the `aws s3 sync limitations` section below.
+
+If `ls` succeeds but `cp`, `HeadObject`, or `CopyObject` fails, credentials are working. Look at object-level causes next: the object path must exist on the volume (`HeadObject` on a missing key can surface as `403` in some clients), the volume must have free space for writes (see the storage capacity note below), and object names with special characters like `#` may need to be URL-encoded.
+
+</Accordion>
+
 <Accordion title="ListObjects runs slowly or fails with &quot;same next token&quot; error">
 
 When running `aws s3 ls` or `ListObjects` on a directory with many files or large amounts of data (typically >10,000 files or >10 GB of data) for the first time, it may run very slowly, or you may encounter the following error: 
