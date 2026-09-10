@@ -129,21 +129,44 @@ To avoid log throttling:
 
 ## vLLM-specific issues
 
+### vLLM worker fails to start
+
+When the vLLM worker hits a fatal startup failure it recognizes, it now keeps the worker alive instead of restarting silently, and returns a structured error on every job the endpoint sends it. Check the job response before digging through logs: the message names the cause and how to fix it.
+
+The error is a single, non-streaming JSON object whose `type` is `startup_error`:
+
+```json
+{
+  "error": {
+    "message": "<message naming the cause and the fix>",
+    "type": "startup_error",
+    "code": null
+  }
+}
+```
+
+Failures that happen after startup, on an individual request, use `type: "worker_error"` instead, so a `startup_error` always points to a startup problem.
+
+The most common recognized failure is a GPU out-of-memory error while allocating the KV cache or capturing CUDA graphs. See [OOM errors](#oom-errors) below for that case. The worker also recognizes:
+
+- **`MAX_MODEL_LEN` is larger than the model's own context length.** Lower `MAX_MODEL_LEN`, or unset it to use the model's limit. To keep the larger value anyway, set `VLLM_ALLOW_LONG_MAX_MODEL_LEN=1` and expect degraded output past the model's real limit.
+- **vLLM rejected a command-line flag.** Check the environment variables that map to vLLM flags, and any values in `VLLM_EXTRA_ARGS`.
+- **The model is gated or private on Hugging Face.** Set `HF_TOKEN` to a token whose account has accepted the model's license, or choose a public model.
+- **The model wasn't found on Hugging Face.** Check `MODEL_NAME` for typos (it must be the full `org/repo` ID), and check `MODEL_REVISION` if you set one.
+- **The model architecture is unsupported.** Confirm the model appears in the [vLLM supported models list](https://docs.vllm.ai/en/latest/models/supported_models.html), or try a newer worker release.
+- **The worker ran out of disk while downloading weights.** Increase the endpoint's container disk to comfortably exceed the repository size, or attach a network volume to cache the weights.
+
+If a startup failure isn't one of these, the worker still exits so the platform can retry it. A persistent crash-loop with no `startup_error` in the job response points to an unrecognized failure, so check the [logs](/serverless/development/logs) for the crash.
+
 ### OOM errors
 
-If your vLLM worker runs out of memory:
+A GPU out-of-memory error is the most common recognized startup failure, and the worker returns it as a `startup_error` (see [vLLM worker fails to start](#vllm-worker-fails-to-start)). It happens when the model weights or the KV cache don't fit in GPU memory, including when capturing CUDA graphs. To fix it:
 
-- Lower `GPU_MEMORY_UTILIZATION` from 0.90 to 0.85.
-- Reduce `MAX_MODEL_LEN` to limit context window.
-- Use a GPU with more VRAM.
-
-### Model not loading
-
-| Issue | Solution |
-|-------|----------|
-| Model not found | Verify `MODEL_NAME` matches the Hugging Face model ID exactly |
-| Gated model access denied | Set `HF_TOKEN` with a token that has access to the model |
-| Incompatible model | Check [vLLM supported models](https://docs.vllm.ai/en/latest/models/supported_models.html) |
+- Lower `MAX_MODEL_LEN` or `MAX_NUM_SEQS` to shrink the KV cache.
+- Set `ENFORCE_EAGER=true` to skip CUDA graph capture and free the memory it uses.
+- Use a quantized checkpoint of the model.
+- Move to a larger GPU, or shard across more GPUs with `TENSOR_PARALLEL_SIZE`.
+- If the model itself loaded but the KV cache didn't fit, raise `GPU_MEMORY_UTILIZATION` slightly to give the cache more room.
 
 ### OpenAI API errors
 
