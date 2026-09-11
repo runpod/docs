@@ -1,0 +1,92 @@
+---
+title: "Download files from job input"
+sidebarTitle: "Download input files"
+description: "Fetch user-supplied URLs from your handler with built-in SSRF protection and size limits."
+---
+
+The Runpod Python SDK provides helpers for downloading files that arrive as URLs in job input. Both helpers refuse non-public destinations by default, disable HTTP redirects, re-validate every hop, and cap the total bytes written to disk. Use them instead of calling `requests.get()` directly so a job can't point your worker at a private address (such as the `169.254.169.254` cloud metadata endpoint).
+
+## `download_files_from_urls`
+
+Use `download_files_from_urls()` when the job input contains one or more URLs and you want them all fetched into the job's working directory in parallel. Files land in `jobs/<job_id>/downloaded_files/` and the function returns the list of absolute paths.
+
+```python
+from runpod.serverless.utils import rp_download
+
+def handler(event):
+    paths = rp_download.download_files_from_urls(
+        event["id"],
+        event["input"]["image_urls"],
+    )
+    # paths is a list of absolute file paths on the worker
+    return {"files": paths}
+```
+
+If a URL fails validation or the request fails after retries, the corresponding entry in the returned list is `None`.
+
+## `file`
+
+Use `file()` when the job input carries a single URL and you want the file name, extension, and (for zip archives) an auto-extracted directory. It saves the file under `job_files/` and returns a dict:
+
+```python
+from runpod.serverless.utils.rp_download import file
+
+def handler(event):
+    result = file(event["input"]["archive_url"])
+    # {
+    #   "file_path": "/abs/path/job_files/<uuid>.zip",
+    #   "type": "zip",
+    #   "original_name": "dataset.zip",
+    #   "extracted_path": "/abs/path/job_files/<uuid>",  # None for non-zip
+    # }
+    return result
+```
+
+`file()` streams the response to disk in chunks rather than buffering the body in memory, and calls `raise_for_status()` on the response. A `4xx` or `5xx` status raises `requests.RequestException` instead of writing the error body as the downloaded file, so callers must handle request exceptions.
+
+## SSRF protection
+
+Both helpers route through an SSRF-safe fetcher that:
+
+- Allows only `http` and `https` URLs.
+- Resolves the hostname up front and rejects any address that isn't globally routable. This includes loopback, link-local (including `169.254.169.254`), RFC 1918 private ranges, CGNAT (`100.64.0.0/10`), multicast, reserved, and the IPv6 equivalents (ULA, link-local, IPv4-mapped forms of the above).
+- Pins the TCP connection to the pre-validated IP so a DNS response can't rebind mid-request.
+- Disables automatic redirects and re-runs every check on each hop.
+- Refuses URLs that would be fetched through an HTTP proxy, because pinning only holds when the SDK opens the socket itself. `NO_PROXY` exclusions are honored.
+- Caps the total bytes written to disk and aborts the download if the cap is exceeded.
+
+A blocked URL raises `SSRFError` (a subclass of `ValueError`). `SSRFError` is deliberately not a `requests.RequestException`, so it bypasses the download retry loop and surfaces immediately.
+
+```python
+from runpod.serverless.utils import rp_download
+from runpod.serverless.utils.rp_ssrf import SSRFError
+
+def handler(event):
+    try:
+        paths = rp_download.download_files_from_urls(event["id"], event["input"]["urls"])
+    except SSRFError as err:
+        return {"error": f"Refused unsafe URL: {err}"}
+    return {"files": paths}
+```
+
+## Configuration
+
+Two environment variables tune the download helpers. Set them in the [endpoint's environment variables](/serverless/development/environment-variables) or in your Dockerfile.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `RUNPOD_ALLOW_PRIVATE_DOWNLOAD_URLS` | `false` | When set to `true`, `1`, or `yes`, the private-address block and the proxied-fetch block are lifted. The scheme allowlist and size cap still apply. |
+| `RUNPOD_MAX_DOWNLOAD_BYTES` | `5368709120` (5 GiB) | Maximum bytes any single download may write to disk. A download that exceeds the cap raises `SSRFError` and the partial file is discarded. |
+
+### Allow private URLs
+
+Downloading from a private address now requires opting in explicitly. Set `RUNPOD_ALLOW_PRIVATE_DOWNLOAD_URLS=true` only when your worker legitimately needs to fetch from a same-VPC host, a self-hosted object store on a private network, or another endpoint the platform routes internally. Leaving the guard in place is strongly recommended for any endpoint that processes URLs supplied by callers.
+
+### Change the size cap
+
+Override `RUNPOD_MAX_DOWNLOAD_BYTES` to lower the cap for endpoints that only handle small inputs, or to raise it for a worker that ingests larger model weights. The value is in bytes:
+
+```dockerfile title="Dockerfile"
+# Cap downloads at 1 GiB
+ENV RUNPOD_MAX_DOWNLOAD_BYTES=1073741824
+```
