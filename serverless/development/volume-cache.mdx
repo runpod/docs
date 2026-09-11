@@ -6,7 +6,7 @@ description: "Persist model weights and other files to an attached network volum
 
 import { ColdStartTooltip } from "/snippets/tooltips.jsx";
 
-The Runpod Python SDK includes `VolumeCache`, a helper that warms local directories across Serverless workers using an attached network volume. It keeps a browsable mirror of your cache directories on the volume: on cold start it restores previously cached files into place, and after your code runs it copies newly written files back. This turns a repeated multi-GB model download on every cold start into a one-time cost per endpoint, which reduces <ColdStartTooltip /> times.
+The Runpod Python SDK includes `VolumeCache`, a helper that warms local directories across Serverless workers using an attached network volume. It keeps a browsable mirror of your cache directories on the volume. On cold start, it restores previously cached files into place. After your code runs, it copies newly written files back. This turns a repeated multi-GB model download on every cold start into a one-time cost per endpoint, which reduces <ColdStartTooltip /> times.
 
 `VolumeCache` is best-effort and self-contained, and it never affects the outcome of a job. If any part of the cache fails, the worker falls back to a normal cold start. You add it explicitly by wrapping the code that populates your cache, so nothing runs until you opt in.
 
@@ -65,7 +65,7 @@ vc.sync(background=False)     # persist new files back to the volume, inline
 - **Size-bucketed mirror:** Cached files live at `{volume_path}/.cache/{namespace}` on the volume. Files below 256 KiB are packed into a single `small.tar` archive, which collapses the per-file metadata round-trips that make many small files slow on a network volume. Larger files are copied unpacked into a `big/` subdirectory, which preserves their original relative paths so the large-file subtree stays browsable. A versioned `manifest.json`, written last, records the size and modification time of every cached file and marks the mirror as complete. A mirror without a valid, current manifest is treated as absent, so a sync self-heals.
 - **Incremental large files, whole-archive small files:** Large-file transfers are diffed per file against the manifest, so unchanged files are skipped. The `small.tar` archive is repacked whole whenever any small file changes, since unpacking and re-diffing many tiny files individually is slower than the volume's per-file overhead.
 - **Parallel copy:** Large-file transfers run across a thread pool sized by `max_workers`. The work is I/O-bound, so the default oversubscribes the CPU count.
-- **Safety:** Symbolic links are never followed or copied. Every archive member and every large-file destination is checked to resolve inside one of your configured `dirs` before it is written, so a mirror entry can't write outside your cached directories.
+- **Safety:** `VolumeCache` never follows or copies symbolic links. Before writing any archive member or large-file destination, it checks that the path resolves inside one of your configured `dirs`, so a mirror entry can't write outside your cached directories.
 
 ## Limitations
 
