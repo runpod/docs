@@ -6,28 +6,32 @@ tag: "BETA"
 ---
 
 <Note>
-Global volumes are in beta. Features and behavior may change before general availability.
+Global Volumes are in beta. Features and behavior may change before general availability.
 </Note>
 
 A global volume is elastic, region-independent storage you can attach to any Pod. Unlike a network volume, a global volume is not tied to a specific data center. You create it once and any Pod, anywhere, can mount it at startup.
 
-Global volumes are designed for read-heavy workloads such as model serving and inference. They are not a replacement for network volumes or high-throughput distributed file storage.
+Global Volumes are designed for workloads that write data infrequently and read it often, such as model serving and inference. They are not a replacement for network volumes, which are better suited for workloads with frequent writes such as training and checkpointing.
 
 ## Create a global volume
 
 1. In the left nav, go to **Storage**.
-2. Click **+ New storage**.
+2. Click **+ New volume**.
 3. Under **Storage type**, select **Global volume**.
 4. Enter a **Name** for the volume.
 5. Click **Create global volume**.
 
 The volume appears in your Storage list with the type set to **Global**. Storage grows automatically as you add data. There is no capacity to provision upfront.
 
+<Warning>
+  If your account balance reaches \$0, your global volume is flagged and permanently deleted after 15 days. Enable [low balance notifications](/accounts-billing/billing#low-balance-notifications) to avoid data loss.
+</Warning>
+
 ## Attach a global volume to a Pod
 
-You can attach a global volume when deploying a new Pod.
+You can attach a global volume when deploying a new Pod using either of the following methods.
 
-Go to **Storage**, click your global volume, then click **Configure Pod with volume**. This opens the Pod deployment page with the volume pre-selected.
+**From Storage:** Go to **Storage**, click your global volume, then click **Configure Pod with volume**. This opens the Pod deployment page with the volume pre-selected.
 
 **During Pod deployment:**
 
@@ -35,32 +39,56 @@ Go to **Storage**, click your global volume, then click **Configure Pod with vol
 2. Select a template and GPU.
 3. Scroll to the **Storage** section.
 4. Under **Persistent storage**, set the type to **Storage volume**.
-5. Click the volume dropdown and select your volume from the **Global volumes** section.
+5. Click the **Storage volume** dropdown and select your volume from the **Global volumes** section.
 6. Click **Deploy Pod**.
-
-The volume mounts at `/workspace-global` inside the container.
 
 ## Access your files
 
-Once the Pod is running, your files are available at `/workspace-global`. You can verify this from the Pod's **Console** tab:
+The mount path depends on whether a network volume is also attached:
+
+- **Global volume only:** mounts at `/workspace`.
+- **Global volume and network volume together:** global volume mounts at `/workspace-global`, network volume mounts at `/workspace`.
+
+You can verify the volume is mounted from the Pod's **Console** tab:
 
 ```bash
-ls /workspace-global
+ls /workspace
 ```
 
 ## Recommended workloads
 
-Global volumes work best for workloads that primarily read large files and do not require high-throughput concurrent writes.
+Global Volumes work best for workloads that primarily read large files and do not require high-throughput concurrent writes.
 
-- **Model serving and inference**: Load model weights, tokenizer files, and configuration from a shared volume at Pod startup, without baking large files into your Docker image.
-- **Shared assets across Pods**: Serve LoRA adapters, embedding indices, or prompt templates that multiple Pods need to read from a central location.
-- **Read-only configuration**: Distribute scripts, config files, or small datasets consistently across a fleet of Pods.
+- **Model serving and inference:** Load model weights, tokenizer files, and configuration from a shared volume at Pod startup, without baking large files into your Docker image.
+- **Shared assets across Pods:** Serve LoRA adapters, embedding indices, or prompt templates that multiple Pods need to read from a central location.
+- **Read-only configuration:** Distribute scripts, config files, or small datasets consistently across a fleet of Pods.
+
+## Migrate data from a network volume
+
+If you have data on a network volume that you want to move to a global volume, you can use `rsync`. When both volumes are attached, the network volume is at `/workspace` and the global volume is at `/workspace-global`.
+
+1. Deploy a Pod with both your network volume and global volume attached.
+2. Run the following command from the Pod's **Console** tab:
+
+```bash
+rsync -avh /workspace/ /workspace-global/
+```
+
+There is no in-console conversion tool. Migration must be done manually.
 
 ## Limitations
 
-Global volumes use object-backed storage, not a fully POSIX compliant file system. Review the following before using global volumes in production.
+Global Volumes use object-backed storage, not a fully POSIX compliant file system. Review the following before using Global Volumes in production.
 
+- **One volume of each type per Pod:** Each Pod currently supports a maximum of one global volume and one network volume at a time.
 - **Not suitable for training writes:** Writing large volumes of data such as checkpoints, logs, and activations to a global volume during training is not supported. Use a network volume for workloads that write frequently.
-- **Limited POSIX semantics:** Global volumes do not support file locking, atomic rename, or hard links. Applications that depend on POSIX behavior may fail or produce unexpected results.
+- **Limited POSIX semantics:** Global Volumes do not support file locking, atomic rename, or hard links. Applications that depend on POSIX behavior may fail or produce unexpected results.
+- **No permission bits:** Global Volumes cannot set file permission bits. This may produce warnings when downloading models from sources such as Hugging Face.
 - **No concurrent writes across Pods:** Multiple Pods writing to the same global volume concurrently can cause data corruption or overwrite conflicts. Use a network volume for shared mutable storage.
-- **Eventual consistency:** Global volumes use object storage, which means updates made to the volume after the Pod starts may not be immediately visible inside the container. Plan your workload around the state of the volume at mount time.
+- **Eventual consistency:** Global Volumes use object storage, which means updates made to the volume after the Pod starts may not be immediately visible inside the container. Plan your workload around the state of the volume at mount time.
+
+## Next steps
+
+- [Manage network volumes](/storage/network-volumes)
+- [Use the S3-compatible API](/storage/s3-api)
+- [Deploy a Pod](/pods/manage-pods)
