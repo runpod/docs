@@ -1,11 +1,11 @@
 ---
 title: "Build a concurrent handler"
-description: "Build a concurrent handler function to process multiple requests simultaneously on a single worker."
+description: "Build a concurrent handler function to process multiple requests simultaneously on a single worker. See Runpod Serverless setup and usage details."
 ---
 
 ## Requirements
 
-* You've [created a Runpod account](/get-started/manage-accounts).
+* You've [created a Runpod account](/accounts-billing/manage-accounts).
 * You've installed the Runpod SDK (`pip install runpod`).
 * You know how to build a [basic handler function](/serverless/workers/handler-functions).
 
@@ -222,6 +222,25 @@ def update_request_rate(request_history):
     # Option 3: Read from a shared metrics service like Redis
     # request_rate = redis_client.get('recent_request_rate')
 ```
+
+## Automatic job stopping
+
+When a worker processes multiple jobs concurrently, individual jobs can be stopped without affecting sibling jobs. If a request expires, times out, or is cancelled, Runpod signals the worker to stop only that job while other in-progress jobs continue running.
+
+This behavior is automatic and requires no handler changes. If your async handler needs to release resources when stopped, catch `asyncio.CancelledError`:
+
+```python
+async def process_request(job):
+    resource = acquire_resource()
+    try:
+        await do_work(job)
+        return result
+    except asyncio.CancelledError:
+        release_resource(resource)
+        raise
+```
+
+Re-raise `CancelledError` after cleanup so the worker correctly marks the job as stopped.
 
 ## Next steps
 
