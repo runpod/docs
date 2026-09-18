@@ -244,6 +244,36 @@ You have three options:
 Python 3.12 is recommended for best performance with no cold-start overhead. Python 3.10, 3.11, and 3.13 incur additional cold-start overhead on GPU workers because an alternative Python interpreter must be installed.
 </Tip>
 
+### Local module could not be resolved
+
+**Error:**
+```
+endpoint.py: relative import (level=1, module='helpers') could not be resolved to a local file under /path/to/project
+```
+
+Or, for an ignore-excluded import:
+
+```
+Shipped code imports local modules that the build ignore rules (.gitignore or built-in defaults) exclude:
+  utils/helpers.py (imported by endpoint.py)
+
+Shipping them would silently override a deliberate exclusion, and omitting them would break the worker with ModuleNotFoundError. Remove the matching ignore pattern or stop importing these modules from shipped code.
+```
+
+**Cause:** This `LocalModuleResolutionError` has two variants: an `@Endpoint` file imports a local module that Flash can't resolve, or shipped code imports a local module that an ignore pattern excludes.
+
+**Solution:**
+
+For an unresolvable import:
+
+1. Fix the import so it points to a file that exists under your project root.
+2. Move the imported module under the project directory if it lives outside it.
+3. Confirm that package imports have an `__init__.py` file.
+
+For an ignore-excluded import, remove the matching ignore pattern, or stop importing that module from your shipped code.
+
+For how Flash resolves and bundles local imports, see [Import local modules](/flash/create-endpoints#import-local-modules).
+
 ## Deployment errors
 
 ### Tarball too large
@@ -463,6 +493,27 @@ Payload size X MB exceeds limit of 10.0 MB
    ```
 
 3. **Split large requests**: Break large datasets into smaller chunks and process them in multiple requests.
+
+### Local module payload too large
+
+**Error:**
+```
+Inline module payload is X bytes, over the 8388608-byte live-serverless cap.
+Use `flash deploy` for endpoints with large local dependencies.
+```
+
+**Cause:** On the live execution path (calling an `@Endpoint` function directly or during `flash dev`), Flash ships your local module source inline with the request, and the combined source exceeds the 8 MiB cap.
+
+**Solution:** Deploy the app with `flash deploy`, which bundles local modules into the build artifact instead of the request payload:
+
+```bash
+flash deploy
+
+# If using uv:
+uv run flash deploy
+```
+
+See [Live execution size limit](/flash/create-endpoints#live-execution-size-limit) for details on how local module source is shipped.
 
 ### Deserialization timeout
 
