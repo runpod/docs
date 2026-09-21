@@ -153,6 +153,29 @@ If your vLLM worker runs out of memory:
 | 404 Not Found | Wrong endpoint URL | Use the format `https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1` |
 | Connection refused | Endpoint not ready | Wait for workers to initialize |
 
+## ComfyUI-specific issues
+
+### Workflow references a missing model or file
+
+The [ComfyUI worker](https://github.com/runpod-workers/worker-comfyui) checks that every model and input file a workflow references is available before it submits the workflow to ComfyUI. If a referenced file is missing, the job fails immediately with a `Workflow validation failed` error. The error lists each missing file, its model type, and the directory where the worker expects to find it.
+
+To fix it, upload the missing file to the matching directory on your [network volume](/storage/network-volumes), or update the workflow to reference a file the worker already has. The worker expects models under `/runpod-volume/models/` in a subdirectory named for the model type:
+
+- Checkpoints go in `/runpod-volume/models/checkpoints/`.
+- LoRAs go in `/runpod-volume/models/loras/`.
+- VAEs go in `/runpod-volume/models/vae/`.
+- CLIP and text encoder models go in `/runpod-volume/models/clip/`.
+- UNet and diffusion models go in `/runpod-volume/models/unet/`.
+- Upscale models go in `/runpod-volume/models/upscale_models/`.
+
+Filenames are case-sensitive and must match exactly, including the file extension. If the error asks `Did you mean '...'?`, the file exists but its name differs in capitalization. For a missing input image, upload it using the request's `images` parameter or place it in ComfyUI's input directory.
+
+If a reference shows the placeholder value `__list__`, the request was sent with a default value from the ComfyUI interface that was never replaced with a real filename. Set that field to one of the available files the error lists.
+
+<Note>
+This check runs only when the worker can reach ComfyUI's model list. If it can't, the worker submits the workflow anyway and any missing file surfaces as an error from ComfyUI instead.
+</Note>
+
 ## Load balancing endpoint issues
 
 ### "No workers available" error
