@@ -152,7 +152,8 @@ The most common recognized failure is a GPU out-of-memory error while allocating
 - **`MAX_MODEL_LEN` is larger than the model's own context length.** Lower `MAX_MODEL_LEN`, or unset it to use the model's limit. To keep the larger value anyway, set `VLLM_ALLOW_LONG_MAX_MODEL_LEN=1` and expect degraded output past the model's real limit.
 - **vLLM rejected a command-line flag.** Check the environment variables that map to vLLM flags, and any values in `VLLM_EXTRA_ARGS`.
 - **The model is gated or private on Hugging Face.** Set `HF_TOKEN` to a token whose account has accepted the model's license, or choose a public model.
-- **The model wasn't found on Hugging Face.** Check `MODEL_NAME` for typos (it must be the full `org/repo` ID), and check `MODEL_REVISION` if you set one.
+- **The model wasn't found on Hugging Face.** Check `MODEL_NAME` for typos (it must be the full `org/repo` ID).
+- **A pinned model revision doesn't exist.** Check `MODEL_REVISION` (and `TOKENIZER_REVISION`, if you set one) against the revisions listed on the model page, or unset it to use the default branch. If a revision that existed when you deployed later disappears (for example, when the repository's history is force-pushed), the worker automatically relaunches once against the current default branch, dropping the `MODEL_REVISION`, `TOKENIZER_REVISION`, and `CODE_REVISION` pins. It reports this error only if that second attempt also fails.
 - **The model architecture is unsupported.** Confirm the model appears in the [vLLM supported models list](https://docs.vllm.ai/en/latest/models/supported_models.html), or try a newer worker release.
 - **The worker ran out of disk while downloading weights.** Increase the endpoint's container disk to comfortably exceed the repository size, or attach a network volume to cache the weights.
 
@@ -163,10 +164,12 @@ If a startup failure isn't one of these, the worker still exits so the platform 
 A GPU out-of-memory error is the most common recognized startup failure, and the worker returns it as a `startup_error` (see [vLLM worker fails to start](#vllm-worker-fails-to-start)). It happens when the model weights or the KV cache don't fit in GPU memory, including when capturing CUDA graphs. To fix it:
 
 - Lower `MAX_MODEL_LEN` or `MAX_NUM_SEQS` to shrink the KV cache.
+- Lower `MAX_NUM_BATCHED_TOKENS` to `8192`. Its default doubled to `16384` in vLLM v0.28, which doubles peak activation memory.
 - Set `ENFORCE_EAGER=true` to skip CUDA graph capture and free the memory it uses.
 - Use a quantized checkpoint of the model.
 - Move to a larger GPU, or shard across more GPUs with `TENSOR_PARALLEL_SIZE`.
 - If the model itself loaded but the KV cache didn't fit, raise `GPU_MEMORY_UTILIZATION` slightly to give the cache more room.
+- If you set `KV_CACHE_DTYPE=fp8` on an Ampere or Ada GPU, switch it back to `auto`. On those GPUs, fp8 KV cache forces the FlashInfer backend, which needs extra workspace memory.
 
 ### OpenAI API errors
 
