@@ -1,0 +1,113 @@
+---
+title: "Prestart hooks"
+sidebarTitle: "Prestart hooks"
+description: "Run supervised startup work in a Serverless worker before it serves jobs, and report startup failures and timeouts back to the caller."
+---
+
+A prestart hook is a function the Runpod SDK runs once per worker, before the handler serves any jobs. Use one to do startup work such as loading a model or booting an inference engine.
+
+Workers often load a model or start an inference engine before calling `runpod.serverless.start(...)`. The SDK cannot observe that work on its own, so when that work fails, requests stay stuck in the [`IN_QUEUE`](/serverless/endpoints/job-states) state while the reason sits in the worker logs. When you register that work as a hook, the SDK supervises it. The worker runs the hook before taking jobs, and reports a failure or timeout back to the caller as a structured request error.
+
+This page covers registering hooks, bounding them with a timeout, how they behave across endpoint modes, and how startup failures reach the caller. It does not cover validating a worker's environment and marking it unhealthy. For that, see [Fitness checks and preflight checks](/serverless/development/fitness-checks).
+
+To follow this page, you need a Serverless worker with a handler and a `runpod.serverless.start(...)` call, and the runpod Python SDK installed in the worker image.
+
+## Register a prestart hook
+
+Use the `@runpod.serverless.register_prestart_hook` decorator to register a hook. A hook takes no arguments and runs once per worker. When you register more than one, they run sequentially in the order you register them. Both synchronous and asynchronous functions are supported.
+
+```python title="handler.py"
+import runpod
+
+model = None
+
+@runpod.serverless.register_prestart_hook
+def load_model():
+    # Replace this with your own model-loading code.
+    global model
+    model = load_weights("/models/my-model")
+
+def handler(job):
+    # Use the model loaded during prestart to serve the request.
+    return {"output": model.predict(job["input"])}
+
+runpod.serverless.start({"handler": handler, "prestart_timeout": 600})
+```
+
+### Asynchronous hooks
+
+A hook can also be an asynchronous function, which suits startup work that waits on I/O, such as fetching weights from a remote store:
+
+```python title="handler.py"
+import runpod
+
+@runpod.serverless.register_prestart_hook
+async def warm_up():
+    # Replace this with your own async startup code.
+    await download_weights("s3://my-bucket/model")
+
+def handler(job):
+    return {"output": "ready"}
+
+runpod.serverless.start({"handler": handler})
+```
+
+## Set a prestart timeout
+
+Add the optional `prestart_timeout` key to the config you pass to `runpod.serverless.start(...)` to bound the prestart phase. The value is in seconds and bounds the whole phase, not each hook individually. Omit the key to run with no timeout.
+
+```python title="handler.py"
+runpod.serverless.start({"handler": handler, "prestart_timeout": 600})
+```
+
+## When prestart runs across endpoint modes
+
+Prestart support depends on how the endpoint runs the worker:
+
+- [Queue-based endpoints](/serverless/endpoints/overview): full support. The worker keeps taking jobs from the queue while prestart runs, but it does not run your handler until every prestart hook succeeds.
+- Local testing: prestart runs before the handler starts when you run your handler locally with test input, or serve it with the local API server (`--rp_serve_api`) running a single worker (the default `--rp_api_concurrency 1`). See [Local testing](/serverless/development/local-testing).
+- Not supported: realtime mode, and the local API server running more than one worker. Registering a prestart hook in one of these raises an error when the worker starts.
+- [Load-balancing endpoints](/serverless/load-balancing/overview): not applicable, because they manage their own HTTP server lifecycle and do not start through this worker entry point.
+
+## Failure, timeout, and cancellation behavior
+
+When a hook raises an exception or the prestart phase exceeds its timeout, the SDK attaches a structured error to a request, then drains and exits the worker. The caller receives an explanation instead of a request that times out silently. A caller observes these identifiers, the way it observes a job state:
+
+- `prestart_failed`: a hook raised an exception. The payload carries the error's type, message, and traceback; the worker ID; the runpod version; the name of the failing hook; and, optionally, the captured worker logs. Use the error details and captured logs to diagnose and fix the failing hook.
+- `PrestartTimeout`: the prestart phase exceeded `prestart_timeout` before its hooks completed. Increase `prestart_timeout`, or move slow work out of the prestart phase.
+- `prestart_cancelled`: the worker began shutting down before prestart completed, so a request held during the phase is returned with this reason.
+
+## Capture worker logs on failure
+
+Set the `RUNPOD_LOG_CAPTURE` environment variable in the worker environment to attach captured worker output to a failure payload. For where to set environment variables, see [Environment variables](/serverless/development/environment-variables).
+
+`RUNPOD_LOG_CAPTURE` accepts these values:
+
+- `auto` (default): capture prestart failures only when hooks are registered.
+- `all`: capture both prestart and handler failures.
+- `off`: never capture.
+
+An unrecognized value falls back to `auto`.
+
+A failure payload can carry the last 16,384 characters (16 KB) of the worker's captured stdout and stderr. Capture does not see child processes, log handlers created before startup, or threads your code starts directly. Capture does see work you send through `asyncio.to_thread`.
+
+## Backward compatibility
+
+Prestart hooks are opt-in.
+
+<Note>
+A worker that registers no prestart hooks is unaffected. The prestart phase, log capture under `auto`, and mode validation all stay inactive until you register a hook.
+</Note>
+
+## See also
+
+Fitness checks are the parallel startup mechanism. A fitness check validates the worker's environment and, on failure, marks the worker unhealthy so it exits. A prestart hook runs your startup work and surfaces its failures to the caller. Use fitness checks to gate on readiness, and prestart hooks to supervise initialization. The two are independent: a worker can register both, using fitness checks to validate readiness and prestart hooks to run and supervise startup work.
+
+<CardGroup cols={2}>
+  <Card title="Fitness checks and preflight checks" href="/serverless/development/fitness-checks" icon="stethoscope" horizontal>
+    Validate a worker's environment at startup and mark it unhealthy on failure.
+  </Card>
+  <Card title="Handler functions" href="/serverless/workers/handler-functions" icon="code" horizontal>
+    The "Initialize outside the handler" pattern that prestart hooks supervise.
+  </Card>
+</CardGroup>
