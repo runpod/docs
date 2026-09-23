@@ -84,12 +84,24 @@ Global volumes work best for workloads that primarily read large files and do no
 - **Shared assets across Pods:** Serve LoRA adapters, embedding indices, or prompt templates that multiple Pods need to read from a central location.
 - **Read-only configuration:** Distribute scripts, config files, or small datasets consistently across a fleet of Pods.
 
+## Request costs
+
+Global volumes charge for storage and for request operations separately. Each file system operation issues one or more underlying requests.
+
+| Request class | Typical operations | Rate |
+| --- | --- | --- |
+| Class A | Writes, creates, lists | \$0.005 per 1,000 requests |
+| Class B | Reads, metadata lookups | \$0.0005 per 1,000 requests |
+
+A single file system command often translates into multiple requests. For example, opening a file for writing may issue a read followed by a write. Directory listings use a one-minute cache, so repeated `ls` calls in quick succession do not each generate a new request. Additionally, host memory buffers help reduce the number of underlying requests through readahead and write-back caching.
+
+Workloads that write frequently or loop over large directory listings can accumulate request charges quickly. Test your workflow at small scale and review your billing dashboard to estimate daily request costs before scaling up.
+
 ## Limitations
 
 Global volumes use object-backed storage, not a fully POSIX compliant file system. Review the following before using global volumes in production.
 
 - **One volume of each type per Pod:** Each Pod currently supports a maximum of one global volume and one network volume at a time.
-- **Not suitable for training writes:** Writing large volumes of data to a global volume during training is not recommended. Use a network volume for workloads that write frequently.
 - **Limited POSIX semantics:** Global volumes do not support file locking, atomic rename, or hard links. Applications that depend on POSIX behavior may fail or produce unexpected results.
 - **No permission bits:** Global volumes cannot set file permission bits. This may produce warnings when downloading models from sources such as Hugging Face.
 - **Concurrent writes to the same file:** Multiple Pods can write to a global volume concurrently, but when two Pods write to the same file at the same time, the last write wins. For workloads that require file locking or high-concurrency writes, use a network volume instead.
