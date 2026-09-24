@@ -147,16 +147,16 @@ def check_environment():
 
 Along with your custom checks, Runpod automatically runs a set of built-in system checks at startup, with no registration required. These verify that the worker has enough memory, disk space, and network connectivity to run reliably. GPU workers run three additional checks that validate the CUDA version, initialize the CUDA device, and benchmark GPU compute. GPU workers also run a native GPU memory allocation test that exercises actual memory allocation across all detected GPUs; this test is skipped automatically on CPU-only workers.
 
-You can tune the thresholds for these checks using environment variables, or disable them entirely for testing. Your own registered checks always run, regardless of these settings.
+You can tune the thresholds for these checks using environment variables, or disable them for testing. Your own registered checks always run regardless of these threshold settings.
 
 | Check | Applies to | What it verifies | Default threshold | Environment variable |
 |-------|-----------|------------------|-------------------|----------------------|
 | Memory | All workers | Available RAM | 4 GB minimum | `RUNPOD_MIN_MEMORY_GB` |
 | Disk space | All workers | Free space on `/` as a percentage of total | 10% free | `RUNPOD_MIN_DISK_PERCENT` |
-| Network connectivity | All workers | Internet connectivity via TCP to 8.8.8.8:53 | 5 second timeout | `RUNPOD_NETWORK_CHECK_TIMEOUT` |
+| Network connectivity | All workers | Network connectivity via TCP to the Runpod API | 5 second timeout | `RUNPOD_NETWORK_CHECK_TIMEOUT` |
 | CUDA version | GPU workers | Minimum CUDA driver version | CUDA 11.8+ | `RUNPOD_MIN_CUDA_VERSION` |
 | CUDA device initialization | GPU workers | Devices initialize and synchronize | — | — |
-| GPU compute benchmark | GPU workers | Compute responsiveness (matrix multiply) | 100 ms maximum | `RUNPOD_GPU_BENCHMARK_TIMEOUT` |
+| GPU compute benchmark | GPU workers | Compute responsiveness (matrix multiply) | 2 seconds | `RUNPOD_GPU_BENCHMARK_TIMEOUT` |
 
 The native GPU memory allocation test can be tuned with these additional variables. The test typically takes 100–500 ms per GPU, so keep that in mind when setting `RUNPOD_GPU_TEST_TIMEOUT`.
 
@@ -175,6 +175,22 @@ ENV RUNPOD_MIN_CUDA_VERSION=12.0
 ENV RUNPOD_NETWORK_CHECK_TIMEOUT=10
 ```
 
+### When automatic checks run
+
+Runpod runs the checks that don't need a running worker as early as possible. This way, an unhealthy worker fails before it spends time loading a large model. The memory, disk, and CUDA version checks and the native GPU memory allocation test run when your worker first imports `runpod`. If one of them fails, the worker exits and is marked unhealthy before your model loads.
+
+The other checks need the running worker: network connectivity, CUDA device initialization, and the GPU compute benchmark. These run at worker start, along with your registered checks. Runpod checks disk space in both places, because loading a model between import and startup can use space that was free earlier.
+
+This early pass runs only on the Runpod Serverless platform. It's skipped for realtime workers and during local development and testing.
+
+The early checks read their thresholds when `runpod` is imported, so set any threshold variables in your Dockerfile or environment before the import. Values set later, from your handler code, apply only to the checks that run at worker start.
+
+To run every check at worker start instead of splitting them, set `RUNPOD_DEFER_FITNESS_CHECKS=true`. This keeps all checks enabled and skips the early import-time pass.
+
+<Note>
+The early import-time pass and the `RUNPOD_DEFER_FITNESS_CHECKS` and `RUNPOD_SKIP_FITNESS_CHECKS` controls require a recent version of the `runpod` SDK. If your workers don't run checks at import time, upgrade the `runpod` SDK to a newer release.
+</Note>
+
 ### Disable automatic checks
 
 You can disable the automatic system checks with the following environment variables. This is intended for testing only and is not recommended in production, since the checks help catch unhealthy workers before they take traffic.
@@ -185,6 +201,8 @@ You can disable the automatic system checks with the following environment varia
 | `RUNPOD_SKIP_GPU_CHECK=true` | Skips the native GPU memory allocation test. |
 
 Your own registered checks still run even when these flags are set.
+
+To disable fitness checks entirely, including your own registered checks, set `RUNPOD_SKIP_FITNESS_CHECKS=true`. No checks run at import time or at worker start. This is intended for testing only.
 
 ## Test fitness checks locally
 
