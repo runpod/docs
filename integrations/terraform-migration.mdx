@@ -1,0 +1,725 @@
+---
+title: "Migrate the Runpod Terraform provider from 1.x to 2.0.0"
+sidebarTitle: "Terraform 1.x to 2.0.0"
+description: "Map every 1.x attribute of the Runpod Terraform provider to its 2.0.0 equivalent, with the configuration edit and state action each resource needs."
+---
+
+The 2.0.0 Runpod Terraform provider is a breaking release. It is generated entirely from the Runpod REST v2 API. Every resource therefore needs both a configuration edit and a state action before it plans cleanly. This guide maps each 1.x attribute to its 2.0.0 equivalent and gives the exact edit and state command each resource needs.
+
+## What changed
+
+The 1.x provider was assembled from more than one backend, so its attribute names came in several styles. Some attributes were even accepted by Terraform but ignored by the service. The 2.0.0 provider has one source of truth. Every attribute maps to a documented v2 field. Names follow the v2 schema: `image`, not `image_name`, and `disk`, not `container_disk_in_gb`. Anything the API never supported is gone rather than silently accepted.
+
+Throughout this guide, "1.x" means 1.0.8, the last release that worked end to end and the baseline that 2.0.0 preserves.
+
+## Requirements
+
+- Terraform 1.6 or later.
+- An existing configuration and state built with the 1.x provider.
+- A Runpod API key, set through the `api_key` argument or the `RUNPOD_API_KEY` environment variable.
+- The resource ids from your current state, recorded before you upgrade. Step 2 below covers this.
+
+## Provider block and authentication
+
+Pin the new major version and raise the Terraform floor. The 1.x block:
+
+```hcl
+terraform {
+  required_providers {
+    runpod = {
+      source = "runpod/runpod"
+    }
+  }
+}
+
+provider "runpod" {
+  api_key = var.runpod_api_key
+}
+```
+
+The 2.0.0 block:
+
+```hcl
+terraform {
+  required_version = ">= 1.6"
+
+  required_providers {
+    runpod = {
+      source  = "runpod/runpod"
+      version = "~> 2.0"
+    }
+  }
+}
+
+provider "runpod" {}
+```
+
+Authentication is unchanged in substance. The provider reads `api_key`, falls back to the `RUNPOD_API_KEY` environment variable, and errors at configure time if neither is set.
+
+The base URL environment variable was renamed. 1.x read `RUNPOD_BASE_URL`; 2.0.0 reads `RUNPOD_API_BASE_URL` (or the `base_url` argument) and falls back to the production API. If you point the provider at a non-production host through the environment, rename the variable.
+
+One more provider argument, `graphql_url`, exists only for the deprecated machine and registry-username surfaces described below. It falls back to `RUNPOD_GRAPHQL_URL`, then the production GraphQL host. Everything on REST v2 ignores it, so set it only if you use those surfaces against a non-production environment.
+
+## Upgrade process
+
+<Steps>
+  <Step title="Pin the new version and initialize">
+    Set the version in your provider block and run `terraform init -upgrade`:
+
+    ```hcl
+    runpod = {
+      source  = "runpod/runpod"
+      version = "2.0.0"
+    }
+    ```
+  </Step>
+
+  <Step title="Record your resource ids">
+    Before editing anything, record the identifiers you will need to re-import. Run `terraform state list` and `terraform show -json` against the old state, or reuse the `id` outputs you already have. Do this while the 1.x provider is still in the lock file.
+  </Step>
+
+  <Step title="Rewrite the configuration resource by resource">
+    Apply the mapping tables below, then:
+
+    - Rename the three resource types that changed name: `runpod_endpoint`, `runpod_container_registry_auth`, and `runpod_ecr_delegation`.
+    - Rename the two data sources that changed with them: `runpod_container_registry_auths` and `runpod_ecr_delegations`.
+    - Delete the resources that no longer exist.
+  </Step>
+
+  <Step title="Run the state actions">
+    2.0.0 ships no state upgraders, so a 1.x state entry whose attribute set changed cannot be decoded. Follow the [state migration](#state-migration) section to remove and re-import each affected resource. Those commands change state only. For a Pod, though, the first apply after them can replace it. Read [Before importing a Pod you want to keep](#before-importing-a-pod-you-want-to-keep) first.
+  </Step>
+
+  <Step title="Plan and review">
+    Run `terraform plan`. Templates, network volumes, endpoints, machines, and account keys should show no changes when the rewritten configuration matches what the API reports. Imported Pods, registry credentials, and ECR delegations behave as the state migration section describes. Read every planned replacement before you apply it.
+  </Step>
+</Steps>
+
+Expect genuine replacements where 1.x let you change something the API cannot change in place. Changing `gpu_type_id`, `gpu_count`, `cloud`, `cpu_type_id`, `vcpu_count`, `template_id`, the CUDA constraints, or the host-size floors forces a new Pod. Switching a Serverless endpoint between the GPU and CPU families replaces the endpoint.
+
+## Resources
+
+### runpod_pod
+
+The resource type name and id format are unchanged. The attribute set changed substantially, and the two mount kinds moved into blocks.
+
+These attributes were renamed, reshaped, or moved:
+
+| 1.x attribute | 2.0.0 attribute | Note |
+| --- | --- | --- |
+| `name` | `name` | Now required. |
+| `image_name` | `image` | Renamed. |
+| `docker_args` | `args` | Renamed. The v2 Pod takes a single command string here. |
+| `container_disk_in_gb` | `disk` | Renamed. |
+| `cloud_type` | `cloud` | Renamed. Values are `SECURE` and `COMMUNITY`; the 1.x `ALL` value is gone. Changing it replaces the Pod. |
+| `env` | `env` | 1.x took a list of `"KEY=VALUE"` strings; 2.0.0 takes a map of string. |
+| `ports` | `ports` | 1.x took one comma-separated string; 2.0.0 takes a list, such as `["8888/http", "22/tcp"]`. |
+| `volume_in_gb` | `persistent_volume.size` | Moved into the `persistent_volume` block. |
+| `volume_mount_path` | `persistent_volume.path` | Moved into the `persistent_volume` block. |
+| `network_volume_id` | `network_volumes[].volume_id` | Moved into the `network_volumes` block; the mount path is now explicit. |
+| `network_volume_ids` | `network_volumes` | A list of `{ volume_id, path }` objects. |
+| `cost_per_hr` | `cost` | Renamed. USD per hour. |
+| `vcpu_count` | `vcpu_count` | Computed in 1.x; now an input for CPU Pods. Read the allocated count from the `runpod_pod` data source (`gpu_vcpu_count` or `cpu_vcpu_count`). |
+
+The container command now lives entirely in `args` as a single string. If your 1.x Pod set `docker_start_cmd` or `docker_entrypoint`, fold that command into `args`; 2.0.0 does not accept either attribute.
+
+These attributes keep their names and behavior: `gpu_type_id`, `gpu_count`, `template_id`, `start_ssh`, `start_jupyter`, `memory_in_gb`, `id`, `status`, and `created_at`. `locked` and `cluster_ip` also keep their names and are now populated from the v2 read, where 1.x declared them but never filled them.
+
+2.0.0 adds these attributes:
+
+- `cpu_type_id`: creates a CPU-only Pod. Exactly one of `gpu_type_id` or `cpu_type_id` must be set.
+- `desired_state`: `RUNNING` or `EXITED`, reconciled on every apply.
+- `data_center_ids`: a placement preference. The scheduler's pick lands in the read-only `data_center_id`.
+- `registry`: the registry credential id for a private image.
+- `global_networking`: a private cross-datacenter IP.
+- `min_cuda_version` and `allowed_cuda_versions`: a CUDA floor, or an exact set. These are mutually exclusive.
+- `min_ram_per_gpu` and `min_vcpu_count_per_gpu`: host-size placement filters, applied per requested GPU.
+
+Before, in 1.x:
+
+```hcl
+resource "runpod_pod" "training" {
+  name                 = "training-pod"
+  image_name           = "runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04"
+  gpu_type_id          = "NVIDIA GeForce RTX 4090"
+  gpu_count            = 1
+  cloud_type           = "SECURE"
+  container_disk_in_gb = 20
+  start_ssh            = true
+  start_jupyter        = true
+  ports                = "8888/http,22/tcp"
+  env                  = ["MODEL_NAME=llama-3"]
+  volume_in_gb         = 50
+  volume_mount_path    = "/workspace"
+}
+```
+
+After, in 2.0.0:
+
+```hcl
+resource "runpod_pod" "training" {
+  name          = "training-pod"
+  image         = "runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04"
+  gpu_type_id   = "NVIDIA GeForce RTX 4090"
+  gpu_count     = 1
+  cloud         = "SECURE"
+  disk          = 20
+  start_ssh     = true
+  start_jupyter = true
+  ports         = ["8888/http", "22/tcp"]
+
+  env = {
+    MODEL_NAME = "llama-3"
+  }
+
+  persistent_volume = {
+    size = 50
+    path = "/workspace"
+  }
+}
+```
+
+To attach a network volume instead of host-local storage, use the `network_volumes` block. The two mount kinds are mutually exclusive, and the volume must be in the same data center as the Pod:
+
+```hcl
+resource "runpod_pod" "training" {
+  name        = "training-pod"
+  image       = "runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04"
+  gpu_type_id = "NVIDIA GeForce RTX 4090"
+
+  network_volumes = [{
+    volume_id = runpod_network_volume.data.id
+    path      = "/runpod-volume"
+  }]
+}
+```
+
+### runpod_endpoint
+
+The 2.0.0 equivalent is **`runpod_serverless_endpoint`**: the resource type was renamed. The largest change is GPU selection. 1.x named individual GPU types; 2.0.0 names Serverless GPU pools and subtracts exceptions from them.
+
+These attributes were renamed, reshaped, or moved:
+
+| 1.x attribute | 2.0.0 attribute | Note |
+| --- | --- | --- |
+| `image_name` | `image` | Renamed. |
+| `container_disk_in_gb` | `disk` | Renamed. |
+| `gpu_type_id`, `gpu_type_ids` | `gpu_pools` | A list of Serverless pool ids, such as `["ADA_24"]`. Read the pool from the `pool` field of `runpod_gpu_types`. |
+| `cpu_flavor_ids` | `cpu[].cpu_type_id` | Moved into the `cpu` block. |
+| `vcpu_count` | `cpu[].vcpu_count` | Moved into the `cpu` block, one entry per eligible configuration. |
+| `scaler_type` | `scaling_type` | Renamed. Values `QUEUE_DELAY` or `REQUEST_COUNT`. |
+| `scaler_value` | `scaling_value` | Renamed. Now required alongside `scaling_type`. |
+| `execution_timeout_ms` | `timeout` | Renamed. Still in milliseconds. |
+| `flashboot` | `flashboot` | A boolean in 1.x; a string enum in 2.0.0 (`OFF`, `FLASHBOOT`, or `PRIORITY_FLASHBOOT`). |
+| `network_volume_id`, `network_volume_ids` | `network_volumes` | A list of volume ids. |
+| `compute_type` | `compute_type` | Now derived from whether `gpu_pools` or `cpu` is set. A value that agrees with the block is allowed; a value that contradicts it is rejected. |
+
+These attributes keep their names and behavior: `name`, `env`, `template_id` (which must be a serverless template), `gpu_count`, `workers_min`, `workers_max`, `idle_timeout`, `allowed_cuda_versions`, `min_cuda_version`, `data_center_ids`, `id`, and `created_at`.
+
+The 1.x priority ordering within a GPU family (`gpu_type_priority` and `cpu_flavor_priority`) has no equivalent in 2.0.0, because a pool has no internal priority. Remove these attributes. The `cloud_type` attribute is also gone, because the v2 Serverless create takes no cloud tier. To observe workers and configuration versions, use the `runpod_endpoint_workers` and `runpod_endpoint_releases` data sources rather than reading them back from the endpoint.
+
+2.0.0 adds these attributes:
+
+- `endpoint_type`: required, either `QUEUE` or `LOAD_BALANCER`. Changing it replaces the endpoint.
+- `ports`: the worker HTTP ports a `LOAD_BALANCER` endpoint routes to.
+- `excluded_types`: GPU type ids subtracted from the selected pools.
+- `registry`: the registry credential id for a private worker image.
+
+Before, in 1.x:
+
+```hcl
+resource "runpod_endpoint" "inference" {
+  name                 = "inference-endpoint"
+  image_name           = "runpod/mock-worker:dev"
+  gpu_type_ids         = ["NVIDIA RTX 4000 Ada Generation"]
+  gpu_count            = 1
+  flashboot            = true
+  scaler_type          = "QUEUE_DELAY"
+  scaler_value         = 4
+  workers_min          = 0
+  workers_max          = 3
+  idle_timeout         = 5
+  execution_timeout_ms = 600000
+}
+```
+
+After, in 2.0.0:
+
+```hcl
+resource "runpod_serverless_endpoint" "inference" {
+  name          = "inference-endpoint"
+  image         = "runpod/mock-worker:dev"
+  endpoint_type = "QUEUE"
+  gpu_pools     = ["ADA_24"]
+  gpu_count     = 1
+  flashboot     = "FLASHBOOT"
+  scaling_type  = "QUEUE_DELAY"
+  scaling_value = 4
+  workers_min   = 0
+  workers_max   = 3
+  idle_timeout  = 5
+  timeout       = 600000
+
+  excluded_types   = ["NVIDIA L40"]
+  min_cuda_version = "12.1"
+}
+```
+
+### runpod_network_volume
+
+The resource type name and id format are unchanged. One attribute was renamed:
+
+| 1.x attribute | 2.0.0 attribute | Note |
+| --- | --- | --- |
+| `data_center_id` | `data_center` | Renamed. Immutable; changing it replaces the volume. |
+
+`name`, `size` (10 to 4096 GB, which can grow but never shrink), `type` (`STANDARD` or `HIGH_PERFORMANCE`, immutable), and `id` keep their names and behavior.
+
+Before, in 1.x:
+
+```hcl
+resource "runpod_network_volume" "datasets" {
+  name           = "datasets"
+  size           = 100
+  data_center_id = "EU-RO-1"
+  type           = "HIGH_PERFORMANCE"
+}
+```
+
+After, in 2.0.0:
+
+```hcl
+resource "runpod_network_volume" "datasets" {
+  name        = "datasets"
+  size        = 100
+  data_center = "EU-RO-1"
+  type        = "HIGH_PERFORMANCE"
+}
+```
+
+### runpod_template
+
+The resource type name and id format are unchanged. The container settings come from the v2 template object, and the single persistent mount moved into the `persistent_volume` block.
+
+These attributes were renamed, reshaped, or moved:
+
+| 1.x attribute | 2.0.0 attribute | Note |
+| --- | --- | --- |
+| `image_name` | `image` | Renamed. Now required. |
+| `container_disk_in_gb` | `disk` | Renamed. |
+| `is_public` | `public` | Renamed. |
+| `is_serverless` | `serverless` | Renamed. |
+| `docker_start_cmd` | `args` | Renamed and reshaped: a list in 1.x, a single string in 2.0.0. |
+| `container_registry_auth_id` | `registry` | Renamed. |
+| `volume_in_gb` | `persistent_volume.size` | Moved into the `persistent_volume` block. |
+| `volume_mount_path` | `persistent_volume.path` | Moved into the `persistent_volume` block. |
+
+`name`, `category` (`CPU`, `NVIDIA`, or `AMD`), `env`, `ports`, and `id` keep their names and behavior.
+
+Before, in 1.x:
+
+```hcl
+resource "runpod_template" "pytorch" {
+  name                 = "pytorch-notebook"
+  image_name           = "runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04"
+  container_disk_in_gb = 20
+  is_public            = false
+  is_serverless        = false
+  ports                = ["8888/http", "22/tcp"]
+  docker_start_cmd     = ["bash", "-lc", "start.sh"]
+
+  env = {
+    MODEL_NAME = "llama-3"
+  }
+}
+```
+
+After, in 2.0.0:
+
+```hcl
+resource "runpod_template" "pytorch" {
+  name       = "pytorch-notebook"
+  image      = "runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04"
+  disk       = 20
+  public     = false
+  serverless = false
+  ports      = ["8888/http", "22/tcp"]
+  args       = "bash -lc start.sh"
+
+  env = {
+    MODEL_NAME = "llama-3"
+  }
+}
+```
+
+### runpod_container_registry_auth
+
+The 2.0.0 equivalent is **`runpod_registry`**: the resource type was renamed. Every attribute (`name`, `username`, `password`, and `id`) kept its name. The API has no update operation, so any change replaces the credential, and 2.0.0 cannot import one.
+
+Before, in 1.x:
+
+```hcl
+resource "runpod_container_registry_auth" "private" {
+  name     = "private-images"
+  username = "runpod-puller"
+  password = var.registry_password
+}
+
+resource "runpod_pod" "private" {
+  name       = "private-image-pod"
+  image_name = "ghcr.io/example/trainer:1.0.0"
+}
+```
+
+After, in 2.0.0, the Pod references the credential explicitly through `registry`:
+
+```hcl
+resource "runpod_registry" "private" {
+  name     = "private-images"
+  username = "runpod-puller"
+  password = var.registry_password
+}
+
+resource "runpod_pod" "private" {
+  name        = "private-image-pod"
+  image       = "ghcr.io/example/trainer:1.0.0"
+  gpu_type_id = "NVIDIA GeForce RTX 4090"
+  registry    = runpod_registry.private.id
+}
+```
+
+### runpod_ecr_delegation
+
+The 2.0.0 equivalent is **`runpod_registry_delegation`**: the resource type was renamed. Every attribute kept its name, and `resource` is now required. The API has no update operation, so any change replaces the delegation, and 2.0.0 cannot import one.
+
+Before, in 1.x:
+
+```hcl
+resource "runpod_ecr_delegation" "ecr" {
+  name     = "ecr-trainers"
+  resource = "arn:aws:ecr:us-east-1:123456789012:repository/trainers"
+}
+```
+
+After, in 2.0.0:
+
+```hcl
+resource "runpod_registry_delegation" "ecr" {
+  name     = "ecr-trainers"
+  resource = "arn:aws:ecr:us-east-1:123456789012:repository/trainers"
+}
+```
+
+### runpod_pod_action
+
+The resource type name is unchanged, but the semantics are now explicit: the resource is imperative. It reconciles nothing and refreshes to nothing, and destroying it only forgets it, leaving the Pod as it is. The action runs on create and again whenever `action` or `triggers` change.
+
+- `pod_id` keeps its behavior. Pointing it at a different Pod replaces the resource and runs the action on the new Pod.
+- `action` keeps the names `start`, `stop`, `restart`, and `terminate`. 1.x also documented `resume` and `reset`; use `start` and `restart` instead.
+- `status` is read-only and reports the status at the moment the action was accepted, not a live value. A refresh does not update it, and `terminate` returns no body, so it leaves this null. Read live state from the `runpod_pod` data source.
+- `triggers` is new: a map of arbitrary values that re-runs the action when any of them changes.
+- `id` is new and read-only: the Pod this resource acts on, one action runner per Pod.
+
+<Warning>
+Do not combine `runpod_pod_action` with `runpod_pod.desired_state` on the same Pod. Both manage the same transitions, and each apply would undo the other. Use `desired_state` for a run state Terraform should keep, and `runpod_pod_action` for a one-off restart or a stop tied to something else changing.
+</Warning>
+
+Before, in 1.x:
+
+```hcl
+resource "runpod_pod_action" "stop" {
+  pod_id = runpod_pod.batch.id
+  action = "stop"
+}
+```
+
+After, in 2.0.0, a restart that re-runs when the image tag moves:
+
+```hcl
+resource "runpod_pod_action" "restart_on_image_change" {
+  pod_id = runpod_pod.jupyter.id
+  action = "restart"
+
+  triggers = {
+    image = var.image
+  }
+}
+```
+
+If what you wanted was a run state Terraform keeps, set `desired_state` on the Pod instead:
+
+```hcl
+resource "runpod_pod" "batch" {
+  name          = "batch-pod"
+  image         = var.image
+  gpu_type_id   = "NVIDIA GeForce RTX 4090"
+  desired_state = "EXITED"
+}
+```
+
+### runpod_machine
+
+The `runpod_machine` resource remains available on the GraphQL API as a deprecated shim. The resource type name, id format, and every attribute name are unchanged. No configuration change is needed beyond the state action. Only `name` and `bid_price_per_gpu` are settable, exactly as in 1.x; everything else reports what the API assigned. Terraform prints a deprecation warning on every plan that touches it.
+
+### Removed resources
+
+Two 1.x resources have no 2.0.0 equivalent:
+
+- **`runpod_endpoint_job`**: jobs are runtime objects served by the Serverless runtime API, not infrastructure Terraform should own. Submit jobs from your application or a caller against the runtime API.
+- **`runpod_endpoint_worker`**: individual workers are not addressable. Use the `runpod_endpoint_workers` and `runpod_endpoint_worker_logs` data sources to observe workers, and the endpoint's `workers_min`, `workers_max`, `scaling_type`, and `scaling_value` to control them.
+
+## Data sources
+
+Data sources hold no managed state, so none of them needs a state action. Rename the two that changed name and delete the removed ones; the rest re-read on the next plan.
+
+### runpod_pod
+
+The `runpod_pod` data source keeps its name and required `id`. It now reports far more than 1.x did, including live cost, runtime utilization, SSH details, mounts, and cluster membership.
+
+These attributes were renamed, reshaped, or moved:
+
+| 1.x attribute | 2.0.0 attribute | Note |
+| --- | --- | --- |
+| `image_name` | `image` | Renamed. |
+| `docker_args` | `args` | Renamed. |
+| `container_disk_in_gb` | `disk` | Renamed. |
+| `cost_per_hr` | `cost` | Renamed. USD per hour. |
+| `env` | `env` | A list of `"KEY=VALUE"` strings in 1.x; a map of string in 2.0.0. |
+| `ports` | `ports` | One string in 1.x; a list in 2.0.0. |
+| `memory_in_gb` | `gpu_memory`, `cpu_memory` | Renamed and split by Pod family. |
+| `template_id` | `template` | Renamed. |
+| `volume_in_gb` | `mounts.persistent.size` | Moved into the `mounts` block. |
+| `volume_mount_path` | `mounts.persistent.path` | Moved into the `mounts` block. |
+
+`id`, `name`, `gpu_count`, `gpu_type_id`, `status`, and `created_at` keep their names. The `desired_status`, `machine_id`, and `machine_type` attributes are gone; the 1.x data source could never populate them, so no configuration depended on them.
+
+2.0.0 adds `cloud`, `data_center_id`, `started_at`, `locked`, `registry`, `actions`, `cpu_type_id`, `cpu_vcpu_count`, `gpu_vcpu_count`, `cuda_version`, the `global_networking` fields, `mounts.network`, `runtime` (CPU, memory, and per-GPU utilization), `ssh.direct` and `ssh.proxy`, and `cluster`.
+
+### runpod_machine and runpod_machines
+
+Both data sources remain available on the GraphQL API as deprecated shims. Each keeps its name, its required inputs, and every attribute name. As in 1.x, `data_center_id` is always null on `runpod_machine`, because the underlying query does not select it; use `runpod_machines` when you need the data center.
+
+### runpod_gpu_types
+
+The `runpod_gpu_types` data source is now read from the v2 catalog API. The list attribute is still `gpu_types`, and its nested fields were renamed to the catalog's names:
+
+| 1.x attribute | 2.0.0 attribute | Note |
+| --- | --- | --- |
+| `gpu_types[].display_name` | `gpu_types[].name` | Renamed. |
+| `gpu_types[].memory_in_gb` | `gpu_types[].memory` | Renamed. VRAM in GB. |
+| `gpu_types[].secure_cloud` | `gpu_types[].secure` | Renamed. |
+| `gpu_types[].secure_price` | `gpu_types[].price_secure` | Renamed. USD per hour. |
+| `gpu_types[].community_price` | `gpu_types[].price_community` | Renamed. USD per hour. |
+
+`gpu_types[].id` keeps its name. The `cuda_cores` and `manufacturer` fields are gone, because the v2 catalog does not carry them. 2.0.0 adds `gpu_types[].community` (availability on Community Cloud) and `gpu_types[].pool` (the Serverless pool id for `runpod_serverless_endpoint.gpu_pools`). A new single-item companion, `runpod_gpu_type`, looks up one entry by `id`.
+
+### runpod_data_centers
+
+The `runpod_data_centers` data source is now read from the v2 catalog API. The list attribute is still `data_centers`:
+
+| 1.x attribute | 2.0.0 attribute | Note |
+| --- | --- | --- |
+| `data_centers[].location` | `data_centers[].region` | Renamed. |
+
+`data_centers[].id`, `data_centers[].name`, and `data_centers[].global_network` keep their names. 2.0.0 adds `data_centers[].compliance` (compliance certifications held) and `data_centers[].network_volume_types` (storage tiers offered). A new single-item companion, `runpod_data_center`, looks up one entry by `id`.
+
+### runpod_template
+
+The `runpod_template` data source keeps its name and required `id`, and mirrors the resource's renames. `image_name` becomes `image`, `container_disk_in_gb` becomes `disk`, `is_public` becomes `public`, `is_serverless` becomes `serverless`, and `container_registry_auth_id` becomes `registry`. `docker_start_cmd` becomes `args`, reshaped from a list to a single string. `volume_in_gb` and `volume_mount_path` move into `mounts.persistent.size` and `mounts.persistent.path`. 2.0.0 adds `allowed_cuda_versions`, `start_ssh`, and `start_jupyter`.
+
+### runpod_container_registry_auths
+
+The 2.0.0 equivalent is **`runpod_registries`**: the data source was renamed, and its list attribute `container_registry_auths` became `registries`. The `id` and `name` nested fields keep their names. `registries[].username` is read from the GraphQL API and reads null when that query does not answer, so it is deprecated. The `password`, `created_at`, and `updated_at` fields are gone, because the v2 list does not return them.
+
+### runpod_ecr_delegations
+
+The 2.0.0 equivalent is **`runpod_registry_delegations`**: the data source was renamed along with the resource, and its list attribute `ecr_delegations` became `delegations`. The nested `id`, `name`, `aws_user`, `aws_region`, `repository`, `tag`, `docker_registry_uri`, and `created_at` fields keep their names. The `resource` field is gone, because the API does not echo the delegated ARN; read it from your own configuration. 2.0.0 adds `delegations[].delegator_user_id`, the Runpod user that created the delegation.
+
+### runpod_endpoint_workers
+
+The `runpod_endpoint_workers` data source keeps its name and required `endpoint_id`, with richer per-worker data and a status summary:
+
+| 1.x attribute | 2.0.0 attribute | Note |
+| --- | --- | --- |
+| `workers[].start_time` | `workers[].started_at` | Renamed. RFC 3339. |
+| `workers[].uptime_ms` | `workers[].uptime_seconds` | Renamed, and the unit changed from milliseconds to seconds. |
+
+`workers[].id` and `workers[].status` keep their names. The synthetic top-level `id`, along with `workers[].pod_id` and `workers[].last_busy_ms`, are gone, because the v2 worker list does not carry them. 2.0.0 adds per-worker `data_center_id`, `gpu_type_id`, `gpu_count`, `image`, and `is_stale`, plus a `summary` of counts by status and the endpoint's current `endpoint_version`.
+
+### runpod_endpoint_worker_logs
+
+The `runpod_endpoint_worker_logs` data source keeps its name and required `endpoint_id` and `worker_id`. The API serves logs as a live event stream. A read collects what the stream delivers and ends when the API closes it or the provider's 60-second timeout elapses. The `logs` attribute (one string) became `lines` (a list of line strings); use `join` to get the old shape. The synthetic `id` is gone. 2.0.0 adds `entries` (per-event `line`, `timestamp`, and `source`) and the `tail`, `since`, `last_event_id`, and `source` arguments to bound the read.
+
+### Billing data sources
+
+The 1.x billing data sources move to v2-native equivalents that report cost components in USD. The record shape changed, so this is a rewrite rather than a rename. In every case the `billing_records` list became `records`, `billing_records[].amount` became `records[].amounts.total_amount`, and the single `time` field became a `start_time` and `end_time` pair on each record. Each data source also adds a `last_n` argument and a `metadata` block. The `last_n` argument returns the last N buckets and is mutually exclusive with an explicit window. The `metadata` block describes the resolved window and its totals.
+
+| 1.x data source | 2.0.0 data source | Note |
+| --- | --- | --- |
+| `runpod_billing_pod` | `runpod_pod_billing` | Adds `records[].amounts.gpu_amount`, `.cpu_amount`, and `.disk_amount`. The `gpu_type_id` filter, `time_billed_ms`, `disk_space_billed_gb`, and the record's `endpoint_id` have no 2.0.0 equivalent. |
+| `runpod_billing_network_volume` | `runpod_network_volume_billing` | Adds per-tier `records[].amounts.standard_amount` and `.high_performance_amount`. `time_billed_ms` and `disk_space_billed_gb` have no 2.0.0 equivalent. |
+| `runpod_billing_endpoint` | `runpod_serverless_billing` | The `endpoint_id` filter became `serverless_id`. `time_billed_ms` has no 2.0.0 equivalent. |
+
+<Warning>
+Watch the name on the endpoint billing move. 1.x `runpod_billing_endpoint` reported spend on your Serverless endpoints, and its 2.0.0 replacement is `runpod_serverless_billing`. The similarly named `runpod_endpoint_billing` in 2.0.0 is a different data source that reports spend on Runpod's own Public Endpoints. Do not map to it by name.
+</Warning>
+
+### Removed data sources
+
+`runpod_endpoint_jobs` and `runpod_endpoint_job_logs` have no 2.0.0 equivalent, because jobs and their logs live on the Serverless runtime API. For worker-level output, use `runpod_endpoint_worker_logs`, and for Pod output, use the new `runpod_pod_logs`.
+
+## New in 2.0.0
+
+2.0.0 adds capabilities that 1.x had no surface for.
+
+**Clusters** are multi-node groups of identical Pods on one private overlay network, with SLURM, Ray, training, and application topologies. Read them with `runpod_cluster`, `runpod_clusters`, and `runpod_cluster_pods`.
+
+```hcl
+resource "runpod_cluster" "training" {
+  name              = "llama-finetune"
+  type              = "SLURM"
+  gpu_type_id       = "NVIDIA H100 80GB HBM3"
+  gpu_count_per_pod = 8
+  pod_count         = 4
+  image             = "runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04"
+}
+```
+
+**Account SSH keys** manage the account's registered public keys as a singleton. Every write replaces the whole document, so declare it once per account.
+
+```hcl
+resource "runpod_account_ssh_keys" "this" {
+  keys              = var.ssh_public_keys
+  remove_on_destroy = false
+}
+```
+
+**CPU Pods and CPU Serverless endpoints** replace the GPU type with a CPU flavor, taking the vCPU count from the flavor's catalog range. The flavors are in the new `runpod_cpu_type` and `runpod_cpu_types` catalog data sources.
+
+```hcl
+resource "runpod_pod" "preprocess" {
+  name        = "preprocess-pod"
+  image       = "runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04"
+  cpu_type_id = "cpu5c"
+  vcpu_count  = 4
+}
+```
+
+**CUDA and host-size constraints** filter placement with an open-ended floor or an exact set, plus per-GPU RAM and vCPU floors on Pods.
+
+```hcl
+resource "runpod_pod" "strict" {
+  name                   = "strict-pod"
+  image                  = "runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04"
+  gpu_type_id            = "NVIDIA GeForce RTX 4090"
+  min_cuda_version       = "12.1"
+  min_ram_per_gpu        = 8
+  min_vcpu_count_per_gpu = 2
+}
+```
+
+2.0.0 also adds these data sources and settings:
+
+- **Catalog templates**: the publicly shared template catalog, read through `runpod_catalog_templates`.
+- **Serverless builds and releases**: `runpod_endpoint_builds` and `runpod_endpoint_build` report container builds from a Git repository, and `runpod_endpoint_releases` reports configuration releases with a field-level diff against the previous one.
+- **Billing on the v2 routes**: `runpod_billing` (account-wide), `runpod_pod_billing`, `runpod_serverless_billing`, `runpod_endpoint_billing`, `runpod_network_volume_billing`, and `runpod_cluster_billing`, all with the same window arguments and per-component totals.
+- **Pod logs**: `runpod_pod_logs`, the Pod-level counterpart to worker logs, bounded by `tail`, `since`, or `last_event_id`.
+- **Single-item catalog lookups**: `runpod_gpu_type`, `runpod_cpu_type`, and `runpod_data_center`, so you no longer filter a whole list to read one entry.
+- **FlashBoot tiers**: cold-start acceleration is now a three-value setting (`OFF`, `FLASHBOOT`, or `PRIORITY_FLASHBOOT`) rather than a boolean.
+- **Declarative Pod run state**: `runpod_pod.desired_state` (`RUNNING` or `EXITED`) makes a Pod stopped outside Terraform show up as a plan diff and get started again on the next apply.
+
+## Removed in 2.0.0
+
+Some 1.x attributes are gone in 2.0.0. Most of them were declared in the 1.x schema but never sent to the service, so removing them changes no behavior.
+
+- **Spot Pods** (`type = "SPOT"`, `interruptible`, and `bid_per_gpu`) were retired by the platform. The APIs stopped accepting bids, so migrate these configurations to on-demand Pods.
+- **`stop_after`, `terminate_after`, `port`, and `volume_key` on `runpod_pod`** were schema-only in 1.x and have no v2 counterpart. Use `desired_state` or `runpod_pod_action` for a scheduled stop or terminate, declare ports as a list in `ports`, and note that the v2 API has no volume encryption key.
+- **Machine pinning on Pods** never worked in 1.x, and the v2 Pod create has no machine parameter. Constrain placement with `data_center_ids` and the per-GPU RAM and vCPU floors instead.
+
+## State migration
+
+2.0.0 ships no state upgraders. Every resource schema is at version 0 in both majors. Terraform does not rewrite a 1.x state entry into the 2.0.0 shape. Wherever the attribute set changed, the old entry cannot be decoded and must be removed and re-imported. `terraform state rm` and `terraform import` change state only: running them stops no Pod and deletes no volume. Do the state work after rewriting the configuration and before the first `terraform apply`.
+
+### Before importing a Pod you want to keep
+
+<Warning>
+The v2 Pod read does not return eight create-time attributes: `template_id`, `start_ssh`, `start_jupyter`, `allowed_cuda_versions`, `min_cuda_version`, `min_ram_per_gpu`, `min_vcpu_count_per_gpu`, and `data_center_ids`. A 2.0.0 Pod configuration can set all eight. After `terraform import`, each one the configuration sets shows as a diff on the first plan, and all eight force replacement. Applying that plan deletes the Pod permanently, along with everything not on a network volume, and creates a new Pod with a new id. The "after" Pod example in this guide sets `start_ssh` and `start_jupyter`, so a Pod migrated with it as written would be replaced.
+</Warning>
+
+There are two safe ways through:
+
+- **Leave a running 1.x Pod on 1.x.** Do not remove and import it. Keep it in a root module pinned to 1.0.8. Let that provider manage it until the Pod is due to be recreated anyway. Then create its successor under 2.0.0.
+- **Adopt it with `ignore_changes`.** If the Pod has to move to 2.0.0 now, add a `lifecycle` block before the first apply. Name every one of the eight attributes the configuration sets. Listing all eight is harmless if you are unsure which the Pod was created with.
+
+```hcl
+resource "runpod_pod" "training" {
+  # ...
+  start_ssh     = true
+  start_jupyter = true
+
+  lifecycle {
+    ignore_changes = [start_ssh, start_jupyter]
+  }
+}
+```
+
+The cost of `ignore_changes` is that Terraform never enforces those values on this Pod. State keeps them empty, so changing one later plans nothing at all. To apply a new value, take the attribute out of `ignore_changes` and accept the replacement. On a GPU Pod, also set `cloud` and `gpu_count` to the values the Pod already has. Leaving either out makes any other change plan as unknown, and both force replacement.
+
+Either way, read the first plan before applying it. It must not replace a Pod you mean to keep, and the `# forces replacement` marker names the attribute responsible.
+
+### Re-import with the same type name
+
+The type name does not change, and the id is the one you already have. The attribute set still changed, though, so remove and import each resource. This applies to `runpod_pod`, `runpod_template`, `runpod_network_volume`, and `runpod_machine`. For `runpod_machine`, the attribute names are unchanged, but re-import anyway because the resource is a different implementation.
+
+```bash
+terraform state rm runpod_pod.training
+terraform import runpod_pod.training pod_abc123
+```
+
+### Re-import with a renamed type
+
+The old address cannot be read once 2.0.0 is in the lock file, because the type no longer exists. `terraform state mv` does not help either, because the type is part of the address and the schemas differ. Remove the old address, then import the new one against the same id. This applies to `runpod_endpoint`, which becomes `runpod_serverless_endpoint`.
+
+```bash
+terraform state rm runpod_endpoint.inference
+terraform import runpod_serverless_endpoint.inference ep_abc123
+```
+
+### Recreate a renamed type that cannot be imported
+
+The credential and delegation types were renamed, and neither can be imported, because the v2 API does not return the values needed to reconstruct them. Remove the old address and let the new resource be created; it gets a new id, so update every `registry` reference on Pods and endpoints. The 1.x resource stays on the account until you delete it in the console. This applies to `runpod_container_registry_auth`, which becomes `runpod_registry`, and `runpod_ecr_delegation`, which becomes `runpod_registry_delegation`.
+
+```bash
+terraform state rm runpod_container_registry_auth.private
+terraform apply
+```
+
+### Remove and re-declare
+
+`runpod_pod_action` holds no Pod state and cannot be imported, so remove the old address and re-declare it.
+
+<Warning>
+Re-declaring `runpod_pod_action` runs the action again on create, so a `terminate` action you re-declare will terminate the Pod. If you wanted a persistent run state, drop the resource and set `runpod_pod.desired_state` instead. If you wanted a one-off, add a `triggers` map so future runs are deliberate.
+</Warning>
+
+### Remove with nothing to import
+
+The `runpod_endpoint_job` and `runpod_endpoint_worker` resource types are gone, so remove them from state:
+
+```bash
+terraform state rm runpod_endpoint_job.warmup
+terraform state rm runpod_endpoint_worker.pinned
+```
+
+The account SSH keys singleton, new in 2.0.0, imports by the literal id `account`.
+
+### Final check
+
+After the state work, run `terraform plan`. Expect:
+
+- No changes for templates, network volumes, endpoints, and machines.
+- For each imported Pod, no replacement, and at most an in-place update for the `env` and `desired_state` that an import leaves empty.
+- A create for each registry credential and delegation.
+- A refresh on the log, worker, and billing data sources.
+
+A planned Pod replacement has one of two causes. One is a create-time attribute the Pod guidance above says to cover. The other is a configuration mismatch against what the API reports, shown by the `# forces replacement` marker. Fix the configuration rather than applying it.
