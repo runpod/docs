@@ -10,7 +10,11 @@ description: "Storage options for Serverless workers: container disks, network v
 
 Temporary storage that exists only while a worker is running. Data is lost when the worker stops or scales down. Fast read/write speeds since storage is locally attached. Cost is included in the worker's running cost.
 
-All data saved by a worker's [handler function](/serverless/workers/handler-functions) is stored in the container disk by default. To persist data beyond the current worker session, use a network volume or S3-compatible storage.
+All data saved by a worker's [handler function](/serverless/workers/handler-functions) is stored in the container disk by default. To persist data beyond the current worker session, use one of the following:
+
+- A network volume.
+- A global volume.
+- S3-compatible storage.
 
 
 ### Network volume
@@ -38,12 +42,13 @@ See [S3-compatible storage](/serverless/endpoints/send-requests#s3-compatible-st
 | **Persistence** | Temporary (lost on stop)    | Permanent                     | Permanent                     | Permanent (external)         |
 | **Sharing**     | Not shareable               | Multi-worker                  | Multi-worker (any region)     | Via S3 credentials           |
 | **Speed**       | Fastest (local)             | Fast (networked NVMe)         | Varies (object storage)       | Varies by provider           |
-| **Cost**        | Included in worker cost     | \$0.05-\$0.07/GB/month        | Storage + request costs       | Varies by provider           |
+| **Cost**        | Included in worker cost     | \$0.05-\$0.07/GB/month        | Storage + [request costs](/storage/globalvolume#request-costs) | Varies by provider           |
 | **Best for**    | Temporary processing        | Multi-worker sharing, models  | Read-heavy inference, models  | Large files, external access |
 | **Data center** | Follows worker              | Pins endpoint to one region   | No region constraint          | External                     |
 
 ## Behavior notes
 
-- **Data isolation**: Workers don't share data unless a network volume is attached.
+- **Data isolation**: Workers don't share data unless you attach a network volume or a global volume.
+- **Mount path**: Network volumes and global volumes both mount at `/runpod-volume`.
 - **Caching**: Docker images cache locally on container disk, but loading large models into GPU memory still impacts cold start times. See [Reducing worker startup times](/serverless/endpoints/endpoint-configurations#reducing-worker-startup-times).
 - **Location constraints**: Network volumes constrain deployments to the volume's data center, which may impact GPU availability. Global volumes have no data center, so they don't restrict where workers run.

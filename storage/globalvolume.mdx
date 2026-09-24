@@ -9,7 +9,7 @@ tag: "Beta"
 Global volumes are in beta. Features and behavior may change before general availability.
 </Note>
 
-A global volume is elastic, region-independent storage you can attach to Pods and Serverless endpoints. Unlike a network volume, a global volume is not tied to a specific data center. You create it once and any Pod or worker, anywhere, can mount it at startup. The volume persists when a Pod or worker is stopped or deleted. Your data remains intact until you choose to remove it.
+A global volume is elastic, region-independent storage you can attach to GPU Pods and GPU Serverless endpoints. Unlike a network volume, a global volume is not tied to a specific data center. You create it once and any Pod or worker, anywhere, can mount it at startup. The volume persists when a Pod or worker is stopped or deleted. Your data remains intact until you choose to remove it.
 
 Global volumes are designed for workloads that write data infrequently and read it often, such as model serving and inference. They are not a replacement for network volumes, which are better suited for workloads with frequent writes such as training and checkpointing.
 
@@ -90,16 +90,25 @@ Inside a worker, a global volume mounts at `/runpod-volume`, the same path used 
 
 ### Attach a global volume to an endpoint
 
-You attach a global volume when you create or edit an endpoint.
+You attach a global volume when you create a new endpoint or edit an existing one.
+
+To attach a global volume to a new endpoint:
+
+1. Go to [Serverless](https://www.console.runpod.io/serverless/user/endpoints) and click **+ New Endpoint**.
+2. Configure your endpoint, then expand **Advanced**.
+3. Under **Global volume**, select the volume you want to attach.
+4. Click **Deploy**.
+
+To attach or change the global volume on an existing endpoint:
 
 1. Go to [Serverless](https://www.console.runpod.io/serverless/user/endpoints) and select your endpoint.
 2. Click **Manage**, then **Edit Endpoint**.
 3. Expand **Advanced** and select the global volume you want to attach.
 4. Click **Save Endpoint**.
 
-Changing the attached volume is a configuration change, so it triggers a new release and your workers redeploy to pick it up.
+Attaching a volume doesn't copy any existing data, so upload your model files and other assets to the global volume before you attach it. Changing the attached volume is a configuration change, so it triggers a new release and your workers redeploy to pick it up.
 
-An endpoint supports one volume at a time. You can attach either a global volume or a network volume, but not both. To attach a network volume instead, remove the global volume first.
+An endpoint can attach at most one global volume. It can't use a global volume and a network volume at the same time, but it can attach [multiple network volumes](/storage/network-volumes#network-volumes-for-serverless) on their own. To switch an endpoint from network volumes to a global volume, detach the network volumes first. To switch back, remove the global volume first.
 
 ### Attach a global volume with the REST API
 
@@ -168,6 +177,7 @@ Workloads that write frequently or loop over large directory listings can accumu
 Global volumes use object-backed storage, not a fully POSIX compliant file system. Review the following before using global volumes in production.
 
 - **One volume of each type per Pod:** Each Pod currently supports a maximum of one global volume and one network volume at a time.
+- **GPU only:** Global volumes can't be attached to CPU Pods or CPU Serverless endpoints.
 - **Limited POSIX semantics:** Global volumes do not support file locking, atomic rename, or hard links. Applications that depend on POSIX behavior may fail or produce unexpected results.
 - **No permission bits:** Global volumes cannot set file permission bits. This may produce warnings when downloading models from sources such as Hugging Face.
 - **Concurrent writes to the same file:** Multiple Pods can write to a global volume concurrently, but when two Pods write to the same file at the same time, the last write wins. For workloads that require file locking or high-concurrency writes, use a network volume instead.
