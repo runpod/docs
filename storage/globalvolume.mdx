@@ -101,6 +101,47 @@ Changing the attached volume is a configuration change, so it triggers a new rel
 
 An endpoint supports one volume at a time. You can attach either a global volume or a network volume, but not both. To attach a network volume instead, remove the global volume first.
 
+### Attach a global volume with the REST API
+
+You can also attach and detach an endpoint's global volume through the [Runpod REST API v2](/api-reference-v2/overview). The endpoint create, update, and read operations accept a `globalVolumes` field: an array of volume IDs that holds at most one volume. It mirrors the existing `networkVolumes` field.
+
+The API doesn't expose a route for listing global volumes yet, so copy the volume ID from the **Storage** page in the console before you make a request.
+
+To attach a global volume when you create an endpoint, include `globalVolumes` in the request body:
+
+```bash
+curl --request POST \
+  --url https://api.runpod.io/v2/serverless \
+  --header 'Authorization: Bearer RUNPOD_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "name": "my-endpoint",
+    "image": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
+    "gpu": { "pools": ["ADA_24"], "count": 1 },
+    "globalVolumes": ["<global-volume-id>"]
+  }'
+```
+
+To change the attached volume on an existing endpoint, send a `PATCH` request to `/v2/serverless/{id}`. The `globalVolumes` field follows the same rules as `networkVolumes`:
+
+- Omit the field to keep the current volume attached.
+- Set it to `["<global-volume-id>"]` to attach or replace the volume.
+- Set it to `[]` to detach the volume.
+
+```bash
+curl --request PATCH \
+  --url https://api.runpod.io/v2/serverless/{id} \
+  --header 'Authorization: Bearer RUNPOD_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{ "globalVolumes": [] }'
+```
+
+Because an endpoint can't use a global volume and a network volume at the same time, a request that would attach both is rejected. Detach the existing volume first.
+
+The REST API can attach global volumes to Serverless endpoints only. To attach a global volume to a Pod, use the console (see [Attach a global volume to a Pod](#attach-a-global-volume-to-a-pod)).
+
+For the full request schemas, see [Create a Serverless endpoint](/api-reference-v2/serverless/create-a-serverless-endpoint) and [Update a Serverless endpoint](/api-reference-v2/serverless/update-a-serverless-endpoint).
+
 ## Recommended workloads
 
 Global volumes work best for workloads that primarily read large files and do not require high-throughput concurrent writes.
