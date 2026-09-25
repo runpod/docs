@@ -1,0 +1,117 @@
+---
+title: "Global volumes for Serverless"
+sidebarTitle: "For Serverless"
+description: "Attach elastic, region-independent storage to GPU Serverless endpoints so workers share access to model weights and other read-heavy data across all data centers."
+tag: "Beta"
+---
+
+<Note>
+  Global volumes are in beta. Features and behavior may change before general availability.
+</Note>
+
+<Note>
+  Global volume support for Serverless is rolling out and may not be available on every account yet.
+</Note>
+
+Attaching a global volume to a Serverless endpoint gives its workers shared, region-independent access to model weights and other read-heavy data. Because a global volume has no data center, attaching one doesn't restrict where your workers run. Your endpoint keeps access to the full GPU pool, unlike a network volume, which limits an endpoint to a single region.
+
+Global volumes are available on GPU endpoints only. CPU endpoints don't support them.
+
+Inside a worker, a global volume mounts at `/runpod-volume`, the same path used for network volumes on Serverless. Read your model files and other assets from this path in your handler function.
+
+If you don't have a global volume yet, [create one first](/storage/globalvolume#create-a-global-volume).
+
+## Attach a global volume to an endpoint
+
+You attach a global volume when you create a new endpoint or edit an existing one.
+
+**To attach a global volume to a new endpoint:**
+
+1. Go to **Serverless** and click **\+ New Endpoint**.
+2. Configure your endpoint, then expand **Advanced**.
+3. Under **Global volume**, select the volume you want to attach.
+4. Click **Deploy**.
+
+**To attach or change the global volume on an existing endpoint:**
+
+1. Go to **Serverless** and select your endpoint.
+2. Click **Manage**, then **Edit Endpoint**.
+3. Expand **Advanced** and select the global volume you want to attach.
+4. Click **Save Endpoint**.
+
+<Note>
+  Attaching a volume doesn't copy any existing data, so upload your model files and other assets to the global volume before you attach it. Changing the attached volume triggers a new release and your workers redeploy to pick it up.
+</Note>
+
+An endpoint can attach at most one global volume. It can't use a global volume and a network volume at the same time, but it can attach multiple network volumes on their own. To switch an endpoint from network volumes to a global volume, detach the network volumes first. To switch back, remove the global volume first.
+
+## Attach a global volume with the REST API
+
+You can also attach and detach an endpoint's global volume through the Runpod REST API v2. The endpoint create, update, and read operations accept a `globalVolumes` field: an array of volume IDs that holds at most one volume. It mirrors the existing `networkVolumes` field.
+
+<Note>
+  The API doesn't expose a route for listing global volumes yet, so copy the volume ID from the **Storage** page in the console before you make a request.
+</Note>
+
+To attach a global volume when you create an endpoint, include `globalVolumes` in the request body:
+
+```bash
+curl --request POST \
+--url https://api.runpod.io/v2/serverless \
+--header 'Authorization: Bearer RUNPOD_API_KEY' \
+--header 'Content-Type: application/json' \
+--data '{
+  "name": "my-endpoint",
+  "image": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
+  "gpu": { "pools": ["ADA_24"], "count": 1 },
+  "globalVolumes": ["<global-volume-id>"]
+}'
+```
+
+To change the attached volume on an existing endpoint, send a PATCH request to `/v2/serverless/{id}`. The `globalVolumes` field follows the same rules as `networkVolumes`:
+
+- Omit the field to keep the current volume attached.
+- Set it to `["<global-volume-id>"]` to attach or replace the volume.
+- Set it to `[]` to detach the volume.
+
+```bash
+curl --request PATCH \
+--url https://api.runpod.io/v2/serverless/{id} \
+--header 'Authorization: Bearer RUNPOD_API_KEY' \
+--header 'Content-Type: application/json' \
+--data '{ "globalVolumes": [] }'
+```
+
+Because an endpoint can't use a global volume and a network volume at the same time, a request that would attach both is rejected. Detach the existing volume first.
+
+The REST API can attach global volumes to Serverless endpoints only. To attach a global volume to a Pod, use the console (see [Global volumes for Pods](/storage/globalvolume)).
+
+For the full request schemas, see [Create a Serverless endpoint](/serverless/references/create-endpoint) and [Update a Serverless endpoint](/serverless/references/update-endpoint).
+
+## Request costs
+
+Global volumes charge for storage and for request operations separately. Each file system operation issues one or more underlying requests.
+
+| Request class | Typical operations | Rate |
+| --- | --- | --- |
+| Class A | Writes, creates, lists | \$0.005 per 1,000 requests |
+| Class B | Reads, metadata lookups | \$0.0005 per 1,000 requests |
+
+Workloads that write frequently or loop over large directory listings can accumulate request charges quickly. Test your workflow at small scale and review your billing dashboard to estimate daily request costs before scaling up.
+
+## Limitations
+
+Global volumes use object-backed storage, not a fully POSIX compliant file system. Review the following before using global volumes in production.
+
+- **GPU only:** Global volumes can't be attached to CPU Serverless endpoints.
+- **One global volume per endpoint:** An endpoint can attach at most one global volume at a time.
+- **Mutually exclusive with network volumes:** An endpoint can't use a global volume and a network volume at the same time.
+- **Limited POSIX semantics:** Global volumes do not support file locking, atomic rename, or hard links. Applications that depend on POSIX behavior may fail or produce unexpected results.
+- **No permission bits:** Global volumes cannot set file permission bits. This may produce warnings when downloading models from sources such as Hugging Face.
+- **Eventual consistency:** Global volumes use object storage, which means updates made to the volume after a worker starts may not be immediately visible inside the container. Plan your workload around the state of the volume at mount time.
+
+## Next steps
+
+- [Global volumes for Pods](/storage/globalvolume)
+- [Serverless storage options](/serverless/storage/overview)
+- [Use the S3-compatible API](/storage/s3-api)
