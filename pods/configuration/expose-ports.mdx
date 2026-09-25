@@ -70,6 +70,20 @@ Design your application with these constraints in mind. For long-running operati
 - Breaking large operations into smaller chunks.
 - Returning immediate responses with job IDs for later retrieval.
 
+### Restrict access by IP address
+
+By default, anyone who knows your Pod's proxy URL can reach your service. To limit access to specific source IP addresses, set the `RUNPOD_ALLOW_IP` environment variable on your Pod to a comma-separated list of IP addresses or IP address ranges:
+
+```bash
+RUNPOD_ALLOW_IP=203.0.113.7,198.51.100.0/24
+```
+
+The proxy checks the source IP of each request against this list before forwarding it to your Pod. Requests from addresses that aren't on the list receive a `400 Bad Request` response with an empty body. If the variable is empty or unset, the proxy allows all IP addresses.
+
+You can set `RUNPOD_ALLOW_IP` in a template or on an existing Pod under **Environment Variables**. See [Environment variables](/pods/templates/environment-variables#runpod-reserved-variables) for details.
+
+`RUNPOD_ALLOW_IP` only applies to ports exposed through the HTTP proxy. It doesn't restrict [TCP ports exposed via public IP](#tcp-access-via-public-ip), including SSH. To restrict access on TCP ports, configure a firewall inside your container or add authentication to your application.
+
 ## TCP access via public IP
 
 <Warning>
@@ -140,6 +154,7 @@ When exposing ports from your Pods, follow these guidelines for security and rel
 ### Security considerations
 
 - **Implement authentication**: Both HTTP proxy and TCP access make your services publicly accessible. Always implement proper authentication and authorization in your applications.
+- **Restrict access by IP**: For HTTP proxy ports, set [`RUNPOD_ALLOW_IP`](#restrict-access-by-ip-address) to limit access to known IP addresses or ranges. This doesn't cover TCP ports.
 - **Use HTTPS for sensitive data**: While the proxy automatically provides HTTPS, TCP connections do not. Implement TLS in your application when handling sensitive data over TCP.
 - **Validate input**: Public endpoints are targets for malicious traffic. Implement robust input validation and rate limiting.
 
@@ -169,6 +184,7 @@ Different types of applications benefit from different exposure methods:
 Try these fixes if you're having issues with port exposure:
 
 - **Service not accessible via proxy**: Ensure your service binds to `0.0.0.0` (all interfaces) not just `localhost` or `127.0.0.1`.
+- **400 Bad Request with an empty body from the proxy URL**: Your IP address isn't in the Pod's [`RUNPOD_ALLOW_IP`](#restrict-access-by-ip-address) list. Add your address or remove the variable.
 - **524 timeout errors**: If your service takes longer than 100 seconds to respond, consider using TCP or restructuring your application for faster responses.
 - **Connection refused**: Verify your service is running and listening on the correct port inside the Pod.
 - **Port already in use**: Check that no other services in your Pod are using the same port.
