@@ -131,7 +131,7 @@ To avoid log throttling:
 
 ### vLLM worker fails to start
 
-When the vLLM worker hits a fatal startup failure it recognizes, it now keeps the worker alive instead of restarting silently, and returns a structured error on every job the endpoint sends it. Check the job response before digging through logs: the message names the cause and how to fix it.
+When the vLLM worker hits a fatal startup failure it recognizes, it keeps the worker alive instead of restarting silently, and returns a structured error on every job the endpoint sends it. Check the job response before digging through logs: the message names the cause and how to fix it.
 
 The error is a single, non-streaming JSON object whose `type` is `startup_error`:
 
@@ -161,11 +161,18 @@ If a startup failure isn't one of these, the worker still exits so the platform 
 
 ### OOM errors
 
-A GPU out-of-memory error is the most common recognized startup failure, and the worker returns it as a `startup_error` (see [vLLM worker fails to start](#vllm-worker-fails-to-start)). It happens when the model weights or the KV cache don't fit in GPU memory, including when capturing CUDA graphs. To fix it:
+A GPU out-of-memory error is the most common recognized startup failure. It happens when the model weights or the KV cache don't fit in GPU memory, including the memory vLLM reserves up front for CUDA graphs.
+
+When vLLM runs out of memory during startup, the worker relaunches it once with a smaller memory footprint before reporting an error:
+
+- It sets `ENFORCE_EAGER=true`, which disables CUDA graphs and frees the memory reserved for them. This overrides an explicit `ENFORCE_EAGER=false`.
+- It lowers `MAX_NUM_BATCHED_TOKENS` to `8192` when the variable is unset, set to `0`, or set higher than `8192`. Its default doubled to `16384` in vLLM v0.28, which doubles peak activation memory.
+
+If the relaunch succeeds, the endpoint serves requests, but without CUDA graphs it can be slower than usual. The worker logs a warning for each setting it changed, so check the [logs](/serverless/development/logs) when an endpoint on a tight GPU is slower than expected. To avoid the extra launch, set `ENFORCE_EAGER=true` and `MAX_NUM_BATCHED_TOKENS=8192` yourself, or use one of the fixes below so the model fits with its default settings.
+
+If `ENFORCE_EAGER` is already `true` and `MAX_NUM_BATCHED_TOKENS` is already `8192` or lower, the worker skips the relaunch because it would run out of memory the same way. It returns a `startup_error` right away (see [vLLM worker fails to start](#vllm-worker-fails-to-start)). If the relaunch also runs out of memory, the `startup_error` message states that the retry already ran. To make the model fit:
 
 - Lower `MAX_MODEL_LEN` or `MAX_NUM_SEQS` to shrink the KV cache.
-- Lower `MAX_NUM_BATCHED_TOKENS` to `8192`. Its default doubled to `16384` in vLLM v0.28, which doubles peak activation memory.
-- Set `ENFORCE_EAGER=true` to skip CUDA graph capture and free the memory it uses.
 - Use a quantized checkpoint of the model.
 - Move to a larger GPU, or shard across more GPUs with `TENSOR_PARALLEL_SIZE`.
 - If the model itself loaded but the KV cache didn't fit, raise `GPU_MEMORY_UTILIZATION` slightly to give the cache more room.
