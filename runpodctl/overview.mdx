@@ -207,6 +207,69 @@ Learn more about a particular command by running:
 runpodctl [command] --help
 ```
 
+## Output format
+
+Successful command output goes to standard output as JSON by default, which makes runpodctl scriptable and agent-friendly. Use the `--output` flag to switch to a human-readable table or YAML:
+
+```bash
+runpodctl pod list                    # json (default)
+runpodctl pod list --output=table     # table
+runpodctl pod list --output=yaml      # yaml
+```
+
+`template search` and `hub search` emit `[]` on standard output when nothing matches, instead of a prose message, so a caller piping the output into a JSON parser gets a valid empty list on the no-match case.
+
+### Error format
+
+When a command fails, runpodctl writes a single flat JSON object to standard error and exits with a non-zero status. Branch on the `code` field, never on the message text:
+
+```json
+{"error":"failed to get endpoint: endpoint not found","code":"not_found","status":404}
+```
+
+| Field | Description |
+| --- | --- |
+| `error` | Human-readable message, unwrapped (never a nested JSON blob). |
+| `code` | Stable, lowercase identifier for the failure class. Present on every error from the resource commands. |
+| `status` | HTTP status code. Only present when the failure came back from a REST call. Absent when the API answered `200` with an empty result (GraphQL reports missing resources this way), so branch on `code` rather than `status`. |
+
+Codes runpodctl generates:
+
+| Code | Meaning |
+| --- | --- |
+| `usage_error` | The invocation was wrong: unknown command or flag, bad or missing arguments, missing required flags. Usage text is printed after the JSON object. |
+| `not_found` | The resource does not exist. |
+| `bad_request`, `unauthorized`, `forbidden`, `conflict`, `rate_limited`, `server_error`, `api_error` | Derived from the REST status returned by the API. |
+| `graphql_error` | GraphQL returned an errors array (HTTP 200). |
+| `no_credentials` | No API key is configured. Run `runpodctl doctor` or set `RUNPOD_API_KEY`. |
+| `network_error` | The API could not be reached (DNS failure, connection refused, TLS error, timeout). This is the only code that means "transient, retry." |
+| `cli_error` | Any other local failure: validation, config, bad input, malformed `RUNPOD_API_URL`. |
+
+The API can also return its own code, which is passed through in lowercase. Treat the list above as the set the CLI generates rather than an exhaustive one.
+
+### Exit codes
+
+Every documented resource command exits non-zero on failure, including `model`, `update`, `send`, and `receive` (which previously exited `0` on some failure paths). Do not rely on stdout being empty to detect failure. Check the exit code and parse the JSON error object on stderr.
+
+A few legacy surfaces still print plain-text errors and do not carry a `code`:
+
+- The legacy pod verbs (`get pod`, `create pod`, `remove pod`, `start pod`, `stop pod`, `create pods`, `remove pods`) and `get cloud` print `Error: <message>` via cobra and exit `1`.
+- `exec` prints plain text and exits `1`.
+- `project` prints to standard output and exits `0` on failure (tracked upstream).
+
+Parsers should tolerate a non-JSON line on stderr from those commands, and should not rely on the exit code for `project` until the upstream fix lands.
+
+### Environment variables
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `RUNPOD_API_KEY` | — | API key. Also settable via `runpodctl doctor` or `~/.runpod/config.toml`. |
+| `RUNPOD_API_URL` | `https://rest.runpod.io/v1` | REST control plane (config key `restApiUrl`). |
+| `RUNPOD_GRAPHQL_URL` | `https://api.runpod.io/graphql` | GraphQL control plane (config key `apiUrl`). |
+| `RUNPOD_INVOKE_URL` | `https://api.runpod.ai/v2` | Base URL used to build the Serverless invoke URLs reported by `serverless create/get/list` (config key `invokeUrl`). |
+
+Invoke is a separate service from the control plane. Pointing `RUNPOD_API_URL` or `RUNPOD_GRAPHQL_URL` at a non-production host does not move the invoke URLs; override `RUNPOD_INVOKE_URL` explicitly when you need that.
+
 ## Shell completion
 
 Enable tab completion for your shell to make working with `runpodctl` easier:
