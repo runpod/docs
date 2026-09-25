@@ -206,7 +206,7 @@ dependencies=["transformers==4.36.0", "torch>=2.0.0", "numpy<2.0"]
 
 ### Import packages inside the function body
 
-You must import pip/installed packages **inside the decorated function body**, not at the top of your file. This ensures imports happen on the remote worker. This rule applies to installed packages only; local project modules can be imported at the top of the file because Flash ships their source (see [Import local modules](#import-local-modules)).
+You must import pip/installed packages **inside the decorated function body**, not at the top of your file. This ensures imports happen on the remote worker. Import local project modules inside the function body too. See [Import local modules](#import-local-modules) for details.
 
 **Correct:** imports inside the function.
 ```python
@@ -246,7 +246,23 @@ async def process_video(video_data):
 
 Your endpoint can import local (non-pip) Python modules that live alongside it in your project, such as a sibling `utils.py` file or a `helpers/` package. Flash detects these imports, follows them transitively, and ships the module source to the worker for you, so an import like `import utils` or `from helpers import load` works remotely with no extra configuration.
 
-Flash resolves local imports whether they appear at the top of the file or inside the function body, and it supports absolute imports (`import utils`), relative imports (`from . import helpers`), and dynamic imports with a literal name (`importlib.import_module("plugin")`). It also pulls in the `__init__.py` files for any packages you import. Flash can't resolve dynamic imports whose module name is computed at runtime, so it emits a warning, and you're responsible for making those modules available on the worker.
+Put local imports inside the decorated function body. When you run an endpoint live, by calling it directly or during `flash dev`, Flash ships only the function's source. It scans only that source for local imports. Imports at the top of the file aren't shipped or run on the worker, and the function fails when it uses them. The same code works unchanged with `flash deploy`, which bundles whole files.
+
+```python
+from runpod_flash import CpuInstanceType, Endpoint
+
+@Endpoint(name="greeter", cpu=CpuInstanceType.CPU3C_1_2)
+async def greet(name: str = "world", lang: str = "en") -> dict:
+    # Local modules that sit next to this file
+    import text_utils             # sibling module: text_utils.py
+    from greetings import render  # local package: greetings/__init__.py
+
+    return {"greeting": text_utils.shout(render(name, lang))}
+```
+
+For the complete project, see the [local modules example](https://github.com/runpod/flash-examples/tree/main/01_getting_started/05_local_modules) in the Flash examples repository.
+
+Flash supports absolute imports (`import utils`), relative imports (`from . import helpers`), and dynamic imports with a literal name (`importlib.import_module("plugin")`). It also pulls in the `__init__.py` files for any packages you import. Flash can't resolve dynamic imports whose module name is computed at runtime, so it emits a warning, and you're responsible for making those modules available on the worker.
 
 Flash bundles only local project files. Standard library modules are already present in the worker image, and pip packages must still be declared through the `dependencies` parameter. This applies transitively: if a bundled local module imports a pip package at its top level, that package must still be declared in the `dependencies` of any endpoint that uses the module.
 
