@@ -1,0 +1,95 @@
+---
+title: "Global volumes"
+sidebarTitle: "Global volumes"
+description: "Learn how to create a global volume in Runpod and access your data from Pods and Serverless workers across all data centers, with storage that persists across sessions."
+tag: "Beta"
+---
+
+<Note>
+  Global volumes are in beta. Features and behavior may change before general availability.
+</Note>
+
+A global volume is elastic, region-independent storage you can attach to GPU Pods and GPU Serverless endpoints. Unlike a network volume, a global volume is not tied to a specific data center. You create it once and any Pod or worker, anywhere, can mount it at startup. The volume persists when a Pod or worker is stopped or deleted. Your data remains intact until you choose to remove it.
+
+Global volumes are designed for workloads that write data infrequently and read it often, such as model serving and inference. They are not a replacement for network volumes, which are better suited for workloads with frequent writes such as training and checkpointing.
+
+For attachment steps, see [Global volumes for Pods](/storage/globalvolume-pods) or [Global volumes for Serverless](/storage/globalvolume-serverless).
+
+## Create a global volume
+
+1. In the left nav, go to **Storage**.
+2. Click **+ New volume**.
+3. Under **Storage type**, select **Global volume**.
+4. Enter a **Name** for the volume.
+5. Click **Create global volume**.
+
+The volume appears in your Storage list with the type set to **Global**. Storage grows automatically as you add data. There is no capacity to provision upfront.
+
+<Warning>
+  If your account balance reaches $\0, your global volume is flagged and permanently deleted after 15 days. Enable [low balance notifications](/accounts-billing/billing#low-balance-notifications) to avoid data loss.
+</Warning>
+
+## Access your files
+
+A global volume mounts automatically at startup. The mount path depends on where you're using it:
+
+- **Pods:** defaults to `/workspace`, or `/workspace-global` when a network volume is also attached. See [Global volumes for Pods](/storage/globalvolume-pods#mount-paths) for details.
+- **Serverless:** always mounts at `/runpod-volume`. See [Global volumes for Serverless](/storage/globalvolume-serverless#mount-path) for details.
+
+## Migrate data from a network volume
+
+If you have data on a network volume that you want to move to a global volume, you can use `rsync`. When both volumes are attached to a Pod without a custom mount path, the network volume is at `/workspace` and the global volume is at `/workspace-global`. Verify your paths in the Pod's **Console** tab before running the command.
+
+1. Deploy a Pod with both your network volume and global volume attached (see [Attach a global volume to a Pod](/storage/globalvolume-pods#attach-a-global-volume-to-a-pod)).
+2. Run the following command from the Pod's **Console** tab:
+
+```bash
+rsync --archive --verbose --human-readable /workspace/ /workspace-global/
+```
+
+3. Once the data is copied, delete the Pod.
+4. You can now delete the network volume from the **Storage** page.
+
+<Note>
+  You cannot delete a network volume while it is attached to a running Pod.
+</Note>
+
+There is no in-console conversion tool. Migration must be done manually.
+
+## Recommended workloads
+
+Global volumes work best for workloads that primarily read large files and do not require high-throughput concurrent writes.
+
+- **Model serving and inference:** Load model weights, tokenizer files, and configuration from a shared volume at startup, without baking large files into your Docker image.
+- **Shared assets across Pods:** Serve LoRA adapters, embedding indices, or prompt templates that multiple Pods need to read from a central location.
+- **Read-only configuration:** Distribute scripts, config files, or small datasets consistently across a fleet of Pods or workers.
+
+## Request costs
+
+Global volumes charge for storage and for request operations separately. Each file system operation issues one or more underlying requests.
+
+| Request class | Typical operations | Rate |
+| --- | --- | --- |
+| Class A | Writes, creates, lists | $0.005 per 1,000 requests |
+| Class B | Reads, metadata lookups | $0.0005 per 1,000 requests |
+
+A single file system command often translates into multiple requests. For example, opening a file for writing may issue a read followed by a write. Directory listings use a one-minute cache, so repeated `ls` calls in quick succession do not each generate a new request. Additionally, host memory buffers help reduce the number of underlying requests through readahead and write-back caching.
+
+Workloads that write frequently or loop over large directory listings can accumulate request charges quickly. Test your workflow at small scale and review your billing dashboard to estimate daily request costs before scaling up.
+
+## Limitations
+
+Global volumes use object-backed storage, not a fully POSIX compliant file system. Review the following before using global volumes in production.
+
+- **GPU only:** Global volumes can't be attached to CPU Pods or CPU Serverless endpoints.
+- **Limited POSIX semantics:** Global volumes do not support file locking, atomic rename, or hard links. Applications that depend on POSIX behavior may fail or produce unexpected results.
+- **No permission bits:** Global volumes cannot set file permission bits. This may produce warnings when downloading models from sources such as Hugging Face.
+- **Concurrent writes to the same file:** Multiple Pods can write to a global volume concurrently, but when two Pods write to the same file at the same time, the last write wins. For workloads that require file locking or high-concurrency writes, use a network volume instead.
+- **Eventual consistency:** Global volumes use object storage, which means updates made to the volume after a Pod or worker starts may not be immediately visible inside the container. Plan your workload around the state of the volume at mount time.
+
+## Next steps
+
+- [Global volumes for Pods](/storage/globalvolume-pods)
+- [Global volumes for Serverless](/storage/globalvolume-serverless)
+- [Manage network volumes](/storage/network-volumes)
+- [Use the S3-compatible API](/storage/s3-api)
