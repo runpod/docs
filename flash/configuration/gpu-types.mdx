@@ -64,6 +64,8 @@ async def dev_infer(data: dict) -> dict:
 
 The `GpuType` enum provides access to specific GPU models. Use these when you need exact hardware characteristics.
 
+A single `GpuType` requests that exact card — this is the only form guaranteed to pin workers to a specific GPU model. If you pass a list of `GpuType` values, placement is advisory at the pool/VRAM-tier level instead. See [GPU selection behavior](/flash/configuration/gpu-types#gpu-selection-behavior) for details.
+
 ### Available GPU types
 
 | GpuType | GPU Model | VRAM | Architecture |
@@ -95,23 +97,25 @@ The `GpuType` enum provides access to specific GPU models. Use these when you ne
 ```python
 from runpod_flash import Endpoint, GpuType
 
-# Single specific GPU
+# Single specific GPU (pins the exact card)
 @Endpoint(name="inference", gpu=GpuType.NVIDIA_A100_80GB_PCIe)
 async def infer(data: dict) -> dict:
     ...
 
-# Multiple specific GPUs (fallback strategy)
+# Multiple specific GPUs (requests any card in this set)
 @Endpoint(
     name="flexible",
     gpu=[
-        GpuType.NVIDIA_A100_80GB_PCIe,  # Try A100 PCIe first
-        GpuType.NVIDIA_A100_SXM4_80GB,  # Fall back to A100 SXM4
-        GpuType.NVIDIA_A40              # Final fallback to A40
+        GpuType.NVIDIA_A100_80GB_PCIe,
+        GpuType.NVIDIA_A100_SXM4_80GB,
+        GpuType.NVIDIA_A40
     ]
 )
 async def flexible_infer(data: dict) -> dict:
     ...
 ```
+
+When you pass a list, the Flash SDK converts each `GpuType` to its GPU pool (`GpuGroup`) when it creates the endpoint, excluding any pool members you didn't list. Placement within the selected pools is advisory: workers may be scheduled on a different card with equivalent VRAM rather than one of the exact models you listed, and list order is not preserved. Pass a single `GpuType` when your workload requires an exact GPU model.
 
 ## Advanced fallback strategies
 
@@ -123,9 +127,9 @@ from runpod_flash import Endpoint, GpuGroup, GpuType
 @Endpoint(
     name="hybrid-selection",
     gpu=[
-        GpuType.NVIDIA_A100_80GB_PCIe,  # Specific GPU first
-        GpuGroup.AMPERE_48,             # Pool fallback
-        GpuGroup.ANY                    # Ultimate fallback
+        GpuType.NVIDIA_A100_80GB_PCIe,  # Specific GPU model
+        GpuGroup.AMPERE_48,             # Any card in the 48GB Ampere pool
+        GpuGroup.ANY                    # Any GPU: expands to all pools for maximum availability
     ]
 )
 async def infer(data: dict) -> dict:
@@ -135,18 +139,25 @@ async def infer(data: dict) -> dict:
 ## GPU selection behavior
 
 **Single GPU type:**
-Flash waits for this specific GPU to become available. Jobs stay in queue until capacity is available.
+Passing a single `GpuType` requests that exact GPU model. This is the only form guaranteed to pin workers to a specific card. Flash waits for that model to become available, and jobs stay in queue until capacity is free.
 
 ```python
-gpu=GpuGroup.AMPERE_80  # Only A100 80GB
+gpu=GpuType.NVIDIA_GEFORCE_RTX_4090  # Only the RTX 4090
 ```
 
-**Multiple GPU types (fallback):**
-Flash attempts to provision in the order specified.
+**Single GPU pool:**
+Passing a single `GpuGroup` requests any card in that pool.
+
+```python
+gpu=GpuGroup.AMPERE_80  # Any A100 80GB card
+```
+
+**A list of GPU types or pools:**
+A list requests any one of the listed options. It is not an ordered preference: the SDK does not preserve list order, and placement within the selected pools is advisory — workers may be scheduled on a different card with equivalent VRAM rather than one of the exact models you listed. Be aware of this when benchmarking or when your workload depends on a specific GPU model.
 
 ```python
 gpu=[GpuGroup.AMPERE_80, GpuGroup.AMPERE_48, GpuGroup.ADA_24]
-# Tries: A100 → A40/A6000 → RTX 4090
+# Any card from the 80GB, 48GB, or 24GB pools
 ```
 
 **GpuGroup.ANY:**
@@ -156,8 +167,12 @@ Flash selects the first available GPU based on current capacity.
 gpu=GpuGroup.ANY  # Fastest provisioning, unpredictable GPU type
 ```
 
+<Note>
+There is currently no API field that reports which GPU model a worker was actually placed on. The endpoint configuration reflects what you requested, not where workers ran, so GPU substitution is invisible in the API. To verify placement, query the GPU from inside the worker (for example, with `nvidia-smi`).
+</Note>
+
 <Tip>
-**For production**: Use specific GPU types for predictable cost and performance.
+**For production**: Pass a single `GpuType` when you need a specific card for predictable cost and performance.
 **For development**: Use `GpuGroup.ANY` for fastest iteration.
 </Tip>
 
