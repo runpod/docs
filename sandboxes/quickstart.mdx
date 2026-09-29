@@ -1,0 +1,231 @@
+---
+title: "Sandboxes quickstart"
+sidebarTitle: "Quickstart"
+description: "Create a Runpod sandbox with the REST API, run a shell command inside it, stream its logs, and terminate it when you're done, in a few minutes."
+---
+
+Learn how to create a sandbox, run commands in it, and clean it up using the Runpod REST API v2.
+
+## What you'll learn
+
+- How to create a sandbox from a container image.
+- How to wait until the sandbox is ready to accept commands.
+- How to run a command and read its output.
+- How to stream the sandbox's logs.
+- How to terminate the sandbox so billing stops.
+
+## Requirements
+
+- A Runpod account with a positive balance.
+- A [Runpod API key](/get-started/api-keys).
+- `curl` and [`jq`](https://jqlang.org/) for the command-line examples, or Python 3 with the `requests` package for the Python examples.
+
+Set your API key as an environment variable so the examples can use it:
+
+```bash
+export RUNPOD_API_KEY="YOUR_API_KEY"
+```
+
+## Step 1: Create a sandbox
+
+Create a sandbox from the `python:3.12-slim` image with a five-minute idle timeout:
+
+<CodeGroup>
+
+```bash cURL
+curl --request POST \
+  --url https://api.runpod.io/v2/sandboxes \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "name": "quickstart-sandbox",
+    "imageName": "python:3.12-slim",
+    "idleTimeoutSeconds": 300,
+    "labels": {"project": "quickstart"}
+  }'
+```
+
+```python Python
+import os
+import requests
+
+BASE_URL = "https://api.runpod.io/v2"
+HEADERS = {"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}"}
+
+response = requests.post(
+    f"{BASE_URL}/sandboxes",
+    headers=HEADERS,
+    json={
+        "name": "quickstart-sandbox",
+        "imageName": "python:3.12-slim",
+        "idleTimeoutSeconds": 300,
+        "labels": {"project": "quickstart"},
+    },
+)
+response.raise_for_status()
+sandbox = response.json()
+sandbox_id = sandbox["id"]
+print(sandbox_id, sandbox["state"])
+```
+
+</CodeGroup>
+
+The response is the new sandbox. Note its `id`, which you use in every later request:
+
+```json
+{
+  "id": "7h3sbx91kq",
+  "name": "quickstart-sandbox",
+  "state": "CREATING",
+  "imageName": "python:3.12-slim",
+  "idleTimeoutSeconds": 300,
+  "maxLifetimeSeconds": 3600,
+  "labels": {"project": "quickstart"},
+  "...": "..."
+}
+```
+
+You must supply exactly one of `imageName` or `templateId`. Every other field is optional. See [Create a sandbox](/api-reference-v2/sandboxes/create-a-sandbox) for all fields.
+
+<Note>
+
+By default, the sandbox has open outbound internet access. To restrict it, see [Network access](/sandboxes/overview#network-access).
+
+</Note>
+
+## Step 2: Wait for the sandbox to be ready
+
+Poll the sandbox until its `state` is `RUNNING`:
+
+<CodeGroup>
+
+```bash cURL
+export SANDBOX_ID="7h3sbx91kq"
+
+curl --request GET \
+  --url https://api.runpod.io/v2/sandboxes/$SANDBOX_ID \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" | jq -r .state
+```
+
+```python Python
+import time
+
+while True:
+    sandbox = requests.get(f"{BASE_URL}/sandboxes/{sandbox_id}", headers=HEADERS).json()
+    if sandbox["state"] == "RUNNING":
+        break
+    if sandbox["state"] in ("FAILED", "TERMINATED"):
+        raise RuntimeError(f"Sandbox stopped: {sandbox.get('terminationReason')}")
+    time.sleep(2)
+```
+
+</CodeGroup>
+
+If the state becomes `FAILED`, check `terminationReason` in the response.
+
+## Step 3: Run a command
+
+Send a command to the sandbox as an argv array. Commands aren't run through a shell, so wrap them in `["sh", "-c", "..."]` when you need shell syntax such as pipes or `&&`:
+
+<CodeGroup>
+
+```bash cURL
+curl --request POST \
+  --url https://api.runpod.io/v2/sandboxes/$SANDBOX_ID/exec \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{"command": ["sh", "-c", "python --version && uname -a"]}'
+```
+
+```python Python
+def run(command, retries=15):
+    # The container can take 10-30 seconds to start after RUNNING,
+    # so retry on 409 with a short delay.
+    for _ in range(retries):
+        response = requests.post(
+            f"{BASE_URL}/sandboxes/{sandbox_id}/exec",
+            headers=HEADERS,
+            json={"command": command},
+        )
+        if response.status_code != 409:
+            response.raise_for_status()
+            return response.json()
+        time.sleep(2)
+    raise TimeoutError("Sandbox did not accept commands in time")
+
+result = run(["sh", "-c", "python --version && uname -a"])
+print(result["output"])
+if result.get("error"):
+    print("Command failed:", result["error"])
+```
+
+</CodeGroup>
+
+The response contains the command's combined stdout and stderr:
+
+```json
+{
+  "output": "Python 3.12.7\nLinux 7h3sbx91kq 4.4.0 #1 SMP Sun Jan 10 15:06:54 PST 2016 x86_64 GNU/Linux\n",
+  "error": null
+}
+```
+
+`error` is `null` when the command succeeds. If the command exits with a non-zero status or runs past the execution cap, `error` describes the failure and `output` still contains anything the command wrote before it stopped.
+
+<Warning>
+
+For 10 to 30 seconds after the sandbox reaches `RUNNING`, `exec` can return `409` while the container finishes starting. Retry after a short delay, as the Python example does.
+
+</Warning>
+
+## Step 4: Stream logs
+
+Stream the sandbox's logs as Server-Sent Events. The stream includes the main process's stdout (`container`) and lifecycle events such as image pulls (`system`). Output from `exec` commands doesn't appear here.
+
+```bash
+curl --no-buffer --request GET \
+  --url "https://api.runpod.io/v2/sandboxes/$SANDBOX_ID/logs?tail=50" \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
+  --header "Accept: text/event-stream"
+```
+
+Each event carries a JSON payload:
+
+```text
+id: 2026-09-29T14:02:11.482Z
+data: {"source":"system","line":"Pulling image python:3.12-slim","ts":"2026-09-29T14:02:11.482Z"}
+```
+
+Press `Ctrl+C` to stop streaming.
+
+## Step 5: Terminate the sandbox
+
+When you're done, terminate the sandbox to stop billing:
+
+<CodeGroup>
+
+```bash cURL
+curl --request DELETE \
+  --url https://api.runpod.io/v2/sandboxes/$SANDBOX_ID \
+  --header "Authorization: Bearer $RUNPOD_API_KEY"
+```
+
+```python Python
+requests.delete(f"{BASE_URL}/sandboxes/{sandbox_id}", headers=HEADERS).raise_for_status()
+```
+
+</CodeGroup>
+
+A successful request returns `204` with no body. Terminating a sandbox is final: you can still read it with `GET`, but you can't restart it.
+
+<Tip>
+
+In your own code, terminate the sandbox in a `finally` block or equivalent, so it's cleaned up even when a command fails. If you forget, the sandbox terminates at its idle timeout or maximum lifetime, whichever comes first.
+
+</Tip>
+
+## Next steps
+
+- Learn about [timeouts, network access, and pricing](/sandboxes/overview).
+- Run long commands in the background, as described in [Known limitations](/sandboxes/overview#known-limitations).
+- Browse the full [Sandboxes API reference](/api-reference-v2/sandboxes/create-a-sandbox).
