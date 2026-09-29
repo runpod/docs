@@ -1,0 +1,119 @@
+---
+title: "Stream sandbox logs"
+api: "GET https://api.runpod.io/v2/sandboxes/{id}/logs"
+authMethod: "bearer"
+description: "Stream a Runpod sandbox's container and system logs in real time as Server-Sent Events, with backfill and resumable reconnects via Last-Event-ID."
+---
+
+Streams the sandbox's logs as [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events). Two log sources are available:
+
+- `container`: stdout of the sandbox's main process.
+- `system`: lifecycle events, such as image pulls and container starts.
+
+Output from [exec](/api-reference-v2/sandboxes/run-a-command-in-a-sandbox) commands doesn't appear in this stream.
+
+Each event has an `id` line and a JSON `data` payload:
+
+```text
+id: 2026-09-29T14:02:11.482Z
+data: {"source":"container","line":"...","ts":"2026-09-29T14:02:11.482Z"}
+```
+
+The event `id` is the event's `ts` timestamp, so an `EventSource` client that reconnects resumes where it left off by sending `Last-Event-ID`.
+
+Logs are available only once the sandbox has a backing container, which can lag creation by a short while. Until then, and after the sandbox terminates, this endpoint returns `409`.
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  The sandbox ID.
+</ParamField>
+
+### Query parameters
+
+<ParamField query="source" type="enum<string>">
+  Log source to stream: `container` or `system`. Omit to include both.
+</ParamField>
+
+<ParamField query="tail" type="integer" default="100">
+  Number of historical lines to backfill before streaming live. Set `0` to stream live with no backfill. Maximum `5000`. Ignored when `since` or `Last-Event-ID` is provided.
+</ParamField>
+
+<ParamField query="since" type="string<date-time>">
+  RFC 3339 timestamp to resume from. When set, `tail` is ignored. Ignored when `Last-Event-ID` is provided.
+</ParamField>
+
+### Headers
+
+<ParamField header="Last-Event-ID" type="string<date-time>">
+  Reconnect cursor: an event `id` previously emitted by this endpoint. Takes precedence over `since` and `tail`. `EventSource` sends it automatically on reconnect.
+</ParamField>
+
+### Response
+
+A `text/event-stream` response. Each event's `data` payload has these fields:
+
+<ResponseField name="source" type="string">
+  The log source: `container` or `system`.
+</ResponseField>
+
+<ResponseField name="line" type="string">
+  The log line.
+</ResponseField>
+
+<ResponseField name="ts" type="string<date-time>">
+  When the line was logged. Also used as the event `id`.
+</ResponseField>
+
+### Errors
+
+| Status | Meaning |
+| --- | --- |
+| `401` | The API key is missing or invalid. |
+| `403` | The API key doesn't have access to sandboxes. |
+| `404` | No sandbox with this ID exists on your account. |
+| `409` | The sandbox has no streamable logs right now. Its container is still starting (retry shortly), or it has been terminated. |
+| `429` | Too many requests. Retry after a delay. |
+
+<RequestExample>
+
+```bash cURL
+curl --no-buffer --request GET \
+  --url "https://api.runpod.io/v2/sandboxes/SANDBOX_ID/logs?source=container&tail=50" \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
+  --header "Accept: text/event-stream"
+```
+
+```python Python
+import json
+import os
+import requests
+
+with requests.get(
+    "https://api.runpod.io/v2/sandboxes/SANDBOX_ID/logs",
+    headers={
+        "Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}",
+        "Accept": "text/event-stream",
+    },
+    params={"tail": 50},
+    stream=True,
+) as response:
+    for line in response.iter_lines(decode_unicode=True):
+        if line and line.startswith("data:"):
+            event = json.loads(line[len("data:"):])
+            print(event["source"], event["line"])
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```text 200
+id: 2026-09-29T14:02:06.120Z
+data: {"source":"system","line":"Pulling image python:3.12-slim","ts":"2026-09-29T14:02:06.120Z"}
+
+id: 2026-09-29T14:02:11.482Z
+data: {"source":"system","line":"Container started","ts":"2026-09-29T14:02:11.482Z"}
+```
+
+</ResponseExample>
