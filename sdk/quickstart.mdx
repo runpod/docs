@@ -1,0 +1,143 @@
+---
+title: "Get started with the Runpod SDK"
+sidebarTitle: "Quickstart"
+description: "Install the runpod Python package, log in with the rp CLI, and run your first function on a Runpod GPU in a few minutes, then deploy it as an endpoint."
+---
+
+{/* TODO(DOCS-504): This page supersedes CON-617 (unified getting-started doc). Run every step end to end against the released package before publishing, and paste real output into the output blocks. */}
+
+This quickstart takes you from installing the Runpod SDK to running a function on a cloud GPU. You'll write a small app, run it in a live development session, and deploy it as a Serverless endpoint.
+
+## Requirements
+
+- A [Runpod account](/accounts-billing/manage-accounts) with a verified email address.
+- [Python 3.10 or higher](https://www.python.org/downloads/).
+
+## Step 1: Install the SDK
+
+Create a project directory and a virtual environment, then install the `runpod` package:
+
+```bash
+mkdir hello-runpod && cd hello-runpod
+python -m venv .venv
+source .venv/bin/activate
+pip install runpod
+
+# If using uv:
+uv init && uv add runpod
+```
+
+Installing the package also installs the `rp` CLI.
+
+## Step 2: Log in
+
+Authenticate with your Runpod account:
+
+```bash
+rp login
+
+# If using uv:
+uv run rp login
+```
+
+This opens your browser so you can approve access. Your credentials are saved to `~/.runpod/config.toml`, and both the SDK and the CLI use them from then on.
+
+<Tip>
+  To skip the browser, run `rp login --api-key API_KEY` with a key from the [API keys page](https://console.runpod.io/user/settings), or set the `RUNPOD_API_KEY` environment variable.
+</Tip>
+
+## Step 3: Write your app
+
+Create a file called `main.py` with the following code:
+
+```python
+import runpod
+
+app = runpod.App("quickstart")
+
+@app.queue(gpu="H100", workers=(0, 3), dependencies=["torch"])
+def matrix_multiply(size: int):
+    # Import packages inside the function so they load on the worker
+    import torch
+
+    a = torch.rand(size, size, device="cuda")
+    b = torch.rand(size, size, device="cuda")
+    c = a @ b
+
+    return {
+        "size": size,
+        "mean": c.mean().item(),
+        "gpu": torch.cuda.get_device_name(0),
+    }
+
+@runpod.local_entrypoint
+def main():
+    result = matrix_multiply.remote(2000)
+    print(f"Matrix size: {result['size']}x{result['size']}")
+    print(f"Result mean: {result['mean']:.4f}")
+    print(f"GPU used: {result['gpu']}")
+```
+
+This code does three things:
+
+- `runpod.App("quickstart")` creates an app to hold your resources.
+- `@app.queue(...)` turns `matrix_multiply` into an autoscaling queue endpoint on H100 GPUs that scales between 0 and 3 workers and installs `torch` on each worker.
+- `@runpod.local_entrypoint` marks `main` as the code that runs on your machine. Calling `matrix_multiply.remote(2000)` sends the work to Runpod and waits for the result.
+
+<Warning>
+  Import installed packages such as `torch` inside the remote function body, not at the top of the file. Top-level imports run on your machine, where the package may not be installed.
+</Warning>
+
+{/* TODO(DOCS-504): Confirm the accepted gpu string values and whether there's an "any available GPU" option equivalent to Flash's GpuGroup.ANY. If there is, use it here so the quickstart doesn't fail when H100s are scarce. */}
+
+## Step 4: Run a live development session
+
+Start a development session:
+
+```bash
+rp flash dev main.py
+```
+
+The CLI creates a temporary endpoint, runs `main`, and streams worker logs back to your terminal. The first run takes longer while Runpod provisions a worker and installs dependencies:
+
+{/* TODO(DOCS-504): Replace with real output from rp flash dev. */}
+
+```text
+Matrix size: 2000x2000
+Result mean: 500.0412
+GPU used: NVIDIA H100 80GB HBM3
+```
+
+Edit `main.py`, for example by changing `2000` to `4000`, and run it again. Later runs reuse the warm worker, so they return much faster.
+
+When you're done, press Ctrl-C. The session waits for the running entrypoint to finish and then deletes the temporary endpoints.
+
+## Step 5: Deploy your app
+
+When your app works the way you want, deploy it:
+
+```bash
+rp flash deploy
+```
+
+This creates production endpoints that stay up after you close your terminal. List your deployed apps with:
+
+```bash
+rp flash app list
+```
+
+{/* TODO(DOCS-504): Show how to get the deployed endpoint ID or URL from the deploy output, then add a short runpod.Endpoint("ENDPOINT_ID").run_sync(...) call so the quickstart ends with a first call to a deployed endpoint. */}
+
+## Clean up
+
+To delete the endpoints you deployed, run:
+
+```bash
+rp flash undeploy --app quickstart
+```
+
+## Next steps
+
+- [Learn what's in the SDK](/sdk/overview), including tasks, HTTP services, and storage.
+- [Review the CLI commands](/sdk/cli).
+- [Call an existing endpoint](/serverless/endpoints/send-requests) with `runpod.Endpoint`.
