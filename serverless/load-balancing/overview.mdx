@@ -1,7 +1,7 @@
 ---
 title: "Overview"
 sidebarTitle: "Overview"
-description: "Deploy custom direct-access REST APIs with load balancing Serverless endpoints."
+description: "Deploy custom direct-access REST APIs with load balancing Serverless endpoints. Review configuration and operations guidance for Runpod Serverless."
 ---
 
 import { RequestsTooltip, QueueBasedEndpointsTooltip } from "/snippets/tooltips.jsx";
@@ -89,7 +89,13 @@ This exposes custom endpoints: `https://ENDPOINT_ID.api.runpod.ai/ping` and `htt
 
 ## Health checks
 
-Workers must expose a `/ping` endpoint on the `PORT_HEALTH` port. The load balancer periodically checks this endpoint:
+Each worker exposes a health check endpoint on the `PORT_HEALTH` port, and the load balancer polls it periodically to decide whether the worker is healthy enough to receive traffic. By default the load balancer polls `/ping`, but you can point it at any path by setting the `HEALTH_CHECK_PATH` environment variable. This is useful when you deploy a public image whose server already exposes a health check at a different path, such as a `llama.cpp` image that serves `/health`, so you don't need to build a custom image just to satisfy the health check.
+
+<Note>
+You can also set the health check path directly in the Runpod console when creating a new endpoint. The **Health check endpoint** field appears on the Configure image step. Leave it empty to use the default `/ping`.
+</Note>
+
+The load balancer interprets the response code from the health check endpoint as follows:
 
 | Response code | Status |
 |---------------|--------|
@@ -101,7 +107,7 @@ Unhealthy workers are automatically removed from the routing pool.
 
 <Note>
 
-When calculating endpoint metrics, Runpod calculates the cold start time for load balancing workers by measuring the time it takes between  `/ping`  first returning `204` until it first returns `200`. 
+When calculating endpoint metrics, Runpod calculates the cold start time for load balancing workers by measuring the time it takes between the health check endpoint first returning `204` until it first returns `200`.
 
 </Note>
 
@@ -112,6 +118,7 @@ When calculating endpoint metrics, Runpod calculates the cold start time for loa
 |----------|---------|-------------|
 | `PORT` | `80` | Main application server port |
 | `PORT_HEALTH` | Same as `PORT` | Health check endpoint port |
+| `HEALTH_CHECK_PATH` | `/ping` | Path the load balancer polls to check worker health |
 
 If using a custom port, add it to your endpoint's environment variables and expose it in container configuration (under **Expose HTTP Ports (Max 10)**).
 
@@ -159,13 +166,26 @@ if health_check_with_retry("https://ENDPOINT_ID.api.runpod.ai", "RUNPOD_API_KEY"
 
 Use at least 3 retries with 5-10 second delays.
 
+## When to use queue-based endpoints
+
+Use queue-based endpoints when you need:
+
+- Job-based or long-running workloads that run for extended periods. Load balancing is not suited for long-running tasks and would time out or drop the request.
+- Guaranteed execution where every request is queued and processed, even during traffic spikes. No requests are dropped when workers are busy.
+- Batch or offline workloads processed asynchronously where latency is not critical, such as nightly dataset processing, pre-computing embeddings, or running evaluations.
+- Automatic retries on failure without any client-side logic.
+- Configurable concurrency that supports both low and high concurrency workloads depending on your needs.
+
+Choose queue-based when your workload can tolerate higher latency in exchange for reliability and guaranteed delivery. If your use case is a short, real-time request/response transaction, use a load balancing endpoint instead.
 
 ## When to use load balancing endpoints
 
 Use load balancing endpoints when you need:
 
-- Direct access to your model's HTTP server.
-- Internal batching systems (like vLLM).
-- Non-JSON payloads.
-- Multiple endpoints within a single worker.
-- Lower latency for real-time applications.
+- Direct access to your model's HTTP server without queueing overhead.
+- Internal batching systems like vLLM that manage their own request batching internally.
+- Non-JSON payloads such as binary data or multipart uploads.
+- Multiple endpoints within a single worker using custom URL paths and any HTTP framework.
+- Low-latency real-time applications where responses are immediate and ephemeral, such as serving a file download or returning page stats.
+
+Choose load balancing when your workload is latency-sensitive and responses are immediate. If your use case involves long-running jobs or requires guaranteed delivery, use a queue-based endpoint instead.
