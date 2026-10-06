@@ -156,6 +156,16 @@ Configure concurrency and logging for Serverless deployments.
 | `DISABLE_LOG_STATS` | `False` | `bool` | If `False`, enables vLLM stats logging. |
 | `DISABLE_LOG_REQUESTS` | `False` | `bool` | If `False`, enables vLLM request logging. |
 
+## Compile cache settings
+
+vLLM compiles the model with torch.compile when a worker starts, which can add tens of seconds to every cold start. The worker image stores the compiled output on your [network volume](/storage/network-volumes) at `/runpod-volume/vllm-cache`, next to the Hugging Face model cache. Only the first start for a given model configuration, GPU type, and worker image version compiles the model. Later cold starts load the saved output instead. Without a network volume, the cache lives in the container and is lost when the worker stops.
+
+| Variable | Default | Type | Description |
+| --- | --- | --- | --- |
+| `VLLM_CACHE_ROOT` | `/runpod-volume/vllm-cache` | `str` | Where vLLM stores its torch.compile cache. Set it to `/root/.cache/vllm` to keep the cache in the container. |
+
+If the cache directory isn't writable or the volume has less than 1 GiB free, the worker compiles into the container for that start. If the volume runs out of space during startup, the worker relaunches once with the cache in the container. vLLM never removes old cache entries, so the folder grows with each new vLLM version, model configuration, and GPU type. You can delete `vllm-cache` from the network volume while no worker is starting (for example, with the endpoint scaled to zero). vLLM rebuilds it on the next start.
+
 ## Advanced settings
 
 Additional configuration options for specialized use cases.
@@ -175,7 +185,7 @@ These variables are used when building custom Docker images with models baked in
 
 | Variable | Default | Type | Description |
 | --- | --- | --- | --- |
-| `BASE_PATH` | `/runpod-volume` | `str` | The storage directory for the Hugging Face cache and model. |
+| `BASE_PATH` | `/runpod-volume` | `str` | The root directory for the Hugging Face cache and the vLLM compile cache, set when the image is built. Setting it as an endpoint environment variable has no effect. To move the caches on a running endpoint, set `HF_HUB_CACHE` or `VLLM_CACHE_ROOT` instead. |
 | `WORKER_CUDA_VERSION` | `12.1.0` | `str` | The CUDA version for the worker image. |
 
 ## Deprecated variables
