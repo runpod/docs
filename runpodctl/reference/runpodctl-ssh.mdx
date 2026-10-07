@@ -4,7 +4,7 @@ sidebarTitle: "ssh"
 description: "Use runpodctl to manage SSH keys and retrieve the connection command and key details required to access a Runpod Pod."
 ---
 
-Manage SSH keys and get SSH connection information for Pods.
+Manage SSH keys, get SSH connection information for Pods, and forget recorded Pod host keys.
 
 <RequestExample>
 ```bash Command
@@ -92,6 +92,33 @@ Name of the key to remove.
 <ResponseField name="--fingerprint" type="string">
 Fingerprint of the key to remove. Use this when multiple keys have the same name.
 </ResponseField>
+
+### Forget a Pod's host key
+
+Remove the host key that runpodctl recorded for a Pod:
+
+```bash
+runpodctl ssh forget <pod-id>
+```
+
+The legacy `runpodctl exec` and `runpodctl project` commands verify each Pod's SSH host key. On the first connection to a Pod, runpodctl saves the Pod's key to `~/.runpod/ssh/known_hosts` and prints its fingerprint. Later connections must present the same key. Stopping and starting a Pod, or updating it, generates a new host key, so the next connection reports a mismatch.
+
+When a mismatch happens in an interactive terminal, runpodctl shows the old and new fingerprints and asks whether to trust the new key. In scripts and other non-interactive sessions, the connection fails instead. Run `runpodctl ssh forget <pod-id>` so the next connection saves the key the Pod presents. If you haven't restarted or updated the Pod since your last connection, a changed key may mean someone intercepted the connection. Investigate before you forget the key.
+
+The command removes only the entries for the specified Pod and returns the fingerprints it removed:
+
+```json
+{
+  "fingerprints": ["SHA256:abcd1234..."],
+  "forgotten": true,
+  "knownHosts": "/home/user/.runpod/ssh/known_hosts",
+  "podId": "abc123xyz"
+}
+```
+
+If runpodctl has no key recorded for the Pod, the command succeeds and returns `"forgotten": false`, so scripts can run it before every retry.
+
+This command doesn't affect `ssh info`. The SSH command that `ssh info` prints uses your own `~/.ssh/known_hosts` file.
 
 ## Related commands
 
