@@ -3,7 +3,7 @@ name: Documentation request
 about: Suggest an idea for this project
 title: "[Request]"
 labels: ''
-assignees: muhsinking
+assignees: lavanya-gunreddi
 
 ---
 
