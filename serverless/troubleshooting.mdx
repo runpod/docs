@@ -159,6 +159,12 @@ The most common recognized failure is a GPU out-of-memory error while allocating
 
 If a startup failure isn't one of these, the worker still exits so the platform can retry it. A persistent crash-loop with no `startup_error` in the job response points to an unrecognized failure, so check the [logs](/serverless/development/logs) for the crash.
 
+### vLLM worker times out during startup
+
+The worker gives vLLM a fixed amount of time to download and load the model and report that it's ready. `VLLM_STARTUP_TIMEOUT` sets this limit, which defaults to 1800 seconds (30 minutes). If vLLM isn't ready in time, the worker stops it and logs `vLLM did not become healthy within 1800s`. The worker then exits and the platform starts a new one, which repeats the whole download and load.
+
+Very large models (400 GB or more) can take longer than the default to load, especially on a busy host. If the logs show the model still loading when the timeout hits, raise `VLLM_STARTUP_TIMEOUT` in your endpoint's environment variables. When you deploy from the Hub, set **vLLM Startup Timeout** in the advanced settings. Attaching a [network volume](/storage/network-volumes) also helps, because later workers load the cached weights instead of downloading them again.
+
 ### OOM errors
 
 A GPU out-of-memory error is the most common recognized startup failure. It happens when the model weights or the KV cache don't fit in GPU memory, including the memory vLLM reserves up front for CUDA graphs.
