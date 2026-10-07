@@ -1,0 +1,124 @@
+---
+title: "SSH key management"
+sidebarTitle: "SSH key management"
+description: "Add your SSH public key in your Runpod account settings so members can securely connect to the Pods your organization deploys."
+tag: "Beta"
+---
+
+Each member of your organization adds their own SSH public key in their Runpod account settings. When your organization deploys a Pod, Runpod injects the public keys of all current members into that Pod, so any member can connect to it with their matching private key.
+
+There is no separate organization SSH keys page: members add keys on the same account settings page whether they belong to a team or an organization. The organization dimension applies only at deploy time, when Runpod combines current members' keys into the Pod. This gives your team consistent access across the organization's Pods without per-Pod key setup.
+
+## Key scope and membership
+
+Runpod injects the union of current members' public keys into a Pod when the organization creates it, and that key set is frozen at creation. A key added after a Pod is created reaches only Pods deployed afterward. Restarting a Pod reuses its original key set, so to put an updated key set on a Pod, redeploy it by creating a new Pod.
+
+When a member leaves the organization, their key is excluded from future deploys, but it remains on any Pod that was already running with it injected. To revoke that member's access to an existing Pod, terminate and redeploy it.
+
+<Warning>
+Terminating a Pod permanently deletes any data that is not stored on a [network volume](/storage/network-volumes). Back up your data or attach a network volume before you terminate a Pod to update or revoke its keys.
+</Warning>
+
+## Roles and permissions
+
+Members with any of these roles can add and delete their own SSH keys, and each member's key is included in the set injected into the organization's Pods:
+
+- Admin.
+- Dev.
+- Basic.
+
+The Billing role does not manage SSH keys through the console. However, if a Billing member has a public key in their account settings, that key is still included in the union injected into the organization's Pods. To exclude someone from Pod SSH access, remove them from the organization before deploying.
+
+For the full role matrix, see [Roles and permissions](/accounts-billing/organizations/roles-and-permissions).
+
+## Add an SSH key
+
+<Steps>
+  <Step title="Generate a key pair">
+    If you don't already have an SSH key pair, generate one on your local machine. Runpod stores only the **public key**. Never paste your private key anywhere.
+
+    <Tabs>
+    <Tab title="macOS / Linux">
+    ```bash
+    ssh-keygen -t ed25519 -C "your-name@yourorg.com"
+    ```
+
+    When prompted, accept the default file location (`~/.ssh/id_ed25519`) or specify a custom path. To view your public key:
+
+    ```bash
+    cat ~/.ssh/id_ed25519.pub
+    ```
+    </Tab>
+    <Tab title="Windows (PowerShell)">
+    ```powershell
+    ssh-keygen -t ed25519 -C "your-name@yourorg.com"
+    ```
+
+    When prompted, accept the default file location. To view your public key:
+
+    ```powershell
+    Get-Content "$env:USERPROFILE\.ssh\id_ed25519.pub"
+    ```
+
+    If `ssh-keygen` is not available, install [OpenSSH for Windows](https://learn.microsoft.com/en-us/windows-server/administration/openssh/openssh_install_firstuse) or use [PuTTYgen](https://www.puttygen.com/).
+    </Tab>
+    </Tabs>
+
+    Your public key looks like:
+
+    ```text
+    ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... your-name@yourorg.com
+    ```
+  </Step>
+  <Step title="Add the public key to your account">
+    Paste your public key into the **SSH Public Keys** field in your [Runpod account settings](https://www.console.runpod.io/user/settings). This is the same field for team and organization members. There is no organization-specific keys page. For the full procedure, including the CLI method, see [Generate an SSH key and add it to your Runpod account](/pods/configuration/use-ssh#generate-an-ssh-key-and-add-it-to-your-runpod-account).
+
+    To confirm the key was saved, run `runpodctl ssh list-keys`.
+
+    Once your key is in your account settings, it is included in the union of members' keys that Runpod injects into Pods the organization deploys afterward.
+  </Step>
+</Steps>
+
+## Manage your keys
+
+You add and delete your own keys from the **SSH Public Keys** field in your [Runpod account settings](https://www.console.runpod.io/user/settings). Paste each key on its own line to add it, and delete its line to remove it. Renaming a key is not supported.
+
+<Warning>
+Because each Pod's key set is frozen at creation, deleting a key only affects Pods deployed afterward. Existing Pods keep the key until they are terminated and redeployed.
+</Warning>
+
+## Connect to a Pod
+
+Connecting to an organization's Pod works the same as connecting to any other Pod: you connect with the private key that matches one of the public keys injected into the Pod. For the connection methods, including basic proxied SSH, full SSH over public IP, and password-based access, see [Connect to a Pod with SSH](/pods/configuration/use-ssh).
+
+## Troubleshooting
+
+**Permission denied (publickey)**
+
+Confirm that the public key matching your private key was in a member's account settings before the Pod was deployed, and that you're pointing SSH at the right private key with `-i`. A key added after the Pod was created reaches the Pod only after you redeploy it. If the timing is already correct, the cause is usually the key's format: see [Connect to a Pod with SSH](/pods/configuration/use-ssh#troubleshooting-ssh-key-authentication) for common issues, such as pasting the key fingerprint instead of the public key, omitting the `ssh-ed25519` prefix, or not putting each key on its own line.
+
+**Connected to the wrong Pod**
+
+Copy the IP and port fresh from the **Connect** tab. They may change when you stop and resume the Pod.
+
+**Key not injected into a Pod**
+
+Runpod injects keys only when it creates a Pod (see [Key scope and membership](#key-scope-and-membership)). If you added your key after the Pod was deployed, redeploy it (terminate the Pod and deploy a new one) for the new key to take effect.
+
+**Member cannot connect after joining the organization**
+
+A new member's key reaches only Pods the organization deploys after they join. To give them access to an existing Pod, redeploy it (terminate the Pod and deploy a new one).
+
+**Access not revoked after removing a member**
+
+Removing a member excludes their key from future deploys only. It does not revoke their access to Pods that are already running with their key injected. To revoke access to an existing Pod, terminate and redeploy it.
+
+## Security notes
+
+**Store only public keys.** Never paste a private key into Runpod. Your private key stays only on the machine you connect from.
+
+**Use a strong key type.** An ed25519 key (`-t ed25519`) is recommended.
+
+**Rotate keys regularly.** If a key may be compromised, delete it from your account settings and generate a new key pair. Because existing Pods keep their injected keys until redeployed, terminate and redeploy any running Pod that must not accept the old key.
+
+**Offboarding members.** Removing a member excludes their key from future deploys. To fully revoke a former member's access, terminate and redeploy the Pods their key was injected into. Runpod does not remove keys from running Pods automatically.
