@@ -1,0 +1,84 @@
+---
+title: "Run a command in a sandbox"
+api: "POST https://api.runpod.io/v2/sandboxes/{id}/exec"
+authMethod: "bearer"
+description: "Run a single command inside a running Runpod sandbox and get its combined stdout and stderr, plus an error field if the command fails or times out."
+---
+
+Runs one command inside the sandbox and returns its combined stdout and stderr once it completes.
+
+Each command has a short execution cap. A command that runs past the cap is killed and reports an `error`. For longer work, start the process in the background with `setsid nohup ... &`, write its output to a file, and read the file with later calls. See [Known limitations](/sandboxes/overview#known-limitations).
+
+A sandbox accepts commands only once its container has started, which can lag the `RUNNING` state by 10 to 30 seconds. Until then, this endpoint returns `409`. Retry after a short delay.
+
+{/* TODO(DOCS-509): Update when streaming exec (AI-191) and separate stdout/stderr/exit code (AI-246) ship. Confirm the exact per-command cap with Zack. */}
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  The sandbox ID.
+</ParamField>
+
+### Body
+
+<ParamField body="command" type="string[]" required>
+  The command to run, as an argv array with at least one element. It isn't interpreted by a shell. To use shell syntax such as pipes, redirects, or `&&`, wrap it: `["sh", "-c", "..."]`.
+</ParamField>
+
+### Response
+
+<ResponseField name="output" type="string" required>
+  Combined stdout and stderr of the command. If the command failed or was killed, this still contains whatever it wrote before it stopped.
+</ResponseField>
+
+<ResponseField name="error" type="string | null">
+  The failure reported by the host: the command exited with a non-zero status, or ran past the per-command execution cap and was killed. `null` when the command succeeded.
+</ResponseField>
+
+### Errors
+
+| Status | Meaning |
+| --- | --- |
+| `401` | The API key is missing or invalid. |
+| `403` | The API key doesn't have access to sandboxes. |
+| `404` | No sandbox with this ID exists on your account. |
+| `409` | The sandbox can't accept commands right now. Its container is still starting (retry shortly), or it has been terminated. |
+| `422` | The request is well-formed but can't be processed. |
+| `429` | Too many requests. Retry after a delay. |
+| `503` | Command execution is temporarily unavailable. The sandbox itself is unaffected. Retry later. |
+
+<RequestExample>
+
+```bash cURL
+curl --request POST \
+  --url https://api.runpod.io/v2/sandboxes/SANDBOX_ID/exec \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{"command": ["sh", "-c", "echo hello && python --version"]}'
+```
+
+```python Python
+import os
+import requests
+
+response = requests.post(
+    "https://api.runpod.io/v2/sandboxes/SANDBOX_ID/exec",
+    headers={"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}"},
+    json={"command": ["sh", "-c", "echo hello && python --version"]},
+)
+result = response.json()
+print(result["output"])
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200
+{
+  "output": "hello\nPython 3.12.7\n",
+  "error": null
+}
+```
+
+</ResponseExample>
