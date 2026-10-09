@@ -1,0 +1,277 @@
+---
+title: "Runpod Python SDK"
+sidebarTitle: "Overview"
+description: "Use the runpod Python package to define GPU functions, deploy apps, call endpoints, build Serverless workers, and manage Runpod resources from one SDK."
+---
+
+{/* TODO(DOCS-504): Publish only after runpod-python PR #534 is merged and released to PyPI. Confirm the release version number with Ezekiel Wotring and add it to the Requirements note below. */}
+
+The `runpod` Python package is the single SDK for building on Runpod. It includes the decorator-based app SDK that was previously shipped as Flash, the `rp` command-line interface, the client for calling existing Serverless endpoints, the Serverless worker SDK, and the API wrapper for managing Pods and other resources.
+
+```python
+import runpod
+
+app = runpod.App("hello")
+
+@app.queue(gpu="H100", dependencies=["torch"])
+def hello():
+    import torch
+    return {"gpu": torch.cuda.get_device_name(0)}
+
+@runpod.local_entrypoint
+def main():
+    print(hello.remote())
+```
+
+Run the file with `rp flash dev main.py`. The `hello` function runs on a Runpod GPU, and `main` runs on your machine.
+
+<Note>
+  Flash is now part of the Runpod SDK. If you have existing code that uses the `runpod-flash` package, it continues to work. See [What changed](/sdk/whats-changed) for how the old Flash commands and imports map to the unified SDK.
+</Note>
+
+## Get started
+
+<CardGroup cols={3}>
+  <Card title="Quickstart" icon="bolt" horizontal href="/sdk/quickstart">
+    Install the SDK and run a function on a GPU.
+  </Card>
+
+  <Card title="What changed" icon="arrow-right-arrow-left" horizontal href="/sdk/whats-changed">
+    Map Flash commands and imports to the unified SDK.
+  </Card>
+
+  <Card title="CLI reference" icon="terminal" horizontal href="/sdk/cli">
+    Use the `rp` CLI to log in, develop, and deploy.
+  </Card>
+</CardGroup>
+
+## Install
+
+The SDK requires Python 3.10 or higher.
+
+```bash
+pip install runpod
+
+# If using uv:
+uv add runpod
+```
+
+Installing the package also installs the `rp` CLI. The same CLI is available under the longer name `runpod`.
+
+## Authenticate
+
+Log in once to store your credentials:
+
+```bash
+rp login
+```
+
+This opens your browser to approve access. Credentials are saved to `~/.runpod/config.toml` and are shared by the SDK and the CLI. See [`rp login`](/sdk/cli#rp-login) for other options, including named profiles.
+
+<Tip>
+  You can also set the `RUNPOD_API_KEY` environment variable. This is the only environment variable the SDK reads for authentication.
+</Tip>
+
+## What's in the SDK
+
+The `runpod` package covers four areas. Each one is independent, so you can use any of them on its own.
+
+| Area | Use it to | Main entry points |
+| --- | --- | --- |
+| Apps | Define functions and classes in Python that run on Runpod GPUs or CPUs, then deploy them as endpoints. | `runpod.App`, `@app.queue`, `@app.task`, `@app.api`, `rp flash` |
+| Endpoint client | Call a Serverless endpoint that already exists, by ID. | `runpod.Endpoint` |
+| Serverless worker | Write the handler that runs inside a custom Serverless worker container. | `runpod.serverless.start` |
+| API wrapper | Create and manage Pods, endpoints, templates, and other resources. | `runpod.create_pod`, `runpod.get_pods`, and related functions |
+
+## Apps
+
+An app is a collection of Python functions and classes that run on Runpod. Create one with `runpod.App`, then attach resources to it with decorators. Each decorator defines a different kind of remote compute.
+
+### Resource types
+
+| Decorator | What it creates | Use it for |
+| --- | --- | --- |
+| `@app.queue` | An autoscaling, queue-based Serverless endpoint. | Inference, batch jobs, and other request/response work. |
+| `@app.task` | One ephemeral Pod per call. The Pod provisions, runs to completion, and terminates. | Training, fine-tuning, and other long-running jobs. |
+| `@app.api` | A load-balanced Serverless endpoint that serves a Python class over HTTP. | Web services and APIs with multiple routes. |
+
+The following example defines one of each:
+
+```python
+import runpod
+from runpod import App, Model, NetworkVolume, Secret
+
+app = App("inference")
+
+models = NetworkVolume("models", size=100)
+llama = Model("meta-llama/Llama-3.1-8B-Instruct")
+
+# Autoscaling job queue on H100s, scales to zero when idle
+@app.queue(
+    gpu="H100",
+    workers=(0, 3),
+    dependencies=["vllm"],
+    mounts={"/runpod-volume": models},
+    model=llama,
+    env={"HF_TOKEN": Secret("hf-token")},
+)
+def chat(prompt: str):
+    import vllm
+
+    llm = vllm.LLM(model=str(llama.path))
+    return llm.generate(prompt)
+
+# One ephemeral Pod per call
+@app.task(gpu="H100", gpu_count=2, mounts={"/models": models})
+def finetune(steps: int = 1000):
+    ...
+    return {"loss": 0.1}
+
+# Load-balanced HTTP service
+@app.api(cpu="cpu3c-1-2")
+class Counter:
+    @runpod.init
+    def setup(self):
+        self.count = 0
+
+    @runpod.post("/bump")
+    async def bump(self, body: dict):
+        self.count += body.get("by", 1)
+        return {"count": self.count}
+
+    @runpod.get("/value")
+    async def value(self):
+        return {"count": self.count}
+```
+
+In this example:
+
+- `chat` runs on an autoscaling queue endpoint with between 0 and 3 workers. Model weights are cached on the network volume, and the `HF_TOKEN` environment variable is read from a Runpod secret.
+- `finetune` provisions a two-GPU Pod for each call and terminates it when the function returns.
+- `Counter` is served over HTTP. The method marked with `@runpod.init` runs once when each worker starts, and methods marked with `@runpod.get` and `@runpod.post` become routes. Workers keep state in memory between requests.
+
+{/* TODO(DOCS-504): Document the full parameter list for @app.queue, @app.task, and @app.api (gpu, cpu, gpu_count, workers, dependencies, mounts, model, env, image, datacenter, max_concurrency). Source: runpod/apps/spec.py and runpod/apps/app.py on the feat/apps-sdk branch. Confirm whether GPU and CPU type enums exist (runpod/apps/gpu.py) or only strings. */}
+
+### Call remote functions
+
+Decorated functions keep their Python identity. You call them through methods that control where and how they run:
+
+| Call | Behavior |
+| --- | --- |
+| `fn.remote(...)` | Runs the function on Runpod and blocks until the result is ready. |
+| `await fn.remote.aio(...)` | The async form of `.remote()`. |
+| `fn.spawn(...)` | Submits the work and returns a `Job` handle immediately, without waiting for the result. |
+| `fn.stream(...)` | Streams results back as the function produces them. |
+| `fn.local(...)` | Runs the function in your local Python process. Remote storage isn't mounted. |
+
+For HTTP services defined with `@app.api`, call routes through the class, for example `Counter.post("/bump", {"by": 3})` or `Counter.get("/value")`.
+
+{/* TODO(DOCS-504): Add a short example for .stream() and for working with the Job object returned by .spawn() (status, output, cancel). Source: runpod/apps/job.py and examples/apps/streaming.py. */}
+
+### Local entrypoints
+
+Mark the function that drives your app with `@runpod.local_entrypoint`. It runs on your machine and is the entry point for `rp flash dev`:
+
+```python
+@runpod.local_entrypoint
+def main():
+    print(chat.remote("Why is the sky blue?"))  # Blocks for the result
+    job = finetune.spawn(steps=500)  # Returns a Job immediately
+```
+
+App discovery imports your modules synchronously. Keep blocking work inside an entrypoint or a remote function, not at the top level of a module.
+
+### Storage
+
+Attach storage with the `mounts` parameter, which maps a path on the worker to a volume:
+
+- `NetworkVolume(name_or_id, size=50, datacenter=None, create=True)` references a [network volume](/storage/network-volumes) in a single datacenter. The app chooses a datacenter that works for every resource sharing the volume.
+- `GlobalVolume(name_or_id, create=True)` references global storage that isn't tied to a datacenter.
+
+Both types look up a volume by name or ID and create it if it doesn't exist. Set `create=False` to require an existing volume.
+
+Mount rules depend on the resource type:
+
+- `@app.task` supports one network volume and one global volume, mounted at different paths that don't overlap.
+- `@app.queue` and `@app.api` support one volume, mounted at `/runpod-volume`. Global volumes require a GPU endpoint.
+
+Inside a remote function, `volume.path` returns the path where the volume is mounted. Read `.path` inside remote functions, not at the top level of a module.
+
+### Develop and deploy
+
+Use the `rp flash` commands to iterate on an app and ship it:
+
+```bash
+rp flash dev main.py  # Live dev session: edit, re-run, logs stream back
+rp flash deploy       # Deploy production endpoints
+```
+
+A dev session creates temporary endpoints and deletes them when you press Ctrl-C. See the [CLI reference](/sdk/cli) for all commands.
+
+## Endpoint client
+
+To call a Serverless endpoint that already exists, such as one you deployed from the console or with `rp flash deploy`, use `runpod.Endpoint` with the endpoint ID. This class works the same way it did before the Flash consolidation.
+
+```python
+import runpod
+
+endpoint = runpod.Endpoint("ENDPOINT_ID")
+
+# Wait for the result
+result = endpoint.run_sync({"prompt": "Hello"})
+print(result)
+
+# Or submit a job and check on it later
+run_request = endpoint.run({"prompt": "Hello"})
+print(run_request.status())
+print(run_request.output())
+```
+
+By default, the client uses the API key from `rp login`, `RUNPOD_API_KEY`, or `runpod.api_key`. To use a different key for one endpoint, pass it to the constructor: `runpod.Endpoint("ENDPOINT_ID", api_key="API_KEY")`. A key passed to the constructor takes precedence over the global key.
+
+See [Send API requests](/serverless/endpoints/send-requests) for more examples.
+
+## Serverless worker
+
+If you build your own worker container, use `runpod.serverless.start` to register the handler that processes jobs:
+
+```python
+import runpod
+
+def handler(job):
+    job_input = job["input"]
+    return {"output": job_input}
+
+runpod.serverless.start({"handler": handler})
+```
+
+To learn how to write handlers, including streaming, progress updates and error handling, see [Handler functions](/serverless/workers/handler-functions)    .
+
+## API wrapper
+
+The SDK includes functions for managing Runpod resources through the REST API:
+
+```python
+import runpod
+
+pods = runpod.get_pods()
+pod = runpod.create_pod("test", "runpod/stack", "NVIDIA GeForce RTX 4090")
+runpod.stop_pod(pod["id"])
+runpod.terminate_pod(pod["id"])
+```
+
+{/* TODO(DOCS-504): CON-597 and CON-598 (Done) add resource classes such as runpod.Pod, runpod.Volume, runpod.Template, and runpod.Registry with create/list/get class methods. CON-599 (Ready, not shipped) will add a DeprecationWarning to the flat functions above, pointing at the class methods. Confirm the shipped class API and whether it is part of the first release, then document it here and update the example. Also confirm how runpod.Model (Hugging Face model reference in apps) relates to the Model class from CON-598. */}
+
+## Limitations
+
+- CPU resources are restricted to the `EU-RO-1` datacenter.
+- Apps can scale workers quickly across several endpoints, so you may reach your account's worker limit. Contact [Runpod support](https://www.runpod.io/contact) to raise it.
+
+{/* TODO(DOCS-504): Confirm Windows support for apps and the rp CLI (CON-1036, CON-1037 in Backlog). Flash previously required WSL2 on Windows. Also review open gaps in SLS-488 that may need a limitation here before launch, especially SLS-644 (fixed 300 s .remote() timeout), SLS-645 (~300 s request cap on @app.api), SLS-647 (no command deletes a volume; volumes keep billing after an app is deleted), and SLS-648 (datacenter enum gaps for volumes). */}
+
+## Next steps
+
+- [Run your first function](/sdk/quickstart) with the SDK quickstart.
+- [See what changed](/sdk/whats-changed) if you're coming from Flash.
+- [Learn about the runtime](/sdk/runtime) that runs your code on workers.
+- [Browse the examples](https://github.com/runpod/runpod-python/tree/main/examples/apps) in the runpod-python repository.

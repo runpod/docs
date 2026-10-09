@@ -1,0 +1,143 @@
+---
+title: "What changed: Flash is now part of the Runpod SDK"
+sidebarTitle: "What changed"
+description: "See where Flash commands, imports, and features live now that Flash is part of the runpod Python package, and when the standalone Flash repo will be archived."
+---
+
+{/* TODO(DOCS-504): This is a "where things live now" page, not a migration guide (per DOCS-504). Have Ezekiel Wotring review every row of the mapping tables before publishing. */}
+
+Flash, the Python SDK for running code on Runpod from decorated functions, is now part of the `runpod` Python package. There's now one SDK, one package to install, and one CLI. This page shows where each part of Flash lives now.
+
+<Note>
+  **Your existing Flash code keeps working.** The `runpod-flash` package is still available, and `from runpod_flash import Endpoint` continues to work unchanged. You don't need to change anything today. New features land only in the `runpod` package.
+</Note>
+
+## Summary
+
+- **One package.** Install `runpod` instead of `runpod-flash`. The app SDK, the endpoint client, the Serverless worker SDK, and the API wrapper all ship together.
+- **One CLI.** Flash commands now run as `rp flash COMMAND`. Account and Pod commands, such as `rp login`, live at the root of the same CLI.
+- **One login.** `rp login` saves credentials to `~/.runpod/config.toml`, which the whole SDK reads. `RUNPOD_API_KEY` is the only environment variable for authentication.
+- **An app-based API.** Instead of decorating functions with `@Endpoint`, you create a `runpod.App` and attach resources to it with `@app.queue`, `@app.api`, or the new `@app.task`.
+- **A separate runtime.** The code that runs on workers now lives in its own package, `runpod-sdk-runtime`, so it can be released independently of the SDK. See [Runtime](/sdk/runtime).
+
+## Install and authenticate
+
+| Before (Flash) | Now (Runpod SDK) |
+| --- | --- |
+| `pip install runpod-flash` | `pip install runpod` |
+| `uv tool install runpod-flash` | `uv add runpod` |
+| `flash login` | `rp login` |
+| Python 3.10 to 3.13 | Python 3.10 or higher |
+
+## CLI commands
+
+| Before (Flash) | Now (Runpod SDK) |
+| --- | --- |
+| `flash login` | `rp login` |
+| `flash init PROJECT_NAME` | `rp flash init PROJECT_NAME` |
+| `flash dev` | `rp flash dev main.py` |
+| `flash deploy` | `rp flash deploy` |
+| `flash app list` | `rp flash app list` |
+| `flash env list` | `rp flash env list --app APP_NAME` |
+| `flash undeploy ENDPOINT_NAME` | `rp flash undeploy --app APP_NAME` |
+| `flash build` | {/* TODO(DOCS-504): confirm */} To be confirmed |
+| `flash update` | Update the package with `pip install --upgrade runpod`. |
+
+The `rp` CLI is also available as `runpod`, so `runpod flash deploy` works too. See the [CLI reference](/sdk/cli) for details.
+
+{/* TODO(DOCS-504): Confirm whether the old `flash` command is still installed by runpod-flash after the freeze (CON-603) and whether it prints a pointer to `rp flash`. */}
+
+## Imports and code
+
+| Before (Flash) | Now (Runpod SDK) |
+| --- | --- |
+| `from runpod_flash import Endpoint` | `import runpod`, then `app = runpod.App("APP_NAME")` |
+| `@Endpoint(name=..., gpu=...)` on a function (queue-based) | `@app.queue(gpu=...)` |
+| `api = Endpoint(...)` with `@api.get` and `@api.post` routes (load-balanced) | `@app.api(...)` on a class, with `@runpod.get`, `@runpod.post`, and `@runpod.init` on its methods |
+| No equivalent | `@app.task(...)`: one ephemeral Pod per call |
+| `await my_function(x)` | `my_function.remote(x)` or `await my_function.remote.aio(x)` |
+| `asyncio.gather(...)` to fire off work | `my_function.spawn(x)` returns a `Job` without waiting |
+| No equivalent | `my_function.local(x)` runs in your local process |
+| `if __name__ == "__main__": asyncio.run(main())` | `@runpod.local_entrypoint` on `main`, run with `rp flash dev main.py` |
+| `GpuType.NVIDIA_...` and `GpuGroup.ANY` | `gpu="H100"` and other GPU strings {/* TODO(DOCS-504): confirm accepted values and whether enums exist */} |
+| `NetworkVolume(name=..., size=..., datacenter=...)` with `volume=vol` | `runpod.NetworkVolume(...)` with `mounts={"/runpod-volume": vol}` |
+| No equivalent | `runpod.GlobalVolume(...)` for storage that isn't tied to a datacenter |
+| `env={"HF_TOKEN": "..."}` | `env={"HF_TOKEN": runpod.Secret("SECRET_NAME")}` to read from a Runpod secret |
+| `Endpoint(id="ENDPOINT_ID")` to call an existing endpoint | `runpod.Endpoint("ENDPOINT_ID")` (unchanged) |
+| `Endpoint(image="IMAGE")` to deploy a custom image | `image="IMAGE"` on a resource decorator {/* TODO(DOCS-504): confirm; blocked by SLS-631 */} |
+
+Here's the same queue-based function written both ways.
+
+With Flash:
+
+```python
+import asyncio
+from runpod_flash import Endpoint, GpuType
+
+@Endpoint(name="hello-gpu", gpu=GpuType.NVIDIA_GEFORCE_RTX_4090, dependencies=["torch"])
+async def hello():
+    import torch
+    return {"gpu": torch.cuda.get_device_name(0)}
+
+print(asyncio.run(hello()))
+```
+
+With the Runpod SDK:
+
+```python
+import runpod
+
+app = runpod.App("hello-gpu")
+
+@app.queue(gpu="RTX 4090", dependencies=["torch"])
+def hello():
+    import torch
+    return {"gpu": torch.cuda.get_device_name(0)}
+
+@runpod.local_entrypoint
+def main():
+    print(hello.remote())
+```
+
+{/* TODO(DOCS-504): Confirm the GPU string for RTX 4090. */}
+
+Run the new version with `rp flash dev main.py`.
+
+## What stays the same
+
+- `runpod.Endpoint("ENDPOINT_ID")` and its `run`, `run_sync`, `status`, and `output` methods work exactly as before.
+- `runpod.serverless.start` and the rest of the Serverless worker SDK are unchanged.
+- API wrapper functions such as `runpod.create_pod` and `runpod.get_pods` still work.
+- Endpoints you already deployed with Flash keep running. Nothing is redeployed or deleted.
+
+{/* TODO(DOCS-504): CON-599 will add a one-time DeprecationWarning to the flat API wrapper functions, pointing at class methods such as runpod.Pod.create. If it ships with this release, add a row here and a sentence explaining the warning. */}
+
+## Before you move existing Flash projects
+
+You don't have to move existing projects to the unified SDK. If you choose to, test each project in a dev session first, because a few Flash patterns behave differently in the new app API:
+
+{/* TODO(DOCS-504): These items come from the SLS-488 gap evaluation (2026-09-25). Re-check each one before publishing and delete any that are fixed: SLS-634 multi-file project layout, SLS-635 @remote classes, SLS-636 route path/query parameters on @app.api, SLS-637 no equivalent for template= and id= on resources. */}
+
+- Projects split across multiple files.
+- Classes used as remote resources.
+- Path and query parameters on HTTP routes.
+- Resources that reference an existing template or endpoint by ID.
+
+## Flash repository deprecation timeline
+
+The standalone [runpod/flash](https://github.com/runpod/flash) repository is deprecated and will be archived. Archiving makes the repository read-only. It doesn't remove the `runpod-flash` package from PyPI, and it doesn't affect endpoints you've already deployed.
+
+{/* TODO(DOCS-504): Archive date is still TBD (open question on DOCS-504). Fill in the dates below and make sure the wording matches the deprecation notice in the runpod/flash README exactly. */}
+
+| Date | What happens |
+| --- | --- |
+| DATE_TBD | Flash is part of the `runpod` package. The runpod/flash repository shows a deprecation notice. The `runpod-flash` package is frozen: it keeps working but gets no new features. |
+| DATE_TBD | The runpod/flash repository is archived and becomes read-only. |
+
+The Flash pages in these docs stay online for reference, with a notice pointing to the Runpod SDK docs.
+
+## Next steps
+
+- [Get started with the Runpod SDK](/sdk/quickstart).
+- [Read the SDK overview](/sdk/overview).
+- [Learn where the runtime lives](/sdk/runtime).
