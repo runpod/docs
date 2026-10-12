@@ -55,7 +55,7 @@ import runpod
 
 app = runpod.App("quickstart")
 
-@app.queue(gpu="H100", workers=(0, 3), dependencies=["torch"])
+@app.queue(gpu=runpod.GpuGroup.ANY, workers=(0, 3), dependencies=["torch"])
 def matrix_multiply(size: int):
     # Import packages inside the function so they load on the worker
     import torch
@@ -81,14 +81,12 @@ def main():
 This code does three things:
 
 - `runpod.App("quickstart")` creates an app to hold your resources.
-- `@app.queue(...)` turns `matrix_multiply` into an autoscaling queue endpoint on H100 GPUs that scales between 0 and 3 workers and installs `torch` on each worker.
+- `@app.queue(...)` turns `matrix_multiply` into an autoscaling queue endpoint that runs on any available GPU, scales between 0 and 3 workers, and installs `torch` on each worker. To request specific hardware, use a short name such as `gpu="4090"` or `gpu="H100"`.
 - `@runpod.local_entrypoint` marks `main` as the code that runs on your machine. Calling `matrix_multiply.remote(2000)` sends the work to Runpod and waits for the result.
 
 <Warning>
   Import installed packages such as `torch` inside the remote function body, not at the top of the file. Top-level imports run on your machine, where the package may not be installed.
 </Warning>
-
-{/* TODO(DOCS-504): Confirm the accepted gpu string values and whether there's an "any available GPU" option equivalent to Flash's GpuGroup.ANY. If there is, use it here so the quickstart doesn't fail when H100s are scarce. */}
 
 ## Step 4: Run a live development session
 
@@ -105,7 +103,7 @@ The CLI creates a temporary endpoint, runs `main`, and streams worker logs back 
 ```text
 Matrix size: 2000x2000
 Result mean: 500.0412
-GPU used: NVIDIA H100 80GB HBM3
+GPU used: NVIDIA RTX A5000
 ```
 
 Edit `main.py`, for example by changing `2000` to `4000`, and run it again. Later runs reuse the warm worker, so they return much faster.

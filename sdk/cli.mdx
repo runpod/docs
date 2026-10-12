@@ -4,7 +4,7 @@ sidebarTitle: "CLI reference"
 description: "Reference for the rp CLI that ships with the runpod Python package: log in, scaffold apps, run live dev sessions, deploy, and manage SSH keys and Pods."
 ---
 
-{/* TODO(DOCS-504): Source is docs/cli/references/command_line_interface.md on runpod-python feat/apps-sdk. Confirm flags for each command with `rp <command> --help` on the released version, and confirm whether rp flash build and rp flash update exist. */}
+{/* TODO(DOCS-504): Sources: docs/cli/references/command_line_interface.md and runpod/rp_cli/main.py on runpod-python main. main.py defines: flash init/dev/deploy/update/logs, login, app list/get/delete, env list/get/add/delete, undeploy, secret add/list/delete, registry add/list/delete, and flags --env, --python-version, --exclude, --build-only, --once, --follow, --tail, --force, --yes. Confirm the exact command tree and arguments with `rp --help` on the released version, especially whether secret and registry live under `rp flash` or at the root. */}
 
 The `rp` CLI is installed with the `runpod` Python package. Use it to authenticate, develop and deploy apps, and work with Pods and SSH keys. The same CLI is also available under the name `runpod`, so `rp flash deploy` and `runpod flash deploy` are equivalent.
 
@@ -24,7 +24,9 @@ rp flash dev main.py
 rp flash deploy
 rp flash app list
 rp flash env list --app my-app
+rp flash logs --follow
 rp flash undeploy --app my-app
+rp flash update
 
 # SSH
 rp ssh add
@@ -67,7 +69,13 @@ Run a live development session for the app defined in a file:
 rp flash dev main.py
 ```
 
-The session creates temporary endpoints, runs the function marked with `@runpod.local_entrypoint`, and streams worker logs back to your terminal. Edit your code and re-run to iterate.
+The session creates temporary endpoints, runs the function marked with `@runpod.local_entrypoint`, and streams worker logs back to your terminal. Edit your code, then press Enter to re-run. Workers pick up the new code automatically.
+
+To run the entrypoint once and exit, which is useful for scripts and CI, add `--once`:
+
+```bash
+rp flash dev main.py --once
+```
 
 When you press Ctrl-C, the session waits for the running entrypoint to finish and then deletes its endpoints. If cleanup fails, the command exits with an error and lists the endpoint IDs you need to delete.
 
@@ -83,23 +91,51 @@ Build and deploy the app in the current project:
 rp flash deploy
 ```
 
-This creates production endpoints for every resource in the app.
+This creates production endpoints for every resource in the app. Common flags:
+
+| Flag | Description |
+| --- | --- |
+| `--env ENVIRONMENT_NAME` | Deploy to a specific environment. |
+| `--exclude PACKAGES` | Leave packages out of the build, for example `--exclude scipy,pandas`. |
+| `--python-version VERSION` | Build for a specific Python version, for example `--python-version 3.12`. |
+| `--build-only` | Build the deployment artifact without deploying it. This replaces `flash build`. |
+
+{/* TODO(DOCS-504): Confirm flag descriptions and whether --exclude takes a comma-separated list, as it did in Flash. */}
 
 ## rp flash app
 
-List the apps you've deployed:
+Manage the apps you've deployed:
 
 ```bash
-rp flash app list
+rp flash app list              # List your apps
+rp flash app get APP_NAME      # Show an app's details
+rp flash app delete APP_NAME   # Delete an app
 ```
 
 ## rp flash env
 
-List the environments for an app:
+Manage an app's environments, such as `dev`, `staging`, and `production`:
 
 ```bash
-rp flash env list --app my-app
+rp flash env list --app my-app       # List environments
+rp flash env get ENVIRONMENT_NAME    # Show an environment's endpoints and status
+rp flash env add ENVIRONMENT_NAME    # Create an environment
+rp flash env delete ENVIRONMENT_NAME # Delete an environment
 ```
+
+{/* TODO(DOCS-504): Confirm arguments for env get/add/delete (environment name positional or flag, and whether --app is required). */}
+
+## rp flash logs
+
+Show logs from your app's workers:
+
+```bash
+rp flash logs              # Show recent logs
+rp flash logs --follow     # Stream new logs as they arrive
+rp flash logs --tail 100   # Show the last 100 lines
+```
+
+{/* TODO(DOCS-504): Confirm what rp flash logs targets by default (app, environment, or resource) and its arguments. */}
 
 ## rp flash undeploy
 
@@ -114,6 +150,30 @@ rp flash undeploy --app my-app
 </Warning>
 
 {/* TODO(DOCS-504): The warning above reflects SLS-647 (open). Remove or update it if a volume delete command ships before launch. */}
+
+## rp flash update
+
+Update the SDK and CLI to the latest version:
+
+```bash
+rp flash update
+```
+
+## Secrets and registries
+
+Store secrets that your app reads with `runpod.Secret`, and save credentials for private container registries:
+
+```bash
+rp secret add SECRET_NAME       # Create a secret
+rp secret list                  # List secrets
+rp secret delete SECRET_NAME    # Delete a secret
+
+rp registry add                 # Save credentials for a private registry
+rp registry list                # List saved registries
+rp registry delete REGISTRY     # Delete saved credentials
+```
+
+{/* TODO(DOCS-504): Command paths for secret and registry are unconfirmed (root vs. rp flash) and arguments are inferred from rp_cli/main.py (--value, --description, --username, --password). Verify with rp --help before publishing. */}
 
 ## rp ssh
 
