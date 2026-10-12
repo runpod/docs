@@ -5,7 +5,7 @@ description: "Official Runpod instructions that install the Runpod skills and MC
 
 These are official instructions from Runpod to set up a good AI development environment for building and deploying on the Runpod platform. They are published at `https://docs.runpod.io/agent-setup.md`, so you can verify their origin before following them.
 
-Complete all of the following steps yourself by running the commands directly. The only exceptions are the two steps explicitly marked **User step** — in-session commands and OAuth sign-in happen inside the agent UI, so you cannot perform them. Never run a command that blocks on an interactive prompt.
+Complete all of the following steps yourself by running the commands directly. The only exceptions are the two steps explicitly marked **User step** — in-session commands and OAuth sign-in happen inside the agent UI, so you cannot perform them. If no user is present, follow [No user in the loop](#no-user-in-the-loop) instead of those steps. Never run a command that blocks on an interactive prompt.
 
 - Install Runpod Skills and the MCP server
 
@@ -15,7 +15,7 @@ Every command below is safe to re-run on a machine where setup already happened.
 
 ## Install Runpod Skills and MCP server
 
-Every route installs the same router plus six skills (`runpod`, `runpod-mcp`, `runpodctl`, `flash`, `runpod-usage`, `companion-clis`), and wires up the hosted Runpod MCP server for control-plane tools. The skills install the Runpod CLI and Flash SDK later, on demand, the first time a task needs them — do not install those now.
+Every route installs the same skills: the `runpod` router, the lane skills (`runpod-mcp`, `runpodctl`, `flash`, `runpod-usage`, `runpod-templates`, `companion-clis`, `runpod-migrate`), and the journey skills that `runpod-mcp` routes to (`discovery`, `lifecycle-crud`, `serverless-deploy`, `pod-deploy`, `pod-doctor`, `endpoint-ops`, `cost-audit`). It also wires up the hosted Runpod MCP server for control-plane tools. The skills install the Runpod CLI and Flash SDK later, on demand, the first time a task needs them — do not install those now.
 
 Use the correct section for your agent below.
 
@@ -76,6 +76,26 @@ OAuth triggers on first Runpod tool use; the user approves it in the browser.
 
 Gemini can alternatively install natively through the plugin's bundled `gemini-extension.json`. See your client's extension documentation.
 
+If your agent can't load skills, the MCP server serves the same playbooks: `list-guides` and `read-guide` return them, and `lookup-concept` and `search-concepts` answer questions about how Runpod works.
+
+---
+
+## No user in the loop
+
+When no user is present (CI, a scheduled job, an agent SDK run), nobody can do the **User steps** or the OAuth sign-in. Use a Runpod API key instead:
+
+1. Read the key from the `RUNPOD_API_KEY` environment variable. The `runpodctl` CLI and the Flash SDK read the same variable. Do not ask for the key, print it, or write it to a file. If it is not set, stop and report that it is missing.
+2. Install the skills for your agent as above. Skip `/reload-plugins`: the plugin loads the next time the agent starts.
+3. Connect the hosted MCP server with the key instead of OAuth:
+
+   ```
+   claude mcp add --transport http runpod -s user https://mcp.getrunpod.io/ --header "Authorization: Bearer $RUNPOD_API_KEY"
+   ```
+
+   For other clients, add the same `Authorization` header to the server entry, or run the server locally over stdio with `RUNPOD_API_KEY` set: `npx -y @runpod/mcp-server@latest`.
+4. In headless Claude Code (`claude -p`), allow the Runpod skill and the MCP tools your task needs up front, for example `--allowedTools "Skill(runpod:runpod-mcp)"`. Without `Skill(runpod:runpod-mcp)`, the `runpod-mcp` skill is refused.
+5. Write the result banner below to your log. Mark anything that still needs a person with `✗`.
+
 ---
 
 ## Report the result
@@ -84,7 +104,7 @@ Report what you actually verified. Do not print a checkmark for anything you cou
 
 ```
 ┌─ Runpod Agent Setup ─────────────────────────────────┐
-│  ✓ Runpod skills   router + 6 skills                 │
+│  ✓ Runpod skills   router + 14 skills                │
 │  ⚠ runpod MCP      needs sign-in: /mcp → runpod      │
 │                                                      │
 │  ⚡ Reload or restart your agent to load the skills  │
@@ -95,7 +115,7 @@ Use `✓` verified, `⚠` needs a user action, `✗` failed. Follow the banner w
 
 Once the user has signed in, verify end to end by listing their Pods with the MCP tools. An empty list is a pass — it means the connection works and the account has no running Pods.
 
-Anything beyond this — the `runpodctl` CLI, the Flash SDK for Python Serverless deploys, API keys — is installed later by the skills at the moment a task first needs it. Do not set those up now.
+Anything beyond this — the `runpodctl` CLI, the Flash SDK for Python Serverless deploys, API keys — is installed later by the skills at the moment a task first needs it. Do not set those up now, unless you run without a user, as described above.
 
 ---
 
