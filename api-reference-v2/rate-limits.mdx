@@ -14,7 +14,7 @@ Each user has a quota for three windows: `minute`, `hour`, and `day`. A request 
 
 ## Rate limit headers
 
-Responses to authenticated requests include two headers that follow the [IETF RateLimit header fields draft](https://datatracker.ietf.org/doc/draft-ietf-httpapi-ratelimit-headers/). They're present on successful responses as well as on 429 responses, so your client can track quota before it's rejected. Callers that are exempt from rate limiting don't receive them.
+Responses to authenticated requests include two headers that follow the [IETF RateLimit header fields draft](https://datatracker.ietf.org/doc/draft-ietf-httpapi-ratelimit-headers/). They're present on successful responses as well as on 429 responses, so your client can track quota before it's rejected. If your responses don't include these headers, your requests aren't subject to these limits.
 
 `RateLimit-Policy` describes the quota for each window. Each entry carries the quota `q` (requests allowed) and the window length `w` in seconds:
 
@@ -28,7 +28,7 @@ RateLimit-Policy: "minute";q=60;w=60, "hour";q=3000;w=3600, "day";q=50000;w=8640
 RateLimit: "minute";r=0;t=12, "hour";r=2800;t=1812, "day";r=49500;t=45012
 ```
 
-These values are examples. Read the headers from your own responses rather than hardcoding the quotas shown here.
+The quota values on this page are illustrative, not the limits that apply to your account. Read your actual quotas from the `RateLimit-Policy` header on your own responses, and don't hardcode them in your client.
 
 ## 429 responses
 
@@ -46,8 +46,6 @@ RateLimit: "minute";r=0;t=12, "hour";r=2800;t=1812, "day";r=49500;t=45012
   "detail": "rate limit exceeded for the minute window"
 }
 ```
-
-A rejected request has no effect, so you can send the same request again after waiting.
 
 ## Build a client that respects limits
 
@@ -122,3 +120,17 @@ def request(method, path, **kwargs):
 pods = request("GET", "/pods")
 print(pods)
 ```
+
+The `request` function sends every call through one shared session and handles each outcome differently:
+
+- A 429 response waits for the number of seconds in `Retry-After`, plus up to one second of jitter, and then retries. If the header is missing, the client falls back to exponential backoff.
+- A network error or a `5xx` response is retried with exponential backoff only for `GET` requests. Other methods raise the error immediately, because a `POST` that timed out may already have created a resource.
+- A successful response is passed to `seconds_until_reset`, which reads the `minute` entry of the `RateLimit` header. When no requests remain in that window, the client sleeps until the window resets, so the next call doesn't receive a 429.
+
+After `MAX_RETRIES` attempts, the client raises an error instead of retrying indefinitely.
+
+## Next steps
+
+- [Send API requests](/serverless/endpoints/send-requests#rate-limits): Learn about the separate rate limits for Serverless endpoint requests.
+- [API v2 overview](/api-reference-v2/overview): Review the base URL, authentication, and available resources.
+- [Migrate from v1](/api-reference-v2/migrate-from-v1): Move an existing REST v1 or GraphQL integration to API v2.

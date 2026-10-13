@@ -9,7 +9,7 @@ import { QueueBasedEndpointsTooltip, LoadBalancingEndpointTooltip } from "/snipp
 After creating a [Serverless endpoint](/serverless/endpoints/overview), you can start sending HTTP requests to submit jobs and retrieve results:
 
 ```sh
-curl -x POST https://api.runpod.ai/v2/ENDPOINT_ID/runsync \
+curl -X POST https://api.runpod.ai/v2/ENDPOINT_ID/runsync \
      -H "authorization: Bearer RUNPOD_API_KEY" \
      -H "content-type: application/json" \
      -d '{ "input": {  "prompt": "Hello, world!" }}'
@@ -184,7 +184,7 @@ Your worker must contain logic to use this information for storage operations. W
 
 Runpod enforces rate limits per endpoint and operation:
 
-| Operation      | Method | Rate Limit                   | Concurrent Limit |
+| Operation      | Method | Rate limit                   | Concurrent limit |
 |----------------|--------|------------------------------|------------------|
 | `/runsync`     | POST   | 2000 requests per 10 seconds | 400 concurrent   |
 | `/run`         | POST   | 1000 requests per 10 seconds | 200 concurrent   |
@@ -199,8 +199,8 @@ Runpod enforces rate limits per endpoint and operation:
 
 Rate limits scale with your endpoint's worker count. The system uses whichever is higher between:
 
-1. **Base limit**: Fixed rate limit per user per endpoint (shown above)
-2. **Worker-based limit**: `number_of_running_workers × requests_per_worker`
+1. **Base limit**: Fixed rate limit per user per endpoint (shown above).
+2. **Worker-based limit**: `number_of_running_workers × requests_per_worker`.
 
 Requests exceeding the effective limit return `429 (Too Many Requests)`.
 
@@ -208,7 +208,7 @@ Requests exceeding the effective limit return `429 (Too Many Requests)`.
 
 Rate limits apply to each endpoint for each user. All of your processes that call the same endpoint with the same API key share one limit. Build your client to expect 429 responses and to keep its request rate below the limits in the table:
 
-- Retry 429 responses with exponential backoff and random jitter, and cap the number of retries. If the response includes a `Retry-After` header, wait at least that many seconds before retrying.
+- Retry 429 responses with exponential backoff and random jitter, and cap the number of retries.
 - Limit how many requests your client has open at once. Each `/runsync` request stays open until the job finishes or the wait time expires. A burst of slow jobs can reach the concurrent limit well before the request rate limit. Use a bounded worker pool or semaphore rather than sending every request at once.
 - Poll `/status` at a measured interval that grows the longer a job runs, rather than in a tight loop. For jobs that take more than a few seconds, use [webhook notifications](#webhook-notifications) instead of polling, or `/stream` for incremental results.
 - Avoid calling `/requests` and `/purge-queue` from automated loops. Their limits are much lower than the job submission limits.
@@ -236,9 +236,8 @@ def call(method, path, **kwargs):
         if response.status_code != 429:
             response.raise_for_status()
             return response.json()
-        # Honor Retry-After when present; otherwise back off exponentially. Jitter spreads out parallel clients.
-        delay = float(response.headers.get("Retry-After", 2**attempt))
-        time.sleep(delay + random.uniform(0, 1))
+        # Back off exponentially. Jitter spreads out parallel clients.
+        time.sleep(2**attempt + random.uniform(0, 1))
     raise RuntimeError(f"{path} was rate-limited {MAX_RETRIES} times")
 
 
