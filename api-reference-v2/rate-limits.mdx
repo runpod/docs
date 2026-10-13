@@ -1,0 +1,124 @@
+---
+title: "Rate limits"
+sidebarTitle: "Rate limits"
+description: "Learn how the Runpod REST API v2 limits request rates, read your remaining quota from response headers, and build a client that handles 429 responses."
+---
+
+The Runpod REST API v2 limits how many requests each user can send so that one integration can't degrade the API for everyone else. Limits apply per user across several time windows at once, and every authenticated response tells your client how much quota it has left. A client that reads this information can slow down before it reaches a limit and recover cleanly when it does.
+
+This page covers the management API at `https://api.runpod.io/v2`. Requests to Serverless endpoints (`https://api.runpod.ai/v2/ENDPOINT_ID/...`) have separate per-endpoint limits, described in [Send API requests](/serverless/endpoints/send-requests#rate-limits).
+
+## How limits work
+
+Each user has a quota for three windows: `minute`, `hour`, and `day`. A request counts against all three. When any window runs out, the API rejects further requests with `429 Too Many Requests` until that window resets, even if the other windows still have quota left.
+
+## Rate limit headers
+
+Responses to authenticated requests include two headers that follow the [IETF RateLimit header fields draft](https://datatracker.ietf.org/doc/draft-ietf-httpapi-ratelimit-headers/). They're present on successful responses as well as on 429 responses, so your client can track quota before it's rejected. Callers that are exempt from rate limiting don't receive them.
+
+`RateLimit-Policy` describes the quota for each window. Each entry carries the quota `q` (requests allowed) and the window length `w` in seconds:
+
+```text
+RateLimit-Policy: "minute";q=60;w=60, "hour";q=3000;w=3600, "day";q=50000;w=86400
+```
+
+`RateLimit` describes the live state of each window. Each entry carries the remaining request count `r` and the seconds `t` until the window resets:
+
+```text
+RateLimit: "minute";r=0;t=12, "hour";r=2800;t=1812, "day";r=49500;t=45012
+```
+
+These values are examples. Read the headers from your own responses rather than hardcoding the quotas shown here.
+
+## 429 responses
+
+When your client exceeds a window, the API returns `429 Too Many Requests` with a `Retry-After` header that gives the number of seconds to wait, plus the `RateLimit` and `RateLimit-Policy` headers. The body uses the same `application/problem+json` format as other v2 errors, and `detail` names the window you exceeded:
+
+```http
+HTTP/2 429
+Content-Type: application/problem+json
+Retry-After: 12
+RateLimit: "minute";r=0;t=12, "hour";r=2800;t=1812, "day";r=49500;t=45012
+
+{
+  "title": "Too Many Requests",
+  "status": 429,
+  "detail": "rate limit exceeded for the minute window"
+}
+```
+
+A rejected request has no effect, so you can send the same request again after waiting.
+
+## Build a client that respects limits
+
+Design your integration to treat a 429 as an expected signal rather than a failure:
+
+- Wait for the number of seconds in `Retry-After` before retrying. Retrying sooner returns another 429.
+- Watch the `RateLimit` header and slow down when `r` for any window gets close to zero, instead of waiting for a 429.
+- Cap the number of retries, and surface an error once the cap is reached.
+- Add random jitter to retry delays so that multiple workers or processes that were rejected together don't retry at the same moment.
+- Reduce request volume where you can. For example, list resources once and reuse the result instead of fetching each resource in a loop. Cache data that changes rarely, such as the [catalog](/api-reference-v2/catalog/list-gpu-types).
+- Share one rate-limit-aware client across your code. Quotas are per user, so separate processes using the same API key draw from the same quota.
+
+For errors other than 429, retry only when a retry is safe. Server errors (`5xx`) and network timeouts are usually transient, so retrying `GET` requests with exponential backoff is safe. A `POST` that creates a resource, such as a Pod, may have succeeded even though your client didn't receive the response. Before retrying it, list your resources to check whether the first attempt went through, or you may create a duplicate. Don't retry other `4xx` errors without changing the request, because they won't succeed on their own.
+
+### Example
+
+The following Python client honors `Retry-After` on 429 responses and pauses when the minute window is almost empty. It also retries transient errors on `GET` requests with exponential backoff and jitter. It requires the `requests` package and a `RUNPOD_API_KEY` environment variable.
+
+```python
+import os
+import random
+import re
+import time
+
+import requests
+
+BASE_URL = "https://api.runpod.io/v2"
+MAX_RETRIES = 5
+RETRYABLE_STATUSES = {500, 502, 503, 504}
+
+session = requests.Session()
+session.headers["Authorization"] = f"Bearer {os.environ['RUNPOD_API_KEY']}"
+
+
+def seconds_until_reset(ratelimit_header, window="minute", threshold=1):
+    """Return how long to pause if the given window is almost exhausted."""
+    match = re.search(rf'"{window}";r=(\d+);t=(\d+)', ratelimit_header or "")
+    if match and int(match.group(1)) < threshold:
+        return int(match.group(2))
+    return 0
+
+
+def request(method, path, **kwargs):
+    for attempt in range(MAX_RETRIES):
+        try:
+            response = session.request(method, f"{BASE_URL}{path}", timeout=30, **kwargs)
+        except (requests.ConnectionError, requests.Timeout):
+            # The request may have reached the server. Only retry methods that are safe to repeat.
+            if method != "GET" or attempt == MAX_RETRIES - 1:
+                raise
+            time.sleep(2**attempt + random.uniform(0, 1))
+            continue
+
+        if response.status_code == 429:
+            # Wait as long as the API asks, plus jitter so parallel clients spread out.
+            time.sleep(int(response.headers.get("Retry-After", 2**attempt)) + random.uniform(0, 1))
+            continue
+
+        if response.status_code in RETRYABLE_STATUSES and method == "GET":
+            time.sleep(2**attempt + random.uniform(0, 1))
+            continue
+
+        response.raise_for_status()
+
+        # Slow down before the next request if this window is nearly used up.
+        time.sleep(seconds_until_reset(response.headers.get("RateLimit")))
+        return response.json() if response.content else None
+
+    raise RuntimeError(f"{method} {path} failed after {MAX_RETRIES} attempts")
+
+
+pods = request("GET", "/pods")
+print(pods)
+```
