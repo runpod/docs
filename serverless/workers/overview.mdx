@@ -41,22 +41,61 @@ Workers can run in two modes depending on your latency and cost requirements:
 
 - **Active workers** run continuously (24/7) and are always ready to process requests instantly. They eliminate cold starts entirely, making them ideal for latency-sensitive or high-traffic applications.
 
-- **Flex workers** scale dynamically based on demand, spinning down to zero when idle. They incur cold starts when scaling up but cost nothing when not in use, making them ideal for variable or sporadic workloads.
+- **Flex workers** scale dynamically based on demand, scaling down to zero when there are no requests. They incur cold starts when scaling up but cost nothing when not in use, making them ideal for variable or sporadic workloads.
 
 The system may also spin up **extra workers** during traffic spikes when Docker images are cached on hosts (default: 2).
 
+## Worker lifecycle
+
+A worker is always either **scaled down** or **running**. Billing follows that split: a worker is billed only while it is running.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    state "Scaled down (not billed)" as down {
+        Initializing --> Idle: image and cached models ready
+        Idle --> Throttled: host GPU taken by another workload
+        Throttled --> Idle: host GPU free again
+    }
+    state "Running (billed)" as up {
+        ColdStart: Cold start
+        Processing: Processing a job
+        Waiting: Waiting (idle timeout)
+        ColdStart --> Processing: handler ready
+        Processing --> Waiting: job done, queue empty
+        Waiting --> Processing: new job
+    }
+    Idle --> ColdStart: request arrives, billing starts
+    Waiting --> Idle: idle timeout expires, billing stops
+```
+
+1. **Scaled down**: Runpod prepares workers ahead of time on a host <MachineTooltip /> by pulling your image and downloading [cached models](/serverless/endpoints/model-caching). No container is running for you, so nothing is billed.
+2. **Cold start**: When a request needs a worker, Runpod starts one and billing begins. Your container starts and your handler loads its model. The cold start ends when the handler is ready to take its first job.
+3. **Processing**: The worker runs jobs from the queue back to back.
+4. **Waiting**: When the queue is empty, the worker waits for the next job for up to the [idle timeout](/serverless/endpoints/endpoint-configurations#idle-timeout). It is still running and still billed. A new job during this window starts immediately with no cold start.
+5. **Scale down**: If no job arrives before the idle timeout expires, the worker stops and billing stops. With [FlashBoot](/serverless/endpoints/endpoint-configurations#flashboot), Runpod tries to keep the stopped worker in a state that restarts faster.
+
+[Active workers](#worker-types) skip step 5. They stay running, and billed, even when they have no jobs.
+
+<Note>
+"Idle" in the console means a worker that has scaled down and is not billed. A worker waiting out its idle timeout is still running and shows as **Running**.
+</Note>
+
 ## Worker states
 
-| State | Description | Billing |
-|-------|-------------|---------|
-| **Initializing** | Downloading image, loading code, and downloading cached models (if using model caching) | No |
-| **Idle** | Scaled down, waiting for requests | No |
-| **Running** | Processing requests | Yes |
-| **Throttled** | Temporarily unable to run due to host <MachineTooltip /> resource constraints | No |
-| **Outdated** | Marked for replacement after update | Yes (while processing) |
-| **Unhealthy** | Crashed; auto-retries for up to 7 days | No |
+The **Workers** tab shows each worker in one of these states:
 
-Billing starts when a worker switches to **Running** and stops when it scales down. Pulling the image and downloading cached models happen while the worker is **Initializing**, so they are not billed. A running worker is billed while its handler loads the model (cold start), while it processes requests, and during the [idle timeout](/serverless/endpoints/endpoint-configurations#idle-timeout) after each request, which the console also shows as **Running**. See [compute cost breakdown](/serverless/pricing#compute-cost-breakdown).
+| State | Description | Billed |
+|-------|-------------|---------|
+| **Initializing** | Scaled down. Runpod is pulling the image or downloading cached models on the host. | No |
+| **Idle** | Scaled down and ready to start. The image and cached models are on the host. | No |
+| **Running** | Started. Covers the cold start, processing jobs, and waiting during the idle timeout. | Yes |
+| **Throttled** | Scaled down. The host's GPUs are in use by other workloads, so this worker can't start there right now. | No |
+| **Unhealthy** | The worker crashed or failed to initialize. Runpod retries it with increasing delays for up to 7 days. | No |
+
+A worker marked **Outdated** in the version column is running an older version of your endpoint. Runpod replaces it with a worker on the latest version. It is billed while it is running, like any other worker.
+
+Image pulls are normally done while a worker is scaled down. If a worker starts before its image is on the host, the pull happens during the cold start and is billed. See [compute cost breakdown](/serverless/pricing#compute-cost-breakdown).
 
 <Note>
 If an endpoint repeatedly produces unhealthy workers, Runpod automatically scales it down; see [My endpoint was scaled down unexpectedly](/serverless/troubleshooting#my-endpoint-was-scaled-down-unexpectedly). 
