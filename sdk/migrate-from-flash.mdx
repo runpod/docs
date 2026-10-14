@@ -19,6 +19,7 @@ Flash is now part of the `runpod` Python package, so there's one SDK, one packag
 - **One login.** `rp login` saves credentials to `~/.runpod/config.toml`, which the whole SDK reads. `RUNPOD_API_KEY` is the only environment variable for authentication.
 - **An app-based API.** Instead of decorating functions with `@Endpoint`, you create a `runpod.App` and attach resources to it with `@app.queue`, `@app.api`, or the new `@app.task`.
 - **A separate runtime.** The code that runs on workers now ships in its own package, `runpod-sdk-runtime`, so it can be released independently of the SDK. See [Runtime](/sdk/runtime).
+- **A new major version.** The unified SDK is `runpod` 2.0. Version 2.0 includes breaking changes, such as the removal of the old `runpod config`, `runpod project`, and `runpod exec` CLI commands. Until the stable release, you can test it with `pip install runpod==2.0.0rc1`.
 
 ## What stays the same
 
@@ -39,14 +40,15 @@ Migrate if you want features that are only in the Runpod SDK:
 - `runpod.Secret` for reading environment values from Runpod secrets.
 - `runpod.Model` for platform-cached model weights.
 - `.spawn()` and `.stream()` for background jobs and streamed results.
-- `rp flash logs` for following worker logs from your terminal.
+- `rp logs` for following a Pod's logs from your terminal.
 
 Stay on Flash for now if your project relies on a pattern that doesn't work the same way in the Runpod SDK yet. See [Known differences](#known-differences) before you start.
 
 ## Requirements
 
 - An existing Flash project.
-- [Python 3.10 or higher](https://www.python.org/downloads/).
+- [Python 3.10 to 3.14](https://www.python.org/downloads/).
+- The `runpod` package, version 2.0 or later.
 - A [Runpod account](/accounts-billing/manage-accounts) with a verified email address.
 
 ## Step 1: Install the SDK and log in
@@ -62,6 +64,8 @@ uv remove runpod-flash
 uv add runpod
 ```
 
+Until `runpod` 2.0.0 is released, install the release candidate instead: `pip install runpod==2.0.0rc1`.
+
 Then log in:
 
 ```bash
@@ -75,7 +79,7 @@ If you already logged in with `flash login`, your saved credentials still work a
 | `pip install runpod-flash` | `pip install runpod` |
 | `uv tool install runpod-flash` | `uv add runpod` |
 | `flash login` | `rp login` |
-| Python 3.10 to 3.13 | Python 3.10 or higher |
+| Python 3.10 to 3.13 | Python 3.10 to 3.14 |
 
 ## Step 2: Update your CLI commands
 
@@ -91,12 +95,11 @@ Replace `flash` commands in your scripts, Makefiles, and CI with their `rp flash
 | `flash deploy --env ENVIRONMENT_NAME` | `rp flash deploy --env ENVIRONMENT_NAME` |
 | `flash app list` | `rp flash app list` |
 | `flash env list` | `rp flash env list --app APP_NAME` |
-| `flash env create ENVIRONMENT_NAME` | `rp flash env add` |
-| `flash undeploy ENDPOINT_NAME` | `rp flash undeploy --app APP_NAME` |
-| `flash update` | `rp flash update` |
-| No equivalent | `rp flash logs --follow` |
-
-{/* TODO(DOCS-504): Confirm with `rp --help` on the released version: exact arguments for `rp flash env add`, that `--build-only` is the replacement for `flash build`, and whether secret and registry commands live under `rp flash` or at the root. */}
+| `flash env create ENVIRONMENT_NAME` | `rp flash env add ENVIRONMENT_NAME` |
+| `flash undeploy ENDPOINT_NAME` | `rp flash undeploy --app APP_NAME --env ENVIRONMENT_NAME` |
+| `flash update` | `rp update` |
+| No equivalent | `rp logs POD_ID --follow` |
+| No equivalent | `rp secret add` and `rp registry add` |
 
 See the [CLI reference](/sdk/cli) for all commands and flags.
 
@@ -154,7 +157,7 @@ def main():
 
 Run the new version with `rp flash dev main.py`.
 
-{/* TODO(DOCS-504): Confirm how resource names are derived now that there's no name= argument (function or class name), and how that affects endpoint names in the console. */}
+Resource names come from the function or class name, so the example above creates a resource called `hello`. To use a different name, pass `name=`, for example `@app.queue(name="hello-gpu", gpu="4090")`.
 
 ### Load-balanced endpoints
 
@@ -221,7 +224,7 @@ The `GpuType` and `GpuGroup` names are the same, and you can also use shorter st
 | --- | --- |
 | `gpu=GpuType.NVIDIA_GEFORCE_RTX_4090` | `gpu="4090"` or `gpu=runpod.GpuType.NVIDIA_GEFORCE_RTX_4090` |
 | `gpu=GpuGroup.ANY` | `gpu=runpod.GpuGroup.ANY` |
-| `gpu=[GpuType.A, GpuType.B]` | `gpu=["H100", "A100"]` (ordered fallbacks) |
+| `gpu=[GpuType.A, GpuType.B]` | `gpu=["H100", "A100"]` (any of the listed GPUs) |
 | `cpu="cpu5c-4-8"` or `CpuInstanceType.CPU5C_4_8` | `cpu="cpu5c-4-8"` |
 | `gpu_count=2` | `gpu_count=2` |
 
@@ -243,11 +246,11 @@ Queue-based and load-balanced resources support one volume, mounted at `/runpod-
 | --- | --- |
 | `template=PodTemplate(containerDiskInGb=100)` | `container_disk_gb=100` |
 | `PodTemplate(min_cuda_version="12.8")` | `min_cuda_version="12.8"` on the decorator |
-| `python_version="3.12"` on a resource | `rp flash deploy --python-version 3.12` |
+| `python_version="3.12"` on a resource | `rp flash deploy --python-version 3.12` (defaults to your local Python) |
 | `idle_timeout`, `execution_timeout_ms`, `flashboot`, `scaler_type`, `scaler_value`, `accelerate_downloads`, `datacenter`, `dependencies`, `system_dependencies` | Same names on the decorator |
 | No equivalent | `max_concurrency=4` to process several requests per worker |
 
-{/* TODO(DOCS-504): Confirm that per-resource python_version is gone and which Python versions GPU and CPU workers run. */}
+See [Resource parameters](/sdk/configuration/parameters) for the full list.
 
 ### Environment variables and secrets
 
@@ -275,6 +278,8 @@ These differences don't raise errors, so check them before you deploy:
 - **Custom images work differently.** You no longer need an image that implements a Serverless handler. The SDK runs your function on any image that has Python 3.
 - **One volume per endpoint.** Lists of volumes across datacenters aren't supported.
 - **Volumes keep billing.** Undeploying an app doesn't delete the network volumes it created. Delete them separately when you no longer need them.
+- **New ignore file.** `.flashignore` is replaced by `.runpodignore`, and deployments also follow your project's `.gitignore` files. `.env` files, keys, and credential files are always left out. See [Ignore rules](/sdk/apps/deploy#ignore-rules).
+- **Python version must match in dev sessions.** Dev sessions and tasks send your function from your local Python, so your local interpreter must be 3.10 to 3.14. See [Dev sessions](/sdk/apps/dev-sessions#python-version).
 
 ## Step 5: Test, then deploy
 
@@ -326,6 +331,8 @@ The Flash pages in these docs stay online for reference, with a notice pointing 
 ## Next steps
 
 - [Read the SDK overview](/sdk/overview) to learn about apps, resource types, and storage.
+- [Configure resources](/sdk/configuration/parameters) with the full parameter reference.
+- [Build an app](/sdk/apps/build-app) step by step.
 - [Review the CLI reference](/sdk/cli).
 - [Learn about the runtime](/sdk/runtime) that runs your code on workers.
 - [Browse the examples](https://github.com/runpod/runpod-python/tree/main/examples/apps) in the runpod-python repository.
