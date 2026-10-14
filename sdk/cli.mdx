@@ -55,15 +55,18 @@ rp login --api-key API_KEY     # Store a key directly
 rp login --profile staging     # Save credentials to a named profile
 ```
 
-Use `--profile PROFILE_NAME` with either login method to update only that profile. The default profile is `default`.
+Use `--profile PROFILE_NAME` with either login method to update only that profile. The default profile is `default`. To print the approval URL instead of opening a browser, add `--no-open`.
 
 ## rp flash init
 
 Scaffold a new app project:
 
 ```bash
-rp flash init my-app
+rp flash init my-app   # Create a project in a new my-app directory
+rp flash init .        # Create a project in the current directory
 ```
+
+This writes `main.py` (an app with one queue function and a local entrypoint), `requirements.txt`, and `.runpodignore`. Existing files aren't overwritten unless you add `--force`. See [Build an app](/sdk/apps/build-app).
 
 ## rp flash dev
 
@@ -75,7 +78,7 @@ rp flash dev main.py
 
 The session creates temporary endpoints, runs the function marked with `@runpod.local_entrypoint`, and streams worker logs back to your terminal. Edit your code, then press Enter to re-run. Workers pick up the new code automatically.
 
-To run the entrypoint once and exit, which is useful for scripts and CI, add `--once`:
+See [Dev sessions](/sdk/apps/dev-sessions) for how sessions work. To run the entrypoint once and exit, which is useful for scripts and CI, add `--once`:
 
 ```bash
 rp flash dev main.py --once
@@ -95,16 +98,16 @@ Build and deploy the app in the current project:
 rp flash deploy
 ```
 
-This creates production endpoints for every resource in the app. Common flags:
+This packages and deploys every app found in the current directory. To deploy another directory, pass its path, for example `rp flash deploy path/to/project`. Flags:
 
 | Flag | Description |
 | --- | --- |
-| `--env ENVIRONMENT_NAME` | Deploy to a specific environment. |
-| `--exclude PACKAGES` | Leave packages out of the build, for example `--exclude scipy,pandas`. |
-| `--python-version VERSION` | Build for a specific Python version, for example `--python-version 3.12`. |
-| `--build-only` | Build the deployment artifact without deploying it. This replaces `flash build`. |
+| `--env`, `-e` | Deploy to a specific environment. Defaults to the app's environment, which is `default` unless set in code. |
+| `--exclude PACKAGES` | Leave a comma-separated list of packages out of the artifact, for example `--exclude scipy,pandas`. They must then come from the worker image. |
+| `--python-version VERSION` | The worker Python version used to pick dependency wheels, from 3.10 to 3.14. Defaults to the Python running the CLI. |
+| `--build-only` | Build the artifact without deploying it, and write `APP_NAME-artifact.tar.gz` to the current directory. This replaces `flash build`. |
 
-{/* TODO(DOCS-504): Confirm flag descriptions and whether --exclude takes a comma-separated list, as it did in Flash. */}
+To learn what goes into the artifact, including ignore rules and the size limit, see [Deploy an app](/sdk/apps/deploy).
 
 ## rp flash app
 
@@ -113,7 +116,7 @@ Manage the apps you've deployed:
 ```bash
 rp flash app list              # List your apps
 rp flash app get APP_NAME      # Show an app's details
-rp flash app delete APP_NAME   # Delete an app
+rp flash app delete APP_NAME   # Delete an app (add --yes to skip the prompt)
 ```
 
 ## rp flash env
@@ -127,27 +130,18 @@ rp flash env add ENVIRONMENT_NAME    # Create an environment
 rp flash env delete ENVIRONMENT_NAME # Delete an environment
 ```
 
-{/* TODO(DOCS-504): Confirm arguments for env get/add/delete (environment name positional or flag, and whether --app is required). */}
-
-## rp flash logs
-
-Show logs from your app's workers:
-
-```bash
-rp flash logs              # Show recent logs
-rp flash logs --follow     # Stream new logs as they arrive
-rp flash logs --tail 100   # Show the last 100 lines
-```
-
-{/* TODO(DOCS-504): Confirm what rp flash logs targets by default (app, environment, or resource) and its arguments. */}
+The `env` commands use the app in the current directory. If the directory has no app or more than one, pass `--app APP_NAME`.
 
 ## rp flash undeploy
 
-Delete the endpoints for an app's environment:
+Delete an environment's endpoints and the environment itself:
 
 ```bash
-rp flash undeploy --app my-app
+rp flash undeploy --app my-app              # Undeploy the default environment
+rp flash undeploy --app my-app --env staging
 ```
+
+The app and its build history remain. `--app` is optional when the current directory has one app. Add `--yes` to skip the confirmation prompt.
 
 <Warning>
   Undeploying an app doesn't delete network volumes it created. Volumes continue to incur storage charges until you delete them. See [Network volumes](/storage/network-volumes) to learn how to delete a volume.
@@ -155,29 +149,41 @@ rp flash undeploy --app my-app
 
 {/* TODO(DOCS-504): The warning above reflects SLS-647 (open). Remove or update it if a volume delete command ships before launch. */}
 
-## rp flash update
-
-Update the SDK and CLI to the latest version:
-
-```bash
-rp flash update
-```
-
 ## Secrets and registries
 
 Store secrets that your app reads with `runpod.Secret`, and save credentials for private container registries:
 
 ```bash
-rp secret add SECRET_NAME       # Create a secret
+rp secret add SECRET_NAME       # Create a secret (prompts for the value)
 rp secret list                  # List secrets
 rp secret delete SECRET_NAME    # Delete a secret
 
-rp registry add                 # Save credentials for a private registry
-rp registry list                # List saved registries
-rp registry delete REGISTRY     # Delete saved credentials
+rp registry add REGISTRY_NAME   # Save registry credentials (prompts for username and password)
+rp registry list                # List saved credentials
+rp registry delete REGISTRY_NAME
 ```
 
-{/* TODO(DOCS-504): Command paths for secret and registry are unconfirmed (root vs. rp flash) and arguments are inferred from rp_cli/main.py (--value, --description, --username, --password). Verify with rp --help before publishing. */}
+`rp secret add` also accepts `--value` and `--description`, and `rp registry add` accepts `--username` and `--password`. If you leave them out, the CLI prompts for them, which keeps the values out of your shell history. Reference a secret in code with `env={"HF_TOKEN": runpod.Secret("SECRET_NAME")}`, and registry credentials with `registry_auth="REGISTRY_NAME"`.
+
+## rp logs
+
+Show a Pod's container and system logs, such as a Pod started by `@app.task`:
+
+```bash
+rp logs POD_ID                    # Show recent logs
+rp logs POD_ID --follow           # Stream new logs as they arrive
+rp logs POD_ID --tail 500         # Backfill the last 500 lines (default 100)
+rp logs POD_ID --type container   # Only container logs (all, container, or system)
+```
+
+## rp update
+
+Update the `runpod` package, which includes the CLI, to the latest version:
+
+```bash
+rp update
+rp update --version 2.0.0   # Install a specific version
+```
 
 ## rp ssh
 
