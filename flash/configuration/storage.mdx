@@ -132,6 +132,35 @@ async def run_inference(prompt: str) -> dict:
     return {"generated_text": text}
 ```
 
+### Load large models from local disk
+
+Reading model weights straight from `/runpod-volume/` reads them over the network on every cold start. To load from local disk instead, keep the Hugging Face cache on the container disk and wrap the model load in [`VolumeCache`](/serverless/development/volume-cache) from the Runpod Python SDK. `VolumeCache` keeps a mirror of the cache directory on the network volume. When a worker starts, it copies the mirror onto the container disk, and after the load it syncs any newly downloaded files back. The first worker downloads the model from Hugging Face, and later cold starts restore it from the volume.
+
+```python
+from runpod_flash import Endpoint, GpuType, NetworkVolume
+
+vol = NetworkVolume(name="model-cache", size=100)
+
+@Endpoint(
+    name="model-server",
+    gpu=GpuType.NVIDIA_A100_80GB_PCIe,
+    volume=vol,
+    env={"HF_HUB_CACHE": "/opt/hf-cache"},  # Container disk, mirrored by VolumeCache
+    dependencies=["torch", "transformers", "runpod>=1.12.0"]
+)
+class ModelServer:
+    def __init__(self):
+        from runpod.serverless import VolumeCache
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        # Restore the cache from the volume, then sync new files back
+        with VolumeCache(dirs=["/opt/hf-cache"]):
+            self.model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-7B-Instruct")
+            self.tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-7B-Instruct")
+```
+
+`VolumeCache` requires `runpod` 1.12.0 or later. It never fails a job: if any part of the cache fails, the worker logs the error and falls back to a normal cold start, so pass `best_effort=False` while you set it up. `VolumeCache` doesn't copy symbolic links, which the Hugging Face cache uses for its `snapshots/` directory, so keep Hugging Face Hub access enabled and let `from_pretrained` re-link the snapshot on each cold start. Don't set `HF_HUB_OFFLINE=1` on a cache that `VolumeCache` restores. Size the volume to hold the mirror, which lives under `/runpod-volume/.cache/`.
+
 ### Load-balanced endpoints with storage
 
 ```python
