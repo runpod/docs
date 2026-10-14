@@ -4,7 +4,7 @@ sidebarTitle: "Overview"
 description: "Use the runpod Python package to define GPU functions, deploy apps, call endpoints, build Serverless workers, and manage Runpod resources from one SDK."
 ---
 
-{/* TODO(DOCS-504): runpod-python PR #534 merged to main on 2026-10-05 but isn't released yet (latest release v1.12.0). Publish only after the PyPI release, and add the minimum version to the Install section. */}
+{/* TODO(DOCS-504): runpod 2.0.0rc1 was published on 2026-10-12. Publish these pages with the stable 2.0.0 release, and drop the release-candidate install notes then. */}
 
 The `runpod` Python package is the single SDK for building on Runpod. It includes the decorator-based app SDK that was previously shipped as Flash, the `rp` command-line interface, the client for calling existing Serverless endpoints, the Serverless worker SDK, and the API wrapper for managing Pods and other resources.
 
@@ -47,7 +47,7 @@ Run the file with `rp flash dev main.py`. The `hello` function runs on a Runpod 
 
 ## Install
 
-The SDK requires Python 3.10 or higher.
+The SDK requires Python 3.10 to 3.14, and the features on this page require `runpod` 2.0 or later.
 
 ```bash
 pip install runpod
@@ -55,6 +55,8 @@ pip install runpod
 # If using uv:
 uv add runpod
 ```
+
+Until 2.0.0 is released, install the release candidate with `pip install runpod==2.0.0rc1`.
 
 Installing the package also installs the `rp` CLI. The same CLI is available under the longer name `runpod`.
 
@@ -150,9 +152,9 @@ In this example:
 - `finetune` provisions a two-GPU Pod for each call and terminates it when the function returns.
 - `Counter` is served over HTTP. The method marked with `@runpod.init` runs once when each worker starts, and methods marked with `@runpod.get` and `@runpod.post` become routes. Workers keep state in memory between requests.
 
-Specify hardware with `gpu=` or `cpu=`, which are mutually exclusive. For GPUs, use a short name such as `"4090"`, `"H100"`, or `"B200"`, a `runpod.GpuGroup` pool such as `runpod.GpuGroup.ANY`, or a `runpod.GpuType` device. Pass a list to set fallbacks in order. If you don't set `workers`, resources scale between 0 and 3 workers.
+Specify hardware with `gpu=` or `cpu=`, which are mutually exclusive. For GPUs, use a short name such as `"4090"`, `"H100"`, or `"B200"`, a `runpod.GpuGroup` pool such as `runpod.GpuGroup.ANY`, or a `runpod.GpuType` device. Pass a list to allow several options. If you don't set `workers`, resources scale between 0 and 3 workers.
 
-{/* TODO(DOCS-504): Document the full parameter list (from runpod/apps/spec.py on main) on a dedicated parameters page: gpu, cpu, gpu_count, workers (default (0, 3)), idle_timeout (60), dependencies, system_dependencies, mounts, env, datacenter, image, registry_auth, model, max_concurrency, execution_timeout_ms, flashboot, scaler_type, scaler_value, min_cuda_version, accelerate_downloads, container_disk_gb. */}
+For every option, see [Resource parameters](/sdk/configuration/parameters), [GPU types](/sdk/configuration/gpu-types), and [CPU types](/sdk/configuration/cpu-types).
 
 ### Call remote functions
 
@@ -168,7 +170,7 @@ Decorated functions keep their Python identity. You call them through methods th
 
 For HTTP services defined with `@app.api`, call routes through the class, for example `Counter.post("/bump", {"by": 3})` or `Counter.get("/value")`.
 
-{/* TODO(DOCS-504): Add a short example for .stream() and for working with the Job object returned by .spawn() (status, output, cancel). Source: runpod/apps/job.py and examples/apps/streaming.py. */}
+`.remote()` and `job.wait()` don't impose an execution timeout by default. For streaming examples and how spawned tasks are cleaned up, see [Dev sessions](/sdk/apps/dev-sessions#call-styles).
 
 ### Local entrypoints
 
@@ -202,7 +204,7 @@ Mount rules depend on the resource type:
 - `@app.queue` and `@app.api` support one volume, mounted at `/runpod-volume`.
 - Global volumes require GPU compute, for both tasks and endpoints.
 
-Inside a remote function, `volume.path` returns the path where the volume is mounted. Read `.path` inside remote functions, not at the top level of a module.
+Inside a remote function, `volume.path` returns the path where the volume is mounted. Read `.path` inside remote functions, not at the top level of a module. See [Storage](/sdk/configuration/storage) for volume placement and billing.
 
 ### Develop and deploy
 
@@ -213,7 +215,7 @@ rp flash dev main.py  # Live dev session: edit, re-run, logs stream back
 rp flash deploy       # Deploy production endpoints
 ```
 
-A dev session creates temporary endpoints and deletes them when you press Ctrl-C. See the [CLI reference](/sdk/cli) for all commands.
+A dev session creates temporary endpoints and deletes them when you press Ctrl-C. To learn more, see [Build an app](/sdk/apps/build-app), [Dev sessions](/sdk/apps/dev-sessions), and [Deploy an app](/sdk/apps/deploy). See the [CLI reference](/sdk/cli) for all commands.
 
 ## Endpoint client
 
@@ -271,7 +273,7 @@ runpod.terminate_pod(pod["id"])
 
 ## Limitations
 
-- CPU resources are restricted to the `EU-RO-1` datacenter.
+- 5th-generation CPU instances (`cpu5c`) are only available in `EU-RO-1`. 3rd-generation instances are available in more data centers. See [CPU types](/sdk/configuration/cpu-types#data-center-availability).
 - Apps can scale workers quickly across several endpoints, so you may reach your account's worker limit. Contact [Runpod support](https://www.runpod.io/contact) to raise it.
 
 {/* TODO(DOCS-504): Confirm Windows support for apps and the rp CLI (CON-1036, CON-1037 in Backlog). Flash previously required WSL2 on Windows. Also review open gaps in SLS-488 that may need a limitation here before launch: SLS-645 (~300 s request cap on @app.api), SLS-647 (no command deletes a volume; volumes keep billing after an app is deleted), and SLS-648 (datacenter enum gaps for volumes). SLS-644 (fixed 300 s .remote() timeout) looks fixed: the examples/apps README on main says remote() and job.wait() have no execution timeout by default. Confirm with Dean. */}
