@@ -134,6 +134,10 @@ async def run_inference(prompt: str) -> dict:
 
 ### Load large models from local disk
 
+<Tip>
+If your model is on Hugging Face and your endpoint uses a GPU, try [cached models](/serverless/endpoints/model-caching) first. They need no network volume or cache code, and you aren't billed for the download. Set `HF_HUB_CACHE` to `/runpod-volume/huggingface-cache/hub` on the endpoint, then attach the model after `flash deploy` with `runpodctl serverless update <endpoint-id> --model-reference https://huggingface.co/<org>/<model>:main`. Later deploys keep the reference. Workers wait to start until a host has the model, so compare the whole cold request, including queue time, before you choose between cached models and the volume approach below.
+</Tip>
+
 Reading model weights straight from `/runpod-volume/` reads them over the network on every cold start. To load from local disk instead, keep the Hugging Face cache on the container disk and wrap the model load in [`VolumeCache`](/serverless/development/volume-cache) from the Runpod Python SDK. `VolumeCache` keeps a mirror of the cache directory on the network volume. When a worker starts, it copies the mirror onto the container disk, and after the load it syncs any newly downloaded files back. The first worker downloads the model from Hugging Face, and later cold starts restore it from the volume.
 
 ```python
