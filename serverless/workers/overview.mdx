@@ -50,23 +50,20 @@ The system may also spin up **extra workers** during traffic spikes when Docker 
 A worker is always either **scaled down** or **running**. Billing follows that split: a worker is billed only while it is running.
 
 ```mermaid
-stateDiagram-v2
-    direction LR
-    state "Scaled down (not billed)" as down {
-        Initializing --> Idle: image and cached models ready
-        Idle --> Throttled: host GPU taken by another workload
-        Throttled --> Idle: host GPU free again
-    }
-    state "Running (billed)" as up {
-        ColdStart: Cold start
-        Processing: Processing a job
-        Waiting: Waiting (idle timeout)
-        ColdStart --> Processing: handler ready
-        Processing --> Waiting: job done, queue empty
-        Waiting --> Processing: new job
-    }
-    Idle --> ColdStart: request arrives, billing starts
-    Waiting --> Idle: idle timeout expires, billing stops
+flowchart TB
+    subgraph down["Scaled down: not billed"]
+        direction LR
+        init["Initializing<br/>pulling image"] --> idle["Idle<br/>ready to start"]
+        throttled["Throttled<br/>host GPUs busy"] <-.-> idle
+    end
+    subgraph up["Running: billed"]
+        direction LR
+        cold["Cold start<br/>handler loads model"] --> proc["Processing<br/>running jobs"]
+        proc -- "queue empty" --> wait["Waiting<br/>idle timeout"]
+        wait -- "new job" --> proc
+    end
+    down == "request arrives: billing starts" ==> up
+    up == "idle timeout expires: billing stops" ==> down
 ```
 
 1. **Scaled down**: Runpod prepares workers ahead of time on a host <MachineTooltip /> by pulling your image and downloading [cached models](/serverless/endpoints/model-caching). No container is running for you, so nothing is billed.
