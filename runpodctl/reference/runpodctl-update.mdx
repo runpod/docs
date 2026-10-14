@@ -1,7 +1,7 @@
 ---
 title: "update"
 sidebarTitle: "update"
-description: "Update runpodctl to the latest release, verify the downloaded binary with its SHA-256 checksum, and confirm the installed version."
+description: "Update runpodctl to the latest release, check for a newer version without installing it, and control the automatic update prompt."
 ---
 
 Update `runpodctl` to the latest version to access new features and bug fixes.
@@ -14,7 +14,62 @@ runpodctl update
 
 ## Description
 
-The `update` command downloads the latest version of `runpodctl` and verifies it against its SHA-256 checksum before replacing the installed binary. Verification always runs. If it fails, the update aborts and leaves your existing binary in place. After updating, verify the installation with [`runpodctl version`](/runpodctl/reference/runpodctl-version).
+The `update` command installs the latest release of `runpodctl`. It never prompts for input, so you can run it from scripts and AI agents.
+
+How the update is installed depends on how you installed `runpodctl`. Homebrew, conda, and pixi installs are upgraded through their package manager. Other installs download the release directly, verify it against its SHA-256 checksum, and replace the running binary in place. If verification fails, the update aborts and leaves your existing binary in place. After updating, verify the installation with [`runpodctl version`](/runpodctl/reference/runpodctl-version).
+
+If `runpodctl` is installed in a directory you can't write to, such as `/usr/local/bin` from the install script, run the update with `sudo`:
+
+```bash
+sudo runpodctl update
+```
+
+On Windows, the running executable can't be replaced. The update saves the new binary next to it as `runpodctl.exe.new` and prints the `move` command that puts it in place. Run that command to finish the update.
+
+## Check for updates
+
+To find out whether a newer release exists without installing it, use the `--check` flag:
+
+```bash
+runpodctl update --check
+```
+
+```json
+{"currentVersion": "v2.14.0-dd55bcf", "latestVersion": "v2.15.0", "updateAvailable": true, "updateCommand": "runpodctl update"}
+```
+
+When an update is available, `updateCommand` contains the command that installs it, which is `sudo runpodctl update` when the install directory requires root. Use `--output yaml` for YAML output.
+
+## Flags
+
+<ResponseField name="--check" type="boolean">
+Report the current version, the latest release, and whether an update is available, without installing anything.
+</ResponseField>
+
+## Automatic update prompt
+
+When you run `runpodctl` in an interactive terminal, it checks GitHub for a newer release in the background at most once a day. When one exists, the next command asks whether to update before it runs:
+
+```text
+runpodctl v2.14.0 is available (you have v2.13.0).
+update now? [y]es / [N]ot now / [s]kip this version:
+```
+
+Enter `y` to install the update and then run your command. Enter `s` to stop asking until the next release. Any other answer, including pressing Enter or not answering within 30 seconds, continues with your command and asks again the next day.
+
+In some environments, `runpodctl` prints a one-line notice once a day instead of prompting:
+
+- AI agents such as Claude Code, Codex, Cursor, and Gemini CLI see the notice instead of the prompt, so nothing waits on input. This also applies in Cursor and Zed terminals.
+- Installs in a directory you can't write to see a notice to run `sudo runpodctl update`.
+- Windows sessions see the notice because the prompt can't time out there.
+
+`runpodctl` doesn't check for updates in CI (when `CI` is set), on Pods, or when you run the `update`, `version`, `completion`, or `help` commands. Outside an AI agent, it also skips the check when stdin or stderr isn't a terminal, or when the command runs in the background.
+
+To turn off the update check, prompt, and notice, set `RUNPOD_NO_UPDATE_CHECK` to any value:
+
+```bash
+export RUNPOD_NO_UPDATE_CHECK=1
+```
 
 ## Related commands
 
