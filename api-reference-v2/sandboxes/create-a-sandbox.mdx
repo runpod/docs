@@ -1,0 +1,143 @@
+---
+title: "Create a sandbox"
+api: "POST https://api.runpod.io/v2/sandboxes"
+authMethod: "bearer"
+description: "Create an isolated, fast-starting Runpod CPU sandbox from a container image or template, with optional timeouts, compute size, env vars, and labels."
+---
+
+Launches a new sandbox: an isolated, fast-starting CPU environment for running untrusted code. Supply exactly one of `templateId` or `imageName`. Every other field is optional, and omitted fields use your account's default sandbox policy.
+
+The request returns `201` with the sandbox, usually still in the `CREATING` state. Poll [Get a sandbox](/api-reference-v2/sandboxes/get-a-sandbox) until `state` is `RUNNING`.
+
+The sandbox is billed per second until it terminates. Terminate it explicitly when you're finished, including on error paths, rather than relying on a timeout to stop billing.
+
+<Warning>
+
+There is no idempotency key yet. If a create request fails at the network layer, [list your sandboxes](/api-reference-v2/sandboxes/list-sandboxes) (for example, by a label you set) before retrying, to avoid creating a duplicate.
+
+</Warning>
+
+### Body
+
+<ParamField body="imageName" type="string">
+  Container image to run, for example `python:3.12-slim`. Required unless `templateId` is given. Can't be combined with `templateId`.
+</ParamField>
+
+<ParamField body="templateId" type="string">
+  [Template](/pods/templates/overview) to launch the sandbox from. Required unless `imageName` is given. Can't be combined with `imageName`.
+</ParamField>
+
+<ParamField body="name" type="string">
+  Human-readable name. Names don't have to be unique. Generated when omitted.
+</ParamField>
+
+<ParamField body="cpuFlavorId" type="string">
+  CPU flavor to back the sandbox, for example `cpu3c`. Defaults to the standard sandbox flavor.
+</ParamField>
+
+<ParamField body="vcpuCount" type="integer">
+  Number of vCPUs. Minimum `1`. Memory and container disk scale with the flavor.
+</ParamField>
+
+<ParamField body="memoryInGb" type="integer">
+  Memory in GB. Minimum `1`.
+</ParamField>
+
+<ParamField body="dataCenterId" type="string">
+  Preferred data center, for example `US-KS-2`. Omit to let Runpod choose.
+</ParamField>
+
+<ParamField body="env" type="object">
+  Environment variables to set in the sandbox, as string key-value pairs.
+</ParamField>
+
+<ParamField body="idleTimeoutSeconds" type="integer">
+  Seconds of inactivity before the sandbox is terminated. Omitted values use the default (10 minutes). Values above the maximum (2 hours) are clamped to the maximum.
+</ParamField>
+
+<ParamField body="maxLifetimeSeconds" type="integer">
+  Maximum total lifetime in seconds, counted from creation. Omitted values use the default (1 hour). Values above the maximum (24 hours) are clamped to the maximum.
+</ParamField>
+
+<ParamField body="labels" type="object">
+  String key-value labels for organizing sandboxes. You can filter [List sandboxes](/api-reference-v2/sandboxes/list-sandboxes) by label.
+</ParamField>
+
+{/* TODO(DOCS-509): Add egressMode (ALLOW_ALL default | ALLOW_LIST | DENY_ALL) and egressAllowlist once rphttp2#313 / AI-205 lands in the spec. Confirm timeout defaults and maximums with Zack. */}
+
+### Response
+
+Returns the created sandbox. See [Get a sandbox](/api-reference-v2/sandboxes/get-a-sandbox) for all response fields.
+
+### Errors
+
+| Status | Meaning |
+| --- | --- |
+| `400` | The request is malformed, for example both or neither of `templateId` and `imageName` are set, or it includes an unknown field. |
+| `401` | The API key is missing or invalid. |
+| `402` | Your account balance is too low to start the sandbox. |
+| `403` | The API key doesn't have access to sandboxes. |
+| `422` | The request is well-formed but can't be processed, for example an unknown template or flavor. |
+| `429` | Too many requests. Retry after a delay. |
+| `503` | No capacity is available for the requested configuration. Retry later, or remove placement constraints such as `dataCenterId`. |
+
+<RequestExample>
+
+```bash cURL
+curl --request POST \
+  --url https://api.runpod.io/v2/sandboxes \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "name": "my-sandbox",
+    "imageName": "python:3.12-slim",
+    "idleTimeoutSeconds": 300,
+    "env": {"APP_ENV": "test"},
+    "labels": {"project": "checkout"}
+  }'
+```
+
+```python Python
+import os
+import requests
+
+response = requests.post(
+    "https://api.runpod.io/v2/sandboxes",
+    headers={"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}"},
+    json={
+        "name": "my-sandbox",
+        "imageName": "python:3.12-slim",
+        "idleTimeoutSeconds": 300,
+        "env": {"APP_ENV": "test"},
+        "labels": {"project": "checkout"},
+    },
+)
+print(response.status_code, response.json())
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 201
+{
+  "id": "7h3sbx91kq",
+  "name": "my-sandbox",
+  "state": "CREATING",
+  "templateId": null,
+  "imageName": "python:3.12-slim",
+  "cpuFlavorId": "cpu3c",
+  "idleTimeoutSeconds": 300,
+  "maxLifetimeSeconds": 3600,
+  "lastActivityAt": "2026-09-29T14:02:05Z",
+  "idleExpiresAt": "2026-09-29T14:07:05Z",
+  "expiresAt": "2026-09-29T15:02:05Z",
+  "labels": {"project": "checkout"},
+  "terminationReason": null,
+  "terminatedAt": null,
+  "createdAt": "2026-09-29T14:02:05Z",
+  "updatedAt": "2026-09-29T14:02:05Z"
+}
+```
+
+</ResponseExample>

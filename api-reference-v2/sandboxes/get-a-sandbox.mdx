@@ -1,0 +1,167 @@
+---
+title: "Get a sandbox"
+api: "GET https://api.runpod.io/v2/sandboxes/{id}"
+authMethod: "bearer"
+description: "Retrieve a Runpod sandbox by ID with its lifecycle state, compute, cost per hour, timeout deadlines, labels, and termination reason if it has stopped."
+---
+
+Returns a single sandbox by ID. Terminated sandboxes remain readable, with `state`, `terminationReason`, and `terminatedAt` set.
+
+`RUNNING` means the backing compute is allocated, not that the container has finished pulling and started. A sandbox can report `RUNNING` for a short while (typically 10 to 30 seconds) before it accepts commands.
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  The sandbox ID.
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string" required>
+  Unique sandbox identifier.
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Human-readable name. Not required to be unique.
+</ResponseField>
+
+<ResponseField name="state" type="enum<string>" required>
+  Current lifecycle state: `CREATING`, `RUNNING`, `TERMINATED`, or `FAILED`.
+</ResponseField>
+
+<ResponseField name="templateId" type="string | null">
+  Template the sandbox was created from, if any.
+</ResponseField>
+
+<ResponseField name="imageName" type="string | null">
+  Container image the sandbox runs, if it was created from an image.
+</ResponseField>
+
+<ResponseField name="cpuFlavorId" type="string | null">
+  CPU flavor backing the sandbox.
+</ResponseField>
+
+<ResponseField name="compute" type="object">
+  The compute currently backing the sandbox. Absent while the sandbox is `CREATING` and after it's `TERMINATED`.
+
+  <Expandable title="properties">
+    <ResponseField name="vcpuCount" type="number" required>
+      Number of vCPUs.
+    </ResponseField>
+
+    <ResponseField name="memoryInGb" type="number" required>
+      Memory in GB.
+    </ResponseField>
+
+    <ResponseField name="containerDiskInGb" type="integer" required>
+      Container disk size in GB.
+    </ResponseField>
+
+    <ResponseField name="costPerHr" type="number" required>
+      Current cost per hour in USD. Billing is per second at this rate.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="idleTimeoutSeconds" type="integer" required>
+  Seconds of inactivity after which the sandbox is terminated, after any clamping to the account maximum.
+</ResponseField>
+
+<ResponseField name="maxLifetimeSeconds" type="integer" required>
+  Maximum total lifetime in seconds, after any clamping to the account maximum.
+</ResponseField>
+
+<ResponseField name="lastActivityAt" type="string<date-time>" required>
+  Time of the most recent recorded activity.
+</ResponseField>
+
+<ResponseField name="idleExpiresAt" type="string<date-time>" required>
+  Time after which the sandbox is terminated for inactivity if no further activity occurs.
+</ResponseField>
+
+<ResponseField name="expiresAt" type="string<date-time>" required>
+  Time after which the sandbox is terminated for reaching its maximum lifetime.
+</ResponseField>
+
+<ResponseField name="labels" type="object">
+  User-supplied string key-value labels.
+</ResponseField>
+
+<ResponseField name="terminationReason" type="string | null">
+  Why the sandbox was terminated. `null` while the sandbox is alive.
+</ResponseField>
+
+<ResponseField name="terminatedAt" type="string<date-time> | null">
+  When the sandbox was terminated. `null` while the sandbox is alive.
+</ResponseField>
+
+<ResponseField name="createdAt" type="string<date-time>" required>
+  When the sandbox was created.
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string<date-time>" required>
+  When the sandbox was last updated.
+</ResponseField>
+
+{/* TODO(DOCS-509): List possible terminationReason values once engineering documents them in the spec. */}
+
+### Errors
+
+| Status | Meaning |
+| --- | --- |
+| `401` | The API key is missing or invalid. |
+| `403` | The API key doesn't have access to sandboxes. |
+| `404` | No sandbox with this ID exists on your account. |
+| `429` | Too many requests. Retry after a delay. |
+
+<RequestExample>
+
+```bash cURL
+curl --request GET \
+  --url https://api.runpod.io/v2/sandboxes/SANDBOX_ID \
+  --header "Authorization: Bearer $RUNPOD_API_KEY"
+```
+
+```python Python
+import os
+import requests
+
+response = requests.get(
+    "https://api.runpod.io/v2/sandboxes/SANDBOX_ID",
+    headers={"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}"},
+)
+print(response.json())
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200
+{
+  "id": "7h3sbx91kq",
+  "name": "my-sandbox",
+  "state": "RUNNING",
+  "templateId": null,
+  "imageName": "python:3.12-slim",
+  "cpuFlavorId": "cpu3c",
+  "compute": {
+    "vcpuCount": 2,
+    "memoryInGb": 4,
+    "containerDiskInGb": 10,
+    "costPerHr": 0.026
+  },
+  "idleTimeoutSeconds": 300,
+  "maxLifetimeSeconds": 3600,
+  "lastActivityAt": "2026-09-29T14:02:40Z",
+  "idleExpiresAt": "2026-09-29T14:07:40Z",
+  "expiresAt": "2026-09-29T15:02:05Z",
+  "labels": {"project": "checkout"},
+  "terminationReason": null,
+  "terminatedAt": null,
+  "createdAt": "2026-09-29T14:02:05Z",
+  "updatedAt": "2026-09-29T14:02:40Z"
+}
+```
+
+</ResponseExample>
