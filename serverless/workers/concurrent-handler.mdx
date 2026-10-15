@@ -223,6 +223,25 @@ def update_request_rate(request_history):
     # request_rate = redis_client.get('recent_request_rate')
 ```
 
+## Automatic job stopping
+
+When a worker processes multiple jobs concurrently, individual jobs can be stopped without affecting sibling jobs. If a request expires, times out, or is cancelled, Runpod signals the worker to stop only that job while other in-progress jobs continue running.
+
+This behavior is automatic and requires no handler changes. If your async handler needs to release resources when stopped, catch `asyncio.CancelledError`:
+
+```python
+async def process_request(job):
+    resource = acquire_resource()
+    try:
+        await do_work(job)
+        return result
+    except asyncio.CancelledError:
+        release_resource(resource)
+        raise
+```
+
+Re-raise `CancelledError` after cleanup so the worker correctly marks the job as stopped.
+
 ## Next steps
 
 Now that you've created a concurrent handler, you're ready to:
