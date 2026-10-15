@@ -8,7 +8,7 @@ import { ColdStartTooltip } from "/snippets/tooltips.jsx";
 
 The Runpod Python SDK includes `VolumeCache`, a helper that warms local directories across Serverless workers using an attached network volume. It keeps a browsable mirror of your cache directories on the volume: on cold start it restores previously cached files into place, and after your code runs it copies newly written files back. This turns a repeated multi-GB model download on every cold start into a one-time cost per endpoint, which reduces <ColdStartTooltip /> times.
 
-`VolumeCache` is best-effort and self-contained, and it never affects the outcome of a job. If any part of the cache fails, the worker falls back to a normal cold start. You add it explicitly by wrapping the code that populates your cache, so nothing runs until you opt in.
+`VolumeCache` is best-effort and self-contained, and it never affects the outcome of a job. If any part of the cache fails, the worker falls back to a normal cold start. `VolumeCache` logs a warning for each file it fails to copy. If cold starts don't get faster after the first run, check your worker logs. You add it explicitly by wrapping the code that populates your cache, so nothing runs until you opt in.
 
 ## Requirements
 
@@ -71,6 +71,7 @@ vc.sync(background=False)     # persist new files back to the volume, inline
 
 - **Concurrent cold-start write amplification:** If several workers cold-start at the same time, each may miss the still-empty mirror, download the model, and sync a full copy back. There's no coordination between concurrent syncs, so the mirror reflects whichever worker synced most recently.
 - **Background sync on short-lived processes:** `sync()` schedules the copy on a daemon thread. If the process exits without a normal interpreter shutdown (for example, `os._exit` or `SIGKILL`), the exit hook never runs and the sync may not complete.
+- **Permission bits on restrictive volumes:** Some volumes can't set file permission bits, such as [global volumes](/storage/globalvolume/overview). On these volumes, large files still cache normally, but they're restored with default permissions instead of their original mode.
 - **Orphaned large files aren't pruned:** If you delete or rename a large file locally, its copy under `big/` stays on the volume. Hydration is manifest-driven and ignores it, but volume usage grows as you swap model versions.
 
 ## Next steps
