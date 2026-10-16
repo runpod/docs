@@ -32,7 +32,7 @@ The access point for your Serverless application. Endpoints provide a URL where 
 
 ### [Workers](/serverless/workers/overview)
 
-The container instances that execute your code when requests arrive at your endpoint. Each worker runs your custom Docker container with your application code and dependencies. Runpod automatically manages worker lifecycle, starting them when needed and stopping them when idle to optimize resource usage.
+The container instances that execute your code when requests arrive at your endpoint. Each worker runs your custom Docker container with your application code and dependencies. Runpod automatically manages worker lifecycle, starting them when requests arrive and stopping them when there are no requests to optimize resource usage.
 
 ### [Handler functions](/serverless/workers/handler-functions)
 
@@ -68,8 +68,8 @@ When a user/client sends a request to your endpoint:
 2. The request is queued until a worker is available.
 3. A worker processes the request using your handler function.
 4. The result is returned to the user/client after they call `/status` (or automatically if you used `/runsync`).
-5. Workers remain active for a period to handle additional requests.
-6. Idle workers eventually shut down if no new requests arrive.
+5. The worker keeps running and waits for more requests for up to the [idle timeout](/serverless/endpoints/endpoint-configurations#idle-timeout). It is billed while it waits.
+6. If no new requests arrive, the worker scales down and billing stops.
 
 <div style={{ marginLeft: '8rem'}}>
 ```mermaid
@@ -107,7 +107,7 @@ flowchart TD
 
 ### Cold starts
 
- A "cold start" refers to the time between when an endpoint with no running workers receives a request, and when a worker is fully "warmed up" and ready to handle the request. This generally involves starting the container, loading models into GPU memory, and initializing runtime environments. Larger models take longer to load into memory, increasing cold start time, and request response time by extension. 
+A "cold start" is the time from when Runpod starts a worker until the worker is ready to take its first job. It happens when a request arrives and no running worker can take it, either because none are running or because all running workers are busy. It covers starting the container, loading models into GPU memory, and initializing runtime environments. A worker is billed during its cold start. See [worker lifecycle](/serverless/workers/overview#worker-lifecycle). Larger models take longer to load into memory, increasing cold start time, and request response time by extension. 
 
 Minimizing cold start times is key to creating a responsive and cost-effective endpoint. You can reduce cold starts by using [cached models](/serverless/endpoints/model-caching), enabling [FlashBoot](/serverless/endpoints/endpoint-configurations#flashboot), setting [active worker counts](/serverless/endpoints/endpoint-configurations#active-min-workers) above zero.
 
