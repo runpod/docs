@@ -2,13 +2,18 @@
 title: "Pricing"
 sidebarTitle: "Pricing"
 description: "Understand Flash pricing and optimize your costs. Review setup, configuration, deployment, and usage guidance for Runpod Flash."
+canonical: "https://docs.runpod.io/sdk/overview"
 ---
+
+<Warning>
+  Flash is now part of the [Runpod SDK](/sdk/overview). This page documents the standalone `runpod-flash` package, which keeps working but no longer gets new features. For new projects, use the [Runpod SDK](/sdk/overview). To see how Flash commands and imports map to the SDK, see [Migrating from Flash](/sdk/migrate-from-flash).
+</Warning>
 
 Flash follows the same pricing model as [Runpod Serverless](/serverless/pricing). You pay per second of compute time, with no charges when your code isn't running. Pricing depends on the GPU or CPU type you configure for your endpoints.
 
 ## How pricing works
 
-You're billed from when a worker starts until it completes your request, plus any idle time before scaling down. If a worker is already warm, you skip the cold start and only pay for execution time.
+You're billed from when a worker starts until it scales down. That covers the cold start, your request, and the `idle_timeout` window the worker spends waiting for more requests. If a worker is already warm, you skip the cold start and only pay for execution time.
 
 ### Compute cost breakdown
 
@@ -16,7 +21,7 @@ Flash workers incur charges during these periods:
 
 1. **Start time**: The time required to initialize a worker and load models into GPU memory. This includes starting the container, installing dependencies, and preparing the runtime environment.
 2. **Execution time**: The time spent processing your request (running your `@Endpoint` decorated function).
-3. **Idle timeout duration**: The time a worker remains active (running) after completing a request, waiting for additional requests before scaling down. Configure using the `idle_timeout` parameter in the [Endpoint class](/flash/configuration/parameters#idle_timeout).
+3. **Waiting (idle timeout)**: After its last request, a worker keeps running and waits for new requests for up to `idle_timeout` seconds before scaling down. Configure using the `idle_timeout` parameter in the [Endpoint class](/flash/configuration/parameters#idle_timeout).
 
 ### Pricing by resource type
 
@@ -55,7 +60,7 @@ def process(data): ...
 
 #### Configure idle timeouts
 
-Balance responsiveness and cost by adjusting the `idle_timeout` parameter. Shorter timeouts reduce idle costs but increase cold starts for sporadic traffic.
+Balance responsiveness and cost by adjusting the `idle_timeout` parameter. Shorter timeouts reduce the time you pay for waiting workers but increase cold starts for sporadic traffic.
 
 ```python
 # Lower idle timeout for cost savings (more cold starts)
@@ -66,7 +71,7 @@ Balance responsiveness and cost by adjusting the `idle_timeout` parameter. Short
 )
 def process(data): ...
 
-# Higher idle timeout for responsiveness (higher idle costs)
+# Higher idle timeout for responsiveness (more billed waiting time)
 @Endpoint(
     name="responsive",
     gpu=GpuGroup.ANY,
