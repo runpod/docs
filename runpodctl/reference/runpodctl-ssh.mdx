@@ -30,7 +30,7 @@ Include Pod ID and name in output. Shorthand: `-v`.
 
 <Note>
 
-The `ssh info` command returns connection details that you can use to connect via SSH manually. It does not start an interactive SSH session.
+The `ssh info` command returns connection details that you can use to connect via SSH manually. It does not start an interactive SSH session. When a Pod is not reachable, `runpodctl ssh info` reports the specific reason instead of a generic message.
 
 To connect to your Pod, use the SSH command provided in the output:
 ```bash
@@ -38,6 +38,26 @@ ssh user@host -p <port> -i <key-path>
 ```
 
 </Note>
+
+`runpodctl ssh info` explains which of the following cases applies. It also reports the Pod's `runtimeStatus`, so you can match a not-ready result to the runtime status vocabulary:
+
+| Reason | Meaning | What to do |
+| --- | --- | --- |
+| Pod is initializing | No container is reported yet (image pull, container creation, or boot). | Wait and try again. |
+| Pod is stopped | The Pod's container is gone but its disk is kept. | Start it with `runpodctl pod start <pod-id>`. |
+| Pod is terminated | The Pod has been destroyed. | None; deploy a new Pod. |
+| Pod is in an error state | The Pod is in a state it won't recover from on its own. | Check `runpodctl pod logs <pod-id>`, then delete or recreate the Pod. |
+| No SSH port published | The Pod is running but does not publish `22/tcp`. | Add it with the `runpodctl pod update` command the CLI provides (see the Warning below). |
+| No public IP | Port 22 is mapped, but the machine has no publicly routable IP. This affects direct SSH over a public IP specifically; basic SSH (proxied through Runpod, no public IP required) may still work. | Use [Basic SSH](/pods/configuration/use-ssh#basic-ssh-with-key-authentication), which does not need a public IP. If you need direct SSH over a public IP, redeploy on a machine that provides one. |
+| Mapping not ready yet | Port 22 is declared, but the host has not published the mapping yet. | Wait and try again. |
+
+For the "No SSH port published" case, `runpodctl ssh info` gives you a ready-to-run command of the form `runpodctl pod update <pod-id> --ports <existing-ports>,22/tcp` that preserves your existing ports.
+
+<Warning>
+`runpodctl pod update --ports` replaces the Pod's entire port list (unlike `--env`, which merges), so always include your current ports when you add `22/tcp`. Changing the port list also bumps the Pod's version, which can restart the container. Processes and container-local state outside the volume disk may not survive. If the Pod is running an active job, checkpoint your work to the volume disk before changing ports, since the container may restart.
+</Warning>
+
+For the full list of runtime status values, see [Pod runtime status](/runpodctl/reference/runpodctl-pod#pod-runtime-status).
 
 ### List SSH keys
 
@@ -59,6 +79,8 @@ runpodctl ssh add-key --key-file ~/.ssh/id_ed25519.pub
 runpodctl ssh add-key --key "ssh-ed25519 AAAA..."
 ```
 
+If the key or file contains several public keys, one per line, each is saved as a separate key. Blank lines and comment lines that start with `#` are skipped. If any other line isn't a valid public key, the command fails before saving anything. Keys already on your account are matched by fingerprint and aren't added again.
+
 #### Add-key flags
 
 <ResponseField name="--key" type="string">
@@ -67,6 +89,10 @@ The public key string to add.
 
 <ResponseField name="--key-file" type="string">
 Path to a file containing the public key.
+</ResponseField>
+
+<ResponseField name="--remove-invalid" type="bool">
+Delete saved entries that aren't valid public keys without asking. See [Fix invalid saved entries](#fix-invalid-saved-entries).
 </ResponseField>
 
 ### Remove an SSH key
@@ -81,7 +107,7 @@ runpodctl ssh remove-key --name my-laptop
 runpodctl ssh remove-key --fingerprint SHA256:abcd1234...
 ```
 
-You must provide either `--name` or `--fingerprint`. If multiple keys share the same name, use `--fingerprint` instead.
+You must provide `--name`, `--fingerprint`, or `--invalid`. If multiple keys share the same name, use `--fingerprint` instead.
 
 #### Remove-key flags
 
@@ -92,6 +118,25 @@ Name of the key to remove.
 <ResponseField name="--fingerprint" type="string">
 Fingerprint of the key to remove. Use this when multiple keys have the same name.
 </ResponseField>
+
+<ResponseField name="--invalid" type="bool">
+Remove every saved entry that isn't a valid public key, and keep all valid keys. Can't be combined with `--name` or `--fingerprint`.
+</ResponseField>
+
+<ResponseField name="--remove-invalid" type="bool">
+Delete saved entries that aren't valid public keys without asking, then remove the key you specified.
+</ResponseField>
+
+### Fix invalid saved entries
+
+Older accounts can have saved SSH key entries that aren't valid public keys, such as a stray line of text. While any such entry exists, Runpod rejects every change to your key list, so you can't add or remove keys.
+
+When you run `ssh add-key` or `ssh remove-key` in an interactive terminal, runpodctl lists the invalid entries and asks whether to delete them before continuing. Nothing is deleted unless you confirm.
+
+When runpodctl runs in a script or from an AI agent, it doesn't prompt. Instead, the command fails with a `conflict` error that names the invalid entry. To fix it, do one of the following:
+
+- Re-run the command with `--remove-invalid` to delete the invalid entries as part of the same change.
+- Run `runpodctl ssh remove-key --invalid` to delete only the invalid entries.
 
 ### Forget a Pod's host key
 
