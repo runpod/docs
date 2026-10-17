@@ -14,7 +14,7 @@ runpodctl <subcommand> pod [flags]
 
 ### List Pods
 
-List your Pods. By default, this command shows only running Pods (similar to `docker ps`):
+List your Pods. By default, this command shows only running Pods and Pods in an error state (similar to `docker ps`). Pods in an error state are included because they still exist and may still incur charges:
 
 ```bash
 runpodctl pod list
@@ -48,7 +48,7 @@ runpodctl pod list --created-after 2025-01-15
 #### List flags
 
 <ResponseField name="--all, -a" type="bool">
-Show all Pods including exited ones. By default, only running Pods are shown.
+Show all Pods including exited ones. By default, only running Pods and Pods in an error state are shown.
 </ResponseField>
 
 <ResponseField name="--status" type="string">
@@ -78,6 +78,16 @@ Get detailed information about a specific Pod, including SSH connection info:
 ```bash
 runpodctl pod get <pod-id>
 ```
+
+#### Get flags
+
+<ResponseField name="--include-machine" type="bool">
+Include the Pod's placement: its datacenter ID (`dataCenterId`) and whether it runs on Secure Cloud (`secureCloud`).
+</ResponseField>
+
+<ResponseField name="--include-network-volume" type="bool">
+Include details of the attached network volume.
+</ResponseField>
 
 ### Create a Pod
 
@@ -110,11 +120,11 @@ Docker image to use (e.g., `runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-u
 </ResponseField>
 
 <ResponseField name="--name" type="string">
-Custom name for the Pod.
+Custom name for the Pod. If you don't set one, the Pod is named after its image without the tag (for example, `runpod/pytorch`). A Pod created from a template without `--image` is named after the template ID.
 </ResponseField>
 
 <ResponseField name="--gpu-id" type="string">
-GPU type (e.g., `NVIDIA GeForce RTX 4090`, `NVIDIA A100 80GB PCIe`). Use [`runpodctl gpu list`](/runpodctl/reference/runpodctl-gpu) to see available GPUs.
+GPU type (e.g., `NVIDIA GeForce RTX 4090`, `NVIDIA A100 80GB PCIe`). Required for GPU Pods, and not supported for CPU Pods. Use [`runpodctl gpu list`](/runpodctl/reference/runpodctl-gpu) to see available GPUs.
 </ResponseField>
 
 <ResponseField name="--gpu-count" type="int" default="1">
@@ -130,7 +140,7 @@ Container disk size in GB.
 </ResponseField>
 
 <ResponseField name="--volume-in-gb" type="int">
-Persistent volume size in GB.
+Persistent volume size in GB. CPU Pods can't have a persistent volume. You also can't combine this flag with `--network-volume-id` because a network volume takes the place of the persistent volume.
 </ResponseField>
 
 <ResponseField name="--volume-mount-path" type="string" default="/workspace">
@@ -146,7 +156,7 @@ Environment variables as a JSON object (e.g., `'{"KEY":"value"}'`).
 </ResponseField>
 
 <ResponseField name="--cloud-type" type="string" default="SECURE">
-Cloud tier (`SECURE` or `COMMUNITY`).
+Cloud tier (`SECURE` or `COMMUNITY`). Community Cloud Pods aren't guaranteed a public IP address, so their SSH port may not be publicly reachable. Use Secure Cloud if you need SSH access.
 </ResponseField>
 
 <ResponseField name="--data-center-ids" type="string">
@@ -155,10 +165,6 @@ Comma-separated list of preferred datacenter IDs. Use [`runpodctl datacenter lis
 
 <ResponseField name="--global-networking" type="bool">
 Enable global networking (Secure Cloud only).
-</ResponseField>
-
-<ResponseField name="--public-ip" type="bool">
-Require public IP (Community Cloud only).
 </ResponseField>
 
 <ResponseField name="--ssh" type="bool" default="true">
@@ -182,11 +188,11 @@ Container registry authentication ID for pulling private images. Use [`runpodctl
 </ResponseField>
 
 <ResponseField name="--country-code" type="string">
-Country code for regional deployment (e.g., `US`, `CA`, `EU`). Restricts Pod placement to machines in the specified region.
+Country code that restricts Pod placement to datacenters in that country (e.g., `US`, `DE`). Supported only for GPU Pods on Secure Cloud. For CPU Pods, use `--data-center-ids` instead.
 </ResponseField>
 
 <ResponseField name="--compliance" type="string">
-Compliance settings for the Pod (e.g., regulatory requirements for data handling).
+Comma-separated list of compliance certifications the datacenter must hold (e.g., `HIPAA,SOC_2_TYPE_2`). Supported only on Secure Cloud.
 </ResponseField>
 
 ### Start a Pod
@@ -211,14 +217,6 @@ Restart a Pod:
 
 ```bash
 runpodctl pod restart <pod-id>
-```
-
-### Reset a Pod
-
-Reset a Pod to its initial state:
-
-```bash
-runpodctl pod reset <pod-id>
 ```
 
 ### Update a Pod
