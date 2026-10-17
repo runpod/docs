@@ -2,6 +2,10 @@
 
 This website is built using [Mintlify](https://mintlify.com/).
 
+<!-- runpod-agent-setup:start -->
+**Using an AI agent?** Point it to https://docs.runpod.io/agent-setup.md to install the Runpod skills and MCP server.
+<!-- runpod-agent-setup:end -->
+
 ## Publishing Changes
 
 Create a pull request to make document changes, and request a review from [@lavanya-gunreddi](https://github.com/lavanya-gunreddi). Changes will be deployed to production automatically after they are pushed to the `main` branch.
