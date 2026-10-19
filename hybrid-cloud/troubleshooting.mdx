@@ -10,11 +10,55 @@ This page covers the most common problems when you connect and use external comp
 
 When a machine's status is **Verification failed**, the automated hardware checks found a problem with the machine or its configuration. Running verification again without changing anything gives the same result. Fix the underlying issue first, then retry verification.
 
+To see which checks failed, open the machine on the **External compute** page and go to the **Verifications** tab.
+
 ### DockerFS
+
+The disk mounted at `/var/lib/docker` is too small. The failure message shows the size it found and the size it requires.
+
+To fix this, mount a dedicated disk that meets the Docker disk size in [Requirements](/hybrid-cloud/setup#requirements) at `/var/lib/docker`, then retry verification.
 
 ### DockerFstabUUID
 
+The Docker disk is mounted in `/etc/fstab` by its device name, such as `/dev/sdb` or `/dev/md0`, instead of by its UUID. Device names can change when the machine reboots, which can stop the Docker disk from mounting.
+
+To fix this:
+
+1. Find the UUID of the Docker disk:
+
+   ```bash
+   sudo blkid
+   ```
+
+2. In `/etc/fstab`, replace the device name on the `/var/lib/docker` line with the UUID. For example:
+
+   ```text
+   UUID=DISK_UUID  /var/lib/docker  xfs  defaults  0  0
+   ```
+
+3. Check that the disk mounts correctly, then retry verification:
+
+   ```bash
+   sudo mount -a
+   ```
+
 ### CUDA Open Variant
+
+The machine has the wrong variant of the NVIDIA driver installed, usually the server variant packages. Runpod requires the open kernel module variant, and the Runpod installer installs the driver for you.
+
+To fix this, remove any NVIDIA driver packages you installed before onboarding, reboot the machine, and retry verification. To see which NVIDIA packages are installed, run:
+
+```bash
+dpkg -l | grep nvidia
+```
+
+## Verification timed out
+
+**Verification timed out** means Runpod couldn't connect to your machine to run the hardware checks. To fix this:
+
+1. Make sure `sshd` is listening on all network interfaces, not only on localhost.
+2. Check that your firewall allows the inbound and outbound traffic listed in [Requirements](/hybrid-cloud/setup#requirements).
+3. Retry verification.
 
 ## Machine stuck in pending install
 
