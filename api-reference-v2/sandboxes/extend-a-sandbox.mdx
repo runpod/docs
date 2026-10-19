@@ -1,0 +1,82 @@
+---
+title: "Extend a sandbox's lifetime"
+api: "POST https://api.runpod.io/v2/sandboxes/{id}/extend"
+authMethod: "bearer"
+description: "Extend a running Runpod sandbox's maximum lifetime by setting a new total lifetime measured from creation, within your account's policy limit."
+---
+
+Sets a new maximum lifetime for a running sandbox. `maxLifetimeSeconds` is the new **total** lifetime measured from the sandbox's `createdAt`, the same meaning as on create, so `expiresAt` becomes `createdAt + maxLifetimeSeconds`.
+
+A request beyond your account's maximum lifetime is rejected, and the deadline is left unchanged.
+
+<Warning>
+
+**Review question:** Does a value above the account's maximum return `400` or `422`? Can `extend` also shorten a sandbox's lifetime? _Remove this box before merging._
+
+</Warning>
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  The sandbox ID.
+</ParamField>
+
+### Body
+
+<ParamField body="maxLifetimeSeconds" type="integer" required>
+  New total lifetime in seconds, measured from `createdAt`.
+</ParamField>
+
+### Response
+
+Returns the updated sandbox, with the new `maxLifetimeSeconds` and `expiresAt`. See [Get a sandbox](/api-reference-v2/sandboxes/get-a-sandbox) for all fields.
+
+### Errors
+
+| Status | Meaning |
+| --- | --- |
+| `400` | The request is malformed. |
+| `401` | The API key is missing or invalid. |
+| `403` | The API key doesn't have access to sandboxes. |
+| `404` | No sandbox with this ID exists on your account. |
+| `422` | The request can't be applied, for example the value exceeds your account's maximum lifetime or the sandbox is no longer running. |
+| `429` | Too many requests. Retry after a delay. |
+
+<RequestExample>
+
+```bash cURL
+curl --request POST \
+  --url https://api.runpod.io/v2/sandboxes/SANDBOX_ID/extend \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{"maxLifetimeSeconds": 7200}'
+```
+
+```python Python
+import os
+import requests
+
+response = requests.post(
+    "https://api.runpod.io/v2/sandboxes/SANDBOX_ID/extend",
+    headers={"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}"},
+    json={"maxLifetimeSeconds": 7200},
+)
+print(response.json()["expiresAt"])
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200
+{
+  "id": "7h3sbx91kq",
+  "state": "RUNNING",
+  "maxLifetimeSeconds": 7200,
+  "expiresAt": "2026-10-19T16:02:05Z",
+  "createdAt": "2026-10-19T14:02:05Z",
+  "...": "..."
+}
+```
+
+</ResponseExample>
