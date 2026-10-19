@@ -147,6 +147,8 @@ def check_environment():
 
 Along with your custom checks, Runpod automatically runs a set of built-in system checks at startup, with no registration required. These verify that the worker has enough memory, disk space, and network connectivity to run reliably. GPU workers run three additional checks that validate the CUDA version, initialize the CUDA device, and benchmark GPU compute. GPU workers also run a native GPU memory allocation test that exercises actual memory allocation across all detected GPUs; this test is skipped automatically on CPU-only workers.
 
+The CUDA device initialization and GPU compute benchmark checks use PyTorch or CuPy, but they never import either one. They run only if your handler code already imports PyTorch or CuPy at module level. In that case, they reuse the loaded framework and add almost nothing to cold start time. Runpod skips both checks if your handler imports neither framework, or imports it only inside the handler function, as Flash handlers do. The native GPU memory allocation test still verifies every GPU either way.
+
 You can tune the thresholds for these checks using environment variables, or disable them for testing. Your own registered checks always run regardless of these threshold settings.
 
 | Check | Applies to | What it verifies | Default threshold | Environment variable |
@@ -155,8 +157,8 @@ You can tune the thresholds for these checks using environment variables, or dis
 | Disk space | All workers | Free space on `/` as a percentage of total | 10% free | `RUNPOD_MIN_DISK_PERCENT` |
 | Network connectivity | All workers | Network connectivity via TCP to the Runpod API | 5 second timeout | `RUNPOD_NETWORK_CHECK_TIMEOUT` |
 | CUDA version | GPU workers | Minimum CUDA driver version | CUDA 11.8+ | `RUNPOD_MIN_CUDA_VERSION` |
-| CUDA device initialization | GPU workers | Devices initialize and synchronize | — | — |
-| GPU compute benchmark | GPU workers | Compute responsiveness (matrix multiply) | 2 seconds | `RUNPOD_GPU_BENCHMARK_TIMEOUT` |
+| CUDA device initialization | GPU workers that load PyTorch or CuPy | Devices initialize and synchronize | — | — |
+| GPU compute benchmark | GPU workers that load PyTorch or CuPy | Compute responsiveness (matrix multiply) | 2 seconds | `RUNPOD_GPU_BENCHMARK_TIMEOUT` |
 
 The native GPU memory allocation test can be tuned with these additional variables. The test typically takes 100–500 ms per GPU, so keep that in mind when setting `RUNPOD_GPU_TEST_TIMEOUT`.
 
