@@ -10,18 +10,18 @@ Streams the sandbox's logs as [Server-Sent Events](https://developer.mozilla.org
 - `container`: stdout of the sandbox's main process.
 - `system`: lifecycle events, such as image pulls and container starts.
 
-Output from [exec](/api-reference-v2/sandboxes/run-a-command-in-a-sandbox) commands doesn't appear in this stream.
+Output from [exec](/api-reference-v2/sandboxes/run-a-command-in-a-sandbox) commands doesn't appear in this stream. An open log stream counts as activity, so it keeps the sandbox from timing out as idle.
 
 Each event has an `id` line and a JSON `data` payload:
 
 ```text
-id: 2026-09-29T14:02:11.482Z
-data: {"source":"container","line":"...","ts":"2026-09-29T14:02:11.482Z"}
+id: 2026-10-19T14:02:11.482Z
+data: {"source":"container","line":"...","ts":"2026-10-19T14:02:11.482Z"}
 ```
 
 The event `id` is the event's `ts` timestamp, so an `EventSource` client that reconnects resumes where it left off by sending `Last-Event-ID`.
 
-Logs are available only once the sandbox has a backing container, which can lag creation by a short while. Until then, and after the sandbox terminates, this endpoint returns `409`.
+Logs are available only once the sandbox has a backing container, which can lag creation by a short while. Until then, and after the sandbox stops, this endpoint returns `409`.
 
 ### Path parameters
 
@@ -72,7 +72,7 @@ A `text/event-stream` response. Each event's `data` payload has these fields:
 | `401` | The API key is missing or invalid. |
 | `403` | The API key doesn't have access to sandboxes. |
 | `404` | No sandbox with this ID exists on your account. |
-| `409` | The sandbox has no streamable logs right now. Its container is still starting (retry shortly), or it has been terminated. |
+| `409` | The sandbox has no streamable logs right now. The response code says whether to retry: `sandbox_starting` (retry shortly), `container_exited`, or `sandbox_terminated`. |
 | `429` | Too many requests. Retry after a delay. |
 
 <RequestExample>
@@ -109,11 +109,11 @@ with requests.get(
 <ResponseExample>
 
 ```text 200
-id: 2026-09-29T14:02:06.120Z
-data: {"source":"system","line":"Pulling image python:3.12-slim","ts":"2026-09-29T14:02:06.120Z"}
+id: 2026-10-19T14:02:06.120Z
+data: {"source":"system","line":"Pulling image python:3.12-slim","ts":"2026-10-19T14:02:06.120Z"}
 
-id: 2026-09-29T14:02:11.482Z
-data: {"source":"system","line":"Container started","ts":"2026-09-29T14:02:11.482Z"}
+id: 2026-10-19T14:02:11.482Z
+data: {"source":"system","line":"Container started","ts":"2026-10-19T14:02:11.482Z"}
 ```
 
 </ResponseExample>
