@@ -1,0 +1,93 @@
+---
+title: "Storage"
+sidebarTitle: "Storage"
+description: "Attach network volumes and global volumes to Runpod SDK resources with mounts, read volume paths in worker code, and avoid common storage mistakes."
+---
+
+Use volumes to keep data that outlives a single worker, such as model weights, datasets, and checkpoints, and to share files between resources. The SDK supports two kinds of persistent volume:
+
+- **`runpod.NetworkVolume`**: Storage in a single data center. Resources that mount it run in that data center. Works with GPU and CPU compute.
+- **`runpod.GlobalVolume`** (beta): Storage that isn't tied to a data center. Requires GPU compute.
+
+To compare the two and decide which to use, see [Storage overview](/storage/overview).
+
+## Attach a volume
+
+Declare the volume once, then attach it to resources with `mounts`, which maps a path on the worker to a volume:
+
+```python
+import runpod
+
+app = runpod.App("trainer")
+
+checkpoints = runpod.NetworkVolume("checkpoints", size=10)
+
+@app.task(gpu="4090", mounts={"/checkpoints": checkpoints})
+def train(steps: int = 200):
+    run_dir = checkpoints.path / "linear"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    # ... train and save to run_dir ...
+    return {"checkpoint": "linear"}
+
+@app.task(gpu="4090", mounts={"/checkpoints": checkpoints})
+def evaluate(checkpoint: str):
+    model_file = checkpoints.path / checkpoint / "model.pt"
+    ...
+```
+
+Both tasks mount the same network volume, so `evaluate` can read the checkpoint that `train` wrote. The SDK places both tasks in the volume's data center.
+
+## Volume references
+
+Both volume types take a name or an ID:
+
+```python
+runpod.NetworkVolume(name_or_id, size=50, datacenter=None, create=True)
+runpod.GlobalVolume(name_or_id, create=True)
+```
+
+- If no volume with that name or ID exists, the SDK creates it the first time it provisions a resource that mounts it. Set `create=False` to require an existing volume instead.
+- `size` is the size in GB for a new network volume. Global volumes grow with your data, so they don't take a size.
+- `datacenter` pins a new network volume to a data center. If you leave it unset, the SDK picks a data center that supports network storage and has hardware for every resource that shares the volume, respecting any `datacenter` setting on those resources. If you pin a data center that doesn't support network storage, provisioning fails before the volume is created.
+- An existing volume keeps its ID and data center. Every resource that mounts it must be able to run in that data center.
+
+## Mount rules
+
+| Resource | Volumes | Mount path |
+| --- | --- | --- |
+| `@app.queue` and `@app.api` | One volume | `/runpod-volume` |
+| `@app.task` | One network volume and one global volume | Any paths that don't overlap |
+
+Global volumes require GPU compute for both tasks and endpoints.
+
+## Read the mount path in your code
+
+Inside a remote function, `volume.path` returns the path where the volume is mounted on that worker:
+
+```python
+@app.queue(gpu="4090", mounts={"/runpod-volume": models})
+def infer(prompt: str):
+    weights = models.path / "llama" / "model.safetensors"
+    ...
+```
+
+Keep these rules in mind:
+
+- Read `.path` inside remote functions, not at the top level of a module. The SDK imports your modules locally to discover resources, and the volume isn't mounted there.
+- Accessing `.path` raises an error if the volume isn't mounted on the current worker, or if it's mounted more than once.
+- `fn.local()` runs your function on your machine without mounting remote storage.
+
+## Cache model weights
+
+To load a Hugging Face model without managing a volume yourself, use the `model` parameter instead. Runpod stages the weights on the host before the worker starts. See [`model`](/sdk/configuration/parameters#model).
+
+## Billing
+
+<Warning>
+  Volumes keep incurring storage charges after you undeploy an app or delete a dev session. The SDK doesn't delete volumes for you. To delete a volume, see [Network volumes](/storage/network-volumes) or [Global volumes](/storage/globalvolume/overview).
+</Warning>
+
+## Next steps
+
+- [Compare network and global volumes](/storage/overview).
+- [Build an app](/sdk/apps/build-app) that shares checkpoints between tasks.
