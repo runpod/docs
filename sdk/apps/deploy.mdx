@@ -20,7 +20,7 @@ To deploy a different directory, pass it as an argument: `rp flash deploy path/t
 | --- | --- |
 | `--env`, `-e` | The environment to deploy to. Defaults to the app's environment, which is `default` unless you set `env=` on `runpod.App`. |
 | `--python-version` | The worker Python version used to pick dependency wheels: 3.10 to 3.14. Defaults to the Python running the CLI. |
-| `--exclude` | A comma-separated list of packages to leave out of the artifact, for example `--exclude scipy,pandas`. Excluded packages must already be installed in the worker image. |
+| `--exclude` | A comma-separated list of packages to leave out of the artifact, for example `--exclude scipy,pandas`. They're left out even when another dependency pulls them in. Excluded packages must already be installed in the worker image. |
 | `--build-only` | Builds the artifact without deploying it, and writes `APP_NAME-artifact.tar.gz` to the current directory. Use it to check what's included. |
 
 ## What goes into a build
@@ -33,7 +33,11 @@ Each build artifact contains:
 
 You don't build container images. Resources run on Runpod's runtime images, which unpack the artifact and run your code.
 
-On the built-in GPU images, `torch`, `torchvision`, `torchaudio`, and `triton` are already installed, so they're left out of the artifact automatically. If you use a custom `image`, every dependency is included unless you exclude it.
+The built-in GPU images already include `torch`, `torchvision`, `torchaudio`, and `triton`. If any resource uses a built-in GPU image and none uses a custom `image`, the SDK leaves these packages out of the artifact. Workers then use the image's CUDA build. This also applies when another dependency, such as `peft` or `accelerate`, pulls them in. The SDK removes them after installing your dependencies, along with packages that only they need, such as the NVIDIA CUDA libraries.
+
+Because the whole app shares one artifact, CPU resources in the same app don't get these packages from it either. If a CPU resource's dependencies need `torch`, the build warns you, and that resource's workers install it at cold start. Set [`container_disk_gb`](/sdk/configuration/parameters#container_disk_gb) high enough to fit it.
+
+If any resource uses a custom `image`, every dependency is included unless you exclude it.
 
 ### Size limit
 
