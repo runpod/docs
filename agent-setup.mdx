@@ -3,9 +3,9 @@ title: "Onboard your agent to Runpod"
 description: "Official Runpod instructions that install the Runpod skills and MCP server into your coding agent in one shot."
 ---
 
-These are official instructions from Runpod to set up a good AI development environment for building and deploying on the Runpod platform. They are published at `https://docs.runpod.io/agent-setup.md`, so you can verify their origin before following them.
+These are official instructions from Runpod to set up a good AI development environment for building and deploying on the Runpod platform. They are published at `https://agents.runpod.io/` (also available at `https://docs.runpod.io/agent-setup.md`), so you can verify their origin before following them.
 
-Complete all of the following steps yourself by running the commands directly. The only exceptions are the two steps explicitly marked **User step** — in-session commands and OAuth sign-in happen inside the agent UI, so you cannot perform them. Never run a command that blocks on an interactive prompt.
+Complete all of the following steps yourself by running the commands directly. The only exceptions are the steps explicitly marked **User step**: in-session commands and OAuth sign-in happen inside the agent UI or the browser, so you cannot perform them. If no user is present, follow [No user in the loop](#no-user-in-the-loop) instead of those steps. Never run a command that blocks on an interactive prompt.
 
 - Install Runpod Skills and the MCP server
 
@@ -15,13 +15,13 @@ Every command below is safe to re-run on a machine where setup already happened.
 
 ## Install Runpod Skills and MCP server
 
-Every route installs the same router plus six skills (`runpod`, `runpod-mcp`, `runpodctl`, `flash`, `runpod-usage`, `companion-clis`), and wires up the hosted Runpod MCP server for control-plane tools. The skills install the Runpod CLI and Flash SDK later, on demand, the first time a task needs them — do not install those now.
+Every route installs the same skills: the `runpod` router, the lane skills (`runpod-mcp`, `runpodctl`, `flash`, `runpod-usage`, `runpod-templates`, `companion-clis`, `runpod-migrate`), and the journey skills that `runpod-mcp` routes to (`discovery`, `lifecycle-crud`, `serverless-deploy`, `pod-deploy`, `pod-doctor`, `endpoint-ops`, `cost-audit`). It also wires up the hosted Runpod MCP server (`https://mcp.getrunpod.io/`) for control-plane tools. The skills install the Runpod CLI and Flash SDK later, on demand, the first time a task needs them. Do not install those now.
 
 Use the correct section for your agent below.
 
 ### Claude Code
 
-Run these two commands to install both the Runpod skills and the MCP server in one step. Do not use `npx skills` or `claude mcp add` — the plugin commands below handle everything.
+Run these two commands to install both the Runpod skills and the MCP server in one step. Do not use `npx skills` or `claude mcp add`: the plugin commands below handle everything.
 
 ```
 claude plugin marketplace add runpod/runpod-plugins-official
@@ -36,55 +36,122 @@ claude plugin list | grep -A2 'runpod@runpod'
 
 Expect `Status: ✔ enabled`. If the plugin is listed but disabled, run `claude plugin enable runpod@runpod`.
 
-> **User step.** Ask the user to run `/reload-plugins` inside Claude Code to activate the plugin, then sign in to the MCP server with `/mcp` → **runpod** → **Sign in with Runpod**. This uses OAuth — no API key is created or stored. Wait for the user to confirm before reporting the MCP server as connected.
+If `marketplace add` fails with an SSH `known_hosts` error, the machine usually can't reach `github.com` at all (common on networks that block GitHub). Check with `curl -sI https://github.com` before debugging SSH.
+
+> **User step.** Ask the user to run `/reload-plugins` inside Claude Code to activate the plugin, then sign in to the MCP server with `/mcp` → **runpod** → **Sign in with Runpod**. This uses OAuth, so no API key is created or stored. Wait for the user to confirm before reporting the MCP server as connected.
 
 ---
 
 ## Install for other agents
 
-First, install skills:
+### 1. Install the skills
+
+This step needs Node.js 22.20 or newer. Check with `node --version`; if it's older, stop and report it instead of continuing.
+
+Run the command below, replacing `<agent-id>` with your agent's id from the table. Always pass `--agent`: without it, the installer targets every agent it knows about and prints a `Failed to install` block for agents that don't apply to you.
 
 ```
-npx -y skills add runpod/runpod-plugins-official --skill '*' --yes --global
+npx -y skills add runpod/runpod-plugins-official --skill '*' --agent <agent-id> --yes --global
 ```
 
-Then register the hosted MCP server for your agent.
+| Agent | `<agent-id>` |
+| --- | --- |
+| Codex | `codex` |
+| Cursor | `cursor` |
+| GitHub Copilot | `github-copilot` |
+| Windsurf | `windsurf` |
+| Cline | `cline` |
+| opencode | `opencode` |
+| Gemini CLI | `gemini-cli` |
+| Pi | `pi` |
+| Hermes | `hermes-agent` |
+| Goose | `goose` |
+| Zed | `zed` |
+| Kilo Code | `kilo` |
+| Amp | `amp` |
 
-### Codex
+For any other agent, run `npx -y skills add --help` and use the id it lists for your agent.
+
+Verify:
+
+```
+npx -y skills list --global
+```
+
+Expect the `runpod` router and the lane and journey skills listed above. If the output also mentions PromptScript or another agent you aren't, ignore it; it doesn't affect your install.
+
+### 2. Register the MCP server
+
+Use the section for your agent. Every agent connects to the same hosted server, `https://mcp.getrunpod.io/`, and signs in with OAuth on first Runpod tool use.
+
+#### Codex
 
 ```
 codex plugin marketplace add https://github.com/runpod/runpod-plugins-official.git
+codex plugin add runpod@runpod
 ```
 
-> **User step.** Ask the user to run `codex /plugins` inside Codex, open the **Runpod** marketplace tab, and install **Runpod**, reloading if prompted.
-
-Codex may not auto-wire the bundled MCP server. If the `runpod` MCP tools do not appear after install, add the hosted server directly:
+If the `runpod` MCP tools don't appear after install, add the hosted server directly:
 
 ```
-codex mcp add runpod --transport http https://mcp.getrunpod.io/
+codex mcp add runpod --url https://mcp.getrunpod.io/
 ```
 
-### Cursor, GitHub Copilot, Windsurf, Cline, opencode, Gemini, and all other agents
+In Codex Desktop, the user must fully quit and reopen the app before the plugin and MCP tools appear.
 
-Run the guided installer. It detects the agent and configures the hosted MCP server:
+#### Gemini CLI
 
 ```
-npx @runpod/mcp-server@latest add
+gemini mcp add -s user -t http runpod https://mcp.getrunpod.io/
 ```
-
-OAuth triggers on first Runpod tool use; the user approves it in the browser.
 
 Gemini can alternatively install natively through the plugin's bundled `gemini-extension.json`. See your client's extension documentation.
+
+#### Pi
+
+```
+pi mcp add runpod --url https://mcp.getrunpod.io/
+```
+
+#### Cursor, GitHub Copilot, Windsurf, Cline, opencode, and all other agents
+
+Add a server entry named `runpod` with the HTTP (streamable HTTP) transport and URL `https://mcp.getrunpod.io/` to your agent's MCP configuration. Merge it into the existing file; do not overwrite other servers. See your agent's MCP documentation in [Resources](#resources) for the file location and format.
+
+Do not run `npx @runpod/mcp-server@latest add` yourself. It's an interactive wizard for people at a terminal: in an agent shell it exits without writing any config, and it only supports Claude Code, Cursor, Windsurf, Claude Desktop, and VS Code. If you can't edit your agent's MCP config, hand it to the user:
+
+> **User step.** Ask the user to run `npx @runpod/mcp-server@latest add` in their own terminal and pick your agent.
+
+After registering, the user approves the OAuth sign-in in the browser the first time you call a Runpod tool.
+
+If your agent can't load skills, the MCP server serves the same playbooks: `list-guides` and `read-guide` return them, and `lookup-concept` and `search-concepts` answer questions about how Runpod works.
+
+---
+
+## No user in the loop
+
+When no user is present (CI, a scheduled job, an agent SDK run), nobody can do the **User steps** or the OAuth sign-in. Use a Runpod API key instead:
+
+1. Read the key from the `RUNPOD_API_KEY` environment variable. The `runpodctl` CLI and the Flash SDK read the same variable. Do not ask for the key, print it, or write it to a file. If it is not set, stop and report that it is missing.
+2. Install the skills for your agent as above. Skip `/reload-plugins`: the plugin loads the next time the agent starts.
+3. Connect the hosted MCP server with the key instead of OAuth:
+
+   ```
+   claude mcp add --transport http runpod -s user https://mcp.getrunpod.io/ --header "Authorization: Bearer $RUNPOD_API_KEY"
+   ```
+
+   For other clients, add the same `Authorization` header to the server entry (for Gemini CLI: `gemini mcp add -s user -t http -H "Authorization: Bearer $RUNPOD_API_KEY" runpod https://mcp.getrunpod.io/`), or run the server locally over stdio with `RUNPOD_API_KEY` set: `npx -y @runpod/mcp-server@latest`.
+4. In headless Claude Code (`claude -p`), allow the Runpod skill and the MCP tools your task needs up front, for example `--allowedTools "Skill(runpod:runpod-mcp)"`. Without `Skill(runpod:runpod-mcp)`, the `runpod-mcp` skill is refused.
+5. Write the result banner below to your log. Mark anything that still needs a person with `✗`.
 
 ---
 
 ## Report the result
 
-Report what you actually verified. Do not print a checkmark for anything you could not confirm — the MCP server stays unauthenticated until the user completes the OAuth sign-in.
+Report what you actually verified. Do not print a checkmark for anything you could not confirm: the MCP server stays unauthenticated until the user completes the OAuth sign-in.
 
 ```
 ┌─ Runpod Agent Setup ─────────────────────────────────┐
-│  ✓ Runpod skills   router + 6 skills                 │
+│  ✓ Runpod skills   router + lane + journey skills    │
 │  ⚠ runpod MCP      needs sign-in: /mcp → runpod      │
 │                                                      │
 │  ⚡ Reload or restart your agent to load the skills  │
@@ -93,9 +160,20 @@ Report what you actually verified. Do not print a checkmark for anything you cou
 
 Use `✓` verified, `⚠` needs a user action, `✗` failed. Follow the banner with the specific next action for every non-`✓` line.
 
-Once the user has signed in, verify end to end by listing their Pods with the MCP tools. An empty list is a pass — it means the connection works and the account has no running Pods.
+Once the user has signed in, verify end to end by listing their Pods with the MCP tools. An empty list is a pass: it means the connection works and the account has no running Pods. If the list is empty but the user expects Pods or has a funded balance, the sign-in went to a different Runpod account. Ask the user to sign out of the `runpod` MCP server, sign in again with the right account, and then list Pods again.
 
-Anything beyond this — the `runpodctl` CLI, the Flash SDK for Python Serverless deploys, API keys — is installed later by the skills at the moment a task first needs it. Do not set those up now.
+Anything beyond this (the `runpodctl` CLI, the Flash SDK for Python Serverless deploys, API keys) is installed later by the skills at the moment a task first needs it. Do not set those up now, unless you run without a user, as described above.
+
+---
+
+## Feedback
+
+Two different tools take feedback, on two different servers:
+
+- **About these docs:** `submit_feedback` on the Runpod docs MCP server (`https://docs.runpod.io/mcp`).
+- **About the Runpod product or the Runpod MCP tools:** `report_feedback` on the Runpod MCP server (`https://mcp.getrunpod.io/`).
+
+Only call either one when you have something real to report. Never call them with placeholder content or in sessions that have nothing to do with Runpod.
 
 ---
 
@@ -108,9 +186,12 @@ For setup guides and troubleshooting, refer to each agent's official documentati
 - Runpod skills plugin (source): `https://github.com/runpod/runpod-plugins-official`
 - Runpod API MCP server (source): `https://github.com/runpod/runpod-mcp`
 - Claude Code: `https://docs.anthropic.com/en/docs/claude-code/mcp`
+- Codex: `https://developers.openai.com/codex/mcp`
 - Cursor: `https://cursor.com/docs/mcp`
 - Windsurf: `https://docs.windsurf.com/windsurf/cascade/mcp`
 - GitHub Copilot (VS Code): `https://code.visualstudio.com/docs/copilot/customization/mcp-servers`
+- opencode: `https://opencode.ai/docs/mcp-servers`
+- Cline: `https://docs.cline.bot/mcp/configuring-mcp-servers`
 - Gemini CLI: `https://github.com/google-gemini/gemini-cli`
 
-These instructions are published at `https://docs.runpod.io/agent-setup.md` so you can re-verify their authenticity at any time.
+These instructions are published at `https://agents.runpod.io/` (also available at `https://docs.runpod.io/agent-setup.md`) so you can re-verify their authenticity at any time.
