@@ -380,6 +380,34 @@ async def classify(text: str) -> dict:
     return {"classification": result}
 ```
 
+#### API key for endpoints that call other endpoints
+
+A call to another endpoint needs a Runpod API key on the calling worker. To limit where your key is stored, `flash deploy` adds your `RUNPOD_API_KEY` only to endpoints that `flash build` detects calling other endpoints. After a deploy, the summary lists the endpoints that received the key.
+
+`flash build` treats an endpoint as calling other endpoints when its function or class does any of the following. This also applies when the call happens through a helper, class, or object defined in your project.
+
+- References another `@Endpoint` function or class. This includes module paths such as `tasks.square(x)`, aliased imports, and passing the function as a value.
+- Uses a client `Endpoint(id=...)` or `Endpoint(image=...)`.
+- Uses the `runpod` SDK or reads `RUNPOD_API_KEY`.
+
+If `flash build` can't analyze a helper or resolve a project import, it treats the endpoint as calling other endpoints and gives it the key.
+
+On each deploy, Flash removes `RUNPOD_API_KEY` from endpoints that don't call other endpoints, including a key added in the Runpod console. Flash keeps the key when you set it in the endpoint's `env` parameter, or when the endpoint shares its template with another endpoint. The first deploy after Flash starts removing the key changes the template of each affected endpoint, so the endpoint replaces its workers once.
+
+Flash doesn't scan the code inside a custom image deployed with `Endpoint(image=...)`, so that endpoint doesn't receive the key. If your image calls other endpoints, set the key in its `env`:
+
+```python
+from runpod_flash import Endpoint
+
+router = Endpoint(
+    name="router",
+    image="myregistry/router:latest",
+    env={"RUNPOD_API_KEY": "your_runpod_api_key"},
+)
+```
+
+If `flash build` misses a call, for example when a client `Endpoint` is passed to your function as an argument, the call fails with `401 Unauthorized`. See [Missing API key on a worker](/flash/troubleshooting#missing-api-key-on-a-worker).
+
 ## Call deployed endpoints from scripts
 
 After deploying your Flash app, you can call your `@Endpoint` functions directly from Python scripts. Flash automatically resolves the app context from your project structure, so in most cases you can run scripts without any additional configuration.
