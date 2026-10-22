@@ -56,7 +56,11 @@ vc.sync(background=False)     # persist new files back to the volume, inline
 | `namespace` | `RUNPOD_ENDPOINT_ID` | Isolation key for the on-volume mirror. Must be a single safe path component. |
 | `volume_path` | `/runpod-volume` | Mount point of the network volume. |
 | `best_effort` | `True` | When `True`, cache errors are logged and swallowed instead of raised. Set to `False` while debugging. |
-| `max_workers` | `min(32, (os.cpu_count() or 4) * 4)` | Thread count for the parallel copy of large files. The work is I/O-bound, so the default oversubscribes the CPU count. |
+| `max_workers` | `min(32, (os.cpu_count() or 4) * 4)` | Thread count for copying large files back to the volume during `sync()`. The work is I/O-bound, so the default oversubscribes the CPU count. |
+| `hydrate_workers` | `max_workers` if you set it, otherwise `64` | Number of concurrent range reads when `hydrate()` restores large files. |
+| `hydrate_chunk_size` | 8 MiB | Size in bytes of each range that `hydrate()` reads. |
+
+Hydration holds about `hydrate_workers * hydrate_chunk_size` bytes in memory at its peak, which is 512 MiB with the defaults. Keep that total near the default. On [global volumes](/storage/globalvolume/overview), more than about 1 GiB in flight causes reads to fail under load.
 
 ## How it works
 
@@ -64,7 +68,9 @@ vc.sync(background=False)     # persist new files back to the volume, inline
 
 - **Size-bucketed mirror:** Cached files live at `{volume_path}/.cache/{namespace}` on the volume. Files below 256 KiB are packed into a single `small.tar` archive, which collapses the per-file metadata round-trips that make many small files slow on a network volume. Larger files are copied unpacked into a `big/` subdirectory, which preserves their original relative paths so the large-file subtree stays browsable. A versioned `manifest.json`, written last, records the size and modification time of every cached file and marks the mirror as complete. A mirror without a valid, current manifest is treated as absent, so a sync self-heals.
 - **Incremental large files, whole-archive small files:** Large-file transfers are diffed per file against the manifest, so unchanged files are skipped. The `small.tar` archive is repacked whole whenever any small file changes, since unpacking and re-diffing many tiny files individually is slower than the volume's per-file overhead.
-- **Parallel copy:** Large-file transfers run across a thread pool sized by `max_workers`. The work is I/O-bound, so the default oversubscribes the CPU count.
+- **Parallel sync:** `sync()` copies changed large files whole, across a thread pool sized by `max_workers`.
+- **Range-parallel hydration:** `hydrate()` splits every large file into ranges of `hydrate_chunk_size` bytes. A pool of `hydrate_workers` threads reads the ranges of all files concurrently. Object-store mounts such as global volumes serve a single sequential stream slowly. Parallel range reads restore large model weights much faster than whole-file copies. These mounts can return transient errors such as `ENOMEM` under load, so `hydrate()` retries a failed range with backoff for a few seconds.
+- **All-or-nothing file restores:** Each large file is assembled in a temporary file and moved into place only after every range has copied. A file isn't restored if a range still fails after retries, or if the mirror file doesn't match the size in the manifest. In that case any existing local copy is left untouched. The other files still restore, and your code downloads the missing file as usual.
 - **Safety:** Symbolic links are never followed or copied. Every archive member and every large-file destination is checked to resolve inside one of your configured `dirs` before it is written, so a mirror entry can't write outside your cached directories.
 
 ## Limitations
