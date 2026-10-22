@@ -1,0 +1,131 @@
+---
+title: "Run a command in a sandbox"
+api: "POST https://api.runpod.io/v2/sandboxes/{id}/exec"
+authMethod: "bearer"
+description: "Run a command inside a running Runpod sandbox and get its stdout, stderr, and exit code, or start it in the background for longer work."
+---
+
+Runs one command inside the sandbox and returns its output once it completes.
+
+Commands are synchronous and capped at about 4 seconds. A command still running at the cap is stopped and returns `exitCode: null`. For longer work, set `background: true`: the command starts detached and the request returns as soon as it has started. Redirect its output to a file and read the file with a later command.
+
+A sandbox accepts commands only once its container has started, which can lag the `RUNNING` state by a few seconds. Until then, this endpoint returns `409` with code `sandbox_starting`. Retry after a short delay.
+
+Each accepted command counts as activity and resets the sandbox's idle timer.
+
+<Warning>
+
+**Review question:** Will exec keep this shape (synchronous, 4-second cap, `background`) for Beta, or will the job-based Commands API (start, poll, stream, cancel) replace it before Beta? If it's replacing it, when will it be in dev? _Remove this box before merging._
+
+</Warning>
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  The sandbox ID.
+</ParamField>
+
+### Body
+
+<ParamField body="command" type="string[]" required>
+  The command to run, as an argv array with at least one element. It isn't interpreted by a shell. To use shell syntax such as pipes, redirects, or `&&`, wrap it: `["sh", "-c", "..."]`.
+</ParamField>
+
+<ParamField body="timeoutSeconds" type="integer">
+  How long the command may run before it's stopped. The effective limit is currently 4 seconds; longer values are clamped.
+</ParamField>
+
+<ParamField body="background" type="boolean" default="false">
+  Start the command detached and return as soon as it has started. `output`, `stdout`, and `stderr` are empty and `exitCode` is `0` once it has started.
+</ParamField>
+
+### Response
+
+<ResponseField name="output" type="string" required>
+  Combined stdout and stderr of the command.
+</ResponseField>
+
+<ResponseField name="stdout" type="string | null" required>
+  The command's standard output alone. `null` when the host doesn't report the streams separately.
+</ResponseField>
+
+<ResponseField name="stderr" type="string | null" required>
+  The command's standard error alone. `null` when the host doesn't report the streams separately.
+</ResponseField>
+
+<ResponseField name="exitCode" type="integer | null" required>
+  The command's exit status, `0` on success. `null` when the command didn't exit on its own, for example when it was stopped at the time limit.
+</ResponseField>
+
+<ResponseField name="error" type="string | null">
+  The failure reported by the host, if the command exited non-zero or was stopped. `null` when the command succeeded.
+</ResponseField>
+
+<ResponseField name="durationMs" type="integer" required>
+  Wall-clock time the call took, in milliseconds.
+</ResponseField>
+
+<ResponseField name="truncated" type="boolean" required>
+  `true` when the command wrote more than 4 MiB to a stream and the excess was dropped, so the output is incomplete.
+</ResponseField>
+
+### Errors
+
+| Status | Meaning |
+| --- | --- |
+| `401` | The API key is missing or invalid. |
+| `403` | The API key doesn't have access to sandboxes. |
+| `404` | No sandbox with this ID exists on your account. |
+| `409` | The sandbox can't run commands right now. The response code says whether to retry: `sandbox_starting` (retry shortly), `container_exited` (create a new sandbox), or `sandbox_terminated` (the sandbox is `TERMINATED` or `FAILED`). |
+| `422` | The request is well-formed but can't be processed. |
+| `429` | Too many requests. Retry after a delay. |
+| `503` | Command execution is temporarily unavailable. The sandbox itself is unaffected. Retry later. |
+
+<RequestExample>
+
+```bash cURL
+curl --request POST \
+  --url https://api.runpod.io/v2/sandboxes/SANDBOX_ID/exec \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{"command": ["sh", "-c", "echo hello && python --version"]}'
+```
+
+```python Python
+import os
+import requests
+
+response = requests.post(
+    "https://api.runpod.io/v2/sandboxes/SANDBOX_ID/exec",
+    headers={"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}"},
+    json={"command": ["sh", "-c", "echo hello && python --version"]},
+)
+result = response.json()
+print(result["stdout"], result["exitCode"])
+```
+
+```bash Background
+curl --request POST \
+  --url https://api.runpod.io/v2/sandboxes/SANDBOX_ID/exec \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{"command": ["sh", "-c", "pip install -r requirements.txt > /root/install.log 2>&1"], "background": true}'
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200
+{
+  "output": "hello\nPython 3.12.7\n",
+  "stdout": "hello\nPython 3.12.7\n",
+  "stderr": "",
+  "exitCode": 0,
+  "error": null,
+  "durationMs": 412,
+  "truncated": false
+}
+```
+
+</ResponseExample>

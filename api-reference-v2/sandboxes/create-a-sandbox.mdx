@@ -1,0 +1,215 @@
+---
+title: "Create a sandbox"
+api: "POST https://api.runpod.io/v2/sandboxes"
+authMethod: "bearer"
+description: "Create an isolated, fast-starting Runpod CPU sandbox from an image, template, or the default image, with timeouts, ports, volumes, and labels."
+---
+
+Launches a new sandbox: an isolated, fast-starting CPU environment for running untrusted code. Supply at most one of `templateId` or `image`; with neither, the sandbox runs the default sandbox image. Every field is optional, so an empty body (`{}`) is a valid request. Omitted fields use your account's default sandbox policy.
+
+The request returns `201` with the sandbox, usually still in the `CREATING` state. Poll [Get a sandbox](/api-reference-v2/sandboxes/get-a-sandbox) until `state` is `RUNNING`.
+
+The sandbox is billed per second until it terminates. Terminate it explicitly when you're finished, including on error paths, rather than relying on a timeout to stop billing.
+
+### Headers
+
+<ParamField header="Idempotency-Key" type="string">
+  Makes the create safe to retry after a lost response. Repeating the request with the same key and the same body returns the sandbox the first request created (`201`) instead of creating another. The same key with a different body is a `400`. A key whose first create failed is spent: retrying with it returns `409`, so retry a failed create with a new key. Keys are unique per account and compared case-insensitively.
+</ParamField>
+
+### Body
+
+<ParamField body="image" type="string">
+  Container image to run, for example `python:3.12-slim`. Can't be combined with `templateId`.
+</ParamField>
+
+<ParamField body="templateId" type="string">
+  Sandbox template to launch from. Can't be combined with `image`.
+</ParamField>
+
+<ParamField body="registry" type="string">
+  ID of one of your saved container registry credentials (from `/v2/registries`), for pulling a private image. An ID that isn't yours is rejected.
+</ParamField>
+
+<ParamField body="name" type="string">
+  Human-readable name. Names don't have to be unique. Generated when omitted.
+</ParamField>
+
+<ParamField body="cpu" type="object">
+  CPU flavor and vCPU count, as on a CPU Pod. Memory and container disk limits scale with the flavor. Defaults to the standard sandbox flavor and size.
+
+  <Expandable title="properties">
+    <ParamField body="id" type="string">
+      CPU flavor ID, for example `cpu3c`.
+    </ParamField>
+
+    <ParamField body="vcpuCount" type="integer">
+      Number of vCPUs.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<Warning>
+
+**Review question:** Besides `id` and `vcpuCount`, which fields does `cpu` accept on create? Is `cpu.memory` read-only? _Remove this box before merging._
+
+</Warning>
+
+<ParamField body="disk" type="integer" default="10">
+  Container disk in GB. Ephemeral: deleted when the sandbox terminates. Capped per vCPU, the same limit CPU Pods have.
+</ParamField>
+
+<ParamField body="dataCenterIds" type="string[]">
+  Preferred data centers, each one that offers sandboxes. Omit to let Runpod choose. With a network volume mounted, omit it or include the volume's data center.
+</ParamField>
+
+<ParamField body="env" type="object">
+  Environment variables as string key-value pairs. Use `{{ RUNPOD_SECRET_name }}` to reference a Runpod secret. Values are returned as written in API responses, so don't put plain credentials here.
+</ParamField>
+
+<ParamField body="cmd" type="string[]">
+  Container CMD in exec form, for example `["python", "-m", "http.server", "8080"]`. If the image defines an ENTRYPOINT, this is the argument list passed to it. Omit `cmd` and `entrypoint` to keep the image's own; an image with no command runs a keepalive process.
+</ParamField>
+
+<ParamField body="entrypoint" type="string[]">
+  Container ENTRYPOINT in exec form, overriding the image's own.
+</ParamField>
+
+<ParamField body="ports" type="object[]">
+  Ports to expose, at most 15. Each entry has a `port` and a `protocol` (`http`, `tcp`, or `udp`). HTTP ports are reached through a proxy URL; TCP and UDP ports through a public IP and port. See [Exposed ports](/sandboxes/overview#exposed-ports).
+</ParamField>
+
+<ParamField body="mounts" type="object">
+  Volumes to mount.
+
+  <Expandable title="properties">
+    <ParamField body="network" type="object[]">
+      Network volumes: `volumeId` (required) and `path` (defaults to `/workspace`).
+    </ParamField>
+
+    <ParamField body="global" type="object[]">
+      Global volumes: `volumeId` (required) and `path` (defaults to `/workspace-global`).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="startSsh" type="boolean" default="false">
+  Inject the SSH public keys registered on your account (`PUT /v2/account/ssh-keys`) so you can connect over SSH. Does nothing if you have no registered keys. Only images that start `sshd` from `PUBLIC_KEY` support it; all Runpod official images do. For a direct connection, also expose `22/tcp` in `ports`.
+</ParamField>
+
+<ParamField body="idleTimeoutSeconds" type="integer">
+  Seconds of inactivity before the sandbox is terminated. Omitted uses the default. Values above the maximum are clamped to it, and values under 90 are raised to 90. Read the response for the value applied.
+</ParamField>
+
+<ParamField body="maxLifetimeSeconds" type="integer">
+  Maximum total lifetime in seconds, counted from creation. Omitted or out-of-range values are clamped to the account policy's default and maximum.
+</ParamField>
+
+<ParamField body="labels" type="object">
+  String key-value labels for organizing sandboxes. You can filter [List sandboxes](/api-reference-v2/sandboxes/list-sandboxes) by label.
+</ParamField>
+
+<ParamField body="egressMode" type="enum<string>" default="ALLOW_ALL">
+  Outbound network policy: `ALLOW_ALL`, `ALLOW_LIST`, or `DENY_ALL`. Egress is open by default. Restriction isn't enabled for all accounts yet; until it is, any value other than `ALLOW_ALL` returns `400`.
+</ParamField>
+
+<ParamField body="egressAllowlist" type="string[]">
+  Hostnames the sandbox may reach when `egressMode` is `ALLOW_LIST`. Requires restricted egress to be enabled for your account.
+</ParamField>
+
+{/* TODO: Document allowlist rules (exact lowercase hostnames, max 20, no IPs or wildcards) once host enforcement ships (AI-259). */}
+
+<Note>
+
+`imageName`, `cpuFlavorId`, `vcpuCount`, `memoryInGb`, and `dataCenterId` are deprecated aliases for `image`, `cpu.id`, `cpu.vcpuCount`, and `dataCenterIds`. Use the new names.
+
+</Note>
+
+### Response
+
+Returns the created sandbox. See [Get a sandbox](/api-reference-v2/sandboxes/get-a-sandbox) for all response fields.
+
+### Errors
+
+| Status | Meaning |
+| --- | --- |
+| `400` | The request is malformed, for example both `templateId` and `image` are set, an unknown field is included, or the account has reached its concurrent sandbox limit. |
+| `401` | The API key is missing or invalid. |
+| `402` | Your account balance is too low to start the sandbox. |
+| `403` | The API key doesn't have access to sandboxes. |
+| `409` | The `Idempotency-Key` was spent by a create that failed. Retry with a new key. |
+| `422` | The request is well-formed but can't be processed, for example an unknown template or flavor. |
+| `429` | Too many requests. Retry after a delay. |
+| `503` | No capacity is available for the requested configuration. Retry later, or remove placement constraints such as `dataCenterIds`. |
+
+<RequestExample>
+
+```bash cURL
+curl --request POST \
+  --url https://api.runpod.io/v2/sandboxes \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
+  --header "Content-Type: application/json" \
+  --header "Idempotency-Key: build-4821" \
+  --data '{
+    "name": "my-sandbox",
+    "image": "python:3.12-slim",
+    "idleTimeoutSeconds": 300,
+    "ports": [{"port": 8080, "protocol": "http"}],
+    "env": {"APP_ENV": "test"},
+    "labels": {"project": "checkout"}
+  }'
+```
+
+```python Python
+import os
+import requests
+
+response = requests.post(
+    "https://api.runpod.io/v2/sandboxes",
+    headers={
+        "Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}",
+        "Idempotency-Key": "build-4821",
+    },
+    json={
+        "name": "my-sandbox",
+        "image": "python:3.12-slim",
+        "idleTimeoutSeconds": 300,
+        "ports": [{"port": 8080, "protocol": "http"}],
+        "env": {"APP_ENV": "test"},
+        "labels": {"project": "checkout"},
+    },
+)
+print(response.status_code, response.json())
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 201
+{
+  "id": "7h3sbx91kq",
+  "name": "my-sandbox",
+  "state": "CREATING",
+  "templateId": null,
+  "image": "python:3.12-slim",
+  "registry": null,
+  "dataCenterId": null,
+  "env": {"APP_ENV": "test"},
+  "ports": [{"port": 8080, "protocol": "http"}],
+  "egressPolicy": {"mode": "ALLOW_ALL", "allow": []},
+  "idleTimeoutSeconds": 300,
+  "maxLifetimeSeconds": 3600,
+  "lastActivityAt": "2026-10-19T14:02:05Z",
+  "idleExpiresAt": "2026-10-19T14:07:05Z",
+  "expiresAt": "2026-10-19T15:02:05Z",
+  "labels": {"project": "checkout"},
+  "startedAt": null,
+  "terminationReason": null,
+  "terminatedAt": null,
+  "createdAt": "2026-10-19T14:02:05Z",
+  "updatedAt": "2026-10-19T14:02:05Z"
+}
+```
+
+</ResponseExample>
