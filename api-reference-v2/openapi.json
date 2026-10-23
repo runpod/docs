@@ -65,6 +65,11 @@
         "write"
       ]
     },
+    "audit": {
+      "levels": [
+        "read"
+      ]
+    },
     "billing": {
       "levels": [
         "read",
@@ -117,6 +122,10 @@
     {
       "name": "Billing",
       "description": "Billing history and usage cost records across resource types."
+    },
+    {
+      "name": "Audit Logs",
+      "description": "Record of who did what to which resource on the account."
     }
   ],
   "components": {
@@ -255,6 +264,34 @@
                   "title": "Unprocessable Entity",
                   "status": 422,
                   "detail": "Request validation failed."
+                }
+              }
+            }
+          }
+        }
+      },
+      "RequestTooLargeError": {
+        "headers": {
+          "RateLimit": {
+            "$ref": "#/components/headers/RateLimit"
+          },
+          "RateLimit-Policy": {
+            "$ref": "#/components/headers/RateLimit-Policy"
+          }
+        },
+        "description": "The incoming request body exceeds 1048576 bytes (1 MiB). Body size is\nchecked after authentication and rate limiting. GET and DELETE reject\nany nonempty request body with `422` instead.\n\nAn operation can also return this status when its expanded upstream\nrequest is too large, even if the incoming body is within the limit.\n",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "examples": {
+              "requestTooLarge": {
+                "summary": "Request body exceeds the limit",
+                "value": {
+                  "title": "Request Entity Too Large",
+                  "status": 413,
+                  "detail": "Request body exceeds the 1048576 byte limit."
                 }
               }
             }
@@ -421,6 +458,87 @@
           "maximum": 100
         },
         "example": 50
+      },
+      "PaginationLimitAuditLogs": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "description": "Page size, 1–200. Defaults to 200 when omitted.",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        },
+        "example": 50
+      },
+      "AuditLogActorIdsFilter": {
+        "name": "actorIds",
+        "in": "query",
+        "required": false,
+        "description": "Only return entries performed by these users. Comma-separated user IDs. Available to organization accounts only; a personal or team account is answered 400.",
+        "style": "form",
+        "explode": false,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "example": [
+          "user_id_abc_123",
+          "user_id_def_456"
+        ]
+      },
+      "AuditLogActionsFilter": {
+        "name": "actions",
+        "in": "query",
+        "required": false,
+        "description": "Only return entries whose `action` is one of these names, matched exactly as recorded. Comma-separated.",
+        "style": "form",
+        "explode": false,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "example": [
+          "create",
+          "delete"
+        ]
+      },
+      "AuditLogStartTime": {
+        "name": "startTime",
+        "in": "query",
+        "required": false,
+        "description": "Earliest instant to include, inclusive (RFC 3339). The account's audit log retention window still applies: entries that have aged out are not returned even when this reaches further back.",
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "example": "2026-09-01T00:00:00Z"
+      },
+      "AuditLogEndTime": {
+        "name": "endTime",
+        "in": "query",
+        "required": false,
+        "description": "Latest instant to include, inclusive (RFC 3339). Must be after `startTime` when both are given; 400 otherwise.",
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "example": "2026-09-30T23:59:59Z"
+      },
+      "AuditLogSearch": {
+        "name": "search",
+        "in": "query",
+        "required": false,
+        "description": "Case-insensitive substring match against `email`, `resourceType`, `resourceId`, `action` and `value`; `actorId` is not searched. Surrounding whitespace is ignored.",
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        },
+        "example": "abc123"
       },
       "CatalogIncludeParam": {
         "name": "include",
@@ -2562,7 +2680,7 @@
             ]
           },
           "direct": {
-            "description": "Connection straight to the pod's sshd over its published `22/tcp` mapping. Supports the full SSH feature set. Null unless `22/tcp` is in `ports` and the running pod has been assigned a public port for it — so it is absent while the pod is provisioning or stopped.",
+            "description": "Connection straight to the pod's sshd over its published `22/tcp` mapping. Supports the full SSH feature set. Null unless `22/tcp` is in `ports` and the running pod has been assigned a public port for it — so it is absent while the pod is provisioning or stopped. Also null when listing pods with `GET /v2/pods`; fetch a single pod by ID to obtain the live mapping.",
             "anyOf": [
               {
                 "$ref": "#/components/schemas/PodSshEndpoint"
@@ -2872,7 +2990,7 @@
                 "$ref": "#/components/schemas/PodGlobalNetworking"
               },
               "runtime": {
-                "description": "Live utilization metrics. Null when the pod is not RUNNING.",
+                "description": "Live utilization metrics. Null when the pod is not RUNNING, and when listing pods with `GET /v2/pods`; fetch a single pod by ID to obtain metrics.",
                 "anyOf": [
                   {
                     "$ref": "#/components/schemas/PodRuntime"
@@ -4672,6 +4790,104 @@
           }
         }
       },
+      "AuditLog": {
+        "type": "object",
+        "description": "One recorded action on the account.",
+        "required": [
+          "actorId",
+          "email",
+          "resourceType",
+          "resourceId",
+          "action",
+          "value",
+          "timestamp"
+        ],
+        "properties": {
+          "actorId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ID of the user who performed the action. Null when the action was not attributable to a user.",
+            "examples": [
+              "user_id_abc_123"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Email of the actor when the action was recorded. Null when unknown.",
+            "examples": [
+              "actor@example.com"
+            ]
+          },
+          "resourceType": {
+            "type": "string",
+            "description": "Kind of resource the action applied to, as recorded at write time. Not an enum: values are free-form, mostly lower camel case, and new kinds appear without an API version change. Current writers record values such as `pod`, `apiKey`, `sharedApiKey`, `secret`, `costCenter`, `paymentMethod`, `billingAccount`, `registryCredential`, `organization` and `group`, and `unknown` when the writer recorded no kind.",
+            "examples": [
+              "pod",
+              "apiKey",
+              "costCenter"
+            ]
+          },
+          "resourceId": {
+            "type": "string",
+            "description": "ID of the affected resource. Empty when the action was not about one resource; a bulk action lists every affected ID, comma-separated.",
+            "examples": [
+              "abc123"
+            ]
+          },
+          "action": {
+            "type": "string",
+            "description": "Name of the action, as recorded at write time. Not an enum: values are free-form, mostly lower case verbs, and new actions appear without an API version change. Current writers record values such as `create`, `update`, `delete`, `rename`, `lock`, `unlock`, `start`, `reset`, `add` and `setBillingMode`.",
+            "examples": [
+              "create",
+              "delete",
+              "rename"
+            ]
+          },
+          "value": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Details of the change as a JSON-encoded string. The structure varies by action; parse it as JSON for a structured view. A bulk action split across several entries adds an `auditChunk` object with `index` and `of`. Null when the action recorded no details.",
+            "examples": [
+              "{\"status\":\"TERMINATED\"}",
+              "{\"name\":\"training-run-7\"}",
+              "{\"id\":\"sec_789\",\"name\":\"HF_TOKEN\",\"sharedWithOrganization\":true}"
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the action happened (UTC, whole seconds).",
+            "examples": [
+              "2026-09-02T00:00:00Z"
+            ]
+          }
+        }
+      },
+      "ListAuditLogsResponse": {
+        "type": "object",
+        "required": [
+          "auditLogs",
+          "pagination"
+        ],
+        "properties": {
+          "auditLogs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditLog"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        }
+      },
       "BillingTimeRange": {
         "type": "object",
         "description": "Half-open time range [startTime, endTime) in RFC 3339. On a record it is the time bucket; on a query echo it is the resolved window.\n",
@@ -5723,6 +5939,12 @@
           "403": {
             "$ref": "#/components/responses/ForbiddenError"
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
           },
@@ -5922,6 +6144,9 @@
               }
             }
           },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
           },
@@ -6118,6 +6343,9 @@
           "404": {
             "$ref": "#/components/responses/NotFoundError"
           },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
           },
@@ -6298,12 +6526,7 @@
                               "username": "7h9k2m4n6p-64411eb2",
                               "command": "ssh 7h9k2m4n6p-64411eb2@ssh.runpod.io"
                             },
-                            "direct": {
-                              "host": "195.26.233.3",
-                              "port": 34446,
-                              "username": "root",
-                              "command": "ssh root@195.26.233.3 -p 34446"
-                            }
+                            "direct": null
                           },
                           "template": "9x4m2p7v",
                           "cost": 0.44,
@@ -6311,17 +6534,7 @@
                           "globalNetworking": {
                             "enabled": false
                           },
-                          "runtime": {
-                            "uptime": 3600,
-                            "ports": [
-                              {
-                                "private": 22,
-                                "public": 34446,
-                                "type": "tcp",
-                                "ip": "195.26.233.3"
-                              }
-                            ]
-                          },
+                          "runtime": null,
                           "createdAt": "2026-06-01T12:00:00Z",
                           "startedAt": "2026-06-01T12:02:00Z"
                         }
@@ -6374,7 +6587,7 @@
             "description": "Create a Runpod Pod with GPU or CPU compute, container or template settings, storage, networking, and deployment constraints."
           }
         },
-        "description": "Creates a new pod. `name` is always required; supply exactly one of\n`gpu` or `cpu` to select compute (a GPU or a CPU pod). Container\nsettings come from the body, from a template referenced by\n`templateId` (body fields override the template's), or both; `image`\nis required unless `templateId` is set. See `CreatePodRequest` for\nthe full body.\n\nReturns `201` with the created pod. Provisioning is asynchronous: the\npod starts in `PROVISIONING`, transitions through `STARTING`, and\nreaches `RUNNING` once its container is healthy. Poll `getPod` (or\nwatch the pod's `status`) to observe readiness rather than assuming\nthe pod is running when this call returns.\n\n## Checking what you can deploy\n\nThis endpoint places one specific GPU type. It does not search for\ncapacity, and it does not fall back to a different GPU. To find out\nwhat is deployable before you call it, read the catalog:\n\n- [List GPU types](https://docs.runpod.io/api-reference-v2/catalog/list-gpu-types)\n  — GPU types with pricing, per-cloud ceilings, and, with\n  `include=AVAILABILITY&product=POD`, current pod stock.\n- [List data centers](https://docs.runpod.io/api-reference-v2/catalog/list-data-centers)\n  — locations, with `include=GPU_AVAILABILITY` for stock per data\n  center.\n\nBoth accept filters that combine, so you can narrow by location and by\ncompute in one request — for example\n`GET /v2/catalog/datacenters?regions=EUROPE&include=GPU_AVAILABILITY`\nreturns only European data centers, each carrying the GPU types\ncurrently available there.\n\n## Deploying under region and GPU constraints\n\nIf you need a particular GPU in a particular geography, the working\npattern is read-then-create: narrow the catalog to an acceptable\n(data center, GPU) set, then call this endpoint once per candidate in\nyour order of preference until one returns `201`. The runnable sample\nalongside this operation does exactly that.\n\nAvailability can change between the catalog read and the create call,\nso treat the catalog as a way to order your candidates, not as a\nreservation — a create can still fail for capacity on a GPU the\ncatalog just reported as available.\n\nWhich failures are worth retrying:\n\n| Status | Meaning | Do |\n| --- | --- | --- |\n| `422` | The body does not match the contract. `errors` lists each violation. | Fix the request. Never retry. |\n| `400` | The body matches the contract but was rejected — either it breaks a cross-field rule, or this GPU and data center combination could not be placed. | Try your next candidate. |\n| `402` | Insufficient balance. | Stop; no candidate will succeed. |\n| `403` | Your account cannot access the requested pool. | Skip this candidate, keep going. |\n| `429` | Rate limited. | Back off using `Retry-After`, then resume. |\n| `5xx` | Transient upstream failure. | Retry the same candidate with backoff. |\n\nRequests larger than 102400 bytes receive `413` before authentication\nor processing. Reduce the serialized JSON request body and retry.\n\nThis limit also applies to the deployment request built from your input\nand any referenced template. A small request can therefore receive `413`\nif inherited template settings make the combined request too large.\nReduce environment variables or command values in your request or template\nand retry.\n\n`400` covers both \"your request breaks a rule\" and \"no capacity\",\nbecause capacity exhaustion currently carries no machine-readable code\nof its own — only a human-readable `detail`. A rule violation is\ndeterministic, so it fails identically on every candidate: if *every*\ncandidate returns `400`, read the last `detail` as a problem with the\nrequest rather than as absent capacity.\n",
+        "description": "Creates a new pod. `name` is always required; supply exactly one of\n`gpu` or `cpu` to select compute (a GPU or a CPU pod). Container\nsettings come from the body, from a template referenced by\n`templateId` (body fields override the template's), or both; `image`\nis required unless `templateId` is set. See `CreatePodRequest` for\nthe full body.\n\nReturns `201` with the created pod. Provisioning is asynchronous: the\npod starts in `PROVISIONING`, transitions through `STARTING`, and\nreaches `RUNNING` once its container is healthy. Poll `getPod` (or\nwatch the pod's `status`) to observe readiness rather than assuming\nthe pod is running when this call returns.\n\n## Checking what you can deploy\n\nThis endpoint places one specific GPU type. It does not search for\ncapacity, and it does not fall back to a different GPU. To find out\nwhat is deployable before you call it, read the catalog:\n\n- [List GPU types](https://docs.runpod.io/api-reference-v2/catalog/list-gpu-types)\n  — GPU types with pricing, per-cloud ceilings, and, with\n  `include=AVAILABILITY&product=POD`, current pod stock.\n- [List data centers](https://docs.runpod.io/api-reference-v2/catalog/list-data-centers)\n  — locations, with `include=GPU_AVAILABILITY` for stock per data\n  center.\n\nBoth accept filters that combine, so you can narrow by location and by\ncompute in one request — for example\n`GET /v2/catalog/datacenters?regions=EUROPE&include=GPU_AVAILABILITY`\nreturns only European data centers, each carrying the GPU types\ncurrently available there.\n\n## Deploying under region and GPU constraints\n\nIf you need a particular GPU in a particular geography, the working\npattern is read-then-create: narrow the catalog to an acceptable\n(data center, GPU) set, then call this endpoint once per candidate in\nyour order of preference until one returns `201`. The runnable sample\nalongside this operation does exactly that.\n\nAvailability can change between the catalog read and the create call,\nso treat the catalog as a way to order your candidates, not as a\nreservation — a create can still fail for capacity on a GPU the\ncatalog just reported as available.\n\nWhich failures are worth retrying:\n\n| Status | Meaning | Do |\n| --- | --- | --- |\n| `422` | The body does not match the contract. `errors` lists each violation. | Fix the request. Never retry. |\n| `400` | The body matches the contract but was rejected — either it breaks a cross-field rule, or this GPU and data center combination could not be placed. | Try your next candidate. |\n| `402` | Insufficient balance. | Stop; no candidate will succeed. |\n| `403` | Your account cannot access the requested pool. | Skip this candidate, keep going. |\n| `429` | Rate limited. | Back off using `Retry-After`, then resume. |\n| `5xx` | Transient upstream failure. | Retry the same candidate with backoff. |\n\nRequests larger than 102400 bytes receive `413` after authentication\nand rate limiting, before deployment processing. Reduce the serialized\nJSON request body and retry.\n\nThis limit also applies to the deployment request built from your input\nand any referenced template. A small request can therefore receive `413`\nif inherited template settings make the combined request too large.\nReduce environment variables or command values in your request or template\nand retry.\n\n`400` covers both \"your request breaks a rule\" and \"no capacity\",\nbecause capacity exhaustion currently carries no machine-readable code\nof its own — only a human-readable `detail`. A rule violation is\ndeterministic, so it fails identically on every candidate: if *every*\ncandidate returns `400`, read the last `detail` as a problem with the\nrequest rather than as absent capacity.\n",
         "tags": [
           "Pods"
         ],
@@ -6479,7 +6692,7 @@
                       "globalNetworking": {
                         "enabled": false
                       },
-                      "runtime": {},
+                      "runtime": null,
                       "createdAt": "2026-06-01T12:00:00Z",
                       "startedAt": null
                     }
@@ -6502,6 +6715,14 @@
           },
           "413": {
             "description": "The incoming request body or expanded upstream request exceeds the 102400 byte limit, or the upstream rejects the request as too large.",
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6833,6 +7054,9 @@
                 }
               }
             }
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
@@ -7222,6 +7446,9 @@
           "400": {
             "$ref": "#/components/responses/BadRequestError"
           },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
           },
@@ -7345,6 +7572,9 @@
           },
           "403": {
             "$ref": "#/components/responses/ForbiddenError"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
@@ -7485,6 +7715,9 @@
           },
           "403": {
             "$ref": "#/components/responses/ForbiddenError"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
@@ -7993,6 +8226,9 @@
           "404": {
             "$ref": "#/components/responses/NotFoundError"
           },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
           },
@@ -8312,6 +8548,9 @@
           },
           "400": {
             "$ref": "#/components/responses/BadRequestError"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
@@ -9186,6 +9425,9 @@
           "400": {
             "$ref": "#/components/responses/BadRequestError"
           },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
           },
@@ -9412,6 +9654,9 @@
           },
           "400": {
             "$ref": "#/components/responses/BadRequestError"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
@@ -9679,6 +9924,9 @@
           "400": {
             "$ref": "#/components/responses/BadRequestError"
           },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
           },
@@ -9883,6 +10131,9 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFoundError"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
@@ -10130,6 +10381,9 @@
           "403": {
             "$ref": "#/components/responses/ForbiddenError"
           },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
           },
@@ -10317,6 +10571,9 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFoundError"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
@@ -10564,6 +10821,9 @@
           },
           "400": {
             "$ref": "#/components/responses/BadRequestError"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
@@ -10860,6 +11120,12 @@
           },
           "403": {
             "$ref": "#/components/responses/ForbiddenError"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequestsError"
@@ -11842,6 +12108,138 @@
           },
           "403": {
             "$ref": "#/components/responses/ForbiddenError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/audit-logs": {
+      "get": {
+        "operationId": "listAuditLogs",
+        "x-runpod-scope": "audit:read",
+        "summary": "List audit logs",
+        "x-mint": {
+          "metadata": {
+            "description": "List the audit trail of your Runpod account: who performed which action on which resource, newest first, with actor, action, time-range, and text filters."
+          }
+        },
+        "description": "Returns the account's audit trail, newest first, cursor-paginated; an omitted `limit` defaults to 200. Each entry records who acted (`actorId`, `email`), what they did (`action`), to which resource (`resourceType`, `resourceId`), and the details of the change (`value`). When the caller belongs to an organization the trail is the organization's, and `actorIds` narrows it to specific members; otherwise it is the trail of the account the request acts for. Filters combine with AND. Entries older than the account's audit log retention window are not returned, and an account whose plan does not include audit logs is answered 403. Follow `pagination.nextCursor` until `hasNextPage` is false.",
+        "tags": [
+          "Audit Logs"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AuditLogActorIdsFilter"
+          },
+          {
+            "$ref": "#/components/parameters/AuditLogActionsFilter"
+          },
+          {
+            "$ref": "#/components/parameters/AuditLogStartTime"
+          },
+          {
+            "$ref": "#/components/parameters/AuditLogEndTime"
+          },
+          {
+            "$ref": "#/components/parameters/AuditLogSearch"
+          },
+          {
+            "$ref": "#/components/parameters/PaginationCursor"
+          },
+          {
+            "$ref": "#/components/parameters/PaginationLimitAuditLogs"
+          }
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListAuditLogsResponse"
+                },
+                "examples": {
+                  "auditLogs": {
+                    "summary": "Successful response",
+                    "value": {
+                      "auditLogs": [
+                        {
+                          "actorId": "user_id_abc_123",
+                          "email": "actor@example.com",
+                          "resourceType": "pod",
+                          "resourceId": "abc123",
+                          "action": "delete",
+                          "value": "{\"status\":\"TERMINATED\"}",
+                          "timestamp": "2026-09-02T00:00:00Z"
+                        },
+                        {
+                          "actorId": "user_id_abc_123",
+                          "email": "actor@example.com",
+                          "resourceType": "pod",
+                          "resourceId": "abc123",
+                          "action": "rename",
+                          "value": "{\"name\":\"training-run-7\"}",
+                          "timestamp": "2026-09-01T18:30:00Z"
+                        },
+                        {
+                          "actorId": "user_id_def_456",
+                          "email": "admin@example.com",
+                          "resourceType": "secret",
+                          "resourceId": "sec_789",
+                          "action": "update",
+                          "value": "{\"id\":\"sec_789\",\"name\":\"HF_TOKEN\",\"sharedWithOrganization\":true}",
+                          "timestamp": "2026-09-01T09:15:00Z"
+                        }
+                      ],
+                      "pagination": {
+                        "nextCursor": "eyJ0cyI6IjIwMjYtMDktMDFUMDk6MTU6MDBaIn0=",
+                        "hasNextPage": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequestsError"
