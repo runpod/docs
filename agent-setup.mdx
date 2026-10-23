@@ -174,7 +174,55 @@ Use `✓` verified, `⚠` needs a user action, `✗` failed. Follow the banner w
 
 Once the user has signed in, verify end to end by listing their Pods with the MCP tools. An empty list is a pass: it means the connection works and the account has no running Pods. If the list is empty but the user expects Pods or has a funded balance, the sign-in went to a different Runpod account. Ask the user to sign out of the `runpod` MCP server, sign in again with the right account, and then list Pods again.
 
-Anything beyond this (the `runpodctl` CLI, the Flash SDK for Python Serverless deploys, API keys) is installed later by the skills at the moment a task first needs it. Do not set those up now, unless you run without a user, as described above.
+Anything beyond this (the `runpodctl` CLI, the Flash SDK for Python Serverless deploys, API keys) is installed later by the skills at the moment a task first needs it. Do not set those up now, unless you run without a user, as described above. The same goes for Terraform: set it up only if the user asks for it, as described below.
+
+---
+
+## Optional: manage Runpod with Terraform
+
+Skip this section unless the user asks for Terraform or infrastructure as code, or the project already manages its infrastructure with Terraform. The official [Runpod Terraform provider](https://registry.terraform.io/providers/runpod/runpod/latest) manages Pods, Serverless endpoints, templates, network volumes, Instant Clusters, container registry credentials, and account SSH keys through the Runpod REST API.
+
+1. Check that Terraform 1.6 or newer is installed with `terraform version`. If it's missing, ask the user before installing it.
+2. Give the provider a Runpod API key through the `RUNPOD_API_KEY` environment variable, the same variable `runpodctl` and Flash read. Never write the key into a `.tf` file or a committed `.tfvars` file. The MCP server's OAuth sign-in doesn't authenticate Terraform.
+3. Declare the provider in the project's Terraform configuration:
+
+   ```terraform
+   terraform {
+     required_version = ">= 1.6"
+
+     required_providers {
+       runpod = {
+         source  = "runpod/runpod"
+         version = "~> 2.0"
+       }
+     }
+   }
+
+   provider "runpod" {}
+   ```
+
+4. Add the resources the user asked for. For example, one Secure Cloud GPU Pod:
+
+   ```terraform
+   resource "runpod_pod" "dev" {
+     name        = "dev-pod"
+     image       = "runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04"
+     gpu_type_id = "NVIDIA GeForce RTX 4090"
+     gpu_count   = 1
+     cloud       = "SECURE"
+     disk        = 20
+     start_ssh   = true
+     ports       = ["22/tcp"]
+   }
+   ```
+
+5. Run `terraform init`, then `terraform plan`. Show the user the plan and the hourly price of everything it creates (Terraform doesn't show prices; read them from the GPU and CPU catalog with the MCP tools), and run `terraform apply` only after they approve. Pods, endpoints with active workers, volumes, and clusters bill until `terraform destroy` removes them.
+
+Keep Terraform state out of version control: it stores resource attributes, including Pod and endpoint environment variables, in plain text. Use a remote backend with access control, or a gitignored local state file, and treat the state file as a secret.
+
+Don't manage the same resource from both Terraform and the MCP tools or `runpodctl`. A change made outside Terraform shows up as drift, and the next apply reverts it. Use the MCP tools to read state, check capacity, and stream logs for resources Terraform owns.
+
+For worked modules (GPU and CPU Pods, Serverless endpoints, network volumes, clusters, registries) see the provider's [guides](https://registry.terraform.io/providers/runpod/runpod/latest/docs). If the project pins the 1.x provider, follow [Migrating from 1.x to 2.0.0](https://registry.terraform.io/providers/runpod/runpod/latest/docs/guides/migrating-from-1-x): every resource needs a configuration edit and a state action.
 
 ---
 
@@ -197,6 +245,7 @@ For setup guides and troubleshooting, refer to each agent's official documentati
 - Runpod MCP servers: `https://docs.runpod.io/get-started/mcp-servers`
 - Runpod skills plugin (source): `https://github.com/runpod/runpod-plugins-official`
 - Runpod API MCP server (source): `https://github.com/runpod/runpod-mcp`
+- Runpod Terraform provider: `https://registry.terraform.io/providers/runpod/runpod/latest` (source: `https://github.com/runpod/terraform-provider-runpod`)
 - Claude Code: `https://docs.anthropic.com/en/docs/claude-code/mcp`
 - Codex: `https://developers.openai.com/codex/mcp`
 - Cursor: `https://cursor.com/docs/mcp`
