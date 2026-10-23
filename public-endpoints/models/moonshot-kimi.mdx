@@ -52,25 +52,33 @@ All parameters are passed within the `input` object in the request body.
   The Kimi variant to use. One of `kimi-k2.6`, `kimi-k2.7-code`, or `kimi-k3`.
 </ParamField>
 
-<ParamField body="input.sampling_params.max_tokens" type="integer" default="2048">
-  Maximum number of tokens to generate.
+<ParamField body="input.max_tokens" type="integer" default="2048">
+  Maximum number of tokens to generate. On the native route (`/run` and `/runsync`), this must be set at the top level of `input`. This cap counts reasoning tokens as well as visible output tokens.
 </ParamField>
 
-<ParamField body="input.sampling_params.temperature" type="float" default="1">
+<ParamField body="input.reasoning_effort" type="string" default="max">
+  Controls how much reasoning the model performs before answering. One of `low`, `high`, or `max`. Specific to the `kimi-k3` variant.
+</ParamField>
+
+<ParamField body="input.temperature" type="float" default="1">
   Controls randomness in generation. Lower values make output more deterministic.
 </ParamField>
 
-<ParamField body="input.sampling_params.seed" type="integer">
+<ParamField body="input.seed" type="integer">
   Seed for reproducible results.
 </ParamField>
 
-<ParamField body="input.sampling_params.top_k" type="integer">
+<ParamField body="input.top_k" type="integer">
   Restricts sampling to the top K most probable tokens.
 </ParamField>
 
-<ParamField body="input.sampling_params.top_p" type="float">
+<ParamField body="input.top_p" type="float">
   Nucleus sampling threshold. Range: 0.0-1.0.
 </ParamField>
+
+<Note>
+Sampling parameters such as `max_tokens` must sit at the top level of the `input` object on the native route. Nesting them inside a `sampling_params` object has no effect: the values are ignored, and generation continues until the model stops on its own. Check `finish_reason` in the response (`"length"` means the `max_tokens` cap was reached, `"stop"` means the model finished on its own) to confirm the cap took effect.
+</Note>
 
 <RequestExample>
 ```bash cURL
@@ -79,27 +87,22 @@ curl -X POST "https://api.runpod.ai/v2/moonshot-kimi/runsync" \
   -H "Content-Type: application/json" \
   -d '{
     "input": {
+      "model": "kimi-k3",
+      "reasoning_effort": "max",
+      "max_tokens": 2048,
       "messages": [
-        {
-          "role": "system",
-          "content": "You are Kimi."
-        },
-        {
-          "role": "user",
-          "content": "What is Runpod?"
-        }
-      ],
-      "sampling_params": {
-        "max_tokens": 2048,
-        "temperature": 1
-      },
-      "model": "kimi-k2.6"
+        { "role": "system", "content": "You are Kimi." },
+        { "role": "user", "content": "What is Runpod?" }
+      ]
     }
   }'
 ```
 
 ```python Python
+import os
 import requests
+
+RUNPOD_API_KEY = os.environ["RUNPOD_API_KEY"]
 
 response = requests.post(
     "https://api.runpod.ai/v2/moonshot-kimi/runsync",
@@ -109,21 +112,26 @@ response = requests.post(
     },
     json={
         "input": {
+            "model": "kimi-k3",
+            "reasoning_effort": "max",
+            "max_tokens": 2048,
             "messages": [
                 {"role": "system", "content": "You are Kimi."},
                 {"role": "user", "content": "What is Runpod?"},
             ],
-            "sampling_params": {
-                "max_tokens": 2048,
-                "temperature": 1,
-            },
-            "model": "kimi-k2.6",
         }
     },
 )
 
 result = response.json()
-print(result["output"])
+
+# output is a list; the completion sits under result
+completion = result["output"][0]["result"]
+print(completion["choices"][0]["message"]["content"])
+print(completion["choices"][0]["message"].get("reasoning_content"))
+print(completion["choices"][0]["finish_reason"])   # "length" if max_tokens was reached
+print(completion["usage"])
+print(result["output"][0]["cost"])
 ```
 
 ```javascript JavaScript
@@ -132,27 +140,32 @@ const response = await fetch(
   {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${RUNPOD_API_KEY}`,
+      Authorization: `Bearer ${process.env.RUNPOD_API_KEY}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
       input: {
+        model: "kimi-k3",
+        reasoning_effort: "max",
+        max_tokens: 2048,
         messages: [
           { role: "system", content: "You are Kimi." },
           { role: "user", content: "What is Runpod?" },
         ],
-        sampling_params: {
-          max_tokens: 2048,
-          temperature: 1,
-        },
-        model: "kimi-k2.6",
       },
     }),
   }
 );
 
 const result = await response.json();
-console.log(result.output);
+
+// output is an array; the completion sits under result
+const completion = result.output[0].result;
+console.log(completion.choices[0].message.content);
+console.log(completion.choices[0].message.reasoning_content);
+console.log(completion.choices[0].finish_reason); // "length" if max_tokens was reached
+console.log(completion.usage);
+console.log(result.output[0].cost);
 ```
 </RequestExample>
 
@@ -178,19 +191,23 @@ console.log(result.output);
   Identifier of the worker that processed the request.
 </ResponseField>
 
-<ResponseField name="output" type="object">
-  The generation result containing the text and usage information.
+<ResponseField name="output" type="array">
+  Array of result objects. Each element contains the cost and the generated chat completion.
 
-  <ResponseField name="output.choices" type="array">
-    Array containing the generated text.
-  </ResponseField>
-
-  <ResponseField name="output.cost" type="float">
+  <ResponseField name="output[].cost" type="float">
     Cost of the generation in USD.
   </ResponseField>
 
-  <ResponseField name="output.usage" type="object">
-    Token usage information.
+  <ResponseField name="output[].result" type="object">
+    The chat completion. Contains `choices`, `usage`, and metadata (`id`, `object`, `model`, `created`).
+
+    <ResponseField name="output[].result.choices" type="array">
+      Generated choices. Each has an `index`, a `finish_reason` (`"stop"` or `"length"`), and a `message` with `role`, `content`, and, for reasoning variants such as `kimi-k3`, `reasoning_content`.
+    </ResponseField>
+
+    <ResponseField name="output[].result.usage" type="object">
+      Token usage: `prompt_tokens`, `completion_tokens`, `total_tokens`, `completion_tokens_details` (including `reasoning_tokens`), `prompt_tokens_details` (including `cached_tokens`), and a top-level `cached_tokens` count. The `completion_tokens` count includes reasoning tokens.
+    </ResponseField>
   </ResponseField>
 </ResponseField>
 
@@ -199,23 +216,39 @@ console.log(result.output);
 {
   "id": "sync-a1b2c3d4-e5f6-7890-abcd-ef1234567890-u1",
   "status": "COMPLETED",
-  "delayTime": 15,
-  "executionTime": 2345,
-  "workerId": "oqk7ao1uomckye",
-  "output": {
-    "choices": [
-      {
-        "tokens": [
-          "Runpod is a cloud computing platform that provides GPU resources for AI and machine learning workloads..."
-        ]
+  "delayTime": 89,
+  "executionTime": 10078,
+  "workerId": "wp3m0d84tlio47",
+  "output": [
+    {
+      "cost": 0.0030309,
+      "result": {
+        "id": "chatcmpl-6aaa2dce25da6d26c138da0d",
+        "object": "chat.completion",
+        "model": "kimi-k3",
+        "created": 1789537742,
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "length",
+            "message": {
+              "role": "assistant",
+              "content": "...",
+              "reasoning_content": "..."
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 103,
+          "completion_tokens": 200,
+          "completion_tokens_details": { "reasoning_tokens": 197 },
+          "prompt_tokens_details": { "cached_tokens": 103 },
+          "cached_tokens": 103,
+          "total_tokens": 303
+        }
       }
-    ],
-    "cost": 0.00074,
-    "usage": {
-      "input": 35,
-      "output": 150
     }
-  }
+  ]
 }
 ```
 
@@ -241,7 +274,7 @@ client = OpenAI(
 )
 
 response = client.chat.completions.create(
-    model="kimi-k2.6",
+    model="kimi-k3",
     messages=[
         {
             "role": "system",
