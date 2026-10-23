@@ -1,0 +1,135 @@
+---
+title: "Connect a coding agent to a Pod"
+sidebarTitle: "SSH for agents"
+description: "Set up SSH access so coding agents like Claude Code, Codex, and Cursor can connect to your Runpod Pod over a secure shell connection."
+---
+
+Coding agents like Claude Code, Codex, and Cursor connect to Pods over SSH. This page covers port exposure, confirming the SSH daemon is running, and connecting your agent.
+
+## Requirements
+
+You need an SSH key pair added to your Runpod account before starting. See [SSH public keys](/get-started/credentials#ssh-public-keys) for setup instructions.
+
+## Step 1: Expose TCP port 22
+
+<Warning>
+
+If you deployed a Pod without port 22, open the Pod's three-dot menu, click **Edit Pod**, add `22` to the **Expose TCP ports** field, and save. Editing a Pod resets it and erases anything stored outside `/workspace` or a network volume. See [Update a Pod](/pods/manage-pods#update-a-pod).
+
+</Warning>
+
+Official Runpod templates already expose port 22, so you can skip this step if you use one. After you deploy, check that port 22 appears under **Direct TCP Ports** in the Pod's **Connect** tab.
+
+For other templates, there are three ways to add port 22.
+
+**Edit an existing template:**
+
+1. Go to [Templates](https://console.runpod.io/user/templates) in the Runpod console.
+2. Find your template, click the three-dot menu at the right of its row, and select **Edit template**.
+3. In the **Config** tab, expand **Networking configuration** and add `22` to the **Expose TCP ports** field.
+4. Click **Save**, then deploy the Pod.
+
+**Use a community or Hub template that lacks port 22:**
+
+You can't edit these templates directly. Open the template's three-dot menu and click **Duplicate** to create an editable copy, then follow the preceding steps on the copy.
+
+**Override ports for one deployment:**
+
+If you only need port 22 for this specific Pod and don't want to change the template permanently, click **Set overrides** next to the selected template on the Deploy a Pod page. This changes ports for that deployment only and leaves the template unchanged.
+
+After the Pod starts, open its **Connect** tab and look for **Direct TCP Ports**. You see a mapping like this:
+
+```text
+TCP port 213.173.109.39:13007 -> :22
+```
+
+This is the public IP and port your agent uses to connect.
+
+## Step 2: Confirm the SSH daemon is running
+
+Official Runpod templates such as Runpod PyTorch and Stable Diffusion start the SSH daemon automatically, so you don't need any extra setup.
+
+Custom templates require you to start the SSH daemon manually. See [Full SSH via public IP](/pods/configuration/use-ssh#full-ssh-via-public-ip-with-key-authentication) for the Docker start command to add to your template.
+
+## Step 3: Connect your agent
+
+### Claude Code
+
+In this setup, Claude Code runs on the Pod itself. SSH is how you open a terminal session to reach it. Cursor, by contrast, runs locally and connects to the Pod remotely.
+
+SSH into the Pod using the IP and port from Step 1:
+
+```bash
+ssh root@POD_IP_ADDRESS -p SSH_PORT -i ~/.ssh/id_ed25519
+```
+
+Once inside the Pod, install Claude Code using the native installer:
+
+```bash
+curl -fsSL https://claude.ai/install.sh | bash
+```
+
+Then navigate to your project directory and start Claude Code:
+
+```bash
+claude
+```
+
+### Cursor
+
+Cursor runs on your local machine and connects to the Pod over Remote-SSH. Follow [Configure SSH for your IDE](/pods/configuration/connect-to-ide#step-4-configure-ssh-for-your-ide), using the IP and port from Step 1.
+
+### Codex
+
+Like Claude Code, Codex runs on the Pod itself in this setup. SSH into the Pod first, then install and run Codex there.
+
+SSH into the Pod using the IP and port from Step 1:
+
+```bash
+ssh root@POD_IP_ADDRESS -p SSH_PORT -i ~/.ssh/id_ed25519
+```
+
+Once inside the Pod, install Codex using the native installer:
+
+```bash
+curl -fsSL https://chatgpt.com/codex/install.sh | sh
+```
+
+Authenticate and start Codex from your project directory:
+
+```bash
+codex login
+codex
+```
+
+## Troubleshooting
+
+### Permission denied (publickey)
+
+See [Troubleshooting SSH key authentication](/pods/configuration/use-ssh#troubleshooting-ssh-key-authentication) for a full list of causes and fixes.
+
+### Connection refused
+
+Check that port 22 appears under **Direct TCP Ports** in the Pod's **Connect** tab. If it's missing, add it with **Edit Pod** as described in [Step 1](#step-1-expose-tcp-port-22). Then confirm the SSH daemon is running by opening the [web terminal](/pods/connect-to-a-pod#web-terminal) and running:
+
+```bash
+service ssh status
+```
+
+### Pod IP address or port changed
+
+The external port mapping changes whenever a Pod stops and restarts, and Community Cloud Pods may also receive a new IP address. If your agent loses its connection, copy the IP and port again from **Direct TCP Ports** in the Pod's **Connect** tab and reconnect.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Connect to a Pod with SSH" href="/pods/configuration/use-ssh" icon="terminal" horizontal>
+    Full reference for basic SSH, full SSH via public IP, and password-based SSH.
+  </Card>
+  <Card title="Expose ports" href="/pods/configuration/expose-ports" icon="network-wired" horizontal>
+    TCP and HTTP port exposure for Pods.
+  </Card>
+  <Card title="Connect to a Pod with VSCode or Cursor" href="/pods/configuration/connect-to-ide" icon="code" horizontal>
+    Set up a full IDE connection to your Pod.
+  </Card>
+</CardGroup>
