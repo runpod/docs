@@ -3,7 +3,12 @@ title: "Batch jobs"
 description: "Submit large collections of Serverless inference requests as named batch jobs, then monitor asynchronous processing and retrieve results."
 ---
 
-Use batch jobs to run large volumes of inference requests against a serverless endpoint without waiting for each result in real time. Batch jobs run asynchronously on dedicated workers that are separate from your endpoint's standard `/run` traffic, so submitting a batch never delays your interactive requests.
+Batch jobs let you run large volumes of inference requests against a Serverless endpoint without waiting for each result in real time. Batches run asynchronously on dedicated workers that are separate from your endpoint's standard `/run` traffic, so a large batch never takes capacity from your interactive requests.
+
+## Requirements
+
+- A queue-based Serverless endpoint. To create one, see the [Serverless quickstart](/serverless/quickstart).
+- A Runpod [API key](/get-started/credentials#api-keys), if you use the API.
 
 ## When to use batch vs /run
 
@@ -11,10 +16,16 @@ Use batch jobs to run large volumes of inference requests against a serverless e
 |---|---|---|
 | **Use case** | Bulk, offline workloads | Interactive, real-time inference |
 | **Latency** | Multi-hour | Seconds to minutes |
-| **Traffic isolation** | Dedicated batch workers | Standard serverless workers |
+| **Traffic isolation** | Dedicated batch workers | Standard Serverless workers |
 | **Result delivery** | Poll or subscribe to notifications | Synchronous or async poll |
 
-Choose batch when your workload can tolerate multi-hour latency — for example, nightly dataset processing, pre-computing embeddings, or running evaluations.
+Use batch when your workload can tolerate multi-hour latency. Common examples include:
+
+- Nightly dataset processing.
+- Pre-computing embeddings.
+- Running evaluations.
+
+Keep using `/run` or `/runsync` for any request a user is waiting on.
 
 <Note>
   Batch requests are billed at a discounted rate compared to on-demand Serverless pricing. There are separate discount tiers for consumer and enterprise GPUs. For discount rates, [contact sales](https://www.runpod.io/contact). To estimate cost, run a small test batch (for example, 100 requests) and extrapolate.
@@ -29,33 +40,36 @@ DRAFT → FINALIZED → FAILED
                   → CANCELLED
 ```
 
-- **DRAFT** — The batch is a draft. You can add, update, or remove individual requests. Batch workers have not started any work.
-- **FINALIZED** — The batch is locked; no further requests can be added or removed. Batch workers process the requests while the batch stays in this state, and the API has no separate `RUNNING` or `COMPLETED` batch status. Track progress through the `requestTotal`, `requestInProgress`, `requestCompleted`, and `requestFailed` counts — all requests have finished when `requestCompleted + requestFailed` equals `requestTotal`.
-- **FAILED** — The batch itself failed before or during execution (distinct from individual request failures in a batch whose other requests finished successfully).
-- **CANCELLED** — You cancelled the batch. See [Cancellation](#cancellation) for details.
+- **DRAFT**: The batch is a draft, and you can still change its requests. Batch workers haven't started any work.
+- **FINALIZED**: The batch is locked, and you can't add or remove requests. Batch workers process the requests while the batch stays in this state, and the API has no separate `RUNNING` or `COMPLETED` batch status. Track progress with the `requestTotal`, `requestInProgress`, `requestCompleted`, and `requestFailed` counts. All requests have finished when `requestCompleted + requestFailed` equals `requestTotal`.
+- **FAILED**: The batch itself failed before or during execution. This is different from individual request failures in a batch whose other requests finished.
+- **CANCELLED**: You cancelled the batch. For details, see [Cancellation](#cancellation).
 
-The console shows different status labels. See [Console statuses](#console-statuses).
+A batch doesn't start processing until you finalize it. A `DRAFT` batch never runs.
+
+The console shows different status labels. For the mapping, see [Console statuses](#console-statuses).
 
 ## API walkthrough
 
-### 1. Create a batch
+The following steps create a batch, finalize it, check its progress, and read the results. Replace `ENDPOINT_ID`, `API_KEY`, and `BATCH_ID` with your own values.
+
+### Step 1: Create a batch
+
+Create a batch with an initial list of requests:
 
 ```bash
-POST /v2/{endpoint_id}/batch
-Authorization: Bearer {api_key}
-Content-Type: application/json
+curl -X POST https://api.runpod.ai/v2/ENDPOINT_ID/batch \
+  -H "Authorization: Bearer API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '[
+    { "input": { "text": "The quick brown fox" } },
+    { "input": { "text": "Jumped over the lazy dog" } }
+  ]'
 ```
 
-The request body is a top-level JSON array. Send an empty array `[]` to create a batch and add requests later, or send a populated array to include an initial list of requests. Each element uses the same shape as a standard `/run` call — a JSON object with an `input` field.
+The request body is a top-level JSON array. Each element uses the same shape as a standard `/run` request: a JSON object with an `input` field. To create an empty batch and add requests later, send an empty array (`[]`).
 
-```json
-[
-  { "input": { "text": "The quick brown fox" } },
-  { "input": { "text": "Jumped over the lazy dog" } }
-]
-```
-
-**Response:**
+The response includes the batch ID, which you use in the remaining steps:
 
 ```json
 {
@@ -64,49 +78,43 @@ The request body is a top-level JSON array. Send an empty array `[]` to create a
 }
 ```
 
-### 2. Add more requests
+### Step 2: Add more requests (optional)
 
-While the batch is DRAFT, append additional requests:
-
-```bash
-POST /v2/{endpoint_id}/batch/{batch_id}/requests
-Authorization: Bearer {api_key}
-Content-Type: application/json
-```
-
-```json
-{
-  "requests": [
-    { "input": { "text": "More text to embed" } },
-    { "input": { "text": "Another piece of text" } },
-    { "input": { "text": "And another one" } }
-  ]
-}
-```
-
-Request body size is limited to 10 MiB per call. You can call this endpoint multiple times to build up large batches incrementally.
-
-### 3. Finalize the batch
-
-Once you've added all requests, finalize the batch to make it eligible for execution:
+While the batch is a draft, you can append more requests:
 
 ```bash
-POST /v2/{endpoint_id}/batch/{batch_id}/finalize
-Authorization: Bearer {api_key}
+curl -X POST https://api.runpod.ai/v2/ENDPOINT_ID/batch/BATCH_ID/requests \
+  -H "Authorization: Bearer API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "requests": [
+      { "input": { "text": "More text to embed" } },
+      { "input": { "text": "Another piece of text" } }
+    ]
+  }'
 ```
 
-After finalization, the batch status transitions to `FINALIZED` and requests are locked. You can no longer add or remove individual requests.
+Each call accepts up to 10 MiB. To build a large batch, call this endpoint as many times as you need.
 
-### 4. Poll batch status
+### Step 3: Finalize the batch
 
-Check overall progress by fetching the batch summary:
+Finalize the batch to lock its requests and make it eligible to run:
 
 ```bash
-GET /v2/{endpoint_id}/batch/{batch_id}
-Authorization: Bearer {api_key}
+curl -X POST https://api.runpod.ai/v2/ENDPOINT_ID/batch/BATCH_ID/finalize \
+  -H "Authorization: Bearer API_KEY"
 ```
 
-**Response:**
+The batch status changes to `FINALIZED`. You can no longer add or remove requests.
+
+### Step 4: Check batch progress
+
+Fetch the batch summary to check progress:
+
+```bash
+curl https://api.runpod.ai/v2/ENDPOINT_ID/batch/BATCH_ID \
+  -H "Authorization: Bearer API_KEY"
+```
 
 ```json
 {
@@ -121,18 +129,18 @@ Authorization: Bearer {api_key}
 }
 ```
 
-Poll this endpoint at whatever interval suits your workflow. A batch that is still processing reports `status: FINALIZED`; there is no `RUNNING` or `COMPLETED` status. All requests have finished when `requestCompleted + requestFailed` equals `requestTotal`. The batch reaches a terminal state only when `status` is `FAILED` or `CANCELLED`. The `createdAt` field is a Unix epoch timestamp in milliseconds.
+This batch is still processing: 244 of 1,000 requests are complete and 6 have failed. A batch reports `FINALIZED` while it runs. All of its requests have finished when `requestCompleted + requestFailed` equals `requestTotal`. The status only changes again if the batch fails (`FAILED`) or you cancel it (`CANCELLED`). The `createdAt` field is a Unix timestamp in milliseconds.
 
-### 5. Retrieve results
+You can poll the batch summary at whatever interval suits your workflow, or use [notifications](#notifications) instead.
 
-Fetch paginated results for all child requests in the batch:
+### Step 5: Retrieve results
+
+Fetch the results for every request in the batch:
 
 ```bash
-GET /v2/{endpoint_id}/batch/{batch_id}/requests
-Authorization: Bearer {api_key}
+curl "https://api.runpod.ai/v2/ENDPOINT_ID/batch/BATCH_ID/requests?offset=0&limit=50" \
+  -H "Authorization: Bearer API_KEY"
 ```
-
-**Response:**
 
 ```json
 {
@@ -159,29 +167,47 @@ Authorization: Bearer {api_key}
 }
 ```
 
-The results are paginated. Pass the `offset` and `limit` query parameters to page through results. The `hasMore` field indicates whether more pages remain.
+Results are paginated. Use the `offset` and `limit` query parameters to page through them. When `hasMore` is `true`, more pages remain.
 
-## Full API reference
+## API reference
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/v2/{endpoint_id}/batch` | Create a new batch, optionally with initial requests |
-| `POST` | `/v2/{endpoint_id}/batch/{id}/requests` | Append requests to a DRAFT batch |
-| `POST` | `/v2/{endpoint_id}/batch/{id}/finalize` | Lock the batch and make it eligible for execution |
-| `PUT` | `/v2/{endpoint_id}/batch/{id}` | Update batch attributes (e.g. display name) |
-| `DELETE` | `/v2/{endpoint_id}/batch/{id}/requests/{requestId}` | Remove a single request from a DRAFT batch |
-| `GET` | `/v2/{endpoint_id}/batch` | List all batches for an endpoint, newest first |
-| `GET` | `/v2/{endpoint_id}/batch/{id}` | Batch summary with request counts |
-| `POST` | `/v2/{endpoint_id}/batch/{id}/cancel` | Cancel a batch |
-| `GET` | `/v2/{endpoint_id}/batch/{id}/requests` | Paginated child request list |
-
-For full request and response schemas, see the [API reference](#full-api-reference).
+| `POST` | `/v2/ENDPOINT_ID/batch` | Create a batch, optionally with initial requests. |
+| `POST` | `/v2/ENDPOINT_ID/batch/BATCH_ID/requests` | Append requests to a draft batch. |
+| `POST` | `/v2/ENDPOINT_ID/batch/BATCH_ID/finalize` | Lock the batch and make it eligible to run. |
+| `PUT` | `/v2/ENDPOINT_ID/batch/BATCH_ID` | Update batch attributes, such as the display name. |
+| `DELETE` | `/v2/ENDPOINT_ID/batch/BATCH_ID/requests/REQUEST_ID` | Remove a single request from a draft batch. |
+| `GET` | `/v2/ENDPOINT_ID/batch` | List all batches for an endpoint, newest first. |
+| `GET` | `/v2/ENDPOINT_ID/batch/BATCH_ID` | Get the batch summary with request counts. |
+| `POST` | `/v2/ENDPOINT_ID/batch/BATCH_ID/cancel` | Cancel a batch. |
+| `GET` | `/v2/ENDPOINT_ID/batch/BATCH_ID/requests` | List the batch's requests, paginated. |
 
 ## Monitoring batches in the console
 
-Open your endpoint in the Runpod console and select the **Bulk Requests** tab to see all batches. Each row shows the batch name, status, and progress counts.
+To see all batches for an endpoint, open the endpoint in the [Runpod console](https://console.runpod.io/serverless) and select the **Bulk Requests** tab. Each row shows the batch name, status, and progress counts.
 
-To create a batch in the console, select **Create batch**, add your requests as a JSON request object or an array of request objects, then select **Run this batch** to finalize it. You can edit the requests until you run the batch.
+To create a batch in the console:
+
+<Steps>
+  <Step title="Open the Bulk Requests tab">
+    Open your endpoint and select the **Bulk Requests** tab.
+  </Step>
+  <Step title="Add your requests">
+    Click **Create batch**, then enter a JSON request object or an array of request objects. You can edit the requests until you run the batch.
+  </Step>
+  <Step title="Run the batch">
+    Click **Run this batch** to finalize the batch.
+  </Step>
+</Steps>
+
+Click a batch to open its detail view, which shows:
+
+- The batch's status and progress.
+- A row for each request, with its status, timestamps, and an error message if it failed.
+- Links to the full detail view for each request.
+
+The request list shows failed requests first, then in-progress, queued, and completed requests.
 
 ### Console statuses
 
@@ -195,38 +221,30 @@ The console uses different status labels from the API:
 | **Failed** | `FAILED` |
 | **Cancelled** | `CANCELLED` |
 
-Click a batch to open the detail view, which shows:
-
-- Top-level status and progress
-- Per-request rows with status, timestamps, and error messages for failed requests
-- Links to the full request detail view for each child request
-
-The child request list is sorted by failures first, then in-progress, then queued, then completed.
-
 ## Notifications
 
 When a batch reaches a terminal state (`FAILED` or `CANCELLED`), Runpod sends:
 
-- **Console Inbox notification** — includes batch ID, endpoint name, terminal status, and item counts (completed / failed / total)
-- **Webhook event** — if your account has a webhook subscription configured for batch events
+- **Console Inbox notification**: Includes the batch ID, endpoint name, terminal status, and request counts (completed, failed, and total).
+- **Webhook event**: Sent if your account has a webhook subscription for batch events.
 
-Notifications are sent once per terminal state transition and are not fired for intermediate progress.
+Each notification is sent once per terminal state. Runpod doesn't send notifications for intermediate progress.
 
 ## Cancellation
 
 To cancel a batch:
 
 ```bash
-POST /v2/{endpoint_id}/batch/{batch_id}/cancel
-Authorization: Bearer {api_key}
+curl -X POST https://api.runpod.ai/v2/ENDPOINT_ID/batch/BATCH_ID/cancel \
+  -H "Authorization: Bearer API_KEY"
 ```
 
-Cancellation behavior:
+When you cancel a batch:
 
-- **Queued requests** are cancelled immediately and are not billed.
-- **In-progress requests** are allowed to finish and are billed normally.
+- Queued requests are cancelled immediately and aren't billed.
+- In-progress requests finish and are billed normally.
 
-The batch status transitions to `CANCELLED` once all in-progress work has drained.
+The batch status changes to `CANCELLED` once all in-progress requests have finished.
 
 ## Limits
 
@@ -240,19 +258,27 @@ The batch status transitions to `CANCELLED` once all in-progress work has draine
 
 ## Billing
 
-Batch requests are billed at a discounted rate compared to on-demand Serverless pricing, with separate discount tiers for consumer and enterprise GPUs. For discount rates, [contact sales](https://www.runpod.io/contact). Billing is based on the compute time used by each child request, regardless of whether the batch was later cancelled (in-progress requests that completed before cancellation are billed normally).
+Batch requests are billed at a discounted rate compared to on-demand Serverless pricing, with separate discount tiers for consumer and enterprise GPUs. For discount rates, [contact sales](https://www.runpod.io/contact).
+
+Billing is based on the compute time each request uses. If you cancel a batch, requests that were already in progress are still billed. For general Serverless pricing, see [Pricing](/serverless/pricing).
 
 ## Error handling
 
-**Individual request failures** — A failed child request does not fail the entire batch. The batch stays `FINALIZED` and continues processing the remaining requests; overall completion is inferred from the request counts (all requests are done when `requestCompleted + requestFailed` equals `requestTotal`). Inspect failed requests via the console or the `GET .../requests` endpoint; each failed request includes an error message from the handler.
+A failed request doesn't fail the batch. The batch stays `FINALIZED` and keeps processing the remaining requests. To inspect failed requests, use the console or the `GET .../requests` endpoint. Each failed request includes the error message from your handler.
 
-**Batch-level failure** — If the batch itself fails (status `FAILED`), it indicates a systemic problem rather than individual handler errors. Contact support if you see this state and cannot explain it from request-level errors.
+If the batch itself has the `FAILED` status, the problem is systemic rather than an error in individual requests. Check the request-level errors first, and contact support if they don't explain the failure.
 
-**Redis durability** — Batch jobs use the same Redis-backed queue as standard serverless requests. In the event of a Redis failure, queued batch requests may be lost. This is an MVP limitation that applies equally to `/run` traffic.
+Batch requests use the same queue as standard Serverless requests. If the queue fails, queued batch requests may be lost. This also applies to `/run` traffic.
 
 ## Known limitations
 
-- Batch jobs inherit the GPU type configured on your endpoint. You cannot specify a different GPU per batch or per request.
-- There is no per-request scheduling or ordering. Requests within a batch are processed in an unspecified order.
-- Cost estimation before finalization is not available at launch.
+- Batches use the GPU type configured on your endpoint. You can't choose a different GPU per batch or per request.
+- Requests within a batch run in no particular order, and you can't schedule individual requests.
+- Runpod doesn't show a cost estimate before you finalize a batch. To estimate cost, run a small test batch and extrapolate.
 - Runpod schedules batch workers based on global queue urgency and off-peak capacity, so start times aren't guaranteed. Runpod attempts to run each batch within 24 hours on a best-effort basis.
+
+## Next steps
+
+- [Send requests to an endpoint](/serverless/endpoints/send-requests).
+- [Learn about job states](/serverless/endpoints/job-states).
+- [Review Serverless pricing](/serverless/pricing).
