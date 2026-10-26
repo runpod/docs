@@ -44,6 +44,12 @@ Instant Clusters support up to 8 high-bandwidth interfaces per node. The `PRIMAR
 Do not use `eth0` for inter-node communication. The 172.xxx IP addresses on `eth0` are reserved for internet connectivity only and will result in connection timeouts for distributed workloads.
 </Warning>
 
+### RDMA
+
+On hosts with RDMA-capable adapters, traffic between nodes runs over InfiniBand or RoCE, not only TCP. Each Pod gets the `/dev/infiniband/uverbs*` devices for its adapters and an unlimited memlock limit, and Runpod sets `NCCL_IB_HCA` and `NCCL_IB_DISABLE=0` (plus `NCCL_IB_GID_INDEX` on RoCE). NCCL uses RDMA automatically. The `ens` interfaces carry connection setup, and NCCL falls back to TCP over them on hosts without RDMA.
+
+GPUDirect RDMA is enabled on the hosts, so libraries that register GPU memory with the verbs API directly (for example, KV cache transfer libraries) can work. NCCL over these interfaces is the tested path; check that your library sees the `mlx5` devices and `NCCL_IB_HCA` before relying on it.
+
 ## NCCL configuration
 
 [NCCL](https://developer.nvidia.com/nccl) (NVIDIA Collective Communications Library) handles GPU-to-GPU communication in distributed training. You must configure NCCL to use the internal network interfaces.

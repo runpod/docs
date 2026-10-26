@@ -2680,7 +2680,7 @@
             ]
           },
           "direct": {
-            "description": "Connection straight to the pod's sshd over its published `22/tcp` mapping. Supports the full SSH feature set. Null unless `22/tcp` is in `ports` and the running pod has been assigned a public port for it — so it is absent while the pod is provisioning or stopped. Also null when listing pods with `GET /v2/pods`; fetch a single pod by ID to obtain the live mapping.",
+            "description": "Connection straight to the pod's sshd over its published `22/tcp` mapping. Supports the full SSH feature set. Null unless `22/tcp` is in `ports` and the running pod has been assigned a public port for it — so it is usually absent while the pod is provisioning or stopped. It is read from the pod's port mappings, not from `status`, so check that `status` is `RUNNING` before connecting. Also null when listing pods with `GET /v2/pods`; fetch a single pod by ID to obtain the live mapping.",
             "anyOf": [
               {
                 "$ref": "#/components/schemas/PodSshEndpoint"
@@ -2974,7 +2974,7 @@
               "cost": {
                 "type": "number",
                 "format": "float",
-                "description": "Current cost in USD per hour (0.0 when EXITED or TERMINATED)",
+                "description": "The Pod's configured hourly rate in USD. It isn't zeroed while the Pod is stopped, so it doesn't tell you whether you're being billed; check `status`.",
                 "examples": [
                   0.35
                 ]
@@ -3031,7 +3031,7 @@
             "required": [
               "name"
             ],
-            "description": "Request body for creating a pod. Exactly one of `gpu` or `cpu`\nmust be set — enforced at the handler layer. For CPU pods, memory\nis derived by the API from the selected flavor's RAM multiplier;\nclients provide only CPU flavor and vCPU count. CPU pods support\ncontainer disk and network volumes only; `mounts.persistent` is\ninvalid when `cpu` is set.\n\n`image` is required unless `templateId` is set.\n",
+            "description": "Request body for creating a pod. Exactly one of `gpu` or `cpu`\nmust be set — enforced at the handler layer. For CPU pods, memory\nis derived by the API from the selected flavor's RAM multiplier;\nclients provide only CPU flavor and vCPU count. CPU pods support\ncontainer disk, network volumes, and a global volume; `mounts.persistent`\nis invalid when `cpu` is set.\n\n`image` is required unless `templateId` is set.\n",
             "properties": {
               "name": {
                 "type": "string",
@@ -5716,9 +5716,9 @@
       },
       "RateLimitPolicyHeader": {
         "type": "string",
-        "description": "Static per-window quota policy. Optional — omitted for rate-limit-exempt\ncallers.\n\nA structured-field list with one member per window (`minute`, `hour`,\n`day`), each carrying the quota `q` and the window length in seconds `w`.\nReturned on responses to authenticated requests, not only on 429s.\n",
+        "description": "Static per-window quota policy. Optional — omitted for rate-limit-exempt\ncallers.\n\nA structured-field list with one member per window (`minute`, `hour`,\n`day`), each carrying the quota `q` and the window length in seconds `w`.\nReturned on responses to authenticated requests, not only on 429s.\n\nLimits are per user and shared by every `/v2` route; pod create has no\nseparate limit. Read the live quotas from this header rather than\nhard-coding them: they can change, and some accounts have higher limits.\nA 429 is a temporary throttle. Wait for `Retry-After` and retry; the\naccount is not suspended.\n",
         "examples": [
-          "\"minute\";q=60;w=60, \"hour\";q=3000;w=3600, \"day\";q=50000;w=86400"
+          "\"minute\";q=180;w=60, \"hour\";q=3600;w=3600, \"day\";q=43200;w=86400"
         ]
       }
     }
