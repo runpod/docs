@@ -26,7 +26,7 @@ except ImportError:
     sys.exit(1)
 
 
-API_BASE = "https://rest.runpod.io/v1"
+API_BASE = "https://api.runpod.io/v2"
 DEFAULT_PREFIX = "doc_test_"
 
 
@@ -36,73 +36,72 @@ def get_headers() -> dict:
     if not api_key:
         print("Error: RUNPOD_API_KEY environment variable not set")
         sys.exit(1)
-    return {"Authorization": f"Bearer {api_key}"}
+    return {
+        "Authorization": f"Bearer {api_key}",
+        "User-Agent": "runpod-docs-cleanup/1.0",
+    }
+
+
+def list_resources(path: str, key: str, prefix: str) -> list[dict[str, Any]]:
+    """List every resource at path whose name matches prefix, following pagination."""
+    items: list[dict[str, Any]] = []
+    params: dict[str, Any] = {"limit": 1000}
+    while True:
+        resp = requests.get(f"{API_BASE}/{path}", headers=get_headers(), params=params)
+        resp.raise_for_status()
+        body = resp.json()
+        items.extend(body.get(key, []))
+        pagination = body.get("pagination") or {}
+        if not pagination.get("hasNextPage") or not pagination.get("nextCursor"):
+            break
+        params["cursor"] = pagination["nextCursor"]
+    return [i for i in items if (i.get("name") or "").startswith(prefix)]
 
 
 def list_pods(prefix: str) -> list[dict[str, Any]]:
     """List pods matching prefix."""
-    resp = requests.get(f"{API_BASE}/pods", headers=get_headers())
-    resp.raise_for_status()
-    pods = resp.json()
-    if isinstance(pods, dict):
-        pods = pods.get("pods", [])
-    return [p for p in pods if p.get("name", "").startswith(prefix)]
+    return list_resources("pods", "pods", prefix)
 
 
 def list_endpoints(prefix: str) -> list[dict[str, Any]]:
     """List serverless endpoints matching prefix."""
-    resp = requests.get(f"{API_BASE}/endpoints", headers=get_headers())
-    resp.raise_for_status()
-    endpoints = resp.json()
-    if isinstance(endpoints, dict):
-        endpoints = endpoints.get("endpoints", [])
-    return [e for e in endpoints if e.get("name", "").startswith(prefix)]
+    return list_resources("serverless", "endpoints", prefix)
 
 
 def list_templates(prefix: str) -> list[dict[str, Any]]:
     """List templates matching prefix."""
-    resp = requests.get(f"{API_BASE}/templates", headers=get_headers())
-    resp.raise_for_status()
-    templates = resp.json()
-    if isinstance(templates, dict):
-        templates = templates.get("templates", [])
-    return [t for t in templates if t.get("name", "").startswith(prefix)]
+    return list_resources("templates", "templates", prefix)
 
 
 def list_network_volumes(prefix: str) -> list[dict[str, Any]]:
     """List network volumes matching prefix."""
-    resp = requests.get(f"{API_BASE}/network-volumes", headers=get_headers())
-    resp.raise_for_status()
-    volumes = resp.json()
-    if isinstance(volumes, dict):
-        volumes = volumes.get("networkVolumes", [])
-    return [v for v in volumes if v.get("name", "").startswith(prefix)]
+    return list_resources("network-volumes", "networkVolumes", prefix)
+
+
+def delete_resource(path: str, resource_id: str) -> bool:
+    """Delete a resource by ID. REST v2 returns 204 No Content on success."""
+    resp = requests.delete(f"{API_BASE}/{path}/{resource_id}", headers=get_headers())
+    return resp.status_code in (200, 204)
 
 
 def delete_pod(pod_id: str) -> bool:
     """Delete a pod by ID."""
-    resp = requests.delete(f"{API_BASE}/pods/{pod_id}", headers=get_headers())
-    return resp.status_code == 200
+    return delete_resource("pods", pod_id)
 
 
 def delete_endpoint(endpoint_id: str) -> bool:
     """Delete an endpoint by ID."""
-    resp = requests.delete(f"{API_BASE}/endpoints/{endpoint_id}", headers=get_headers())
-    return resp.status_code == 200
+    return delete_resource("serverless", endpoint_id)
 
 
 def delete_template(template_id: str) -> bool:
     """Delete a template by ID."""
-    resp = requests.delete(f"{API_BASE}/templates/{template_id}", headers=get_headers())
-    return resp.status_code == 200
+    return delete_resource("templates", template_id)
 
 
 def delete_network_volume(volume_id: str) -> bool:
     """Delete a network volume by ID."""
-    resp = requests.delete(
-        f"{API_BASE}/network-volumes/{volume_id}", headers=get_headers()
-    )
-    return resp.status_code == 200
+    return delete_resource("network-volumes", volume_id)
 
 
 def main():
