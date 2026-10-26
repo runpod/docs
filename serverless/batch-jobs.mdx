@@ -17,24 +17,24 @@ Use batch jobs to run large volumes of inference requests against a serverless e
 Choose batch when your workload can tolerate multi-hour latency — for example, nightly dataset processing, pre-computing embeddings, or running evaluations.
 
 <Note>
-  Batch requests are billed at a discounted rate compared to on-demand Serverless pricing. The discount depends on the GPU type: enterprise GPUs (H100, H200, B200, and B300) receive a smaller discount than other GPU types. To estimate cost, run a small test batch (for example, 100 requests) and extrapolate.
+  Batch requests are billed at a discounted rate compared to on-demand Serverless pricing. There are separate discount tiers for consumer and enterprise GPUs (H100, H200, B200, and B300). To estimate cost, run a small test batch (for example, 100 requests) and extrapolate.
 </Note>
 
 ## Batch lifecycle
 
-A batch moves through the following states:
+A batch moves through the following API states:
 
-```
+```text
 DRAFT → FINALIZED → FAILED
                   → CANCELLED
 ```
 
 - **DRAFT** — The batch is a draft. You can add, update, or remove individual requests. Batch workers have not started any work.
-- **FINALIZED** — The batch is locked; no further requests can be added or removed. Batch workers process the requests while the batch stays in this state, and there is no separate `RUNNING` or `COMPLETED` batch status. Track progress through the `requestTotal`, `requestInProgress`, `requestCompleted`, and `requestFailed` counts — all requests have finished when `requestCompleted + requestFailed` equals `requestTotal`.
+- **FINALIZED** — The batch is locked; no further requests can be added or removed. Batch workers process the requests while the batch stays in this state, and the API has no separate `RUNNING` or `COMPLETED` batch status. Track progress through the `requestTotal`, `requestInProgress`, `requestCompleted`, and `requestFailed` counts — all requests have finished when `requestCompleted + requestFailed` equals `requestTotal`.
 - **FAILED** — The batch itself failed before or during execution (distinct from individual request failures in a batch whose other requests finished successfully).
 - **CANCELLED** — You cancelled the batch. See [Cancellation](#cancellation) for details.
 
-In the console, a finalized batch shows as **Running** while its requests are processing and **Completed** when they've all finished. The API status stays `FINALIZED` during both.
+The console shows different status labels. See [Console statuses](#console-statuses).
 
 ## API walkthrough
 
@@ -181,6 +181,20 @@ For full request and response schemas, see the [API reference](#full-api-referen
 
 Open your endpoint in the Runpod console and select the **Bulk Requests** tab to see all batches. Each row shows the batch name, status, and progress counts.
 
+To create a batch in the console, select **Create batch**, add your requests as a JSON request object or an array of request objects, then select **Run this batch** to finalize it. You can edit the requests until you run the batch.
+
+### Console statuses
+
+The console uses different status labels from the API:
+
+| Console status | API `status` |
+| --- | --- |
+| **Draft** | `DRAFT` |
+| **Running** | `FINALIZED` (requests still processing) |
+| **Completed** | `FINALIZED` (all requests finished) |
+| **Failed** | `FAILED` |
+| **Cancelled** | `CANCELLED` |
+
 Click a batch to open the detail view, which shows:
 
 - Top-level status and progress
@@ -222,11 +236,11 @@ The batch status transitions to `CANCELLED` once all in-progress work has draine
 | Requests per batch | 5,000 |
 | Queued requests per endpoint | 50,000 |
 
-<Note> The maximum queued requests per endpoint can go up to 1,000,000 daily jobs. Limits are configurable for enterprise accounts. Contact support for custom limits. </Note>
+<Note>Limits can be raised up to 3,000,000 requests per day. Contact support or sales for higher limits.</Note>
 
 ## Billing
 
-Batch jobs are billed at the same rate as standard serverless requests on your endpoint. For enterprise customers, flex worker discounts apply to batch jobs. Billing is based on the compute time used by each child request, regardless of whether the batch was later cancelled (in-progress requests that completed before cancellation are billed normally).
+Batch requests are billed at a discounted rate compared to on-demand Serverless pricing, with separate discount tiers for consumer and enterprise GPUs (H100, H200, B200, and B300). Billing is based on the compute time used by each child request, regardless of whether the batch was later cancelled (in-progress requests that completed before cancellation are billed normally).
 
 ## Error handling
 
