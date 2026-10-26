@@ -16,7 +16,77 @@
       "bearerAuth": []
     }
   ],
+  "x-runpod-scopes": {
+    "pods": {
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "serverless": {
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "clusters": {
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "volumes": {
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "templates": {
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "secrets": {
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "authentication": {
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "membership": {
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "audit": {
+      "levels": [
+        "read"
+      ]
+    },
+    "billing": {
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
+    "catalog": {
+      "levels": [
+        "read"
+      ]
+    }
+  },
   "tags": [
+    {
+      "name": "Organization",
+      "description": "Organization identity, membership, and access management."
+    },
     {
       "name": "Account",
       "description": "Account-scoped settings and primitives (SSH public keys)."
@@ -38,6 +108,10 @@
       "description": "Persistent network storage volumes for workloads."
     },
     {
+      "name": "Global Volumes",
+      "description": "Cross-data-center storage volumes that mount into workloads without pinning them to a data center."
+    },
+    {
       "name": "Registries",
       "description": "Container registry credentials used to pull private images."
     },
@@ -48,6 +122,10 @@
     {
       "name": "Billing",
       "description": "Billing history and usage cost records across resource types."
+    },
+    {
+      "name": "Audit Logs",
+      "description": "Record of who did what to which resource on the account."
     }
   ],
   "components": {
@@ -56,7 +134,7 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "Runpod API Key",
-        "description": "Runpod API key authentication. Generate an API key in the Runpod console and send it in the `Authorization` header as `Bearer <api_key>`. Keys are scoped to the permissions granted when created; requests may return `403` when a valid key lacks access to the requested resource or action.\n"
+        "description": "Runpod API key authentication. Generate an API key in the Runpod console and send it in the `Authorization` header as `Bearer <api_key>`. Keys are scoped to the permissions granted when created; requests may return `403` when a valid key lacks access to the requested resource or action.\n\nConsole sessions (Clerk JWTs) act for the signed-in user. To act for a team instead, also send `X-Team-Id: <team_id>`; it applies only when the user owns or belongs to that team, otherwise the request runs against the user's own account. API keys created inside a team already act for that team and do not need the header.\n"
       }
     },
     "responses": {
@@ -186,6 +264,34 @@
                   "title": "Unprocessable Entity",
                   "status": 422,
                   "detail": "Request validation failed."
+                }
+              }
+            }
+          }
+        }
+      },
+      "RequestTooLargeError": {
+        "headers": {
+          "RateLimit": {
+            "$ref": "#/components/headers/RateLimit"
+          },
+          "RateLimit-Policy": {
+            "$ref": "#/components/headers/RateLimit-Policy"
+          }
+        },
+        "description": "The incoming request body exceeds 1048576 bytes (1 MiB). Body size is\nchecked after authentication and rate limiting. GET and DELETE reject\nany nonempty request body with `422` instead.\n\nAn operation can also return this status when its expanded upstream\nrequest is too large, even if the incoming body is within the limit.\n",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "examples": {
+              "requestTooLarge": {
+                "summary": "Request body exceeds the limit",
+                "value": {
+                  "title": "Request Entity Too Large",
+                  "status": 413,
+                  "detail": "Request body exceeds the 1048576 byte limit."
                 }
               }
             }
@@ -352,6 +458,87 @@
           "maximum": 100
         },
         "example": 50
+      },
+      "PaginationLimitAuditLogs": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "description": "Page size, 1–200. Defaults to 200 when omitted.",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        },
+        "example": 50
+      },
+      "AuditLogActorIdsFilter": {
+        "name": "actorIds",
+        "in": "query",
+        "required": false,
+        "description": "Only return entries performed by these users. Comma-separated user IDs. Available to organization accounts only; a personal or team account is answered 400.",
+        "style": "form",
+        "explode": false,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "example": [
+          "user_id_abc_123",
+          "user_id_def_456"
+        ]
+      },
+      "AuditLogActionsFilter": {
+        "name": "actions",
+        "in": "query",
+        "required": false,
+        "description": "Only return entries whose `action` is one of these names, matched exactly as recorded. Comma-separated.",
+        "style": "form",
+        "explode": false,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "example": [
+          "create",
+          "delete"
+        ]
+      },
+      "AuditLogStartTime": {
+        "name": "startTime",
+        "in": "query",
+        "required": false,
+        "description": "Earliest instant to include, inclusive (RFC 3339). The account's audit log retention window still applies: entries that have aged out are not returned even when this reaches further back.",
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "example": "2026-09-01T00:00:00Z"
+      },
+      "AuditLogEndTime": {
+        "name": "endTime",
+        "in": "query",
+        "required": false,
+        "description": "Latest instant to include, inclusive (RFC 3339). Must be after `startTime` when both are given; 400 otherwise.",
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "example": "2026-09-30T23:59:59Z"
+      },
+      "AuditLogSearch": {
+        "name": "search",
+        "in": "query",
+        "required": false,
+        "description": "Case-insensitive substring match against `email`, `resourceType`, `resourceId`, `action` and `value`; `actorId` is not searched. Surrounding whitespace is ignored.",
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        },
+        "example": "abc123"
       },
       "CatalogIncludeParam": {
         "name": "include",
@@ -531,6 +718,30 @@
       }
     },
     "schemas": {
+      "Organization": {
+        "type": "object",
+        "description": "The authenticated caller's current organization.",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Organization ID.",
+            "examples": [
+              "org_id_abc_123"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "Organization name.",
+            "examples": [
+              "my-org"
+            ]
+          }
+        }
+      },
       "Pagination": {
         "type": "object",
         "required": [
@@ -676,10 +887,9 @@
           }
         ]
       },
-      "Mounts": {
+      "BaseMounts": {
         "type": "object",
-        "additionalProperties": false,
-        "description": "Storage mounts attached to a pod. At-most-one of `persistent` or\n`network` may be set today (mutually exclusive, enforced at the\nhandler with 400 if both are present). The `network` field is an\narray for forward compatibility with eventual multi-network-volume\nsupport, but `maxItems` is 1 today.\n\nPATCH semantics:\n- Omitting `mounts` or sending `{}` leaves the existing mount\n  unchanged.\n- An explicit `network: []` is rejected with 400 (clearing mounts\n  is not supported).\n- Mount kind is fixed at create — a PATCH that introduces a kind\n  not present at create (persistent on a network pod, network on\n  a persistent pod, or any mount on a previously-mountless pod)\n  is rejected with 400.\n- The `volumeId` of a network mount is immutable; a PATCH that\n  names a different `volumeId` is rejected with 400.\n- Partial mounts are not supported — every mount entry must\n  include the full schema (`size` + `path` for persistent,\n  `volumeId` + `path` for network). Missing required fields → 422.\n",
+        "description": "The mount kinds every resource that takes `mounts` shares. At-most-one\nof `persistent` or `network` may be set today (mutually exclusive,\nenforced at the handler with 400 if both are present). The `network`\nfield is an array for forward compatibility with eventual\nmulti-network-volume support, but `maxItems` is 1 today. Left open so\nthat concrete schemas can extend it and close themselves.\n",
         "properties": {
           "persistent": {
             "$ref": "#/components/schemas/PersistentMount"
@@ -692,6 +902,37 @@
             }
           }
         }
+      },
+      "ClusterMounts": {
+        "description": "Storage mounts for a cluster create: `persistent` or `network`, not\nboth. Clusters cannot mount global volumes, so `global` is rejected\nwith 422.\n",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/BaseMounts"
+          }
+        ],
+        "unevaluatedProperties": false
+      },
+      "Mounts": {
+        "description": "Storage mounts attached to a pod. `persistent` is mutually exclusive\nwith both `network` and `global` (enforced at the handler with 400 if\ncombined). The `network` field is an array for forward compatibility\nwith eventual multi-network-volume support, but `maxItems` is 1 today.\n\nPATCH semantics:\n- Omitting `mounts` or sending `{}` leaves the existing mount\n  unchanged.\n- An explicit `network: []` is rejected with 400 (clearing mounts\n  is not supported).\n- Mount kind is fixed at create — a PATCH that introduces a kind\n  not present at create (persistent on a network pod, network on\n  a persistent pod, or any mount on a previously-mountless pod)\n  is rejected with 400.\n- The `volumeId` of a network mount is immutable; a PATCH that\n  names a different `volumeId` is rejected with 400.\n- Partial mounts are not supported — every mount entry must\n  include the full schema (`size` + `path` for persistent,\n  `volumeId` + `path` for network). Missing required fields → 422.\n",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/BaseMounts"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "global": {
+                "type": "array",
+                "maxItems": 1,
+                "description": "At most one global volume, on GPU and CPU pods, with no data\ncenter constraint. Combinable with `network` but not with\n`persistent` (rejected with 400): upstream drops a persistent\ndisk whenever a volume is attached. Same PATCH rules as\n`network`: global mounts are fixed at create, `global: []` is\nrejected with 400, and `volumeId` is immutable; only `path` may\nchange.\n",
+                "items": {
+                  "$ref": "#/components/schemas/GlobalMount"
+                }
+              }
+            }
+          }
+        ],
+        "unevaluatedProperties": false
       },
       "TemplateMounts": {
         "type": "object",
@@ -750,6 +991,30 @@
             "description": "Mount path inside the container. No default — must be specified explicitly.",
             "examples": [
               "/runpod-volume"
+            ]
+          }
+        }
+      },
+      "GlobalMount": {
+        "type": "object",
+        "required": [
+          "volumeId"
+        ],
+        "additionalProperties": false,
+        "description": "Reference to a GlobalVolume. Usage-billed, so it has no size. The\nunderlying `volumeId` is immutable post-create; the mount `path` may be\nchanged via PATCH.\n",
+        "properties": {
+          "volumeId": {
+            "type": "string",
+            "description": "ID of an existing GlobalVolume.",
+            "examples": [
+              "gsb_abc"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "description": "Mount path inside the container. Optional on create, where a default is chosen for you; a PATCH that omits it leaves the path unchanged.",
+            "examples": [
+              "/data"
             ]
           }
         }
@@ -1326,6 +1591,7 @@
               "scaling",
               "dataCenterIds",
               "networkVolumes",
+              "mounts",
               "timeout",
               "flashboot",
               "createdAt"
@@ -1397,11 +1663,15 @@
                 "items": {
                   "type": "string"
                 },
+                "deprecated": true,
                 "examples": [
                   [
                     "vol_abc"
                   ]
                 ]
+              },
+              "mounts": {
+                "$ref": "#/components/schemas/EndpointMounts"
               },
               "timeout": {
                 "type": "integer",
@@ -2044,7 +2314,12 @@
                 "type": "array",
                 "items": {
                   "type": "string"
-                }
+                },
+                "description": "Network volume IDs.",
+                "deprecated": true
+              },
+              "mounts": {
+                "$ref": "#/components/schemas/EndpointMountsInput"
               },
               "templateId": {
                 "type": "string",
@@ -2140,7 +2415,12 @@
                 "type": "array",
                 "items": {
                   "type": "string"
-                }
+                },
+                "description": "Network volume IDs. Pass `[]` to detach.",
+                "deprecated": true
+              },
+              "mounts": {
+                "$ref": "#/components/schemas/EndpointMountsInput"
               },
               "scaling": {
                 "$ref": "#/components/schemas/EndpointScaling"
@@ -2400,7 +2680,7 @@
             ]
           },
           "direct": {
-            "description": "Connection straight to the pod's sshd over its published `22/tcp` mapping. Supports the full SSH feature set. Null unless `22/tcp` is in `ports` and the running pod has been assigned a public port for it — so it is absent while the pod is provisioning or stopped.",
+            "description": "Connection straight to the pod's sshd over its published `22/tcp` mapping. Supports the full SSH feature set. Null unless `22/tcp` is in `ports` and the running pod has been assigned a public port for it — so it is usually absent while the pod is provisioning or stopped. It can still appear on a stopped pod, so check that `status` is `RUNNING` before connecting. Also null when listing pods with `GET /v2/pods`; fetch a single pod by ID to obtain the live mapping.",
             "anyOf": [
               {
                 "$ref": "#/components/schemas/PodSshEndpoint"
@@ -2694,7 +2974,7 @@
               "cost": {
                 "type": "number",
                 "format": "float",
-                "description": "Current cost in USD per hour (0.0 when EXITED or TERMINATED)",
+                "description": "The Pod's hourly compute rate in USD. It's returned in every status, including `EXITED`, so it isn't what you're paying right now: a stopped Pod isn't billed for compute, only for its volume disk.",
                 "examples": [
                   0.35
                 ]
@@ -2710,7 +2990,7 @@
                 "$ref": "#/components/schemas/PodGlobalNetworking"
               },
               "runtime": {
-                "description": "Live utilization metrics. Null when the pod is not RUNNING.",
+                "description": "Live utilization metrics. Null when the pod is not RUNNING, and when listing pods with `GET /v2/pods`; fetch a single pod by ID to obtain metrics.",
                 "anyOf": [
                   {
                     "$ref": "#/components/schemas/PodRuntime"
@@ -2751,7 +3031,7 @@
             "required": [
               "name"
             ],
-            "description": "Request body for creating a pod. Exactly one of `gpu` or `cpu`\nmust be set — enforced at the handler layer. For CPU pods, memory\nis derived by the API from the selected flavor's RAM multiplier;\nclients provide only CPU flavor and vCPU count. CPU pods support\ncontainer disk and network volumes only; `mounts.persistent` is\ninvalid when `cpu` is set.\n\n`image` is required unless `templateId` is set.\n",
+            "description": "Request body for creating a pod. Exactly one of `gpu` or `cpu`\nmust be set — enforced at the handler layer. For CPU pods, memory\nis derived by the API from the selected flavor's RAM multiplier;\nclients provide only CPU flavor and vCPU count. CPU pods support\ncontainer disk, network volumes, and a global volume; `mounts.persistent`\nis invalid when `cpu` is set.\n\n`image` is required unless `templateId` is set.\n",
             "properties": {
               "name": {
                 "type": "string",
@@ -3220,7 +3500,7 @@
                 ]
               },
               "mounts": {
-                "$ref": "#/components/schemas/Mounts"
+                "$ref": "#/components/schemas/ClusterMounts"
               },
               "startJupyter": {
                 "type": "boolean",
@@ -3255,7 +3535,8 @@
       "ListClustersResponse": {
         "type": "object",
         "required": [
-          "clusters"
+          "clusters",
+          "pagination"
         ],
         "properties": {
           "clusters": {
@@ -3263,6 +3544,9 @@
             "items": {
               "$ref": "#/components/schemas/Cluster"
             }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
           }
         }
       },
@@ -3617,13 +3901,172 @@
       "ListNetworkVolumesResponse": {
         "type": "object",
         "required": [
-          "networkVolumes"
+          "networkVolumes",
+          "pagination"
         ],
         "properties": {
           "networkVolumes": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/NetworkVolume"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        }
+      },
+      "GlobalVolume": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "createdAt",
+          "createdByUserId"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique global volume identifier",
+            "examples": [
+              "gsb_abc"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name (not required to be unique)",
+            "examples": [
+              "training-data"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the volume was created"
+          },
+          "createdByUserId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ID of the user who created the volume, if known",
+            "examples": [
+              "user_123"
+            ]
+          }
+        }
+      },
+      "CreateGlobalVolumeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 191,
+            "pattern": "[^\\p{Z}\\t-\\r\u0085]",
+            "description": "Human-readable name, 1–191 characters with at least one non-whitespace character. Leading and trailing whitespace is trimmed.\n",
+            "examples": [
+              "training-data"
+            ]
+          }
+        }
+      },
+      "UpdateGlobalVolumeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "description": "Only the provided fields are updated. At least one field must be\npresent; an empty body is rejected.\n",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 191,
+            "pattern": "[^\\p{Z}\\t-\\r\u0085]",
+            "description": "New human-readable name, 1–191 characters with at least one non-whitespace character. Leading and trailing whitespace is trimmed.\n",
+            "examples": [
+              "renamed-volume"
+            ]
+          }
+        }
+      },
+      "ListGlobalVolumesResponse": {
+        "type": "object",
+        "required": [
+          "globalVolumes",
+          "pagination"
+        ],
+        "properties": {
+          "globalVolumes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GlobalVolume"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        }
+      },
+      "EndpointMount": {
+        "type": "object",
+        "required": [
+          "volumeId"
+        ],
+        "additionalProperties": false,
+        "description": "A volume mounted on every worker, always at `/runpod-volume`. Custom\npaths are not supported yet.\n",
+        "properties": {
+          "volumeId": {
+            "type": "string",
+            "description": "ID of a NetworkVolume (under `network`) or GlobalVolume (under `global`).",
+            "examples": [
+              "vol_abc"
+            ]
+          }
+        }
+      },
+      "EndpointMounts": {
+        "type": "object",
+        "required": [
+          "network",
+          "global"
+        ],
+        "description": "Volumes mounted on every worker of the endpoint.",
+        "properties": {
+          "network": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EndpointMount"
+            }
+          },
+          "global": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EndpointMount"
+            }
+          }
+        }
+      },
+      "EndpointMountsInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Volumes to mount on the endpoint's workers. A `network` or `global`\nlist that is present replaces the endpoint's current list of that kind;\nan empty list detaches it, and an omitted list is left unchanged. Both\nkinds cannot be present on the endpoint at once, so to switch kinds send\n`[]` for one and the new list for the other in the same request. Changes\napply to workers created afterwards. At most one global volume, GPU\nendpoints only. `network` may accompany the deprecated `networkVolumes` field\nonly if the two agree exactly.\n",
+        "properties": {
+          "network": {
+            "type": "array",
+            "description": "Network volumes, at most one per data center.",
+            "items": {
+              "$ref": "#/components/schemas/EndpointMount"
+            }
+          },
+          "global": {
+            "type": "array",
+            "maxItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/EndpointMount"
             }
           }
         }
@@ -4344,6 +4787,104 @@
             "items": {
               "$ref": "#/components/schemas/DataCenter"
             }
+          }
+        }
+      },
+      "AuditLog": {
+        "type": "object",
+        "description": "One recorded action on the account.",
+        "required": [
+          "actorId",
+          "email",
+          "resourceType",
+          "resourceId",
+          "action",
+          "value",
+          "timestamp"
+        ],
+        "properties": {
+          "actorId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ID of the user who performed the action. Null when the action was not attributable to a user.",
+            "examples": [
+              "user_id_abc_123"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Email of the actor when the action was recorded. Null when unknown.",
+            "examples": [
+              "actor@example.com"
+            ]
+          },
+          "resourceType": {
+            "type": "string",
+            "description": "Kind of resource the action applied to, as recorded at write time. Not an enum: values are free-form, mostly lower camel case, and new kinds appear without an API version change. Current writers record values such as `pod`, `apiKey`, `sharedApiKey`, `secret`, `costCenter`, `paymentMethod`, `billingAccount`, `registryCredential`, `organization` and `group`, and `unknown` when the writer recorded no kind.",
+            "examples": [
+              "pod",
+              "apiKey",
+              "costCenter"
+            ]
+          },
+          "resourceId": {
+            "type": "string",
+            "description": "ID of the affected resource. Empty when the action was not about one resource; a bulk action lists every affected ID, comma-separated.",
+            "examples": [
+              "abc123"
+            ]
+          },
+          "action": {
+            "type": "string",
+            "description": "Name of the action, as recorded at write time. Not an enum: values are free-form, mostly lower case verbs, and new actions appear without an API version change. Current writers record values such as `create`, `update`, `delete`, `rename`, `lock`, `unlock`, `start`, `reset`, `add` and `setBillingMode`.",
+            "examples": [
+              "create",
+              "delete",
+              "rename"
+            ]
+          },
+          "value": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Details of the change as a JSON-encoded string. The structure varies by action; parse it as JSON for a structured view. A bulk action split across several entries adds an `auditChunk` object with `index` and `of`. Null when the action recorded no details.",
+            "examples": [
+              "{\"status\":\"TERMINATED\"}",
+              "{\"name\":\"training-run-7\"}",
+              "{\"id\":\"sec_789\",\"name\":\"HF_TOKEN\",\"sharedWithOrganization\":true}"
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the action happened (UTC, whole seconds).",
+            "examples": [
+              "2026-09-02T00:00:00Z"
+            ]
+          }
+        }
+      },
+      "ListAuditLogsResponse": {
+        "type": "object",
+        "required": [
+          "auditLogs",
+          "pagination"
+        ],
+        "properties": {
+          "auditLogs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditLog"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
           }
         }
       },
@@ -5175,17 +5716,93 @@
       },
       "RateLimitPolicyHeader": {
         "type": "string",
-        "description": "Static per-window quota policy. Optional — omitted for rate-limit-exempt\ncallers.\n\nA structured-field list with one member per window (`minute`, `hour`,\n`day`), each carrying the quota `q` and the window length in seconds `w`.\nReturned on responses to authenticated requests, not only on 429s.\n",
+        "description": "Static per-window quota policy. Optional — omitted for rate-limit-exempt\ncallers.\n\nA structured-field list with one member per window (`minute`, `hour`,\n`day`), each carrying the quota `q` and the window length in seconds `w`.\nReturned on responses to authenticated requests, not only on 429s.\n\nLimits are per user, and every `/v2` route counts toward the same\nlimits; creating pods has no separate limit. Read the current quotas from\nthis header instead of hard-coding them, because they can change and some\naccounts have higher limits. A 429 only slows you down: wait for the\n`Retry-After` time and retry. Your account isn't suspended.\n",
         "examples": [
-          "\"minute\";q=60;w=60, \"hour\";q=3000;w=3600, \"day\";q=50000;w=86400"
+          "\"minute\";q=180;w=60, \"hour\";q=3600;w=3600, \"day\";q=43200;w=86400"
         ]
       }
     }
   },
   "paths": {
+    "/v2/organization": {
+      "get": {
+        "operationId": "getOrganization",
+        "x-runpod-scope": "membership:read",
+        "summary": "Get your current organization",
+        "x-mint": {
+          "metadata": {
+            "description": "Retrieve the ID and name of your current Runpod organization through the REST API, including membership requirements and error responses."
+          }
+        },
+        "description": "Returns the authenticated caller's current organization. Organization context comes from the caller's membership; no organization selector is required. Returns 404 when the caller does not belong to an organization, or 403 when organizations are unavailable to the caller.",
+        "tags": [
+          "Organization"
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Organization"
+                },
+                "examples": {
+                  "organization": {
+                    "summary": "Current organization",
+                    "value": {
+                      "id": "org_id_abc_123",
+                      "name": "my-org"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v2/account/ssh-keys": {
       "get": {
         "operationId": "getSshKeys",
+        "x-runpod-scope": "authentication:read",
         "summary": "List registered SSH public keys",
         "x-mint": {
           "metadata": {
@@ -5256,6 +5873,7 @@
       },
       "put": {
         "operationId": "updateSshKeys",
+        "x-runpod-scope": "authentication:write",
         "summary": "Replace registered SSH public keys",
         "x-mint": {
           "metadata": {
@@ -5321,6 +5939,12 @@
           "403": {
             "$ref": "#/components/responses/ForbiddenError"
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
           },
@@ -5351,10 +5975,11 @@
     "/v2/account/secrets": {
       "get": {
         "operationId": "listSecrets",
+        "x-runpod-scope": "secrets:read",
         "summary": "List secrets",
         "x-mint": {
           "metadata": {
-            "description": "List the encrypted secrets on your Runpod account that Pods, Serverless endpoints, and templates reference from environment variables. Values are never returned."
+            "description": "List encrypted secrets referenced by Runpod Pods, Serverless endpoints, and templates through environment variables. Secret values are never returned."
           }
         },
         "description": "Returns the account's secrets — encrypted strings referenced from pod, serverless, and template environment variables with the `{{ RUNPOD_SECRET_<name> }}` placeholder syntax, substituted with the secret's value when the pod or worker boots. Secret values are write-only and are never returned.",
@@ -5438,6 +6063,7 @@
       },
       "post": {
         "operationId": "createSecret",
+        "x-runpod-scope": "secrets:write",
         "summary": "Create a secret",
         "x-mint": {
           "metadata": {
@@ -5518,6 +6144,9 @@
               }
             }
           },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
           },
@@ -5560,6 +6189,7 @@
       ],
       "get": {
         "operationId": "getSecret",
+        "x-runpod-scope": "secrets:read",
         "summary": "Get a secret",
         "x-mint": {
           "metadata": {
@@ -5635,6 +6265,7 @@
       },
       "patch": {
         "operationId": "updateSecret",
+        "x-runpod-scope": "secrets:write",
         "summary": "Update a secret",
         "x-mint": {
           "metadata": {
@@ -5712,6 +6343,9 @@
           "404": {
             "$ref": "#/components/responses/NotFoundError"
           },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
           },
@@ -5740,6 +6374,7 @@
       },
       "delete": {
         "operationId": "deleteSecret",
+        "x-runpod-scope": "secrets:write",
         "summary": "Delete a secret",
         "x-mint": {
           "metadata": {
@@ -5798,13 +6433,14 @@
     "/v2/pods": {
       "get": {
         "operationId": "listPods",
+        "x-runpod-scope": "pods:read",
         "summary": "List pods",
         "x-mint": {
           "metadata": {
             "description": "List Pods owned by the authenticated Runpod user, with an option to include member Pods that belong to Runpod Clusters."
           }
         },
-        "description": "Returns pods owned by the authenticated user. Cluster member\npods are excluded by default; set `includeClusterPods=true` to include\nthem (each carries a non-null `cluster` membership block).\n\nResults are cursor-paginated newest-first; an omitted `limit`\ndefaults to 1000. When cluster member pods are excluded, the\nexclusion applies to each page after it is cut, so a page may hold\nfewer than `limit` pods — follow `pagination.nextCursor` until\n`hasNextPage` is false rather than counting items.\n",
+        "description": "Returns pods owned by the authenticated user. Cluster member\npods are excluded by default; set `includeClusterPods=true` to include\nthem (each carries a non-null `cluster` membership block).\n\nResults are cursor-paginated newest-first; an omitted `limit`\ndefaults to 1000. The cluster-member exclusion is applied before the\npage is cut, so a page holds `limit` pods whenever that many remain.\nFollow `pagination.nextCursor` until `hasNextPage` is false.\n",
         "tags": [
           "Pods"
         ],
@@ -5890,12 +6526,7 @@
                               "username": "7h9k2m4n6p-64411eb2",
                               "command": "ssh 7h9k2m4n6p-64411eb2@ssh.runpod.io"
                             },
-                            "direct": {
-                              "host": "195.26.233.3",
-                              "port": 34446,
-                              "username": "root",
-                              "command": "ssh root@195.26.233.3 -p 34446"
-                            }
+                            "direct": null
                           },
                           "template": "9x4m2p7v",
                           "cost": 0.44,
@@ -5903,17 +6534,7 @@
                           "globalNetworking": {
                             "enabled": false
                           },
-                          "runtime": {
-                            "uptime": 3600,
-                            "ports": [
-                              {
-                                "private": 22,
-                                "public": 34446,
-                                "type": "tcp",
-                                "ip": "195.26.233.3"
-                              }
-                            ]
-                          },
+                          "runtime": null,
                           "createdAt": "2026-06-01T12:00:00Z",
                           "startedAt": "2026-06-01T12:02:00Z"
                         }
@@ -5959,13 +6580,14 @@
       },
       "post": {
         "operationId": "createPod",
+        "x-runpod-scope": "pods:write",
         "summary": "Create a pod",
         "x-mint": {
           "metadata": {
             "description": "Create a Runpod Pod with GPU or CPU compute, container or template settings, storage, networking, and deployment constraints."
           }
         },
-        "description": "Creates a new pod. `name` is always required; supply exactly one of\n`gpu` or `cpu` to select compute (a GPU or a CPU pod). Container\nsettings come from the body, from a template referenced by\n`templateId` (body fields override the template's), or both; `image`\nis required unless `templateId` is set. See `CreatePodRequest` for\nthe full body.\n\nReturns `201` with the created pod. Provisioning is asynchronous: the\npod starts in `PROVISIONING`, transitions through `STARTING`, and\nreaches `RUNNING` once its container is healthy. Poll `getPod` (or\nwatch the pod's `status`) to observe readiness rather than assuming\nthe pod is running when this call returns.\n\n## Checking what you can deploy\n\nThis endpoint places one specific GPU type. It does not search for\ncapacity, and it does not fall back to a different GPU. To find out\nwhat is deployable before you call it, read the catalog:\n\n- [List GPU types](https://docs.runpod.io/api-reference-v2/catalog/list-gpu-types)\n  — GPU types with pricing, per-cloud ceilings, and, with\n  `include=AVAILABILITY&product=POD`, current pod stock.\n- [List data centers](https://docs.runpod.io/api-reference-v2/catalog/list-data-centers)\n  — locations, with `include=GPU_AVAILABILITY` for stock per data\n  center.\n\nBoth accept filters that combine, so you can narrow by location and by\ncompute in one request — for example\n`GET /v2/catalog/datacenters?regions=EUROPE&include=GPU_AVAILABILITY`\nreturns only European data centers, each carrying the GPU types\ncurrently available there.\n\n## Deploying under region and GPU constraints\n\nIf you need a particular GPU in a particular geography, the working\npattern is read-then-create: narrow the catalog to an acceptable\n(data center, GPU) set, then call this endpoint once per candidate in\nyour order of preference until one returns `201`. The runnable sample\nalongside this operation does exactly that.\n\nAvailability can change between the catalog read and the create call,\nso treat the catalog as a way to order your candidates, not as a\nreservation — a create can still fail for capacity on a GPU the\ncatalog just reported as available.\n\nWhich failures are worth retrying:\n\n| Status | Meaning | Do |\n| --- | --- | --- |\n| `422` | The body does not match the contract. `errors` lists each violation. | Fix the request. Never retry. |\n| `400` | The body matches the contract but was rejected — either it breaks a cross-field rule, or this GPU and data center combination could not be placed. | Try your next candidate. |\n| `402` | Insufficient balance. | Stop; no candidate will succeed. |\n| `403` | Your account cannot access the requested pool. | Skip this candidate, keep going. |\n| `429` | Rate limited. | Back off using `Retry-After`, then resume. |\n| `5xx` | Transient upstream failure. | Retry the same candidate with backoff. |\n\nRequests larger than 102400 bytes receive `413` before authentication\nor processing. Reduce the serialized JSON request body and retry.\n\nThis limit also applies to the deployment request built from your input\nand any referenced template. A small request can therefore receive `413`\nif inherited template settings make the combined request too large.\nReduce environment variables or command values in your request or template\nand retry.\n\n`400` covers both \"your request breaks a rule\" and \"no capacity\",\nbecause capacity exhaustion currently carries no machine-readable code\nof its own — only a human-readable `detail`. A rule violation is\ndeterministic, so it fails identically on every candidate: if *every*\ncandidate returns `400`, read the last `detail` as a problem with the\nrequest rather than as absent capacity.\n",
+        "description": "Creates a new pod. `name` is always required; supply exactly one of\n`gpu` or `cpu` to select compute (a GPU or a CPU pod). Container\nsettings come from the body, from a template referenced by\n`templateId` (body fields override the template's), or both; `image`\nis required unless `templateId` is set. See `CreatePodRequest` for\nthe full body.\n\nReturns `201` with the created pod. Provisioning is asynchronous: the\npod starts in `PROVISIONING`, transitions through `STARTING`, and\nreaches `RUNNING` once its container is healthy. Poll `getPod` (or\nwatch the pod's `status`) to observe readiness rather than assuming\nthe pod is running when this call returns.\n\n## Checking what you can deploy\n\nThis endpoint places one specific GPU type. It does not search for\ncapacity, and it does not fall back to a different GPU. To find out\nwhat is deployable before you call it, read the catalog:\n\n- [List GPU types](https://docs.runpod.io/api-reference-v2/catalog/list-gpu-types)\n  — GPU types with pricing, per-cloud ceilings, and, with\n  `include=AVAILABILITY&product=POD`, current pod stock.\n- [List data centers](https://docs.runpod.io/api-reference-v2/catalog/list-data-centers)\n  — locations, with `include=GPU_AVAILABILITY` for stock per data\n  center.\n\nBoth accept filters that combine, so you can narrow by location and by\ncompute in one request — for example\n`GET /v2/catalog/datacenters?regions=EUROPE&include=GPU_AVAILABILITY`\nreturns only European data centers, each carrying the GPU types\ncurrently available there.\n\n## Deploying under region and GPU constraints\n\nIf you need a particular GPU in a particular geography, the working\npattern is read-then-create: narrow the catalog to an acceptable\n(data center, GPU) set, then call this endpoint once per candidate in\nyour order of preference until one returns `201`. The runnable sample\nalongside this operation does exactly that.\n\nAvailability can change between the catalog read and the create call,\nso treat the catalog as a way to order your candidates, not as a\nreservation — a create can still fail for capacity on a GPU the\ncatalog just reported as available.\n\nWhich failures are worth retrying:\n\n| Status | Meaning | Do |\n| --- | --- | --- |\n| `422` | The body does not match the contract. `errors` lists each violation. | Fix the request. Never retry. |\n| `400` | The body matches the contract but was rejected — either it breaks a cross-field rule, or this GPU and data center combination could not be placed. | Try your next candidate. |\n| `402` | Insufficient balance. | Stop; no candidate will succeed. |\n| `403` | Your account cannot access the requested pool. | Skip this candidate, keep going. |\n| `429` | Rate limited. | Back off using `Retry-After`, then resume. |\n| `5xx` | Transient upstream failure. | Retry the same candidate with backoff. |\n\nRequests larger than 102400 bytes receive `413` after authentication\nand rate limiting, before deployment processing. Reduce the serialized\nJSON request body and retry.\n\nThis limit also applies to the deployment request built from your input\nand any referenced template. A small request can therefore receive `413`\nif inherited template settings make the combined request too large.\nReduce environment variables or command values in your request or template\nand retry.\n\n`400` covers both \"your request breaks a rule\" and \"no capacity\",\nbecause capacity exhaustion currently carries no machine-readable code\nof its own — only a human-readable `detail`. A rule violation is\ndeterministic, so it fails identically on every candidate: if *every*\ncandidate returns `400`, read the last `detail` as a problem with the\nrequest rather than as absent capacity.\n",
         "tags": [
           "Pods"
         ],
@@ -6070,7 +6692,7 @@
                       "globalNetworking": {
                         "enabled": false
                       },
-                      "runtime": {},
+                      "runtime": null,
                       "createdAt": "2026-06-01T12:00:00Z",
                       "startedAt": null
                     }
@@ -6093,6 +6715,14 @@
           },
           "413": {
             "description": "The incoming request body or expanded upstream request exceeds the 102400 byte limit, or the upstream rejects the request as too large.",
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6143,6 +6773,7 @@
       ],
       "get": {
         "operationId": "getPod",
+        "x-runpod-scope": "pods:read",
         "summary": "Get a pod",
         "x-mint": {
           "metadata": {
@@ -6280,6 +6911,7 @@
       },
       "patch": {
         "operationId": "updatePod",
+        "x-runpod-scope": "pods:write",
         "summary": "Update a pod",
         "x-mint": {
           "metadata": {
@@ -6423,6 +7055,9 @@
               }
             }
           },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
           },
@@ -6451,6 +7086,7 @@
       },
       "delete": {
         "operationId": "deletePod",
+        "x-runpod-scope": "pods:write",
         "summary": "Terminate a pod",
         "x-mint": {
           "metadata": {
@@ -6531,6 +7167,7 @@
       ],
       "get": {
         "operationId": "getPodLogs",
+        "x-runpod-scope": "pods:read",
         "summary": "Stream pod logs",
         "x-mint": {
           "metadata": {
@@ -6646,6 +7283,7 @@
       ],
       "post": {
         "operationId": "podAction",
+        "x-runpod-scope": "pods:write",
         "summary": "Trigger a pod state transition",
         "x-mint": {
           "metadata": {
@@ -6808,6 +7446,9 @@
           "400": {
             "$ref": "#/components/responses/BadRequestError"
           },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
           },
@@ -6838,15 +7479,24 @@
     "/v2/clusters": {
       "get": {
         "operationId": "listClusters",
+        "x-runpod-scope": "clusters:read",
         "summary": "List clusters",
         "x-mint": {
           "metadata": {
             "description": "List all Runpod Clusters owned by the authenticated user, including each Cluster's configuration, status, and aggregate Pod counts."
           }
         },
-        "description": "Returns all clusters owned by the authenticated user.",
+        "description": "Returns clusters owned by the authenticated user, cursor-paginated\nnewest-first; an omitted `limit` defaults to 1000. Follow\n`pagination.nextCursor` until `hasNextPage` is false.\n",
         "tags": [
           "Clusters"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PaginationCursor"
+          },
+          {
+            "$ref": "#/components/parameters/PaginationLimit"
+          }
         ],
         "responses": {
           "200": {
@@ -6882,6 +7532,7 @@
       },
       "post": {
         "operationId": "createCluster",
+        "x-runpod-scope": "clusters:write",
         "summary": "Create a cluster",
         "x-mint": {
           "metadata": {
@@ -6922,6 +7573,9 @@
           "403": {
             "$ref": "#/components/responses/ForbiddenError"
           },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
           },
@@ -6956,6 +7610,7 @@
       ],
       "get": {
         "operationId": "getCluster",
+        "x-runpod-scope": "clusters:read",
         "summary": "Get a cluster",
         "x-mint": {
           "metadata": {
@@ -7010,6 +7665,7 @@
       },
       "patch": {
         "operationId": "updateCluster",
+        "x-runpod-scope": "clusters:write",
         "summary": "Rename a cluster",
         "x-mint": {
           "metadata": {
@@ -7060,6 +7716,9 @@
           "403": {
             "$ref": "#/components/responses/ForbiddenError"
           },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
           },
@@ -7080,6 +7739,7 @@
       },
       "delete": {
         "operationId": "deleteCluster",
+        "x-runpod-scope": "clusters:write",
         "summary": "Delete a cluster",
         "x-mint": {
           "metadata": {
@@ -7141,6 +7801,7 @@
       ],
       "get": {
         "operationId": "listClusterPods",
+        "x-runpod-scope": "clusters:read",
         "summary": "List a cluster's pods",
         "x-mint": {
           "metadata": {
@@ -7197,6 +7858,7 @@
     "/v2/serverless": {
       "get": {
         "operationId": "listEndpoints",
+        "x-runpod-scope": "serverless:read",
         "summary": "List serverless endpoints",
         "x-mint": {
           "metadata": {
@@ -7283,6 +7945,14 @@
                           "networkVolumes": [
                             "2q9m7x4c"
                           ],
+                          "mounts": {
+                            "network": [
+                              {
+                                "volumeId": "2q9m7x4c"
+                              }
+                            ],
+                            "global": []
+                          },
                           "timeout": 300000,
                           "flashboot": "OFF",
                           "createdAt": "2026-06-01T12:00:00Z"
@@ -7329,6 +7999,7 @@
       },
       "post": {
         "operationId": "createEndpoint",
+        "x-runpod-scope": "serverless:write",
         "summary": "Create a serverless endpoint",
         "x-mint": {
           "metadata": {
@@ -7472,6 +8143,14 @@
                       "networkVolumes": [
                         "2q9m7x4c"
                       ],
+                      "mounts": {
+                        "network": [
+                          {
+                            "volumeId": "2q9m7x4c"
+                          }
+                        ],
+                        "global": []
+                      },
                       "timeout": 300000,
                       "flashboot": "OFF",
                       "createdAt": "2026-06-01T12:00:00Z"
@@ -7522,6 +8201,10 @@
                       },
                       "dataCenterIds": [],
                       "networkVolumes": [],
+                      "mounts": {
+                        "network": [],
+                        "global": []
+                      },
                       "timeout": 300000,
                       "flashboot": "OFF",
                       "createdAt": "2026-06-01T12:00:00Z"
@@ -7542,6 +8225,9 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFoundError"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
@@ -7585,6 +8271,7 @@
       ],
       "get": {
         "operationId": "getEndpoint",
+        "x-runpod-scope": "serverless:read",
         "summary": "Get a serverless endpoint",
         "x-mint": {
           "metadata": {
@@ -7655,6 +8342,14 @@
                       "networkVolumes": [
                         "2q9m7x4c"
                       ],
+                      "mounts": {
+                        "network": [
+                          {
+                            "volumeId": "2q9m7x4c"
+                          }
+                        ],
+                        "global": []
+                      },
                       "timeout": 300000,
                       "flashboot": "OFF",
                       "createdAt": "2026-06-01T12:00:00Z"
@@ -7698,13 +8393,14 @@
       },
       "patch": {
         "operationId": "updateEndpoint",
+        "x-runpod-scope": "serverless:write",
         "summary": "Update a serverless endpoint",
         "x-mint": {
           "metadata": {
             "description": "Update selected settings on a Runpod Serverless endpoint, including compute, workers, scaling, storage, and container configuration."
           }
         },
-        "description": "Partially updates a serverless endpoint. This is a PATCH: only the\nfields present in the body are changed; omitted fields are left\nuntouched. See `UpdateEndpointRequest` for the full body.\n\nMutable fields: `name`, `gpu`, `cpu`, `workers` (`min`/`max`),\n`scaling` (`type`/`value`/`idleTimeout`), `dataCenterIds`,\n`networkVolumes`, `timeout`, `flashboot`, and the container settings\n(`image`, `args`, `disk`, `ports`, `env`, `registry`).\n\nOmitted compute preserves the current selection. `cpu` completely\nreplaces a CPU endpoint's selection; compute family is immutable.\n`gpu` on CPU, `cpu` on GPU, or both fields returns 400.\n\nReturns `200` with the full updated endpoint. Effect timing differs\nby field: scaling and worker-bound settings (`workers`, `scaling`,\n`timeout`) are applied to the autoscaler promptly, while\ncontainer-affecting changes (e.g. `image`, `env`) create a new\nendpoint release that rolls out as workers cycle — in-flight workers\nkeep the previous version until they are replaced. Track rollout via\n`listEndpointReleases`.\n",
+        "description": "Partially updates a serverless endpoint. This is a PATCH: only the\nfields present in the body are changed; omitted fields are left\nuntouched. See `UpdateEndpointRequest` for the full body.\n\nMutable fields: `name`, `gpu`, `cpu`, `workers` (`min`/`max`),\n`scaling` (`type`/`value`/`idleTimeout`), `dataCenterIds`,\n`networkVolumes`, `timeout`, `flashboot`, and the\ncontainer settings (`image`, `args`, `disk`, `ports`, `env`,\n`registry`).\n\nOmitted compute preserves the current selection. `cpu` completely\nreplaces a CPU endpoint's selection; compute family is immutable.\n`gpu` on CPU, `cpu` on GPU, or both fields returns 400.\n\nReturns `200` with the full updated endpoint. Effect timing differs\nby field: scaling and worker-bound settings (`workers`, `scaling`,\n`timeout`) are applied to the autoscaler promptly, while\ncontainer-affecting changes (e.g. `image`, `env`) create a new\nendpoint release that rolls out as workers cycle — in-flight workers\nkeep the previous version until they are replaced. Track rollout via\n`listEndpointReleases`.\n",
         "tags": [
           "Serverless"
         ],
@@ -7824,6 +8520,14 @@
                       "networkVolumes": [
                         "2q9m7x4c"
                       ],
+                      "mounts": {
+                        "network": [
+                          {
+                            "volumeId": "2q9m7x4c"
+                          }
+                        ],
+                        "global": []
+                      },
                       "timeout": 300000,
                       "flashboot": "OFF",
                       "createdAt": "2026-06-01T12:00:00Z"
@@ -7844,6 +8548,9 @@
           },
           "400": {
             "$ref": "#/components/responses/BadRequestError"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
@@ -7873,6 +8580,7 @@
       },
       "delete": {
         "operationId": "deleteEndpoint",
+        "x-runpod-scope": "serverless:write",
         "summary": "Delete a serverless endpoint",
         "x-mint": {
           "metadata": {
@@ -7943,6 +8651,7 @@
       ],
       "get": {
         "operationId": "listEndpointWorkers",
+        "x-runpod-scope": "serverless:read",
         "summary": "List serverless endpoint workers",
         "x-mint": {
           "metadata": {
@@ -8050,6 +8759,7 @@
       ],
       "get": {
         "operationId": "listEndpointReleases",
+        "x-runpod-scope": "serverless:read",
         "summary": "List serverless endpoint releases",
         "x-mint": {
           "metadata": {
@@ -8171,6 +8881,7 @@
       ],
       "get": {
         "operationId": "listEndpointBuilds",
+        "x-runpod-scope": "serverless:read",
         "summary": "List serverless endpoint builds",
         "x-mint": {
           "metadata": {
@@ -8291,6 +9002,7 @@
       ],
       "get": {
         "operationId": "getEndpointBuild",
+        "x-runpod-scope": "serverless:read",
         "summary": "Get a serverless endpoint build",
         "x-mint": {
           "metadata": {
@@ -8395,6 +9107,7 @@
       ],
       "get": {
         "operationId": "getWorkerLogs",
+        "x-runpod-scope": "serverless:read",
         "summary": "Stream serverless worker logs",
         "x-mint": {
           "metadata": {
@@ -8499,6 +9212,7 @@
     "/v2/templates": {
       "get": {
         "operationId": "listTemplates",
+        "x-runpod-scope": "templates:read",
         "summary": "List templates",
         "description": "Returns templates owned by the authenticated user (including\nteam/organization-scoped ones), cursor-paginated; an omitted `limit`\ndefaults to 1000. Follow `pagination.nextCursor` until `hasNextPage`\nis false.\n",
         "x-mint": {
@@ -8606,6 +9320,7 @@
       },
       "post": {
         "operationId": "createTemplate",
+        "x-runpod-scope": "templates:write",
         "summary": "Create a template",
         "x-mint": {
           "metadata": {
@@ -8710,6 +9425,9 @@
           "400": {
             "$ref": "#/components/responses/BadRequestError"
           },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
           },
@@ -8751,6 +9469,7 @@
       ],
       "get": {
         "operationId": "getTemplate",
+        "x-runpod-scope": "templates:read",
         "summary": "Get a template",
         "x-mint": {
           "metadata": {
@@ -8845,6 +9564,7 @@
       },
       "patch": {
         "operationId": "updateTemplate",
+        "x-runpod-scope": "templates:write",
         "summary": "Update a template",
         "x-mint": {
           "metadata": {
@@ -8935,6 +9655,9 @@
           "400": {
             "$ref": "#/components/responses/BadRequestError"
           },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
           },
@@ -8963,6 +9686,7 @@
       },
       "delete": {
         "operationId": "deleteTemplate",
+        "x-runpod-scope": "templates:write",
         "summary": "Delete a template",
         "x-mint": {
           "metadata": {
@@ -9039,15 +9763,24 @@
     "/v2/network-volumes": {
       "get": {
         "operationId": "listNetworkVolumes",
+        "x-runpod-scope": "volumes:read",
         "summary": "List network volumes",
         "x-mint": {
           "metadata": {
             "description": "List all network volumes owned by the authenticated Runpod user, including each volume's size, data center, and storage tier."
           }
         },
-        "description": "Returns all network volumes owned by the authenticated user.",
+        "description": "Returns network volumes owned by the authenticated user,\ncursor-paginated newest-first; an omitted `limit` defaults to 1000.\nFollow `pagination.nextCursor` until `hasNextPage` is false.\n",
         "tags": [
           "Network Volumes"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PaginationCursor"
+          },
+          {
+            "$ref": "#/components/parameters/PaginationLimit"
+          }
         ],
         "responses": {
           "200": {
@@ -9077,7 +9810,11 @@
                           "dataCenter": "US-KS-2",
                           "type": "HIGH_PERFORMANCE"
                         }
-                      ]
+                      ],
+                      "pagination": {
+                        "nextCursor": null,
+                        "hasNextPage": false
+                      }
                     }
                   }
                 }
@@ -9115,6 +9852,7 @@
       },
       "post": {
         "operationId": "createNetworkVolume",
+        "x-runpod-scope": "volumes:write",
         "summary": "Create a network volume",
         "x-mint": {
           "metadata": {
@@ -9186,6 +9924,9 @@
           "400": {
             "$ref": "#/components/responses/BadRequestError"
           },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
           },
@@ -9228,6 +9969,7 @@
       ],
       "get": {
         "operationId": "getNetworkVolume",
+        "x-runpod-scope": "volumes:read",
         "summary": "Get a network volume",
         "x-mint": {
           "metadata": {
@@ -9303,6 +10045,7 @@
       },
       "patch": {
         "operationId": "updateNetworkVolume",
+        "x-runpod-scope": "volumes:write",
         "summary": "Update a network volume",
         "x-mint": {
           "metadata": {
@@ -9389,6 +10132,9 @@
           "404": {
             "$ref": "#/components/responses/NotFoundError"
           },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
           },
@@ -9417,6 +10163,7 @@
       },
       "delete": {
         "operationId": "deleteNetworkVolume",
+        "x-runpod-scope": "volumes:write",
         "summary": "Delete a network volume",
         "x-mint": {
           "metadata": {
@@ -9472,9 +10219,468 @@
         }
       }
     },
+    "/v2/global-volumes": {
+      "get": {
+        "operationId": "listGlobalVolumes",
+        "x-runpod-scope": "volumes:read",
+        "summary": "List global volumes",
+        "x-mint": {
+          "metadata": {
+            "description": "List global volumes owned by your Runpod account through the REST API, using cursor pagination to retrieve additional results."
+          }
+        },
+        "description": "Returns global volumes owned by the authenticated user,\ncursor-paginated newest-first; an omitted `limit` defaults to 1000.\nFollow `pagination.nextCursor` until `hasNextPage` is false.\n",
+        "tags": [
+          "Global Volumes"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PaginationCursor"
+          },
+          {
+            "$ref": "#/components/parameters/PaginationLimit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListGlobalVolumesResponse"
+                },
+                "examples": {
+                  "globalVolumes": {
+                    "summary": "Successful response",
+                    "value": {
+                      "globalVolumes": [
+                        {
+                          "id": "gsb_abc",
+                          "name": "training-data",
+                          "createdAt": "2026-09-24T00:00:00Z",
+                          "createdByUserId": "user_123"
+                        }
+                      ],
+                      "pagination": {
+                        "nextCursor": null,
+                        "hasNextPage": false
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createGlobalVolume",
+        "x-runpod-scope": "volumes:write",
+        "summary": "Create a global volume",
+        "x-mint": {
+          "metadata": {
+            "description": "Create a named Runpod global volume through the REST API for storage that Pods and Serverless workers can access across data centers."
+          }
+        },
+        "description": "Provisions a new global volume — storage that mounts into workloads\nin any data center. Only a `name` is required; storage is provisioned\nfor you. Accounts have a cap on how many global volumes they can\nhold; creating one past it fails with `400`.\n\nReturns `201` with the created global volume, including its assigned\n`id`.\n",
+        "tags": [
+          "Global Volumes"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateGlobalVolumeRequest"
+              },
+              "examples": {
+                "globalVolume": {
+                  "summary": "Global volume",
+                  "value": {
+                    "name": "training-data"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalVolume"
+                },
+                "examples": {
+                  "globalVolume": {
+                    "summary": "Successful response",
+                    "value": {
+                      "id": "gsb_abc",
+                      "name": "training-data",
+                      "createdAt": "2026-09-24T00:00:00Z",
+                      "createdByUserId": "user_123"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/global-volumes/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Global volume identifier",
+          "example": "gsb_abc"
+        }
+      ],
+      "get": {
+        "operationId": "getGlobalVolume",
+        "x-runpod-scope": "volumes:read",
+        "summary": "Get a global volume",
+        "x-mint": {
+          "metadata": {
+            "description": "Retrieve a Runpod global volume by its ID through the REST API, including its name, creation time, and the user who created it."
+          }
+        },
+        "description": "Returns a single global volume by ID.",
+        "tags": [
+          "Global Volumes"
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalVolume"
+                },
+                "examples": {
+                  "globalVolume": {
+                    "summary": "Successful response",
+                    "value": {
+                      "id": "gsb_abc",
+                      "name": "training-data",
+                      "createdAt": "2026-09-24T00:00:00Z",
+                      "createdByUserId": "user_123"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateGlobalVolume",
+        "x-runpod-scope": "volumes:write",
+        "summary": "Update a global volume",
+        "x-mint": {
+          "metadata": {
+            "description": "Rename an existing Runpod global volume by ID through the REST API, updating its name while leaving omitted fields unchanged."
+          }
+        },
+        "description": "Updates mutable fields on a global volume. Only provided fields are changed.",
+        "tags": [
+          "Global Volumes"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateGlobalVolumeRequest"
+              },
+              "examples": {
+                "renameGlobalVolume": {
+                  "summary": "Rename global volume",
+                  "value": {
+                    "name": "renamed-volume"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalVolume"
+                },
+                "examples": {
+                  "globalVolume": {
+                    "summary": "Successful response",
+                    "value": {
+                      "id": "gsb_abc",
+                      "name": "renamed-volume",
+                      "createdAt": "2026-09-24T00:00:00Z",
+                      "createdByUserId": "user_123"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteGlobalVolume",
+        "x-runpod-scope": "volumes:write",
+        "summary": "Delete a global volume",
+        "x-mint": {
+          "metadata": {
+            "description": "Permanently delete a Runpod global volume and its stored data through the REST API after removing Pod and Serverless attachments."
+          }
+        },
+        "description": "Permanently deletes a global volume and its stored data. Fails with\n`409` while the volume is still mounted: terminate every pod that\nmounts it (stopped pods count) and detach it from every serverless\nendpoint first. Nothing is detached or terminated on your behalf.\n",
+        "tags": [
+          "Global Volumes"
+        ],
+        "responses": {
+          "204": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Deleted. Response has no body."
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "409": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "The volume is still mounted by a pod or serverless endpoint.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v2/registries": {
       "get": {
         "operationId": "listRegistries",
+        "x-runpod-scope": "secrets:read",
         "summary": "List container registries",
         "x-mint": {
           "metadata": {
@@ -9548,6 +10754,7 @@
       },
       "post": {
         "operationId": "createRegistry",
+        "x-runpod-scope": "secrets:write",
         "summary": "Create a container registry credential",
         "x-mint": {
           "metadata": {
@@ -9615,6 +10822,9 @@
           "400": {
             "$ref": "#/components/responses/BadRequestError"
           },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
           },
@@ -9656,6 +10866,7 @@
       ],
       "get": {
         "operationId": "getRegistry",
+        "x-runpod-scope": "secrets:read",
         "summary": "Get a container registry credential",
         "x-mint": {
           "metadata": {
@@ -9728,6 +10939,7 @@
       },
       "delete": {
         "operationId": "deleteRegistry",
+        "x-runpod-scope": "secrets:write",
         "summary": "Delete a container registry credential",
         "x-mint": {
           "metadata": {
@@ -9804,6 +11016,7 @@
     "/v2/registries/delegations": {
       "get": {
         "operationId": "listDelegations",
+        "x-runpod-scope": "secrets:read",
         "summary": "List all ECR delegations",
         "x-mint": {
           "metadata": {
@@ -9863,6 +11076,7 @@
       },
       "post": {
         "operationId": "createDelegation",
+        "x-runpod-scope": "secrets:write",
         "summary": "Register an ECR delegation",
         "x-mint": {
           "metadata": {
@@ -9907,6 +11121,12 @@
           "403": {
             "$ref": "#/components/responses/ForbiddenError"
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
           "429": {
             "$ref": "#/components/responses/TooManyRequestsError"
           },
@@ -9945,6 +11165,7 @@
       ],
       "delete": {
         "operationId": "revokeDelegation",
+        "x-runpod-scope": "secrets:write",
         "summary": "Revoke an ECR delegation",
         "x-mint": {
           "metadata": {
@@ -10017,6 +11238,7 @@
     "/v2/catalog/gpus": {
       "get": {
         "operationId": "listGpuTypes",
+        "x-runpod-scope": "catalog:read",
         "summary": "List GPU types",
         "x-mint": {
           "metadata": {
@@ -10148,6 +11370,7 @@
       ],
       "get": {
         "operationId": "getGpuType",
+        "x-runpod-scope": "catalog:read",
         "summary": "Get a GPU type",
         "x-mint": {
           "metadata": {
@@ -10267,6 +11490,7 @@
     "/v2/catalog/cpus": {
       "get": {
         "operationId": "listCpuTypes",
+        "x-runpod-scope": "catalog:read",
         "summary": "List CPU types",
         "x-mint": {
           "metadata": {
@@ -10382,6 +11606,7 @@
       ],
       "get": {
         "operationId": "getCpuType",
+        "x-runpod-scope": "catalog:read",
         "summary": "Get a CPU type",
         "x-mint": {
           "metadata": {
@@ -10485,6 +11710,7 @@
     "/v2/catalog/datacenters": {
       "get": {
         "operationId": "listDataCenters",
+        "x-runpod-scope": "catalog:read",
         "summary": "List data centers",
         "x-mint": {
           "metadata": {
@@ -10678,6 +11904,7 @@
       ],
       "get": {
         "operationId": "getDataCenter",
+        "x-runpod-scope": "catalog:read",
         "summary": "Get a data center",
         "x-mint": {
           "metadata": {
@@ -10795,6 +12022,7 @@
     "/v2/catalog/templates": {
       "get": {
         "operationId": "listPublicTemplates",
+        "x-runpod-scope": "catalog:read",
         "summary": "List public templates",
         "x-mint": {
           "metadata": {
@@ -10905,9 +12133,142 @@
         }
       }
     },
+    "/v2/audit-logs": {
+      "get": {
+        "operationId": "listAuditLogs",
+        "x-runpod-scope": "audit:read",
+        "summary": "List audit logs",
+        "x-mint": {
+          "metadata": {
+            "description": "List your Runpod audit trail to see who acted on each resource, with filters for actor, action, time range, and text, newest first."
+          }
+        },
+        "description": "Returns the account's audit trail, newest first, cursor-paginated; an omitted `limit` defaults to 200. Each entry records who acted (`actorId`, `email`), what they did (`action`), to which resource (`resourceType`, `resourceId`), and the details of the change (`value`). When the caller belongs to an organization the trail is the organization's, and `actorIds` narrows it to specific members; otherwise it is the trail of the account the request acts for. Filters combine with AND. Entries older than the account's audit log retention window are not returned, and an account whose plan does not include audit logs is answered 403. Follow `pagination.nextCursor` until `hasNextPage` is false.",
+        "tags": [
+          "Audit Logs"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AuditLogActorIdsFilter"
+          },
+          {
+            "$ref": "#/components/parameters/AuditLogActionsFilter"
+          },
+          {
+            "$ref": "#/components/parameters/AuditLogStartTime"
+          },
+          {
+            "$ref": "#/components/parameters/AuditLogEndTime"
+          },
+          {
+            "$ref": "#/components/parameters/AuditLogSearch"
+          },
+          {
+            "$ref": "#/components/parameters/PaginationCursor"
+          },
+          {
+            "$ref": "#/components/parameters/PaginationLimitAuditLogs"
+          }
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListAuditLogsResponse"
+                },
+                "examples": {
+                  "auditLogs": {
+                    "summary": "Successful response",
+                    "value": {
+                      "auditLogs": [
+                        {
+                          "actorId": "user_id_abc_123",
+                          "email": "actor@example.com",
+                          "resourceType": "pod",
+                          "resourceId": "abc123",
+                          "action": "delete",
+                          "value": "{\"status\":\"TERMINATED\"}",
+                          "timestamp": "2026-09-02T00:00:00Z"
+                        },
+                        {
+                          "actorId": "user_id_abc_123",
+                          "email": "actor@example.com",
+                          "resourceType": "pod",
+                          "resourceId": "abc123",
+                          "action": "rename",
+                          "value": "{\"name\":\"training-run-7\"}",
+                          "timestamp": "2026-09-01T18:30:00Z"
+                        },
+                        {
+                          "actorId": "user_id_def_456",
+                          "email": "admin@example.com",
+                          "resourceType": "secret",
+                          "resourceId": "sec_789",
+                          "action": "update",
+                          "value": "{\"id\":\"sec_789\",\"name\":\"HF_TOKEN\",\"sharedWithOrganization\":true}",
+                          "timestamp": "2026-09-01T09:15:00Z"
+                        }
+                      ],
+                      "pagination": {
+                        "nextCursor": "eyJ0cyI6IjIwMjYtMDktMDFUMDk6MTU6MDBaIn0=",
+                        "hasNextPage": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v2/billing": {
       "get": {
         "operationId": "listBilling",
+        "x-runpod-scope": "billing:read",
         "summary": "Get aggregated billing history",
         "x-mint": {
           "metadata": {
@@ -11035,6 +12396,7 @@
     "/v2/billing/pods": {
       "get": {
         "operationId": "listPodBilling",
+        "x-runpod-scope": "billing:read",
         "summary": "Get pod billing history",
         "x-mint": {
           "metadata": {
@@ -11155,6 +12517,7 @@
     "/v2/billing/serverless": {
       "get": {
         "operationId": "listServerlessBilling",
+        "x-runpod-scope": "billing:read",
         "summary": "Get serverless billing history",
         "x-mint": {
           "metadata": {
@@ -11277,6 +12640,7 @@
     "/v2/billing/endpoints": {
       "get": {
         "operationId": "listEndpointBilling",
+        "x-runpod-scope": "billing:read",
         "summary": "Get public endpoint billing history",
         "x-mint": {
           "metadata": {
@@ -11378,6 +12742,7 @@
     "/v2/billing/network-volumes": {
       "get": {
         "operationId": "listNetworkVolumeBilling",
+        "x-runpod-scope": "billing:read",
         "summary": "Get network volume billing history",
         "x-mint": {
           "metadata": {
@@ -11496,6 +12861,7 @@
     "/v2/billing/clusters": {
       "get": {
         "operationId": "listClusterBilling",
+        "x-runpod-scope": "billing:read",
         "summary": "Get cluster billing history",
         "x-mint": {
           "metadata": {

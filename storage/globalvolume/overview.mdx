@@ -1,7 +1,7 @@
 ---
 title: "Overview"
 sidebarTitle: "Overview"
-description: "Learn how to create a global volume in Runpod and access your data from Pods and Serverless workers across all data centers, with storage that persists across sessions."
+description: "Create a Runpod global volume, attach it to Pods or Serverless workers across data centers, and review storage costs and limitations."
 ---
 
 <Note>
@@ -25,21 +25,21 @@ For attachment steps, see [Global volumes for Pods](/storage/globalvolume/global
 The volume appears in your Storage list with the type set to **Global**. Storage grows automatically as you add data. There is no capacity to provision upfront.
 
 <Warning>
-  If your account balance reaches $\0, your global volume is flagged and permanently deleted after 15 days. Enable [low balance notifications](/accounts-billing/billing#low-balance-notifications) to avoid data loss.
+  If your account balance reaches $0, your global volume is flagged and permanently deleted after 15 days. Enable [low balance notifications](/accounts-billing/billing#low-balance-notifications) to avoid data loss.
 </Warning>
 
 ## Access your files
 
 A global volume mounts automatically at startup. The mount path depends on where you're using it:
 
-- **Pods:** defaults to `/workspace`, or `/workspace-global` when a network volume is also attached. See [Global volumes for Pods](/storage/globalvolume-pods#mount-paths) for details.
+- **Pods:** defaults to `/workspace`, or `/workspace-global` when a network volume is also attached. See [Global volumes for Pods](/storage/globalvolume/globalvolume-pods#mount-paths) for details.
 - **Serverless:** always mounts at `/runpod-volume`. See [Global volumes for Serverless](/storage/globalvolume/globalvolume-serverless#mount-path) for details.
 
 ## Migrate data from a network volume
 
 If you have data on a network volume that you want to move to a global volume, you can use `rsync`. When both volumes are attached to a Pod without a custom mount path, the network volume is at `/workspace` and the global volume is at `/workspace-global`. Verify your paths in the Pod's **Console** tab before running the command.
 
-1. Deploy a Pod with both your network volume and global volume attached (see [Attach a global volume to a Pod](/storage/globalvolume-pods#attach-a-global-volume-to-a-pod)).
+1. Deploy a Pod with both your network volume and global volume attached (see [Attach a global volume to a Pod](/storage/globalvolume/globalvolume-pods#attach-a-global-volume-to-a-pod)).
 2. Run the following command from the Pod's **Console** tab:
 
 ```bash
@@ -81,15 +81,15 @@ Workloads that write frequently or loop over large directory listings can accumu
 Global volumes use object-backed storage, not a fully POSIX compliant file system. Review the following before using global volumes in production.
 
 - **Admin-only creation:** Only team members with the [Admin role](/accounts-billing/manage-accounts#roles-and-permissions) can create global volumes. Members with any other role cannot create one, even when they can access other team resources.
-- **GPU only:** Global volumes can't be attached to CPU Pods or CPU Serverless endpoints.
+- **CPU Pods through the API only:** The console attaches global volumes to GPU Pods only. To attach one to a CPU Pod, create the Pod with the [REST API](/api-reference-v2/pods/create-a-pod) (`mounts.global`). Global volumes can't be attached to CPU Serverless endpoints.  
 - **Limited POSIX semantics:** Global volumes do not support file locking, atomic rename, or hard links. Applications that depend on POSIX behavior may fail or produce unexpected results.
-- **No permission bits:** Global volumes cannot set file permission bits. This may produce warnings when downloading models from sources such as Hugging Face.
+- **No permission bits:** Global volumes cannot set file permission bits. This may produce warnings when downloading models from sources such as Hugging Face. It also means templates that install a Python environment into `/workspace`, such as the official ComfyUI template, don't work with a global volume as their primary volume: the deploy page shows an **Unsupported volume type** warning. For those templates, keep `/workspace` on the volume disk or a network volume, and mount the global volume at a second path, such as `/workspace-global`, for model files only.
 - **Concurrent writes to the same file:** Multiple Pods can write to a global volume concurrently, but when two Pods write to the same file at the same time, the last write wins. For workloads that require file locking or high-concurrency writes, use a network volume instead.
 - **Eventual consistency:** Global volumes use object storage, which means updates made to the volume after a Pod or worker starts may not be immediately visible inside the container. Plan your workload around the state of the volume at mount time.
 
 ## Next steps
 
-- [Global volumes for Pods](/storage/globalvolume-pods)
+- [Global volumes for Pods](/storage/globalvolume/globalvolume-pods)
 - [Global volumes for Serverless](/storage/globalvolume/globalvolume-serverless)
 - [Manage network volumes](/storage/network-volumes)
 - [Use the S3-compatible API](/storage/s3-api)

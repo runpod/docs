@@ -5,7 +5,7 @@ description: "Connect AI tools to Runpod using the Model Context Protocol for in
 tag: "NEW"
 ---
 
-Runpod provides two [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro) servers that connect AI tools and coding agents directly to Runpod:
+Runpod provides two [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/2026-07-28/getting-started/intro) servers that connect AI tools and coding agents directly to Runpod:
 
 - **[Runpod API MCP server](#runpod-api-mcp-server):** Manage Pods, endpoints, templates, volumes, and registries through the Runpod REST API. Authenticate with Sign in with Runpod or a [Runpod API key](/get-started/credentials#api-keys).
 - **[Runpod docs MCP server](#runpod-docs-mcp-server):** Search Runpod documentation for features, code examples, and guides. No authentication required.
@@ -14,7 +14,9 @@ Runpod provides two [Model Context Protocol (MCP)](https://modelcontextprotocol.
 
 The Runpod API MCP server gives AI tools access to the [Runpod REST API](/api-reference/overview), letting you create and manage Pods, Serverless endpoints, templates, network volumes, and container registries through natural language.
 
-**Hosted endpoint:** `https://mcp.getrunpod.io/` (Streamable HTTP transport)
+**Hosted endpoint:** `https://mcp.runpod.io/` (Streamable HTTP transport)
+
+`https://mcp.getrunpod.io/` is the same server under its old name, and it still works. Older versions of the installer and the Runpod plugin used that address. Use `https://mcp.runpod.io/` for new connections. Register only one of them: each address has its own sign-in, so registering both gives you two separate entries.
 
 **Local package:** `@runpod/mcp-server` (via npx)
 
@@ -26,12 +28,21 @@ You can connect in two ways: the recommended hosted server, or a local server th
 
 ### Hosted server (recommended)
 
-The hosted server runs at `https://mcp.getrunpod.io/` and provides the same capabilities as the local server. OAuth-capable clients run a "Sign in with Runpod" flow on first connect: a browser opens, you log in to the Runpod console and approve the request, and the server obtains a session-scoped API key. Nothing is stored on disk.
+The hosted server runs at `https://mcp.runpod.io/` and provides the same capabilities as the local server. OAuth-capable clients run a "Sign in with Runpod" flow on first connect: a browser opens, you log in to the Runpod console and approve the request, and the server obtains a session-scoped API key. Nothing is stored on disk. Sign-in always starts from your client. Opening `https://mcp.runpod.io/` directly in a browser doesn't sign you in; it returns HTTP `405`.
 
-The guided installer is the recommended path for supported clients. It detects your installed clients — Claude Code, Claude Desktop, Cursor, Windsurf, and VS Code — and configures each one, handling client-specific config-key differences automatically:
+Sign-in works in Claude, ChatGPT, Codex, and Cursor, and in any client that receives the sign-in on a local address (`http://localhost` or `http://127.0.0.1`). Other clients may fail with a `redirect_uri is not allowed` error. For those clients, [pass an API key as a header](#use-an-api-key-with-the-hosted-server) or use the [local server](#local-server-api-key).
+
+The guided installer is the recommended path for supported clients. It detects your installed clients (Claude Code, Claude Desktop, Cursor, Windsurf, VS Code, opencode, and Pi) and configures each one, handling client-specific config-key differences automatically:
 
 ```bash
 npx @runpod/mcp-server@latest add
+```
+
+The installer needs Node.js 20.12 or later. Without arguments, the installer asks which clients to configure, so it needs an interactive terminal. To skip the questions, for example when a coding agent runs it, name the clients with `--client` (separate several with commas). `--list` shows each client's id and where its config file lives:
+
+```bash
+npx @runpod/mcp-server@latest add --list
+npx @runpod/mcp-server@latest add --client cursor
 ```
 
 To undo these changes, run `npx @runpod/mcp-server@latest remove`.
@@ -39,31 +50,62 @@ To undo these changes, run `npx @runpod/mcp-server@latest remove`.
 #### Claude Code (hosted)
 
 ```bash
-claude mcp add --transport http runpod -s user https://mcp.getrunpod.io/
+claude mcp add --transport http runpod -s user https://mcp.runpod.io/
 ```
 
-#### Claude Desktop (hosted)
+#### Cursor (hosted)
 
-1. Open **Settings** in Claude Desktop.
-2. Navigate to **Connectors** and select **Add custom connector**.
-3. Enter `https://mcp.getrunpod.io/` as the URL and click **Add**.
-
-#### VS Code with Copilot (hosted)
-
-1. Open the Command Palette (Ctrl+Shift+P on Windows/Linux or Cmd+Shift+P on macOS).
-2. Run **MCP: Add Server** and select **HTTP**.
-3. Enter `https://mcp.getrunpod.io/` as the URL and `Runpod` as the name.
-4. Select **Global** or **Workspace** and click **Add**.
-
-#### Other clients (hosted)
-
-For any other MCP-compatible client, use the remote URL `https://mcp.getrunpod.io/`:
+Add the following to `.cursor/mcp.json` (project-level) or `~/.cursor/mcp.json` (global), or run `npx @runpod/mcp-server@latest add --client cursor`. Then restart Cursor and connect **runpod** under **Settings > MCP**:
 
 ```json
 {
   "mcpServers": {
     "runpod": {
-      "url": "https://mcp.getrunpod.io/"
+      "url": "https://mcp.runpod.io/"
+    }
+  }
+}
+```
+
+#### opencode (hosted)
+
+opencode uses the `mcp` key, not `mcpServers`, and needs `"type": "remote"`. Add this to `opencode.json`, or run `npx @runpod/mcp-server@latest add --client opencode`:
+
+```json
+{
+  "mcp": {
+    "runpod": {
+      "type": "remote",
+      "url": "https://mcp.runpod.io/"
+    }
+  }
+}
+```
+
+Run `opencode mcp auth runpod` to sign in, and `opencode mcp list` to check the connection.
+
+#### Claude Desktop (hosted)
+
+1. Open **Settings** in Claude Desktop.
+2. Navigate to **Connectors** and select **Add custom connector**.
+3. Enter `https://mcp.runpod.io/` as the URL and click **Add**.
+
+#### VS Code with Copilot (hosted)
+
+1. Open the Command Palette (Ctrl+Shift+P on Windows/Linux or Cmd+Shift+P on macOS).
+2. Run **MCP: Add Server** and select **HTTP**.
+3. Enter `https://mcp.runpod.io/` as the URL and `Runpod` as the name.
+4. Select **Global** or **Workspace** and click **Add**.
+
+#### Other clients (hosted)
+
+For any other MCP-compatible client, use the remote URL `https://mcp.runpod.io/`:
+
+```json
+{
+  "mcpServers": {
+    "runpod": {
+      "url": "https://mcp.runpod.io/"
     }
   }
 }
@@ -71,20 +113,31 @@ For any other MCP-compatible client, use the remote URL `https://mcp.getrunpod.i
 
 Clients differ in the exact key name they use for a remote server URL. For the clients the guided installer supports, it writes the correct configuration automatically; for any other client, consult that client's MCP documentation for how to add a remote HTTP server, using the URL above.
 
-<Note>
-To skip the OAuth flow, pass your API key as a bearer header. For example, in Claude Code:
+#### Use an API key with the hosted server
+
+To skip the OAuth flow, or if your client can't complete it, pass your API key as a bearer header. For example, in Claude Code:
 
 ```bash
-claude mcp add --transport http runpod -s user https://mcp.getrunpod.io/ \
+claude mcp add --transport http runpod -s user https://mcp.runpod.io/ \
   --header "Authorization: Bearer $RUNPOD_API_KEY"
 ```
 
-Clients configured with JSON use a `headers` block instead.
-</Note>
+Clients configured with JSON use a `headers` block instead:
+
+```json
+{
+  "mcpServers": {
+    "runpod": {
+      "url": "https://mcp.runpod.io/",
+      "headers": { "Authorization": "Bearer your_api_key_here" }
+    }
+  }
+}
+```
 
 ### Local server (API key)
 
-Use this method to run the server locally with an API key stored in your client config — for example, if your client doesn't support the hosted server's sign-in flow, or you prefer to manage the credential yourself.
+Use this method to run the server locally with an API key stored in your client config. For example, use it if your client doesn't support the hosted server's sign-in flow, or you prefer to manage the credential yourself.
 
 #### Supported clients
 
