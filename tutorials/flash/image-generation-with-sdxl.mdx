@@ -20,7 +20,7 @@ This tutorial shows you how to build an image generation script using Flash and 
 
 - You've [created a Runpod account](/accounts-billing/manage-accounts).
 - You've [created a Runpod API key](/get-started/credentials).
-- You've installed [Python 3.10, 3.11, 3.12, or 3.13](https://www.python.org/downloads/).
+- You've installed [Python 3.10 to 3.14](https://www.python.org/downloads/).
 - You've completed the [Flash quickstart](/flash/quickstart) or are familiar with Flash basics.
 
 ## What you'll build
@@ -108,7 +108,7 @@ Add the endpoint function that will run on the GPU worker:
     gpu=[GpuGroup.ADA_24, GpuGroup.AMPERE_24],  # 24GB GPUs
     workers=2,
     idle_timeout=900,  # Keep workers active for 15 minutes
-    dependencies=["diffusers", "torch", "transformers", "accelerate"]
+    dependencies=["diffusers", "torch", "transformers"]
 )
 def generate_image(prompt, negative_prompt="", num_steps=30, guidance_scale=7.5):
     """Generate an image using Stable Diffusion XL."""
@@ -178,11 +178,12 @@ Expand this section for a full breakdown:
 
 <Accordion title="Code breakdown">
 
-**Dependencies**: The function requires four packages:
+**Dependencies**: The function requires three packages:
    - `diffusers`: Hugging Face library for diffusion models
    - `torch`: PyTorch for GPU computation
    - `transformers`: Text encoder dependencies
-   - `accelerate`: Efficient model loading
+
+   Avoid adding `accelerate` here. It requires `torch`, so `flash deploy` downloads `torch` and its CUDA libraries into the local build, which can use several GB of disk on Linux.
 
 **Model loading**:
    ```python
@@ -298,9 +299,20 @@ This main function:
 - Decodes and saves the base64 image to disk.
 - Displays generation metadata.
 
-## Step 7: Run your first generation
+## Step 7: Deploy and run your first generation
 
-Run the application:
+Deploy the endpoint from your project directory:
+
+```bash
+flash deploy
+
+# If using uv:
+uv run flash deploy
+```
+
+Flash builds the project on your machine, uploads it, and creates the `image-generation` endpoint. Your `@Endpoint` dependencies are installed into a local build directory first, so make sure you have free disk space. If the build runs out of space, see [`flash deploy`](/flash/cli/deploy) for the `--exclude` and `--no-deps` options.
+
+Then run the application from the same directory:
 
 ```bash
 python image_generation.py
@@ -312,14 +324,6 @@ python image_generation.py
 Generating image with Stable Diffusion XL on Runpod GPU...
 This may take 1-2 minutes on first run (downloading model)...
 
-Creating endpoint: server_Endpoint_a1b2c3d4
-Provisioning Serverless endpoint...
-Endpoint ready
-Executing function on Runpod endpoint ID: xvf32dan8rcilp
-Initial job status: IN_QUEUE
-Downloading model weights from Hugging Face...
-Model loaded, generating image...
-Job completed, output received
 ✓ Image saved to generated_images/sdxl_output.png
 
 ============================================================
@@ -339,10 +343,6 @@ Device: cuda
 ```text
 Generating image with Stable Diffusion XL on Runpod GPU...
 
-Resource Endpoint_a1b2c3d4 already exists, reusing.
-Executing function on Runpod endpoint ID: xvf32dan8rcilp
-Initial job status: IN_QUEUE
-Job completed, output received
 ✓ Image saved to generated_images/sdxl_output.png
 
 [Results appear]
@@ -648,7 +648,7 @@ vol = NetworkVolume(name="model-cache")  # Finds existing or creates new
     name="image-generation",
     gpu=GpuGroup.ADA_24,
     volume=vol,
-    dependencies=["diffusers", "torch", "transformers", "accelerate"]
+    dependencies=["diffusers", "torch", "transformers"]
 )
 def generate_image(prompt, ...):
     # Models at /runpod-volume/ persist across workers

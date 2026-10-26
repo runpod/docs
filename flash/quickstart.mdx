@@ -15,7 +15,7 @@ This quickstart gets you running GPU workloads on Runpod in minutes. You'll exec
 
 - [Runpod account](/accounts-billing/manage-accounts) with a verified email address.
 - [An API key](/get-started/credentials#api-keys) with **All** access permissions to your Runpod account.
-- [Python 3.10, 3.11, 3.12, or 3.13](https://www.python.org/downloads/) installed.
+- [Python 3.10 to 3.14](https://www.python.org/downloads/) installed. Workers run Python 3.12 by default, whatever your local version.
 - [uv](https://docs.astral.sh/uv/) installed.
 
 ## Step 1: Install Flash
@@ -118,31 +118,46 @@ if __name__ == "__main__":
 Make sure you activate your virtual environment in the same directory where you created the `gpu_demo.py` file. If you open a new terminal, run `source .venv/bin/activate` before executing the script.
 </Warning>
 
-## Step 4: Run it
+## Step 4: Deploy the endpoint
 
-Execute the script:
+From the directory that contains `gpu_demo.py`, deploy the endpoint:
+
+```bash
+flash deploy
+
+# If using uv:
+uv run flash deploy
+```
+
+Flash builds your project on your machine, uploads it, and creates the `flash-quickstart` endpoint. The app is named after the current directory, and the endpoint is deployed to the `production` environment.
+
+<Note>
+`flash deploy` installs your endpoint's dependencies into a local build directory before uploading. Flash leaves `torch`, `torchvision`, `torchaudio`, and `triton` out of the upload because the worker image already provides them, but a dependency that requires `torch` (such as `accelerate`) still downloads it during the local build. On Linux, that can be several GB. If the build runs out of disk space, remove that dependency, exclude it with `--exclude`, or skip transitive dependencies with `--no-deps`. See [`flash deploy`](/flash/cli/deploy) for details.
+</Note>
+
+## Step 5: Run it
+
+Execute the script from the same directory:
 
 ```bash
 python gpu_demo.py
 ```
 
-You'll see Flash provision a GPU worker and execute your function:
+Flash sends the call to your deployed endpoint and prints the result:
 
 ```text
 Running matrix multiplication on Runpod GPU...
-Creating endpoint: flash-quickstart
-Provisioning Serverless endpoint...
-Endpoint ready
-Executing function on Runpod endpoint ID: xvf32dan8rcilp
-Initial job status: IN_QUEUE
-Job completed, output received
 
 ✓ Matrix size: 1000x1000
 ✓ Result mean: 249.8286
 ✓ GPU used: NVIDIA RTX A5000
 ```
 
-The first run takes 30-60 seconds, while Runpod provisions the endpoint, installs dependencies, and starts a worker. Subsequent runs take 2-3 seconds (because the worker is already running).
+The first run takes 30-60 seconds while a worker starts and installs dependencies. Later runs return in a few seconds while the worker is still warm.
+
+<Warning>
+If you see `endpoint 'flash-quickstart' not found in app '...' environment 'production'`, the endpoint isn't deployed for this directory. Run `flash deploy` from the directory that contains `gpu_demo.py`, then run the script again from that same directory.
+</Warning>
 
 
 <Tip>
@@ -155,9 +170,9 @@ export RUNPOD_API_KEY="your_key"
 Replace `your_key` with your actual API key from the [Credentials page](https://console.runpod.io/user/credentials).
 </Tip>
 
-## Step 5: Update and run again
+## Step 6: Update and run again
 
-With your endpoint running, make a change and run the script again:
+With your endpoint running, change an input and run the script again:
 
 1. Open `gpu_demo.py` and change the matrix size from `1000` to `2000`:
 
@@ -171,11 +186,11 @@ With your endpoint running, make a change and run the script again:
    python gpu_demo.py
    ```
 
-This time, the result should appear in 1-3 seconds instead of 30-60 seconds, injects the code into the running worker so code changes take effect immediately without reprovisioning.
+This time, the result should appear in a few seconds because the worker is already warm. The argument is sent with the request, so you don't need to redeploy.
 
-This instant iteration is one of Flash's key features. You can develop and test GPU code as quickly as local development, even though it runs on remote hardware.
+If you change the code inside `gpu_matrix_multiply` or its `@Endpoint` configuration, run `flash deploy` again so the endpoint picks up the new version.
 
-## Step 6: Understand what you just did
+## Step 7: Understand what you just did
 
 Let's break down the code you just ran:
 
@@ -256,18 +271,16 @@ if __name__ == "__main__":
 
 Here's what happens when you call an `@Endpoint` decorated function:
 
-1. Flash checks if the endpoint specified in your decorator already exists.
-   - If yes: It updates the endpoint if the configuration has changed.
-   - If no: It creates a new endpoint, initializes a worker, and installs your dependencies.
-2. Flash sends your code to the GPU worker
-3. The GPU worker executes the function with the provided inputs.
+1. Flash looks up the endpoint by its `name` in your app (the current directory name) and environment (`production` by default). `flash deploy` must have created it first.
+2. Flash sends the function's arguments to the endpoint.
+3. A GPU worker runs the deployed function with those arguments.
 4. The result is returned to your local machine as a Python dictionary, where it's printed in your terminal.
 
 Everything outside the `@Endpoint` function (all the `print` statements, etc.) runs **locally on your machine**. Only the decorated function runs remotely.
 
-## Step 7: Run multiple operations in parallel
+## Step 8: Run multiple operations in parallel
 
-Flash makes it easy to run multiple GPU operations concurrently. Replace your `main()` function with the code below:
+Flash makes it easy to run multiple GPU operations concurrently. Replace your `main()` function with the code below, and keep the `if __name__ == "__main__":` block at the end of the file. Without it, the script exits without printing anything.
 
 ```python
 async def main():
@@ -285,9 +298,12 @@ async def main():
         print(f"\n{i}. Size: {result['matrix_size']}x{result['matrix_size']}")
         print(f"   Mean: {result['result_mean']:.4f}")
         print(f"   GPU: {result['gpu']}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
-Run the script again:
+You only changed code outside the `@Endpoint` function, so you don't need to redeploy. Run the script again:
 
 ```bash
 python gpu_demo.py
@@ -297,12 +313,6 @@ All three operations execute simultaneously:
 
 ```text
 Running 3 matrix operations in parallel...
-Initial job status: IN_QUEUE
-Initial job status: IN_QUEUE
-Initial job status: IN_QUEUE
-Job completed, output received
-Job completed, output received
-Job completed, output received
 
 1. Size: 500x500
    Mean: 125.3097
@@ -357,6 +367,14 @@ You've successfully run GPU code on Runpod! Now you're ready to learn more about
 </CardGroup>
 
 ## Troubleshooting
+
+### Endpoint not found
+
+```text
+RuntimeError: endpoint 'flash-quickstart' not found in app 'Quickstart' environment 'production'. deploy it first with 'flash deploy'.
+```
+
+**Solution**: Calling an `@Endpoint` function sends the request to an endpoint you've already deployed. Run `flash deploy` from the directory that contains your script, then run the script from that same directory. Flash uses the directory name as the app name, so running from a different directory looks up a different app.
 
 ### Authentication error
 
