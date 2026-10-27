@@ -3,14 +3,16 @@ title: "Batch jobs"
 description: "Submit large collections of Serverless inference requests as named batch jobs, then monitor asynchronous processing and retrieve results."
 ---
 
-Batch jobs let you run large volumes of inference requests against a queue-based Serverless endpoint without waiting for each result in real time. Batches run asynchronously on dedicated workers that are separate from your endpoint's standard `/run` traffic, so a large batch never takes capacity from your interactive requests.
+Batch jobs let you run large volumes of inference requests against a queue-based Serverless endpoint without waiting for each result in real time. Batches run asynchronously on dedicated workers that are separate from your endpoint's standard `/run` traffic. A large batch never takes capacity from your interactive requests.
 
 ## Requirements
 
 - A queue-based Serverless endpoint. To create one, see the [Serverless quickstart](/serverless/quickstart). Batch jobs aren't available on [load balancing endpoints](/serverless/load-balancing/overview).
 - A Runpod [API key](/get-started/credentials#api-keys), if you use the API.
 
-## When to use batch vs /run
+## When to use batch jobs instead of `/run`
+
+The following table compares batch jobs with standard `/run` requests:
 
 | | Batch | `/run` |
 |---|---|---|
@@ -43,7 +45,7 @@ DRAFT → FINALIZED → COMPLETED
 
 - **DRAFT**: The batch is a draft, and you can still change its requests. Batch workers haven't started any work.
 - **FINALIZED**: The batch is locked, and you can't add or remove requests. Batch workers process the requests while the batch stays in this state. Track progress with the `requestTotal`, `requestInProgress`, `requestCompleted`, and `requestFailed` counts. When `requestCompleted + requestFailed` equals `requestTotal`, the batch moves to `COMPLETED`.
-- **COMPLETED**: All requests in the batch have finished. Some individual requests may have failed, so check `requestFailed`.
+- **COMPLETED**: All requests in the batch have finished. Some individual requests might have failed, so check `requestFailed`.
 - **FAILED**: The batch itself failed before or during execution. This is different from individual request failures in a batch whose other requests finished.
 - **CANCELLED**: You cancelled the batch. For details, see [Cancellation](#cancellation).
 
@@ -118,6 +120,8 @@ curl https://api.runpod.ai/v2/ENDPOINT_ID/batch/BATCH_ID \
   -H "Authorization: Bearer API_KEY"
 ```
 
+The response shows the batch status and request counts:
+
 ```json
 {
   "id": "5af6bdb3-551f-4195-8872-bad522efbad7",
@@ -143,6 +147,8 @@ Fetch the results for every request in the batch:
 curl "https://api.runpod.ai/v2/ENDPOINT_ID/batch/BATCH_ID/requests?offset=0&limit=50" \
   -H "Authorization: Bearer API_KEY"
 ```
+
+The response lists each request with its status and its output or error:
 
 ```json
 {
@@ -175,6 +181,8 @@ Results are paginated. Use the `offset` and `limit` query parameters to page thr
 
 ## API reference
 
+Use the following endpoints to manage batches:
+
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/v2/ENDPOINT_ID/batch` | Create a batch, optionally with initial requests. |
@@ -187,7 +195,7 @@ Results are paginated. Use the `offset` and `limit` query parameters to page thr
 | `POST` | `/v2/ENDPOINT_ID/batch/BATCH_ID/cancel` | Cancel a batch. |
 | `GET` | `/v2/ENDPOINT_ID/batch/BATCH_ID/requests` | List the batch's requests, paginated. |
 
-## Monitoring batches in the console
+## Monitor batches in the console
 
 To see all batches for an endpoint, open the endpoint in the [Runpod console](https://console.runpod.io/serverless) and select the **Bulk Requests** tab. Each row shows the batch name, status, and progress counts.
 
@@ -227,7 +235,7 @@ The console uses different status labels from the API:
 
 ## Notifications
 
-When a batch reaches a terminal state (`COMPLETED`, `FAILED` or `CANCELLED`), Runpod sends:
+When a batch reaches a terminal state, Runpod sends the following notifications. The terminal states are `COMPLETED`, `FAILED`, and `CANCELLED`.
 
 - **Console Inbox notification**: Includes the batch ID, endpoint name, terminal status, and request counts (completed, failed, and total).
 - **Webhook event**: Sent if your account has a webhook subscription for batch events.
@@ -254,6 +262,8 @@ If you cancel a batch before any requests start, it moves to `CANCELLED` immedia
 
 ## Limits
 
+The following limits apply to batch jobs:
+
 | Limit | Value |
 |-------|-------|
 | Active batches per endpoint | 10 |
@@ -272,7 +282,7 @@ Billing is based on the compute time each request uses. If you cancel a batch, r
 
 ## Error handling
 
-A failed request doesn't fail the batch unless failures reach the request failure limit. Until then, the batch stays `FINALIZED` and keeps processing the remaining requests. To inspect failed requests, use the console or the `GET .../requests` endpoint. Each failed request includes the error message from your handler.
+A failed request doesn't fail the batch unless failures reach the request failure limit. Until then, the batch stays `FINALIZED` and keeps processing the remaining requests. To inspect failed requests, use the console or the `GET /v2/ENDPOINT_ID/batch/BATCH_ID/requests` endpoint. Each failed request includes the error message from your handler.
 
 The request failure limit is 10 failed requests or 2% of the batch's requests (rounded up), whichever is greater. For example:
 
@@ -313,7 +323,7 @@ In this example, 10 of 12 requests failed, which reached the limit, so the batch
 
 The `failedAt` field is a Unix timestamp in milliseconds.
 
-Batch requests use the same queue as standard Serverless requests. If the queue fails, queued batch requests may be lost. This also applies to `/run` traffic.
+Batch requests use the same queue as standard Serverless requests. If the queue fails, you might lose queued batch requests. This also applies to `/run` traffic.
 
 ## Known limitations
 
@@ -324,6 +334,14 @@ Batch requests use the same queue as standard Serverless requests. If the queue 
 
 ## Next steps
 
-- [Send requests to an endpoint](/serverless/endpoints/send-requests).
-- [Learn about job states](/serverless/endpoints/job-states).
-- [Review Serverless pricing](/serverless/pricing).
+<CardGroup cols={2}>
+  <Card title="Send requests to an endpoint" href="/serverless/endpoints/send-requests" icon="paper-plane" horizontal>
+    Submit standard `/run` and `/runsync` requests to a Serverless endpoint.
+  </Card>
+  <Card title="Job states" href="/serverless/endpoints/job-states" icon="list-check" horizontal>
+    Learn about the states a Serverless job moves through.
+  </Card>
+  <Card title="Serverless pricing" href="/serverless/pricing" icon="dollar-sign" horizontal>
+    Review per-second pricing for Serverless workers.
+  </Card>
+</CardGroup>
