@@ -2680,7 +2680,7 @@
             ]
           },
           "direct": {
-            "description": "Connection straight to the pod's sshd over its published `22/tcp` mapping. Supports the full SSH feature set. Null unless `22/tcp` is in `ports` and the running pod has been assigned a public port for it — so it is absent while the pod is provisioning or stopped. Also null when listing pods with `GET /v2/pods`; fetch a single pod by ID to obtain the live mapping.",
+            "description": "Connection straight to the pod's sshd over its published `22/tcp` mapping. Supports the full SSH feature set. Null unless `22/tcp` is in `ports` and the running pod has been assigned a public port for it — so it is usually absent while the pod is provisioning or stopped. It can still appear on a stopped pod, so check that `status` is `RUNNING` before connecting. Also null when listing pods with `GET /v2/pods`; fetch a single pod by ID to obtain the live mapping.",
             "anyOf": [
               {
                 "$ref": "#/components/schemas/PodSshEndpoint"
@@ -2974,7 +2974,7 @@
               "cost": {
                 "type": "number",
                 "format": "float",
-                "description": "Current cost in USD per hour (0.0 when EXITED or TERMINATED)",
+                "description": "The Pod's hourly compute rate in USD. It's returned in every status, including `EXITED`, so it isn't what you're paying right now: a stopped Pod isn't billed for compute, only for its volume disk.",
                 "examples": [
                   0.35
                 ]
@@ -3031,7 +3031,7 @@
             "required": [
               "name"
             ],
-            "description": "Request body for creating a pod. Exactly one of `gpu` or `cpu`\nmust be set — enforced at the handler layer. For CPU pods, memory\nis derived by the API from the selected flavor's RAM multiplier;\nclients provide only CPU flavor and vCPU count. CPU pods support\ncontainer disk and network volumes only; `mounts.persistent` is\ninvalid when `cpu` is set.\n\n`image` is required unless `templateId` is set.\n",
+            "description": "Request body for creating a pod. Exactly one of `gpu` or `cpu`\nmust be set — enforced at the handler layer. For CPU pods, memory\nis derived by the API from the selected flavor's RAM multiplier;\nclients provide only CPU flavor and vCPU count. CPU pods support\ncontainer disk, network volumes, and a global volume; `mounts.persistent`\nis invalid when `cpu` is set.\n\n`image` is required unless `templateId` is set.\n",
             "properties": {
               "name": {
                 "type": "string",
@@ -5716,9 +5716,9 @@
       },
       "RateLimitPolicyHeader": {
         "type": "string",
-        "description": "Static per-window quota policy. Optional — omitted for rate-limit-exempt\ncallers.\n\nA structured-field list with one member per window (`minute`, `hour`,\n`day`), each carrying the quota `q` and the window length in seconds `w`.\nReturned on responses to authenticated requests, not only on 429s.\n",
+        "description": "Static per-window quota policy. Optional — omitted for rate-limit-exempt\ncallers.\n\nA structured-field list with one member per window (`minute`, `hour`,\n`day`), each carrying the quota `q` and the window length in seconds `w`.\nReturned on responses to authenticated requests, not only on 429s.\n\nLimits are per user, and every `/v2` route counts toward the same\nlimits; creating pods has no separate limit. Read the current quotas from\nthis header instead of hard-coding them, because they can change and some\naccounts have higher limits. A 429 only slows you down: wait for the\n`Retry-After` time and retry. Your account isn't suspended.\n",
         "examples": [
-          "\"minute\";q=60;w=60, \"hour\";q=3000;w=3600, \"day\";q=50000;w=86400"
+          "\"minute\";q=180;w=60, \"hour\";q=3600;w=3600, \"day\";q=43200;w=86400"
         ]
       }
     }
@@ -5731,7 +5731,7 @@
         "summary": "Get your current organization",
         "x-mint": {
           "metadata": {
-            "description": "Get the ID and name of the organization you belong to."
+            "description": "Retrieve the ID and name of your current Runpod organization through the REST API, including membership requirements and error responses."
           }
         },
         "description": "Returns the authenticated caller's current organization. Organization context comes from the caller's membership; no organization selector is required. Returns 404 when the caller does not belong to an organization, or 403 when organizations are unavailable to the caller.",
@@ -5979,7 +5979,7 @@
         "summary": "List secrets",
         "x-mint": {
           "metadata": {
-            "description": "List the encrypted secrets on your Runpod account that Pods, Serverless endpoints, and templates reference from environment variables. Values are never returned."
+            "description": "List encrypted secrets referenced by Runpod Pods, Serverless endpoints, and templates through environment variables. Secret values are never returned."
           }
         },
         "description": "Returns the account's secrets — encrypted strings referenced from pod, serverless, and template environment variables with the `{{ RUNPOD_SECRET_<name> }}` placeholder syntax, substituted with the secret's value when the pod or worker boots. Secret values are write-only and are never returned.",
@@ -10226,7 +10226,7 @@
         "summary": "List global volumes",
         "x-mint": {
           "metadata": {
-            "description": "List all global volumes owned by the authenticated Runpod user."
+            "description": "List global volumes owned by your Runpod account through the REST API, using cursor pagination to retrieve additional results."
           }
         },
         "description": "Returns global volumes owned by the authenticated user,\ncursor-paginated newest-first; an omitted `limit` defaults to 1000.\nFollow `pagination.nextCursor` until `hasNextPage` is false.\n",
@@ -10317,7 +10317,7 @@
         "summary": "Create a global volume",
         "x-mint": {
           "metadata": {
-            "description": "Create a Runpod global volume for use by Pods and Serverless workers in any data center."
+            "description": "Create a named Runpod global volume through the REST API for storage that Pods and Serverless workers can access across data centers."
           }
         },
         "description": "Provisions a new global volume — storage that mounts into workloads\nin any data center. Only a `name` is required; storage is provisioned\nfor you. Accounts have a cap on how many global volumes they can\nhold; creating one past it fails with `400`.\n\nReturns `201` with the created global volume, including its assigned\n`id`.\n",
@@ -10430,7 +10430,7 @@
         "summary": "Get a global volume",
         "x-mint": {
           "metadata": {
-            "description": "Retrieve a Runpod global volume by ID."
+            "description": "Retrieve a Runpod global volume by its ID through the REST API, including its name, creation time, and the user who created it."
           }
         },
         "description": "Returns a single global volume by ID.",
@@ -10505,7 +10505,7 @@
         "summary": "Update a global volume",
         "x-mint": {
           "metadata": {
-            "description": "Rename a Runpod global volume."
+            "description": "Rename an existing Runpod global volume by ID through the REST API, updating its name while leaving omitted fields unchanged."
           }
         },
         "description": "Updates mutable fields on a global volume. Only provided fields are changed.",
@@ -10607,7 +10607,7 @@
         "summary": "Delete a global volume",
         "x-mint": {
           "metadata": {
-            "description": "Permanently delete a Runpod global volume and its stored data."
+            "description": "Permanently delete a Runpod global volume and its stored data through the REST API after removing Pod and Serverless attachments."
           }
         },
         "description": "Permanently deletes a global volume and its stored data. Fails with\n`409` while the volume is still mounted: terminate every pod that\nmounts it (stopped pods count) and detach it from every serverless\nendpoint first. Nothing is detached or terminated on your behalf.\n",
@@ -12140,7 +12140,7 @@
         "summary": "List audit logs",
         "x-mint": {
           "metadata": {
-            "description": "List the audit trail of your Runpod account: who performed which action on which resource, newest first, with actor, action, time-range, and text filters."
+            "description": "List your Runpod audit trail to see who acted on each resource, with filters for actor, action, time range, and text, newest first."
           }
         },
         "description": "Returns the account's audit trail, newest first, cursor-paginated; an omitted `limit` defaults to 200. Each entry records who acted (`actorId`, `email`), what they did (`action`), to which resource (`resourceType`, `resourceId`), and the details of the change (`value`). When the caller belongs to an organization the trail is the organization's, and `actorIds` narrows it to specific members; otherwise it is the trail of the account the request acts for. Filters combine with AND. Entries older than the account's audit log retention window are not returned, and an account whose plan does not include audit logs is answered 403. Follow `pagination.nextCursor` until `hasNextPage` is false.",
