@@ -109,6 +109,22 @@ Create a CPU-only Pod:
 runpodctl pod create --compute-type cpu --image ubuntu:22.04
 ```
 
+#### Wait for a Pod to be ready
+
+By default, `pod create` returns when the API accepts the request, before the Pod is usable. To block until the Pod is ready, add `--wait` or `--wait-for`. When the wait succeeds, the command prints the Pod in the same format as `runpodctl pod get`, so a script can use it right away. Progress messages go to stderr, which keeps stdout a single JSON object.
+
+The wait mode depends on how you plan to use the Pod. `--wait-for ssh` (the default for `--wait`) waits until the Pod's public port 22 answers with an SSH banner. `--wait-for running` waits until the Pod is running and its container is up, using the same `running` status that `pod get` reports, and doesn't check SSH. Use `--wait-for running` for images that don't run an SSH daemon, such as `ubuntu:22.04` on a CPU Pod, or for Pods created with `--ssh=false`. The SSH wait runs until it times out on an image without an SSH daemon, and the command rejects `--wait` combined with `--ssh=false`.
+
+```bash
+# Wait until SSH is reachable
+runpodctl pod create --image "runpod/pytorch:1.0.3-cu1281-torch291-ubuntu2404" --gpu-id "NVIDIA GeForce RTX 4090" --wait
+
+# Wait until the container is up, without SSH
+runpodctl pod create --compute-type cpu --image ubuntu:22.04 --wait-for running
+```
+
+If the wait times out or you cancel it, the Pod keeps running and billing. The error includes the Pod ID along with the `pod get` and `pod delete` commands to inspect or remove it. If the Pod stops or terminates during the wait, the command fails instead of waiting for the timeout.
+
 #### Create flags
 
 <ResponseField name="--template-id" type="string">
@@ -193,6 +209,18 @@ Country code that restricts Pod placement to datacenters in that country (e.g., 
 
 <ResponseField name="--compliance" type="string">
 Comma-separated list of compliance certifications the datacenter must hold (e.g., `HIPAA,SOC_2_TYPE_2`). Supported only on Secure Cloud.
+</ResponseField>
+
+<ResponseField name="--wait" type="bool">
+Block until the Pod's SSH port is reachable, then print the Pod as `runpodctl pod get` does. This requires a publicly mapped port 22 and an image that runs an SSH daemon, so you can't combine it with `--ssh=false`. On Community Cloud, a public SSH port isn't guaranteed. See [Wait for a Pod to be ready](#wait-for-a-pod-to-be-ready).
+</ResponseField>
+
+<ResponseField name="--wait-for" type="string" default="ssh">
+What to wait for: `ssh` (port 22 answers with an SSH banner) or `running` (the Pod's container is up, with no SSH check). Setting this flag implies `--wait`. Values are case-insensitive. The command rejects any other value before it creates the Pod. You can't combine it with `--wait=false`.
+</ResponseField>
+
+<ResponseField name="--wait-timeout" type="string" default="10m">
+Maximum time to wait when `--wait` or `--wait-for` is set, such as `90s`, `10m`, or `1h`. On timeout, the Pod is kept and the error includes its ID.
 </ResponseField>
 
 ### Start a Pod
