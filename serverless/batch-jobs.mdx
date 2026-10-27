@@ -75,7 +75,7 @@ The response includes the batch ID, which you use in the remaining steps:
 
 ```json
 {
-  "id": "batch_01j9abc123",
+  "id": "5af6bdb3-551f-4195-8872-bad522efbad7",
   "status": "DRAFT"
 }
 ```
@@ -120,7 +120,7 @@ curl https://api.runpod.ai/v2/ENDPOINT_ID/batch/BATCH_ID \
 
 ```json
 {
-  "id": "batch_01j9abc123",
+  "id": "5af6bdb3-551f-4195-8872-bad522efbad7",
   "endpointId": "abc123xyz",
   "status": "FINALIZED",
   "requestTotal": 1000,
@@ -151,15 +151,15 @@ curl "https://api.runpod.ai/v2/ENDPOINT_ID/batch/BATCH_ID/requests?offset=0&limi
       "id": "req_abc001",
       "status": "COMPLETED",
       "output": { "embedding": [0.12, 0.34, ...] },
-      "startedAt": "2026-07-09T09:15:00Z",
-      "completedAt": "2026-07-09T09:15:02Z"
+      "delayTime": 1200,
+      "executionTime": 2000
     },
     {
       "id": "req_abc002",
       "status": "FAILED",
       "error": "Handler raised an exception: timeout exceeded",
-      "startedAt": "2026-07-09T09:15:01Z",
-      "completedAt": "2026-07-09T09:15:10Z"
+      "delayTime": 1500,
+      "executionTime": 9000
     }
   ],
   "total": 1000,
@@ -168,6 +168,8 @@ curl "https://api.runpod.ai/v2/ENDPOINT_ID/batch/BATCH_ID/requests?offset=0&limi
   "hasMore": true
 }
 ```
+
+Each request includes `delayTime` (how long the request waited in the queue) and `executionTime` (how long it took to run), both in milliseconds.
 
 Results are paginated. Use the `offset` and `limit` query parameters to page through them. When `hasMore` is `true`, more pages remain.
 
@@ -248,6 +250,8 @@ When you cancel a batch:
 
 The batch status changes to `CANCELLED` once all in-progress requests have finished.
 
+If you cancel a batch before any requests start, it moves to `CANCELLED` immediately and nothing is billed.
+
 ## Limits
 
 | Limit | Value |
@@ -268,9 +272,38 @@ Billing is based on the compute time each request uses. If you cancel a batch, r
 
 ## Error handling
 
-A failed request doesn't fail the batch. The batch stays `FINALIZED` and keeps processing the remaining requests. To inspect failed requests, use the console or the `GET .../requests` endpoint. Each failed request includes the error message from your handler.
+A failed request doesn't fail the batch unless failures reach the request failure limit. Until then, the batch stays `FINALIZED` and keeps processing the remaining requests. To inspect failed requests, use the console or the `GET .../requests` endpoint. Each failed request includes the error message from your handler.
 
-If the batch itself has the `FAILED` status, the problem is systemic rather than an error in individual requests. Check the request-level errors first, and contact support if they don't explain the failure.
+If your handler returns an error in its output instead of raising an exception, Runpod marks the request `COMPLETED`, not `FAILED`. These requests don't count toward the failure limit. To catch them, check each request's `output` for errors.
+
+If the batch itself has the `FAILED` status, it stopped before finishing its requests. Check the `failureCode` and the request-level errors, and contact support if they don't explain the failure.
+
+A failed batch includes a `failureCode` that explains why it failed, and a `failedAt` timestamp. For example, a batch that reached the request failure limit returns:
+
+```json
+{
+  "id": "5210fe3f-ee61-4a81-bc4e-7078c955c24d",
+  "endpointId": "bo3oj8kx6jz411",
+  "status": "FAILED",
+  "requestTotal": 12,
+  "requestInProgress": 0,
+  "requestCompleted": 0,
+  "requestFailed": 10,
+  "failureCode": "REQUEST_FAILURE_LIMIT",
+  "failedAt": 1793132360580,
+  "createdAt": 1793132294147,
+  "name": "intentional-failed-batch-example"
+}
+```
+
+In this example, 10 of 12 requests failed, which reached the limit, so the batch stopped and the remaining 2 requests didn't run.
+
+| `failureCode` | Meaning |
+| --- | --- |
+| `REQUEST_FAILURE_LIMIT` | Too many requests failed. Check the request-level errors, fix your handler or inputs, and submit a new batch. |
+| `ALL_BATCH_WORKERS_UNHEALTHY` | No batch worker could start, so no requests ran. Check your endpoint configuration and worker logs. The response also includes `failedWorkerIds`. |
+
+The `failedAt` field is a Unix timestamp in milliseconds.
 
 Batch requests use the same queue as standard Serverless requests. If the queue fails, queued batch requests may be lost. This also applies to `/run` traffic.
 
