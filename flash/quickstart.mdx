@@ -129,7 +129,23 @@ flash deploy
 uv run flash deploy
 ```
 
-Flash builds your project on your machine, uploads it, and creates the `flash-quickstart` endpoint. The app is named after the current directory, and the endpoint is deployed to the `production` environment.
+Flash builds your project on your machine, uploads it, and creates the `flash-quickstart` endpoint. The app is named after the current directory, and the endpoint is deployed to the `production` environment:
+
+```text
+✓ built quickstart  2 files, 1 deps, 15.8 MB
+No app 'quickstart' found. Creating app and 'production' environment...
+
+✓ uploaded  15.8 MB  2.2s
+✓ deployed to production  2.0s
+
+  flash-quickstart  https://api.runpod.ai/v2/abc123xyz/runsync
+```
+
+The URL contains your endpoint ID (`abc123xyz` here). You'll use it in [Step 9](#step-9-call-the-endpoint-from-any-language) to call the endpoint over HTTP.
+
+<Note>
+Every `flash` command and script prints a deprecation notice (a `FutureWarning` in scripts) because `runpod-flash` is moving into the [Runpod SDK](/sdk/overview). The notice doesn't affect your deployment.
+</Note>
 
 <Note>
 `flash deploy` installs your endpoint's dependencies into a local build directory before uploading. Flash leaves `torch`, `torchvision`, `torchaudio`, and `triton` out of the upload because the worker image already provides them, but a dependency that requires `torch` (such as `accelerate`) still downloads it during the local build. On Linux, that can be several GB. If the build runs out of disk space, remove that dependency, exclude it with `--exclude`, or skip transitive dependencies with `--no-deps`. See [`flash deploy`](/flash/cli/deploy) for details.
@@ -153,7 +169,11 @@ Running matrix multiplication on Runpod GPU...
 ✓ GPU used: NVIDIA RTX A5000
 ```
 
-The first run takes 30-60 seconds while a worker starts and installs dependencies. Later runs return in a few seconds while the worker is still warm.
+The first run takes about a minute while a worker starts. Later runs return in a few seconds while the worker is still warm.
+
+<Warning>
+The first request on a new worker can take longer than the 90 seconds `runpod-flash` 1.21.0 waits for a result, especially if the worker has to wait for a free GPU. If the script fails with `timed out after 90s. the endpoint may not be deployed or the worker is still starting` or `KeyError: 'matrix_size'`, the endpoint is deployed and the worker is still starting. Run the script again. See [First run fails after 90 seconds](#first-run-fails-after-90-seconds).
+</Warning>
 
 <Warning>
 If you see `endpoint 'flash-quickstart' not found in app '...' environment 'production'`, the endpoint isn't deployed for this directory. Run `flash deploy` from the directory that contains `gpu_demo.py`, then run the script again from that same directory.
@@ -327,6 +347,46 @@ Running 3 matrix operations in parallel...
    GPU: NVIDIA RTX A5000
 ```
 
+## Step 9: Call the endpoint from any language
+
+Your endpoint is a standard [Serverless endpoint](/serverless/endpoints/send-requests), so any language that can send HTTP requests can call it. The JSON `input` object holds the function's arguments by name.
+
+Submit a job with `/run`, using the endpoint ID from Step 4:
+
+```bash
+curl -X POST https://api.runpod.ai/v2/ENDPOINT_ID/run \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -d '{"input": {"size": 500}}'
+```
+
+```json
+{"id": "50e2248c-55c3-4f61-b633-35e447a4d82d-u2", "status": "IN_QUEUE"}
+```
+
+Then poll `/status` with the job ID until `status` is `COMPLETED`:
+
+```bash
+curl https://api.runpod.ai/v2/ENDPOINT_ID/status/JOB_ID \
+  -H "Authorization: Bearer $RUNPOD_API_KEY"
+```
+
+```json
+{
+  "id": "50e2248c-55c3-4f61-b633-35e447a4d82d-u2",
+  "status": "COMPLETED",
+  "output": {"gpu": "NVIDIA RTX A5000", "matrix_size": 500, "result_mean": 124.87},
+  "delayTime": 15,
+  "executionTime": 189
+}
+```
+
+Use `/run` and `/status` for long jobs and cold starts. `/runsync` returns the result in one request but waits at most 90 seconds by default, then returns `IN_QUEUE` or `IN_PROGRESS` and you poll `/status` anyway.
+
+<Warning>
+Always send at least one key in `input`. Runpod drops a job whose `input` is empty (`{"input": {}}`), and after about 40 seconds it fails with `job timed out after 1 retries`. The curl example that `flash deploy` prints in `runpod-flash` 1.21.0 and earlier uses an empty `input`, so replace it with your function's arguments.
+</Warning>
+
 ## Clean up
 
 When you're done testing, clean up the endpoints:
@@ -376,10 +436,54 @@ RuntimeError: endpoint 'flash-quickstart' not found in app 'Quickstart' environm
 
 **Solution**: Calling an `@Endpoint` function sends the request to an endpoint you've already deployed. Run `flash deploy` from the directory that contains your script, then run the script from that same directory. Flash uses the directory name as the app name, so running from a different directory looks up a different app.
 
-### Authentication error
+### First run fails after 90 seconds
+
+**Issue**: The first run fails with one of these errors:
 
 ```text
-Error: API key is not set
+RuntimeError: request to endpoint 'flash-quickstart' timed out after 90s. the endpoint may not be deployed or the worker is still starting. deploy with 'flash deploy' or increase timeout with FLASH_SENTINEL_TIMEOUT env var.
+```
+
+```text
+KeyError: 'matrix_size'
+```
+
+**Cause**: `runpod-flash` 1.21.0 waits up to 90 seconds for a result. The first request on a new worker can take longer: the worker may wait for a free GPU, then it starts and loads the model. The endpoint is deployed, and the request keeps running after the error.
+
+**Solution**: Run the script again. The worker keeps starting after the error, so the next run is faster. Raising `FLASH_SENTINEL_TIMEOUT` above 90 doesn't help in 1.21.0: the request returns at 90 seconds with the job still running, and the script fails with the `KeyError` instead.
+
+To see whether a worker is up, check the endpoint's health with its ID from `flash deploy`:
+
+```bash
+curl https://api.runpod.ai/v2/ENDPOINT_ID/health \
+  -H "Authorization: Bearer $RUNPOD_API_KEY"
+```
+
+`"throttled": 1` means the worker is waiting for a GPU. `"idle"` or `"running"` means it's ready.
+
+### Job timed out after 1 retries
+
+```text
+RuntimeError: remote execution failed: job timed out after 1 retries
+```
+
+**Solution**: The worker stopped responding while it held the job. Two common causes:
+
+- **Empty input over HTTP**: a request with `{"input": {}}` never reaches your function. Send at least one argument, as shown in [Step 9](#step-9-call-the-endpoint-from-any-language).
+- **Redeploying during a request**: `flash deploy` replaces running workers, so a request that's in progress fails. Wait for running requests to finish before you redeploy, or run the request again.
+
+### Authentication error
+
+`flash` commands print:
+
+```text
+No RunPod API key found. Set one with:
+```
+
+Scripts that call an endpoint fail with:
+
+```text
+httpx.HTTPStatusError: Client error '401 Unauthorized' for url 'https://api.runpod.ai/v2/flash/runsync'
 ```
 
 **Solution**: Run `flash login` to authenticate with your Runpod account:
@@ -409,26 +513,13 @@ Error: endpoint template names must be unique
 
 ### Job stuck in queue
 
-```text
-Initial job status: IN_QUEUE
-[Stays in queue for >60 seconds]
-```
+Requests wait for minutes, and the endpoint's [health check](#first-run-fails-after-90-seconds) shows `"throttled": 1` with no idle or running workers.
 
-**Solution**: No GPUs available. Use `GpuGroup.ANY` to accept any available GPU:
+**Solution**: No GPU of the types you selected is free. `GpuGroup.ANY` (used in this quickstart) accepts any available GPU. If you narrowed `gpu` to specific types, list several so Flash can fall back:
 
 ```python
-@Endpoint(
-    name="flash-quickstart",
-    gpu=GpuGroup.ANY,
-    dependencies=["numpy", "torch"]
-)
-def gpu_matrix_multiply(size):
-    ...
-```
+from runpod_flash import Endpoint, GpuType
 
-Or add multiple specific GPU types for fallback:
-
-```python
 @Endpoint(
     name="flash-quickstart",
     gpu=[
