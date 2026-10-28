@@ -1,10 +1,10 @@
 ---
 title: "rp CLI reference"
 sidebarTitle: "CLI reference"
-description: "Reference for the rp CLI in the runpod Python package: log in, build and deploy apps, compare hardware pricing and stock, and manage Pods and volumes."
+description: "Reference for the rp CLI in the runpod Python package: log in, deploy apps, compare hardware pricing, and manage Serverless endpoints, Pods, and volumes."
 ---
 
-The `rp` CLI is installed with the `runpod` Python package. Use it to authenticate, develop and deploy apps, compare hardware pricing and stock, and work with Pods, volumes, and SSH keys. The same CLI is also available under the name `runpod`, so `rp flash deploy` and `runpod flash deploy` are equivalent.
+The `rp` CLI is installed with the `runpod` Python package. Use it to authenticate, develop and deploy apps, compare hardware pricing and stock, and work with Serverless endpoints, Pods, volumes, and SSH keys. The same CLI is also available under the name `runpod`, so `rp flash deploy` and `runpod flash deploy` are equivalent.
 
 <Note>
   The `rp` CLI is separate from [`runpodctl`](/runpodctl/overview), which is a standalone binary with a different set of commands.
@@ -42,6 +42,12 @@ rp pod list
 rp pod create my-pod --gpu 4090 --image runpod/pytorch:latest --ssh --wait
 rp pod stop POD_ID
 rp pod connect POD_ID
+
+# Serverless endpoints
+rp endpoint list
+rp endpoint create --name my-endpoint --type queue --image IMAGE --gpu 4090
+rp endpoint run ENDPOINT_ID --data '{"prompt": "hello"}'
+rp endpoint logs ENDPOINT_ID --follow
 
 # Hardware pricing and stock
 rp catalog h100
@@ -311,6 +317,159 @@ If you don't pass `--region` or `--data-center` but do attach a network volume, 
 `rp pod connect` opens a terminal on a Pod over SSH, like `rp ssh POD_ID`. It needs an SSH key on your account and port `22/tcp` exposed on the Pod. `rp pod get` also prints the SSH command and the proxy URLs for the Pod's HTTP ports.
 
 `rp pod sync SOURCE_POD_ID DEST_POD_ID` copies `/workspace` on the source Pod into a new `sync_XXXXXXXX` folder in `/workspace` on the destination Pod, so existing files aren't overwritten. To copy other directories, pass the source and destination paths after the Pod IDs. Both Pods need SSH access.
+
+## rp endpoint
+
+Create, configure, and call Serverless endpoints, and watch their workers and logs:
+
+```bash
+rp endpoint list --type queue                # List queue endpoints
+rp endpoint get ENDPOINT_ID                  # Show an endpoint's configuration
+rp endpoint create --name llama-prod --type queue --image ghcr.io/acme/llama:latest --gpu h100
+rp endpoint update ENDPOINT_ID --env DEBUG=1 --wait
+rp endpoint edit ENDPOINT_ID                 # Edit the configuration in your editor
+rp endpoint scale ENDPOINT_ID --max-workers 8
+rp endpoint workers ENDPOINT_ID --watch      # Watch worker status
+rp endpoint releases ENDPOINT_ID             # Show release history and rollout progress
+rp endpoint logs ENDPOINT_ID --follow        # Stream logs from every worker
+rp endpoint run ENDPOINT_ID --data '{"prompt": "hello"}'
+rp endpoint job wait ENDPOINT_ID JOB_ID      # Wait for a queued job's output
+rp endpoint purge ENDPOINT_ID                # Remove every queued job
+rp endpoint delete ENDPOINT_ID               # Delete an endpoint and its workers
+```
+
+If you leave out `ENDPOINT_ID` from `rp endpoint get` or `rp endpoint edit`, the CLI prompts you to pick an endpoint. Other commands need the ID, and [shell completion](#rp-completion) fills it in. Add `--json` to any command except `delete` to print JSON for use in scripts.
+
+To filter `rp endpoint list`, add `--name` to match an endpoint name, including wildcards such as `'llama*'`, or `--type queue` or `--type load-balancer`. Names aren't unique, so the results always include IDs.
+
+### Create an endpoint
+
+`rp endpoint create` needs a name, an endpoint type, the hardware, and a container image or template:
+
+```bash
+# Queue endpoint on H100 GPUs in Europe
+rp endpoint create --name llama-prod --type queue \
+  --image ghcr.io/acme/llama:latest --gpu h100 --max-workers 4 \
+  --region eu --env MODEL_ID=meta-llama/Llama-3.1-8B --flashboot standard
+
+# Load balancing endpoint that sends each worker up to 4 requests
+rp endpoint create --name openai-api --type load-balancer \
+  --image ghcr.io/acme/openai-server:latest --gpu 4090 \
+  --requests-per-worker 4 --env PORT=8000
+
+# CPU endpoint with 8 vCPUs per worker
+rp endpoint create --name embeddings --type queue \
+  --image ghcr.io/acme/embeddings:latest --cpu cpu3c --vcpu-count 8
+```
+
+`--type queue` creates a [queue-based endpoint](/serverless/endpoints/overview) that runs jobs. `--type load-balancer` creates a [load balancing endpoint](/serverless/load-balancing/overview) that receives HTTP requests directly. A load balancing endpoint needs `--requests-per-worker`. A queue endpoint scales on queue delay, which defaults to 4 seconds.
+
+For GPU workers, pass `--gpu` with a GPU name such as `4090`, `h100`, or `a100-sxm4`, or a Serverless GPU pool ID. Add a count, such as `h100:2`, or set it with `--gpu-count`. Repeat `--gpu` to allow more than one GPU type. For CPU workers, pass `--cpu` with a CPU type such as `cpu3c`, and set the vCPUs with `--vcpu-count` or a suffix such as `cpu3c:8`. To compare hardware first, run [`rp catalog --serverless`](#rp-catalog).
+
+| Flag | Description |
+| --- | --- |
+| `--name NAME` | The endpoint name. Required. |
+| `--type TYPE` | `queue` or `load-balancer`. Required. You can't change it later. |
+| `--image IMAGE` | The container image. |
+| `--template ID` | A Serverless template ID whose container settings to use. |
+| `--gpu TYPE[:COUNT]` | A GPU type or pool ID, and optionally the GPUs per worker. Repeat the flag to allow more than one type. |
+| `--gpu-count N` | The number of GPUs per worker. |
+| `--cuda VERSION` | The CUDA version for workers. Use `'>=12.4'` for a minimum version, `12.4` or `12.4,12.8` for exact versions, or `any` to remove the constraint. GPU endpoints only. |
+| `--cpu TYPE[:VCPUS]` | A CPU type, and optionally the vCPUs per worker. You can't combine it with `--gpu`. |
+| `--vcpu-count N` | The number of vCPUs per worker, starting at 2. CPU endpoints only. |
+| `--min-workers N` | The minimum number of workers. |
+| `--max-workers N` | The maximum number of workers. |
+| `--idle-timeout-seconds N` | How long an idle worker waits before it scales down, from 1 to 3600 seconds. |
+| `--queue-delay-seconds N` | Add workers when jobs wait in the queue longer than this many seconds. Queue endpoints only. |
+| `--requests-per-worker N` | Add workers based on the number of in-flight requests per worker. |
+| `--request-timeout-seconds N` | The maximum execution time for a request. |
+| `--region REGION` | A region such as `eu`, `na`, or `asia`, or a data center ID prefix such as `us` or `eu-ro`. Repeat the flag to include more than one. |
+| `--data-center ID` | An exact data center ID, such as `EU-RO-1`. Repeat the flag to include more than one. |
+| `--network-volume ID` | A [network volume](/storage/network-volumes) to attach. Repeat the flag to attach volumes in more than one data center, with at most one per data center. |
+| `--global-volume ID` | A [global volume](/storage/globalvolume/overview) to attach. Repeat the flag to attach more than one. |
+| `--env KEY=VALUE` | An environment variable. Repeat the flag to set more than one. |
+| `--flashboot MODE` | The [FlashBoot](/serverless/endpoints/endpoint-configurations#flashboot) mode: `off`, `standard`, or `priority`. |
+| `--disk GB` | The container disk size, in GB. |
+| `--port PORT/PROTOCOL` | A port to expose, such as `8000/http`. Repeat the flag to expose more than one. |
+| `--args COMMAND` | The container start command, as one string. |
+| `--entrypoint COMMAND` | The container `ENTRYPOINT`, as a shell string. |
+| `--cmd COMMAND` | The container `CMD`, as a shell string. |
+| `--registry NAME` | The name or ID of saved [registry credentials](#secrets-and-registries) for a private image. Pass `''` to clear it. |
+
+Pass one of `--queue-delay-seconds` or `--requests-per-worker`, not both. `--region` expands to every matching data center, and you can combine it with `--data-center`.
+
+### Change an endpoint
+
+You can change an endpoint's configuration in three ways:
+
+- `rp endpoint update` changes the settings you pass as flags. It takes the same flags as `create`, except `--type`.
+- `rp endpoint edit` opens the full configuration as JSON in your editor.
+- `rp endpoint scale` changes only worker limits and scaling, with `--min-workers`, `--max-workers`, `--idle-timeout-seconds`, `--queue-delay-seconds`, and `--requests-per-worker`.
+
+With `rp endpoint update`, settings you don't pass stay the same. `--env` adds or replaces variables in the existing environment, and `--unset-env KEY` removes one. Flags that take a list, such as `--data-center`, `--region`, `--network-volume`, and `--port`, replace the whole list. You can't switch an endpoint between GPU and CPU workers.
+
+`rp endpoint edit` checks the JSON when you save and close the editor, shows the changes as a patch, and applies them after you confirm. If the JSON isn't valid, the CLI shows the problem and offers to reopen the editor. Fields you remove from the document stay unchanged. To apply a JSON document without an editor, such as in a script, pass `--file PATH`. Use `--file -` to read from stdin, and add `--yes` to skip the confirmation.
+
+Changes to the image or other container settings start a [rolling release](/serverless/endpoints/rolling-releases), and workers move to the new release. `rp endpoint edit` follows the rollout until the new release is live, for up to 10 minutes. Add `--no-follow` to return right away. `rp endpoint update` follows the rollout only when you add `--wait`. Use `--timeout SECONDS` with either command to change how long the CLI follows the rollout. Changes to the name, worker limits, scaling, request timeout, or FlashBoot apply without a new release, so the CLI doesn't wait. If you press Ctrl-C while the CLI follows a rollout, the rollout continues. To check on it later, run `rp endpoint releases ENDPOINT_ID`.
+
+### Monitor workers and logs
+
+`rp endpoint workers` shows how many workers are running, idle, initializing, throttled, or unhealthy, and lists each worker with its status, GPU, data center, release version, and uptime. The list marks workers still on an earlier release as stale. Add `--watch` to refresh the view every 2 seconds until you press Ctrl-C, and `--interval SECONDS` to change the rate. With `--watch --json`, the CLI prints one JSON line per refresh.
+
+`rp endpoint releases` shows the endpoint's current version, rollout progress, and the history of releases with the settings each one changed.
+
+`rp endpoint logs` shows logs from every worker, with each line prefixed by its worker ID. These flags change what it shows:
+
+- `--follow` streams new lines as they arrive and picks up new workers as they start.
+- `--worker WORKER_ID` shows only one worker. Repeat the flag to include more than one.
+- `--source container` or `--source system` shows only one source.
+- `--tail N` sets how many earlier lines to show per worker, up to 5000. The default is 100.
+- `--since TIMESTAMP` shows only lines after an RFC 3339 timestamp, such as `2026-10-28T09:00:00Z`.
+
+### Send requests
+
+`rp endpoint run` sends a request to an endpoint. Pass the request body as JSON with `--data`, or from a file with `--input FILE`. Use `--input -` to read from stdin.
+
+For a queue endpoint, the CLI submits a job, waits for it to finish, and prints its output. If the body has no `input` key, the CLI wraps it in one, so `--data '{"prompt": "hello"}'` sends `{"input": {"prompt": "hello"}}`. If the job doesn't complete, for example because it failed or timed out, the command exits with an error.
+
+```bash
+rp endpoint run ENDPOINT_ID --input request.json           # Wait for the output
+rp endpoint run ENDPOINT_ID --input request.json --stream  # Print streamed output as it arrives
+rp endpoint run ENDPOINT_ID --input request.json --async   # Print the job ID and return
+```
+
+| Flag | Description |
+| --- | --- |
+| `--async` | Submit the job and print its ID without waiting. |
+| `--stream` | Print output as the handler [streams it](/serverless/workers/handler-functions#streaming-handlers). You can't combine it with `--async`. |
+| `--timeout SECONDS` | How long to wait for the result before the CLI stops waiting. The job keeps running. |
+| `--webhook URL` | A URL to notify when the job finishes. |
+| `--execution-timeout SECONDS` | The maximum time the job can run. |
+| `--ttl SECONDS` | How long the job can exist, including time in the queue, before it expires. |
+| `--low-priority` | Don't add workers for this job. |
+
+If you press Ctrl-C while the CLI waits, the job keeps running, and the CLI prints the command to resume waiting. To work with a job after you submit it, use `rp endpoint job`:
+
+```bash
+rp endpoint job get ENDPOINT_ID JOB_ID      # Show the job's status and output
+rp endpoint job wait ENDPOINT_ID JOB_ID     # Wait for the job and print its output
+rp endpoint job stream ENDPOINT_ID JOB_ID   # Print the job's streamed output
+rp endpoint job cancel ENDPOINT_ID JOB_ID   # Cancel a queued or running job
+rp endpoint job retry ENDPOINT_ID JOB_ID    # Requeue a failed or timed-out job
+```
+
+`rp endpoint purge` removes every job waiting in an endpoint's queue. Jobs that are already running continue. The CLI asks you to confirm. Add `--yes` to skip the prompt. A non-interactive shell requires `--yes`.
+
+For a load balancing endpoint, the CLI sends an HTTP request to the endpoint's URL and prints the response. Pass the request path with `--path`, which defaults to `/`. The method is POST when you pass a body and GET otherwise. To use another method, pass `--method`. The job flags in the preceding table don't apply.
+
+```bash
+rp endpoint run ENDPOINT_ID --path /v1/models
+rp endpoint run ENDPOINT_ID --path /v1/chat/completions --input request.json
+```
+
+### Delete an endpoint
+
+`rp endpoint delete` deletes an endpoint and its workers. The CLI asks you to confirm. Add `--yes` to skip the prompt. A non-interactive shell requires `--yes`.
 
 ## rp catalog
 
