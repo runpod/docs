@@ -1,10 +1,10 @@
 ---
 title: "rp CLI reference"
 sidebarTitle: "CLI reference"
-description: "Reference for the rp CLI in the runpod Python package: log in, build and deploy apps, compare GPU and CPU pricing and stock, and manage Pods."
+description: "Reference for the rp CLI in the runpod Python package: log in, build and deploy apps, compare hardware pricing and stock, and manage Pods and volumes."
 ---
 
-The `rp` CLI is installed with the `runpod` Python package. Use it to authenticate, develop and deploy apps, compare hardware pricing and stock, and work with Pods and SSH keys. The same CLI is also available under the name `runpod`, so `rp flash deploy` and `runpod flash deploy` are equivalent.
+The `rp` CLI is installed with the `runpod` Python package. Use it to authenticate, develop and deploy apps, compare hardware pricing and stock, and work with Pods, volumes, and SSH keys. The same CLI is also available under the name `runpod`, so `rp flash deploy` and `runpod flash deploy` are equivalent.
 
 <Note>
   The `rp` CLI is separate from [`runpodctl`](/runpodctl/overview), which is a standalone binary with a different set of commands.
@@ -44,6 +44,11 @@ rp pod connect POD_ID
 
 # Hardware pricing and stock
 rp catalog h100
+
+# Volumes
+rp volume list
+rp volume create --name models --size 100 --region eu
+rp volume delete VOLUME_ID
 
 # Shell completion
 rp completion zsh
@@ -150,10 +155,8 @@ rp flash undeploy --app my-app --env staging
 The app and its build history remain. `--app` is optional when the current directory has one app. Add `--yes` to skip the confirmation prompt.
 
 <Warning>
-  Undeploying an app doesn't delete network volumes it created. Volumes continue to incur storage charges until you delete them. See [Network volumes](/storage/network-volumes) to learn how to delete a volume.
+  Undeploying an app doesn't delete network volumes it created. Volumes continue to incur storage charges until you delete them with [`rp volume delete`](#rp-volume).
 </Warning>
-
-{/* TODO(DOCS-504): The warning above reflects SLS-647 (open). Remove or update it if a volume delete command ships before launch. */}
 
 ## Secrets and registries
 
@@ -247,6 +250,48 @@ By default, the command shows Pod prices for Secure Cloud and Community Cloud. A
 `--count`, `--cuda`, `--min-vram`, and `--max-price` apply only to GPU searches. With `--datacenters`, filter by passing `--region` or a region as the query. The other filters don't apply.
 
 To use what you find in an app, see [GPU types](/sdk/configuration/gpu-types) and [CPU types](/sdk/configuration/cpu-types).
+
+## rp volume
+
+Create and manage network volumes and global volumes. Commands act on network volumes by default. Add `--global` to act on global volumes instead.
+
+```bash
+rp volume list                                          # List network volumes
+rp volume list --global                                 # List global volumes
+rp volume get VOLUME_ID                                 # Show one volume
+rp volume create --name models --size 100 --region eu   # Network volume in a European data center
+rp volume create --name shared --global                 # Global volume
+rp volume update VOLUME_ID --name new-name              # Rename a volume
+rp volume expand VOLUME_ID --size +50                   # Add 50 GB to a network volume
+rp volume delete VOLUME_ID                              # Delete a volume and its data
+```
+
+If you leave out `VOLUME_ID` from `rp volume get`, the CLI prompts you to pick a volume. Add `--json` to `list`, `get`, `create`, `update`, or `expand` to print JSON for use in scripts.
+
+### Create a network volume
+
+A network volume lives in one data center, so `rp volume create` needs a size and a location. Pass `--size` in GB, from 10 to 4096, and choose the location with one of these flags:
+
+| Flag | Description |
+| --- | --- |
+| `--data-center ID` | An exact data center ID, such as `EU-RO-1`. |
+| `--region REGION` | A region such as `eu` or `na`, a data center ID prefix such as `us` or `eu-ro`, or a data center ID. Repeat the flag to include more than one. |
+
+You can't combine the two flags. If you pass neither, the CLI considers every data center that offers network volumes. When more than one data center matches, the CLI prompts you to pick one. In a non-interactive shell, such as a script or CI job, pass `--data-center` instead.
+
+To choose a storage tier, add `--type standard` or `--type high_performance`. The CLI then picks only from data centers that offer that tier. If you leave out `--type`, the volume uses the data center's primary tier. You can't change the tier after you create the volume. To see which tiers each data center offers, run `rp catalog --datacenters`. See [High-performance storage](/storage/high-performance-storage).
+
+A global volume isn't tied to a data center and grows with your data, so `rp volume create --global` takes only `--name`. See [Global volumes](/storage/globalvolume/overview).
+
+### Resize or rename a volume
+
+Network volumes can grow but can't shrink. `rp volume expand` takes a new total size, such as `--size 200`, or an amount to add, such as `--size +50`. The total can't exceed 4096 GB.
+
+`rp volume update` renames a volume with `--name`, sets a new total size for a network volume with `--size`, or does both. To rename a global volume, add `--global`. Global volumes have no size to change.
+
+### Delete a volume
+
+`rp volume delete` permanently deletes a volume and all the data stored on it. The CLI shows the volume's details and asks you to confirm. Add `--yes` to skip the prompt. A non-interactive shell requires `--yes`. To delete a global volume, add `--global`.
 
 ## rp completion
 
