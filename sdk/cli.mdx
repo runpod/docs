@@ -39,7 +39,8 @@ rp ssh POD_ID
 
 # Pods
 rp pod list
-rp pod create
+rp pod create my-pod --gpu 4090 --image runpod/pytorch:latest --ssh --wait
+rp pod stop POD_ID
 rp pod connect POD_ID
 
 # Hardware pricing and stock
@@ -208,13 +209,108 @@ rp ssh POD_ID    # Open a terminal on a Pod
 
 ## rp pod
 
-Work with Pods:
+Create, manage, and connect to Pods:
 
 ```bash
-rp pod list
-rp pod create
-rp pod connect POD_ID    # Same as rp ssh POD_ID
+rp pod list                                  # List your Pods
+rp pod get POD_ID                            # Show a Pod with its connection details
+rp pod create my-pod --gpu 4090 --image runpod/pytorch:latest --ssh --wait
+rp pod update POD_ID --env DEBUG=1           # Change a Pod's settings
+rp pod stop POD_ID                           # Stop a running Pod
+rp pod start POD_ID --wait                   # Start a stopped Pod and wait until it's running
+rp pod restart POD_ID                        # Restart a running Pod
+rp pod terminate POD_ID                      # Delete a Pod permanently (alias: rp pod delete)
+rp pod logs POD_ID --follow                  # Stream a Pod's logs
+rp pod connect POD_ID                        # Open a terminal on a Pod over SSH
+rp pod sync SOURCE_POD_ID DEST_POD_ID        # Copy /workspace from one Pod to another
 ```
+
+If you leave out `POD_ID`, the CLI prompts you to pick a Pod. In a non-interactive shell, such as a script or CI job, pass the ID. Add `--json` to `list`, `get`, `create`, `update`, `start`, `stop`, `restart`, or `logs` to print JSON for use in scripts. Status messages and warnings go to stderr, so stdout holds only the JSON.
+
+To filter `rp pod list`, add `--name TEXT` to match part of a Pod's name, or `--status STATUS` to show Pods in one status, such as `running` or `exited`. Repeat `--status` to include more than one. To include Pods that belong to an Instant Cluster, add `--include-cluster-pods`.
+
+### Create a Pod
+
+`rp pod create` takes a Pod name, the hardware, and a container image or template:
+
+```bash
+rp pod create trainer --gpu h100:2 --image runpod/pytorch:latest --region eu --ssh
+rp pod create box --cpu cpu3c --vcpu 4 --image ubuntu:24.04
+rp pod create notebook --gpu 4090 --image runpod/pytorch:latest --jupyter -p 8888/http
+```
+
+For a GPU Pod, pass `--gpu` with a GPU name such as `4090`, `h100`, or `a100-sxm`, and optionally a count, such as `h100:2`. When a name matches more than one GPU type, the CLI picks the one with the most stock in the data centers you allow. Ties go to the lowest price, and the CLI prints the type it chose. If the catalog shows no stock for the GPU, the CLI warns you that creation may fail. To compare options before you create a Pod, run [`rp catalog`](#rp-catalog).
+
+For a CPU Pod, pass `--cpu` with a CPU type such as `cpu3c` or `cpu5c`. `--vcpu` sets the number of vCPUs, starting at 2. If you leave it out, the Pod gets the CPU type's minimum.
+
+| Flag | Description |
+| --- | --- |
+| `--gpu TYPE[:COUNT]` | The GPU type and, optionally, the number of GPUs. |
+| `--gpu-count N` | The number of GPUs, if you don't include it in `--gpu`. Defaults to 1. |
+| `--cpu TYPE` | The CPU type, for a CPU Pod. You can't combine it with `--gpu`. |
+| `--vcpu N` | The number of vCPUs for a CPU Pod. |
+| `--cloud TIER` | `secure` or `community`. Defaults to Secure Cloud. |
+| `--region REGION` | A region such as `eu`, `na`, or `asia`, a data center ID prefix such as `us` or `eu-ro`, or a data center ID. Repeat the flag to include more than one. |
+| `--data-center ID` | An exact data center ID, such as `US-TX-3`. Repeat the flag to include more than one. |
+| `--cuda VERSION` | The host CUDA version. Use `'>=12.4'` for a minimum version, or `12.4` or `12.4,12.8` for exact versions. GPU Pods only. |
+| `--min-ram-per-gpu GB` | The minimum host RAM per GPU, in GB. GPU Pods only. |
+| `--min-vcpu-per-gpu N` | The minimum host vCPUs per GPU. GPU Pods only. |
+| `--ssh` | Start an SSH server that accepts the SSH keys on your account. If your account has no keys, the CLI warns you. Add one with [`rp ssh add`](#rp-ssh). |
+| `--jupyter` | Start JupyterLab. Expose port 8888 with `-p 8888/http` to reach it. |
+| `--wait` | Wait until the Pod's container is running, for up to 10 minutes. |
+
+If you don't pass `--region` or `--data-center` but do attach a network volume, the CLI places the Pod in the volume's data center.
+
+### Container settings
+
+`rp pod create` and `rp pod update` share these flags for the Pod's container:
+
+| Flag | Description |
+| --- | --- |
+| `--image IMAGE` | The container image, such as `runpod/pytorch:latest`. |
+| `--template ID` | A template ID whose container settings to apply. |
+| `--env`, `-e KEY=VALUE` | An environment variable. Repeat the flag to set more than one. |
+| `--port`, `-p PORT/PROTOCOL` | A port to expose, such as `8888/http` or `22/tcp`. Repeat the flag to expose more than one. |
+| `--disk GB` | The container disk size, in GB. |
+| `--persistent-volume GB[:PATH]` | A volume disk on the Pod's host, such as `50` or `50:/workspace`. The mount path defaults to `/workspace`. |
+| `--network-volume ID[:PATH]` | A [network volume](/storage/network-volumes) to attach. The mount path defaults to `/workspace`. |
+| `--global-volume ID[:PATH]` | A [global volume](/storage/globalvolume/overview) to attach. |
+| `--cmd COMMAND` | The container `CMD`, as a shell string. |
+| `--entrypoint COMMAND` | The container `ENTRYPOINT`, as a shell string. |
+| `--args COMMAND` | The container start command, as one string. Pass `''` to clear it. |
+| `--registry NAME` | The name or ID of saved [registry credentials](#secrets-and-registries) for a private image. Pass `''` to clear it. |
+| `--global-networking` | Turn on private networking between Pods across data centers. NVIDIA GPUs only. Use `--no-global-networking` to turn it off. |
+
+`rp pod create` needs either `--image` or `--template`.
+
+### Update a Pod
+
+`rp pod update` changes a Pod's name with `--name`, its container settings, and its lock. Most changes take effect the next time the Pod starts.
+
+`--env` adds or replaces variables in the Pod's existing environment, and `--unset-env KEY` removes one. `--port` replaces the full list of exposed ports. A volume flag restates the whole mount: you can change its size or mount path, but not the volume ID. If you leave out the path, the Pod keeps the current one.
+
+`--lock` keeps anyone from stopping or resetting the Pod until you run `rp pod update POD_ID --unlock`.
+
+### Start, stop, and terminate a Pod
+
+`rp pod stop` stops a running Pod and keeps its volume. `rp pod start` starts a stopped Pod, and `rp pod restart` restarts a running one. Add `--wait` to `start` or `restart` to return once the container is running.
+
+<Warning>
+  `rp pod terminate` permanently deletes a Pod, including its container disk and volume disk. Network volumes and global volumes attached to the Pod aren't deleted. The CLI asks you to confirm. Add `--yes` to skip the prompt. A non-interactive shell requires `--yes`.
+</Warning>
+
+### Read logs and connect
+
+`rp pod logs` shows a Pod's container and system logs. These flags change what it shows:
+
+- `--follow` streams new lines as they arrive.
+- `--tail N` sets how many earlier lines to show, up to 5000. The default is 100.
+- `--source container` or `--source system` shows only one source.
+- `--since TIMESTAMP` shows only lines after a time.
+
+`rp pod connect` opens a terminal on a Pod over SSH, like `rp ssh POD_ID`. It needs an SSH key on your account and port `22/tcp` exposed on the Pod. `rp pod get` also prints the SSH command and the proxy URLs for the Pod's HTTP ports.
+
+`rp pod sync SOURCE_POD_ID DEST_POD_ID` copies `/workspace` on the source Pod into a new `sync_XXXXXXXX` folder in `/workspace` on the destination Pod, so existing files aren't overwritten. To copy other directories, pass the source and destination paths after the Pod IDs. Both Pods need SSH access.
 
 ## rp catalog
 
