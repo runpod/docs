@@ -1,10 +1,10 @@
 ---
 title: "rp CLI reference"
 sidebarTitle: "CLI reference"
-description: "Reference for the rp CLI that ships with the runpod Python package: log in, scaffold apps, run live dev sessions, deploy, and manage SSH keys and Pods."
+description: "Reference for the rp CLI in the runpod Python package: log in, build and deploy apps, compare GPU and CPU pricing and stock, and manage Pods."
 ---
 
-The `rp` CLI is installed with the `runpod` Python package. Use it to authenticate, develop and deploy apps, and work with Pods and SSH keys. The same CLI is also available under the name `runpod`, so `rp flash deploy` and `runpod flash deploy` are equivalent.
+The `rp` CLI is installed with the `runpod` Python package. Use it to authenticate, develop and deploy apps, compare hardware pricing and stock, and work with Pods and SSH keys. The same CLI is also available under the name `runpod`, so `rp flash deploy` and `runpod flash deploy` are equivalent.
 
 <Note>
   The `rp` CLI is separate from [`runpodctl`](/runpodctl/overview), which is a standalone binary with a different set of commands.
@@ -41,9 +41,15 @@ rp ssh POD_ID
 rp pod list
 rp pod create
 rp pod connect POD_ID
+
+# Hardware pricing and stock
+rp catalog h100
+
+# Shell completion
+rp completion zsh
 ```
 
-App lifecycle commands live under `rp flash`. Login, secrets, registries, logs, updates, SSH, and Pod commands live at the root. Run `rp --help` or `rp COMMAND --help` for details on any command.
+App lifecycle commands live under `rp flash`. All other commands live at the root. Run `rp --help` or `rp COMMAND --help` for details on any command.
 
 ## rp login
 
@@ -206,6 +212,53 @@ rp pod list
 rp pod create
 rp pod connect POD_ID    # Same as rp ssh POD_ID
 ```
+
+## rp catalog
+
+Compare GPU and CPU pricing and stock across data centers before you choose hardware for a Pod or Serverless endpoint:
+
+```bash
+rp catalog                                              # All GPUs with Pod pricing and stock
+rp catalog h100 --count 2 --region eu --cuda '>=12.4'   # Two H100s in Europe with CUDA 12.4 or later
+rp catalog 4090 --serverless                            # Serverless pricing and GPU pool
+rp catalog --cpu --vcpu 8 --available                   # In-stock CPU types with 8 vCPUs
+rp catalog --datacenters --region us                    # Data centers whose ID starts with US
+```
+
+To narrow the results, pass a GPU name such as `4090`, `h100`, or `a100-sxm4`, or a Serverless GPU pool ID. With `--cpu`, pass a CPU type such as `cpu3c` or `cpu5c` instead. Results list the hardware with the most stock first, then the lowest price, and show the stock level in each data center that has the hardware.
+
+By default, the command shows Pod prices for Secure Cloud and Community Cloud. Add `--serverless` to show Serverless prices and the GPU pool for each GPU. The results leave out GPUs that aren't offered on Serverless.
+
+| Flag | Description |
+| --- | --- |
+| `--serverless` | Show Serverless prices, GPU pools, and stock instead of Pod prices. |
+| `--cpu` | Search CPU types instead of GPUs. CPU types are available only in Secure Cloud. |
+| `--datacenters` | List data centers with their region, network volume types, global networking support, and compliance certifications. |
+| `--count N` | The number of GPUs per Pod or worker. Prices and stock reflect this count. Defaults to 1. |
+| `--vcpu N` | The number of vCPUs per Pod or worker. Use with `--cpu`. |
+| `--region REGION` | Limit results to a region such as `eu`, `na`, or `asia`, a data center ID prefix such as `us` or `eu-ro`, or a data center ID such as `EU-RO-1`. Repeat the flag to include more than one. |
+| `--cloud TIER` | Show only `secure` or `community` Pod prices. Doesn't apply with `--serverless`. |
+| `--cuda VERSION` | Filter by CUDA version. Use `'>=12.4'` for a minimum version, or `12.4` or `12.4,12.8` for exact versions. |
+| `--min-vram GB` | The minimum VRAM per GPU, in GB. |
+| `--max-price USD` | The maximum price per GPU per hour, in US dollars. |
+| `--available` | Only show hardware that's in stock. |
+| `--json` | Print JSON instead of a table, for use in scripts. |
+
+`--count`, `--cuda`, `--min-vram`, and `--max-price` apply only to GPU searches. With `--datacenters`, filter by passing `--region` or a region as the query. The other filters don't apply.
+
+To use what you find in an app, see [GPU types](/sdk/configuration/gpu-types) and [CPU types](/sdk/configuration/cpu-types).
+
+## rp completion
+
+Print a shell completion script for `bash`, `zsh`, or `fish`. Completion covers commands, flags, and resource IDs. To turn it on, add the matching line to your shell profile:
+
+```bash
+eval "$(rp completion zsh)"     # ~/.zshrc
+eval "$(rp completion bash)"    # ~/.bashrc
+rp completion fish | source     # ~/.config/fish/config.fish
+```
+
+Open a new terminal for the change to take effect.
 
 ## Next steps
 
