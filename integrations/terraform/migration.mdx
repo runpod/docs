@@ -2,7 +2,6 @@
 title: "Migrate the Runpod Terraform provider from 1.x to 2.0.0"
 sidebarTitle: "Migrate from 1.x"
 description: "Map every 1.x attribute of the Runpod Terraform provider to its 2.0.0 equivalent, with the configuration edit and state action each resource needs."
-tag: "Beta"
 ---
 
 The 2.0.0 Runpod Terraform provider is a breaking release. It is generated entirely from the Runpod REST v2 API. Every resource therefore needs both a configuration edit and a state action before it plans cleanly. This guide maps each 1.x attribute to its 2.0.0 equivalent and gives the exact edit and state command each resource needs.
@@ -17,11 +16,9 @@ The 1.x provider was assembled from more than one backend, so its attribute name
 
 Throughout this guide, "1.x" means 1.0.8, the last release that worked end to end and the baseline that 2.0.0 preserves.
 
-Some things 1.x did have no v2 field yet. 2.0.0 keeps these on their old backend and marks them deprecated rather than dropping them. They include the machine surface and the account read on GraphQL, plus the three 1.x billing data sources and a few attributes on Pods, templates, and Serverless endpoints on REST v1. Terraform warns about each one on every plan. The mapping tables below flag them row by row, and [Deprecated shims](#deprecated-shims) lists them all.
+Some things 1.x did have no v2 field yet. 2.0.0 keeps these and marks them deprecated rather than dropping them. The machine surface and the account read run on GraphQL. The three 1.x billing data sources read the v2 billing routes in their 1.x record shape. A few attributes on Pods, templates, and Serverless endpoints read from GraphQL or REST v2, or are kept only so a 1.x configuration still plans. Terraform warns about each one on every plan. The mapping tables below flag them row by row, and [Deprecated shims](#deprecated-shims) lists them all.
 
-<Warning>
-  REST API v1 is retired on **November 15, 2026**. After that date, the REST v1 shims stop working. Move off them before then. See [Deprecated shims](#deprecated-shims).
-</Warning>
+2.0.0 makes no REST v1 calls, so the REST v1 retirement on November 15, 2026 doesn't affect it.
 
 ## Requirements
 
@@ -57,7 +54,7 @@ terraform {
   required_providers {
     runpod = {
       source  = "runpod/runpod"
-      version = "2.0.0-rc.3"
+      version = "~> 2.0"
     }
   }
 }
@@ -67,20 +64,17 @@ provider "runpod" {}
 
 Authentication is unchanged in substance. The provider reads `api_key`, falls back to the `RUNPOD_API_KEY` environment variable, and errors at configure time if neither is set.
 
-The `base_url` argument now points at a different host. In 1.0.8, `base_url` and the `RUNPOD_BASE_URL` environment variable both set the REST v1 host (`https://rest.runpod.io/v1`). In 2.0.0, `base_url` sets the REST v2 host. It falls back to `RUNPOD_API_BASE_URL`, then the production API.
+The `base_url` argument now points at a different host. In 1.0.8, `base_url` and the `RUNPOD_BASE_URL` environment variable both set the REST v1 host (`https://rest.runpod.io/v1`). In 2.0.0, `base_url` sets the REST v2 host that everything except the GraphQL shims calls. It falls back to `RUNPOD_API_BASE_URL`, then the production API. 2.0.0 doesn't read `RUNPOD_BASE_URL`.
 
 <Warning>
-  If your 1.x configuration sets `base_url`, move that value to `rest_v1_url`. If you leave it in `base_url`, the provider sends every v2 call to the REST v1 host.
+  If your 1.x configuration sets `base_url`, remove it. If you leave it, the provider sends every v2 call to the REST v1 host. Set `base_url` or `RUNPOD_API_BASE_URL` only to point the provider at a non-production v2 host.
 </Warning>
 
-`RUNPOD_BASE_URL` still works as it did in 1.0.8. It sets the REST v1 shim host, so a 1.0.8 staging setup keeps pointing its shim reads at staging. The v2 client doesn't read it. To point v2 calls at a non-production host, set `base_url` or `RUNPOD_API_BASE_URL`.
+One more provider argument applies only to the [deprecated shims](#deprecated-shims). Everything on REST v2 ignores it:
 
-Two more provider arguments apply only to the [deprecated shims](#deprecated-shims). Everything on REST v2 ignores them:
+- `graphql_url`: The GraphQL endpoint for the `runpod_machine` resource, the `runpod_machine` and `runpod_machines` data sources, the `runpod_user` data source, and the deprecated attributes on `runpod_pod`, `runpod_template` (resource and data source), and `runpod_serverless_endpoint` that REST v2 doesn't report. Falls back to `RUNPOD_GRAPHQL_URL`, then `https://api.runpod.io/graphql`.
 
-- `graphql_url`: The GraphQL endpoint for the `runpod_machine` resource, the `runpod_machine` and `runpod_machines` data sources, and the `runpod_user` data source. Falls back to `RUNPOD_GRAPHQL_URL`, then `https://api.runpod.io/graphql`.
-- `rest_v1_url`: The REST v1 base URL for the three 1.x billing data sources and the deprecated attributes on `runpod_pod`, `runpod_template` (resource and data source), and `runpod_serverless_endpoint`. Falls back to `RUNPOD_REST_V1_URL`, then `RUNPOD_BASE_URL`, then `https://rest.runpod.io/v1`.
-
-Set these only if you use the deprecated surfaces against a non-production environment. For the full list of calls that still leave REST v2, see [Which Runpod APIs the provider uses](/integrations/terraform/overview#which-runpod-apis-the-provider-uses).
+Set it only if you use the deprecated surfaces against a non-production environment. The 2.0.0 release candidates also had a `rest_v1_url` argument. It's still accepted so a configuration that sets it validates, but it's deprecated and ignored, and `RUNPOD_REST_V1_URL` isn't read. Remove it. For the full list of calls that still leave REST v2, see [Which Runpod APIs the provider uses](/integrations/terraform/overview#which-runpod-apis-the-provider-uses).
 
 ## Upgrade process
 
@@ -91,13 +85,11 @@ Set these only if you use the deprecated surfaces against a non-production envir
     ```hcl
     runpod = {
       source  = "runpod/runpod"
-      version = "2.0.0-rc.3"
+      version = "~> 2.0"
     }
     ```
 
-    <Note>
-      2.0.0 is currently a release candidate. Terraform installs a release candidate only through an exact pin such as `version = "2.0.0-rc.3"`. A `~> 2.0` constraint never selects one, so `terraform init` fails until 2.0.0 is tagged. After the final release, you can switch to `~> 2.0`.
-    </Note>
+    `~> 2.0` installs 2.0.0 and every later 2.x release.
   </Step>
   <Step title="Record your resource ids">
     Before editing anything, record the identifiers you will need to re-import. Run `terraform state list` and `terraform show -json` against the old state, or reuse the `id` outputs you already have. Do this while the 1.x provider is still in the lock file.
@@ -145,7 +137,7 @@ These attributes were renamed, reshaped, or moved:
 
 The container command now lives entirely in `args` as a single string. `docker_entrypoint` and `docker_start_cmd` still exist in 2.0.0 as read-only attributes, read back from the v2 Pod's `entrypoint` and `cmd`. 1.0.8 accepted values for them but never sent those values. Remove them from your configuration and put the command in `args`.
 
-`machine_id` and `volume_encrypted` also still exist, as deprecated read-only values from the REST v1 shim. `machine_id` reports the machine the Pod landed on. You can't set it, because the v2 create has no machine pinning. Both read null after REST v1 is retired on November 15, 2026.
+`machine_id` and `volume_encrypted` also still exist, as deprecated read-only values from the GraphQL Pod. `machine_id` reports the machine the Pod landed on. You can't set it, because the v2 create has no machine pinning. `volume_encrypted` reads `false` for an unencrypted volume, not null as in 1.x, so a check such as `volume_encrypted == null` needs updating.
 
 These attributes keep their names and behavior: `gpu_type_id`, `gpu_count`, `template_id`, `start_ssh`, `start_jupyter`, `memory_in_gb`, `id`, `status`, and `created_at`. `locked` and `cluster_ip` also keep their names and are now populated from the v2 read, where 1.x declared them but never filled them.
 
@@ -158,6 +150,7 @@ These attributes keep their names and behavior: `gpu_type_id`, `gpu_count`, `tem
 - `global_networking`: a private cross-datacenter IP.
 - `min_cuda_version` and `allowed_cuda_versions`: a CUDA floor, or an exact set. These are mutually exclusive.
 - `min_ram_per_gpu` and `min_vcpu_count_per_gpu`: host-size placement filters, applied per requested GPU.
+- `global_volumes`: a list of `{ volume_id, path }` objects that mounts global volumes wherever the Pod is placed.
 
 Before, in 1.x:
 
@@ -241,9 +234,13 @@ These attributes were renamed, reshaped, or moved:
 
 These attributes keep their names and behavior: `name`, `env`, `template_id` (which must be a serverless template), `gpu_count`, `workers_min`, `workers_max`, `idle_timeout`, `allowed_cuda_versions`, `min_cuda_version`, `data_center_ids`, `id`, and `created_at`.
 
-`gpu_type_priority` and `cpu_flavor_priority` are still in the 2.0.0 schema as deprecated REST v1 shims, but REST v1 currently rejects them, and the v2 endpoint has no equivalent. Remove them from your configuration. After November 15, 2026, setting either one fails the apply.
+`gpu_type_priority` and `cpu_flavor_priority` are still in the 2.0.0 schema as deprecated attributes, but they're never applied. No API has a setting for the order in which the scheduler tries GPU types or CPU flavors, so a configured value stays in state, is never sent, and triggers a plan warning. Remove them from your configuration.
 
-`template_version`, `users`, `version`, and `workers` are also still available, as deprecated read-only values from REST v1. The supported replacements are the `runpod_endpoint_releases` data source (for `endpoint_version` and releases) and the `runpod_endpoint_workers` data source.
+`template_version`, `users`, `version`, and `workers` are also still available as deprecated read-only values:
+
+- `template_version` is always null. No API reports it. Use the `runpod_endpoint_releases` data source for releases.
+- `users` is the owning account as a one-element list, read from GraphQL. It was never an access list.
+- `version` and `workers` come from the REST v2 workers listing. In `workers`, `pod_id` is the worker's `id`, `uptime_ms` has whole-second precision, and `last_busy_ms` is always null. The supported view is the `runpod_endpoint_workers` data source.
 
 `cloud_type` is gone. It existed only in 1.0.9, which never ran, and the v2 Serverless create takes no cloud tier.
 
@@ -253,6 +250,7 @@ These attributes keep their names and behavior: `name`, `env`, `template_id` (wh
 - `ports`: the worker HTTP ports a `LOAD_BALANCER` endpoint routes to.
 - `excluded_types`: GPU type ids subtracted from the selected pools.
 - `registry`: the registry credential id for a private worker image.
+- `global_volumes`: global volumes mounted on every worker of a GPU endpoint.
 
 Before, in 1.x:
 
@@ -329,7 +327,9 @@ resource "runpod_network_volume" "datasets" {
 
 ### runpod_template
 
-The resource type name and id format are unchanged. The container settings come from the v2 template object, and the single persistent mount moved into the `persistent_volume` block.
+The resource type name and id format are unchanged. The container settings come from the v2 template object, `docker_entrypoint` included, and the single persistent mount moved into the `persistent_volume` block.
+
+A template that sets both `docker_start_cmd` and `docker_entrypoint` needs one extra edit. The API stores the entrypoint inside `args`, so `args` and `docker_entrypoint` can't both be set. Write `args` in its JSON form instead, for example `args = jsonencode({ entrypoint = ["/bin/bash", "-c"], cmd = ["start.sh"] })`.
 
 These attributes were renamed, reshaped, or moved:
 
@@ -343,9 +343,9 @@ These attributes were renamed, reshaped, or moved:
 | `container_registry_auth_id` | `registry` | Renamed. |
 | `volume_in_gb` | `persistent_volume.size` | Moved into the `persistent_volume` block. |
 | `volume_mount_path` | `persistent_volume.path` | Moved into the `persistent_volume` block. |
-| `docker_entrypoint` | `docker_entrypoint` | Deprecated. Applied and read back through REST v1. After November 15, 2026, setting it fails the apply. |
-| `readme` | `readme` | Deprecated. Applied and read back through REST v1. Set it to `""` to clear the text. After November 15, 2026, setting it fails the apply. |
-| `earned`, `is_runpod`, `runtime_in_min` | `earned`, `is_runpod`, `runtime_in_min` | Deprecated and read-only. Read back from REST v1. |
+| `docker_entrypoint` | `docker_entrypoint` | Unchanged. Sent as the v2 template's `entrypoint` and read back from it; `[]` clears it. Can't be set together with `args`. |
+| `readme` | `readme` | Deprecated. Written and read back through GraphQL. The text can't be cleared: `""` and whitespace-only values are rejected at plan time. Remove the attribute to stop managing it. |
+| `earned`, `is_runpod`, `runtime_in_min` | `earned`, `is_runpod`, `runtime_in_min` | Deprecated and read-only. Read back from GraphQL. `earned` and `runtime_in_min` read 0 for a template the account doesn't own. |
 
 `name`, `category` (`CPU`, `NVIDIA`, or `AMD`), `env`, `ports`, and `id` keep their names and behavior.
 
@@ -558,7 +558,7 @@ The `runpod_data_centers` data source is now read from the v2 catalog API. The l
 
 ### runpod_template
 
-The `runpod_template` data source keeps its name and required `id`, and mirrors the resource's renames. `image_name` becomes `image`, `container_disk_in_gb` becomes `disk`, `is_public` becomes `public`, `is_serverless` becomes `serverless`, and `container_registry_auth_id` becomes `registry`. `docker_start_cmd` becomes `args`, reshaped from a list to a single string. `volume_in_gb` and `volume_mount_path` move into `mounts.persistent.size` and `mounts.persistent.path`. `docker_entrypoint` keeps its name and is read from the v2 template. `readme`, `earned`, `is_runpod`, and `runtime_in_min` are deprecated read-only values from REST v1. 2.0.0 adds `allowed_cuda_versions`, `start_ssh`, and `start_jupyter`.
+The `runpod_template` data source keeps its name and required `id`, and mirrors the resource's renames. `image_name` becomes `image`, `container_disk_in_gb` becomes `disk`, `is_public` becomes `public`, `is_serverless` becomes `serverless`, and `container_registry_auth_id` becomes `registry`. `docker_start_cmd` becomes `args`, reshaped from a list to a single string. `volume_in_gb` and `volume_mount_path` move into `mounts.persistent.size` and `mounts.persistent.path`. `docker_entrypoint` keeps its name and is read from the v2 template. `readme`, `earned`, `is_runpod`, and `runtime_in_min` are deprecated read-only values from GraphQL. 2.0.0 adds `allowed_cuda_versions`, `start_ssh`, and `start_jupyter`.
 
 ### runpod_container_registry_auths
 
@@ -589,7 +589,7 @@ The `runpod_endpoint_worker_logs` data source keeps its name and required `endpo
 
 ### Billing data sources
 
-The three 1.x billing data sources still exist in 2.0.0. They're deprecated, unchanged, and read REST v1, which means they fail every plan after November 15, 2026. They remain only for fields that v2 billing doesn't report yet. New configuration should use the v2-native equivalents below, which report cost components in USD. The record shape changed, so moving to them is a rewrite rather than a rename. In every case the `billing_records` list became `records`, `billing_records[].amount` became `records[].amounts.total_amount`, and the single `time` field became a `start_time` and `end_time` pair on each record. Each data source also adds a `last_n` argument and a `metadata` block. The `last_n` argument returns the last N buckets and is mutually exclusive with an explicit window. The `metadata` block describes the resolved window and its totals.
+The three 1.x billing data sources still exist in 2.0.0. They're deprecated and keep their 1.x names, arguments, and record fields, but they now read the v2 billing routes and map each record back into the 1.x shape, so some records differ from 1.x. See [Deprecated shims](#deprecated-shims). New configuration should use the v2-native equivalents below, which report cost components in USD. The record shape changed, so moving to them is a rewrite rather than a rename. In every case the `billing_records` list became `records`, `billing_records[].amount` became `records[].amounts.total_amount`, and the single `time` field became a `start_time` and `end_time` pair on each record. Each data source also adds a `last_n` argument and a `metadata` block. The `last_n` argument returns the last N buckets and is mutually exclusive with an explicit window. The `metadata` block describes the resolved window and its totals.
 
 | 1.x data source | 2.0.0 data source | Note |
 | --- | --- | --- |
@@ -619,6 +619,22 @@ resource "runpod_cluster" "training" {
   gpu_count_per_pod = 8
   pod_count         = 4
   image             = "runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04"
+}
+```
+
+**Global volumes** are usage-billed storage with no data center. A Pod mounts one through `global_volumes` wherever it's placed, and a GPU Serverless endpoint mounts one on every worker through its own `global_volumes`. Read one with the `runpod_global_volume` data source.
+
+```hcl
+resource "runpod_global_volume" "data" {
+  name = "training-data"
+}
+
+resource "runpod_pod" "trainer" {
+  name        = "trainer"
+  image       = "runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04"
+  gpu_type_id = "NVIDIA GeForce RTX 4090"
+
+  global_volumes = [{ volume_id = runpod_global_volume.data.id, path = "/data" }]
 }
 ```
 
@@ -660,6 +676,7 @@ resource "runpod_pod" "strict" {
 - **Catalog templates**: the publicly shared template catalog, read through `runpod_catalog_templates`.
 - **Serverless builds and releases**: `runpod_endpoint_builds` and `runpod_endpoint_build` report container builds from a Git repository, and `runpod_endpoint_releases` reports configuration releases with a field-level diff against the previous one.
 - **Billing on the v2 routes**: `runpod_billing` (account-wide), `runpod_pod_billing`, `runpod_serverless_billing`, `runpod_endpoint_billing`, `runpod_network_volume_billing`, and `runpod_cluster_billing`, all with the same window arguments and per-component totals.
+- **List data sources**: `runpod_pods`, `runpod_templates`, `runpod_serverless_endpoints`, and `runpod_network_volumes` read every resource of that kind on the account.
 - **Pod logs**: `runpod_pod_logs`, the Pod-level counterpart to worker logs, bounded by `tail`, `since`, or `last_event_id`.
 - **Single-item catalog lookups**: `runpod_gpu_type`, `runpod_cpu_type`, and `runpod_data_center`, so you no longer filter a whole list to read one entry.
 - **FlashBoot tiers**: cold-start acceleration is now a three-value setting (`OFF`, `FLASHBOOT`, or `PRIORITY_FLASHBOOT`) rather than a boolean.
@@ -676,34 +693,33 @@ Some 1.x attributes are gone in 2.0.0. Most of them were declared in the 1.x sch
 
 ## Deprecated shims
 
-A shim is a small piece of code inside the provider that sends a request to an older Runpod API instead of REST v2. Shims keep 1.x features working when REST v2 has no equivalent yet. For the full list and a runnable example, see [Legacy shims](https://registry.terraform.io/providers/runpod/runpod/latest/docs/guides/legacy) on the Terraform Registry.
+A shim is a small piece of code inside the provider that keeps a 1.x feature working when REST v2 has no equivalent yet. For a runnable example, see [Legacy shims](https://registry.terraform.io/providers/runpod/runpod/latest/docs/guides/legacy) on the Terraform Registry.
 
-Everything a 1.0.8 configuration used that REST v2 has no field for still works in 2.0.0. It runs on the old backend and is marked deprecated. Terraform prints a deprecation warning on every plan that touches a shim, and each shim is removed in a later release once REST v2 covers it.
+Everything a 1.0.8 configuration used that REST v2 has no field for still plans in 2.0.0, marked deprecated. Where only GraphQL has the value, the provider reads or writes it there through `graphql_url`. Where no API has the value anymore, the attribute is kept so the configuration still plans, and it reads null or isn't applied. Terraform prints a deprecation warning on every plan that touches a shim, and each shim is removed in a later release once REST v2 covers it.
 
-<Warning>
-  REST API v1 is retired on **November 15, 2026**. After that date:
+2.0.0 makes no REST v1 calls, so the REST v1 retirement on November 15, 2026 doesn't affect any shim.
 
-  - REST v1 read-backs return null with a warning.
-  - Setting `docker_entrypoint`, `readme`, `gpu_type_priority`, or `cpu_flavor_priority` fails the apply.
-  - `runpod_billing_pod`, `runpod_billing_network_volume`, and `runpod_billing_endpoint` fail every plan.
+| 1.x attribute | 2.0.0 reads it from | What you see |
+| --- | --- | --- |
+| `runpod_pod.machine_id` | GraphQL | The machine id; null when GraphQL doesn't report the Pod. |
+| `runpod_pod.volume_encrypted` | GraphQL | `false` for an unencrypted volume, not null. |
+| `runpod_template.readme` | GraphQL (write and read) | Written and read as before. `""` is refused, so the text can't be cleared. |
+| `runpod_template.earned`, `is_runpod`, `runtime_in_min` | GraphQL | Same as 1.x. `earned` and `runtime_in_min` read 0 for a template the account doesn't own. |
+| `runpod_serverless_endpoint.gpu_type_priority`, `cpu_flavor_priority` | Nothing | Kept in state, never sent, warned about at plan time. |
+| `runpod_serverless_endpoint.template_version` | Nothing | Always null. |
+| `runpod_serverless_endpoint.users` | GraphQL | The owner, as a one-element list. |
+| `runpod_serverless_endpoint.version` and `workers` | REST v2 workers listing | Same as 1.x, except `workers[].last_busy_ms` is always null and `uptime_ms` has whole-second precision. |
+| `runpod_billing_pod` with `gpu_type_id` | GraphQL GPU Pod billing | Per GPU type, as in 1.x. Can't be combined with `pod_id`. Hourly buckets over 13 days old and other buckets over 13 months old aren't reported. |
+| `runpod_billing_pod` without `gpu_type_id` | REST v2 | One record per Pod, where 1.x grouped by GPU type. `gpu_type_id`, `endpoint_id`, `disk_space_billed_gb`, and `time_billed_ms` read null. |
+| `runpod_billing_network_volume` | REST v2 | One record per volume, where 1.x reported the whole account. `disk_space_billed_gb` and `time_billed_ms` read null. |
+| `runpod_billing_endpoint` `time_billed_ms` | GraphQL Serverless billing | Whole-second precision. Null for yearly buckets, hourly buckets over 13 days old, and other buckets over 13 months old. |
+| `runpod_registries.registries[].username` | Nothing | Always null. |
 
-  The GraphQL shims aren't affected by this date.
-</Warning>
+The `runpod_machine` resource, the `runpod_machine` and `runpod_machines` data sources, and the `runpod_user` data source also run on GraphQL. Only `id` and `email` are populated on `runpod_user`.
 
-The REST v1 shims use the `rest_v1_url` provider argument:
+For the three billing data sources, `end_time` must be an RFC 3339 timestamp, a date, or a datetime without a zone (read as UTC). The window is the 30 days before `end_time`, or before the current time when it's unset.
 
-- `runpod_pod`: `machine_id` and `volume_encrypted` (read-only).
-- `runpod_serverless_endpoint`: `gpu_type_priority` and `cpu_flavor_priority` (already rejected, so remove them). Also `template_version`, `users`, `version`, and `workers` (read-only).
-- `runpod_template` resource: `docker_entrypoint` and `readme` (settable). Also `earned`, `is_runpod`, and `runtime_in_min` (read-only).
-- `runpod_template` data source: `readme`, `earned`, `is_runpod`, and `runtime_in_min` (read-only).
-- Data sources `runpod_billing_pod`, `runpod_billing_network_volume`, and `runpod_billing_endpoint`.
-
-The GraphQL shims use the `graphql_url` provider argument:
-
-- The `runpod_machine` resource and the `runpod_machine` and `runpod_machines` data sources.
-- The `runpod_user` data source (only `id` and `email` are populated).
-
-When the old host fails, an unconfigured shim attribute reads null with a warning and the apply goes through. A shim attribute your configuration sets fails the apply. The billing data sources always fail on a bad read.
+When GraphQL fails, an unconfigured shim attribute reads null with a warning and the apply goes through. A shim attribute your configuration sets fails the apply. The billing data sources always fail on a bad read.
 
 `compute_type` on `runpod_serverless_endpoint` is deprecated for a different reason. It restates what `gpu_pools` or `cpu` already says, and it goes away once 1.x configurations have moved, not when an API changes.
 

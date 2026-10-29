@@ -4,11 +4,7 @@ sidebarTitle: "Overview"
 description: "Install the Runpod Terraform provider 2.0.0, authenticate with your API key, and deploy your first Pod as code with a minimal working configuration."
 ---
 
-The [Runpod Terraform provider](https://registry.terraform.io/providers/runpod/runpod/latest) lets you manage Runpod infrastructure as code. You declare Pods, Serverless endpoints, templates, network volumes, and registry credentials in HCL files, and Terraform creates, updates, and removes them to match.
-
-<Note>
-The Runpod Terraform provider is in beta. Features and behavior may change before general availability.
-</Note>
+The [Runpod Terraform provider](https://registry.terraform.io/providers/runpod/runpod/latest) lets you manage Runpod infrastructure as code. You declare Pods, Serverless endpoints, templates, network and global volumes, Instant Clusters, and registry credentials in HCL files, and Terraform creates, updates, and removes them to match.
 
 This page covers the 2.0.0 provider. If you already manage Runpod resources with a 1.x version of the provider, read [Migrate the Runpod Terraform provider from 1.x to 2.0.0](/integrations/terraform/migration) before you upgrade, because 2.0.0 is a breaking release.
 
@@ -28,7 +24,7 @@ terraform {
   required_providers {
     runpod = {
       source  = "runpod/runpod"
-      version = "2.0.0-rc.3"
+      version = "~> 2.0"
     }
   }
 }
@@ -36,7 +32,7 @@ terraform {
 provider "runpod" {}
 ```
 
-2.0.0 is currently a release candidate, and Terraform installs a release candidate only through an exact pin. A `~> 2.0` constraint never matches one, so `terraform init` fails with it. After 2.0.0 is released, you can change the constraint to `~> 2.0`, which accepts any later 2.x release and blocks an automatic move to 3.0.
+`~> 2.0` installs 2.0.0 and any later 2.x release, and blocks an automatic move to 3.0.
 
 Download the provider into your working directory:
 
@@ -78,7 +74,7 @@ provider "runpod" {
 Supply the value at run time, for example with `terraform apply -var="runpod_api_key=YOUR_API_KEY"` or a `TF_VAR_runpod_api_key` environment variable. Never commit the key to a `.tfvars` file in version control.
 
 <Note>
-  The provider sends requests to the production Runpod API by default. To target a different host, set the `base_url` argument or the `RUNPOD_API_BASE_URL` environment variable. Most users never need this setting. The deprecated REST v1 and GraphQL shims use separate `rest_v1_url` and `graphql_url` settings. See [Which Runpod APIs the provider uses](#which-runpod-apis-the-provider-uses).
+  The provider sends requests to the production Runpod API by default. To target a different host, set the `base_url` argument or the `RUNPOD_API_BASE_URL` environment variable. Most users never need this setting. The deprecated GraphQL shims use a separate `graphql_url` setting. See [Which Runpod APIs the provider uses](#which-runpod-apis-the-provider-uses).
 </Note>
 
 ## Deploy a Pod
@@ -153,29 +149,29 @@ The 2.0.0 provider covers these resources:
 - Serverless endpoints with `runpod_serverless_endpoint`.
 - Templates with `runpod_template`.
 - Network volumes with `runpod_network_volume`.
+- Global volumes with `runpod_global_volume`.
 - Container registry credentials and Amazon ECR delegations with `runpod_registry` and `runpod_registry_delegation`.
 - Instant Clusters with `runpod_cluster`.
 - Account SSH keys with `runpod_account_ssh_keys`.
 - Host machines with `runpod_machine`. This is a deprecated GraphQL shim for Runpod hosts and needs a host account.
 
-Data sources read the GPU, CPU, and data center catalogs, existing Pods and templates, endpoint workers, builds, releases, logs, and billing. For every argument and attribute, see the [provider reference on the Terraform Registry](https://registry.terraform.io/providers/runpod/runpod/latest/docs). The reference is generated from the provider schema, so it always matches the release you install.
+Data sources read the GPU, CPU, and data center catalogs, existing Pods, templates, Serverless endpoints, network and global volumes, endpoint workers, builds, releases, logs, and billing. For every argument and attribute, see the [provider reference on the Terraform Registry](https://registry.terraform.io/providers/runpod/runpod/latest/docs). The reference is generated from the provider schema, so it always matches the release you install.
 
 ## Which Runpod APIs the provider uses
 
 The 2.0.0 provider is generated from the [Runpod REST API v2](/api-reference-v2/overview), and nearly every resource and data source talks only to `https://api.runpod.io/v2`.
 
-A few resources, data sources, and attributes still use older APIs because REST v2 has no route for them yet:
+A few deprecated resources, data sources, and attributes still call the GraphQL API because REST v2 has no route for them yet:
 
-- **GraphQL:** The `runpod_machine` resource, the `runpod_machine` and `runpod_machines` data sources, and the `runpod_user` data source.
-- **REST API v1:** The three 1.x billing data sources (`runpod_billing_pod`, `runpod_billing_network_volume`, and `runpod_billing_endpoint`), plus a few deprecated attributes on `runpod_pod`, `runpod_template`, and `runpod_serverless_endpoint`, such as `docker_entrypoint` and `readme` on templates.
+- The `runpod_machine` resource, the `runpod_machine` and `runpod_machines` data sources, and the `runpod_user` data source.
+- A few deprecated attributes on `runpod_pod`, `runpod_template`, and `runpod_serverless_endpoint`, such as `machine_id` on Pods and `readme` on templates.
+- Parts of the three 1.x billing data sources (`runpod_billing_pod`, `runpod_billing_network_volume`, and `runpod_billing_endpoint`), which otherwise read the v2 billing routes.
 
-Each of these is deprecated. Terraform prints a warning on every plan that touches one, and each is removed once REST v2 adds the matching route.
+Terraform prints a warning on every plan that touches one, and each is removed once REST v2 adds the matching route. Use the v2 billing data sources (`runpod_pod_billing`, `runpod_serverless_billing`, and `runpod_network_volume_billing`) for new configuration.
 
-<Warning>
-  REST API v1 is retired on **November 15, 2026**. After that date, REST v1 read-backs return null, setting a REST v1-only attribute fails the apply, and the three 1.x billing data sources fail every plan. Use the v2 billing data sources (`runpod_pod_billing`, `runpod_serverless_billing`, and `runpod_network_volume_billing`) for new configuration.
-</Warning>
+The provider makes no REST API v1 calls, so the REST v1 retirement on November 15, 2026 doesn't affect it.
 
-The `graphql_url` argument (fallback `RUNPOD_GRAPHQL_URL`) applies only to the GraphQL shims. The `rest_v1_url` argument (fallback `RUNPOD_REST_V1_URL`, then `RUNPOD_BASE_URL`) applies only to the REST v1 shims. Leave both unset unless you target a non-production environment. The `registries[].username` field on `runpod_registries` is deprecated and always null.
+The `graphql_url` argument (fallback `RUNPOD_GRAPHQL_URL`) applies only to the GraphQL shims. Leave it unset unless you target a non-production environment. The `rest_v1_url` argument from the 2.0.0 release candidates is deprecated and ignored. The `registries[].username` field on `runpod_registries` is deprecated and always null.
 
 ## Next steps
 
