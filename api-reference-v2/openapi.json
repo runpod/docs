@@ -298,6 +298,34 @@
           }
         }
       },
+      "ResponseTooLargeError": {
+        "headers": {
+          "RateLimit": {
+            "$ref": "#/components/headers/RateLimit"
+          },
+          "RateLimit-Policy": {
+            "$ref": "#/components/headers/RateLimit-Policy"
+          }
+        },
+        "description": "The response would exceed the upstream response size cap. Request\nfewer items and retry; on paginated operations, lower `limit`.\n",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "examples": {
+              "responseTooLarge": {
+                "summary": "Response exceeds the size cap",
+                "value": {
+                  "title": "Request Entity Too Large",
+                  "status": 413,
+                  "detail": "Response too large for one request. Request fewer items and retry."
+                }
+              }
+            }
+          }
+        }
+      },
       "MethodNotAllowedError": {
         "description": "The request method is not supported for the target path.",
         "headers": {
@@ -742,6 +770,84 @@
           }
         }
       },
+      "OrganizationRoleRef": {
+        "type": "object",
+        "description": "An organization role, by ID.",
+        "required": [
+          "id",
+          "type"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Role ID. A built-in role's ID is `builtin:` followed by its name; a custom role carries its own ID.",
+            "examples": [
+              "builtin:dev"
+            ]
+          },
+          "type": {
+            "$ref": "#/components/schemas/OrganizationRoleType"
+          }
+        }
+      },
+      "OrganizationRoleType": {
+        "type": "string",
+        "description": "Who defines the role. `builtin` roles are Runpod's: `builtin:admin`, `builtin:dev`, `builtin:billing` and `builtin:basic`. A `custom` role is one the organization defined, under its own ID.",
+        "x-enum-varnames": [
+          "OrganizationRoleTypeBuiltin",
+          "OrganizationRoleTypeCustom"
+        ],
+        "enum": [
+          "builtin",
+          "custom"
+        ]
+      },
+      "OrganizationUser": {
+        "type": "object",
+        "description": "A member of the caller's organization. `id` is the member's user ID.",
+        "required": [
+          "id",
+          "email",
+          "role"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "User ID.",
+            "examples": [
+              "user_id_abc_123"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The member's email address. Null for an account that has none.",
+            "examples": [
+              "member@example.com"
+            ]
+          },
+          "role": {
+            "$ref": "#/components/schemas/OrganizationRoleRef"
+          }
+        }
+      },
+      "ListOrganizationUsersResponse": {
+        "type": "object",
+        "required": [
+          "users"
+        ],
+        "properties": {
+          "users": {
+            "type": "array",
+            "description": "Every member of the organization, in upstream's order.",
+            "items": {
+              "$ref": "#/components/schemas/OrganizationUser"
+            }
+          }
+        }
+      },
       "Pagination": {
         "type": "object",
         "required": [
@@ -904,10 +1010,37 @@
         }
       },
       "ClusterMounts": {
-        "description": "Storage mounts for a cluster create: `persistent` or `network`, not\nboth. Clusters cannot mount global volumes, so `global` is rejected\nwith 422.\n",
+        "description": "Storage mounts for a cluster create: `persistent` or `network`, not\nboth. Clusters cannot mount global volumes, so `global` is rejected\nwith 422. A mount `path` must not be empty (rejected with 422):\nupstream reads an empty path as unset and would mount the volume at\nthe template's path, or `/workspace` without a template.\n",
+        "x-go-type": "BaseMounts",
         "allOf": [
           {
             "$ref": "#/components/schemas/BaseMounts"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "persistent": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "network": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              }
+            }
           }
         ],
         "unevaluatedProperties": false
@@ -2974,7 +3107,7 @@
               "cost": {
                 "type": "number",
                 "format": "float",
-                "description": "The Pod's hourly compute rate in USD. It's returned in every status, including `EXITED`, so it isn't what you're paying right now: a stopped Pod isn't billed for compute, only for its volume disk.",
+                "description": "The pod's hourly compute rate in USD. It's returned in every status, including `EXITED`, so it isn't what you're paying right now: a stopped pod isn't billed for compute, only for its volume disk.",
                 "examples": [
                   0.35
                 ]
@@ -3031,7 +3164,7 @@
             "required": [
               "name"
             ],
-            "description": "Request body for creating a pod. Exactly one of `gpu` or `cpu`\nmust be set — enforced at the handler layer. For CPU pods, memory\nis derived by the API from the selected flavor's RAM multiplier;\nclients provide only CPU flavor and vCPU count. CPU pods support\ncontainer disk, network volumes, and a global volume; `mounts.persistent`\nis invalid when `cpu` is set.\n\n`image` is required unless `templateId` is set.\n",
+            "description": "Request body for creating a pod. Exactly one of `gpu` or `cpu`\nmust be set — enforced at the handler layer. For CPU pods, memory\nis derived by the API from the selected flavor's RAM multiplier;\nclients provide only CPU flavor and vCPU count. CPU pods support\ncontainer disk, network volumes, and a global volume;\n`mounts.persistent` is invalid when `cpu` is set.\n\n`image` is required unless `templateId` is set.\n",
             "properties": {
               "name": {
                 "type": "string",
@@ -3484,7 +3617,7 @@
               "templateId": {
                 "type": "string",
                 "minLength": 1,
-                "description": "ID of a pod template to provision every member pod from. The\ntemplate supplies the container settings (image, args, disk,\nenv, ports) and the container registry credential for private\nimages — the only private-image path for clusters. Mutually\nexclusive with `image`, `args`, `entrypoint`, `cmd`, `disk`,\n`env`, `ports`, and `mounts` (rejected with 400). The cluster\nretains the link: the `template` response field is set. Must be\na non-serverless pod template accessible to the caller.\n",
+                "description": "ID of a pod template to provision every member pod from. The\ntemplate supplies the container settings (image, args, disk,\nenv, ports) and the container registry credential for private\nimages — the only private-image path for clusters. Mutually\nexclusive with `image`, `args`, `entrypoint`, `cmd`, `disk`,\n`env`, and `ports` (rejected with 400). `mounts` combines with\nit: the volume in `mounts` is attached to every member pod,\noverriding the template's volume settings. The cluster\nretains the link: the `template` response field is set. Must be\na non-serverless pod template accessible to the caller.\n",
                 "examples": [
                   "30zmvf89kd"
                 ]
@@ -5972,6 +6105,188 @@
         }
       }
     },
+    "/v2/organization/users": {
+      "get": {
+        "operationId": "listOrganizationUsers",
+        "x-runpod-scope": "membership:read",
+        "summary": "List organization members",
+        "x-mint": {
+          "metadata": {
+            "description": "List the members of your organization and the role each one holds."
+          }
+        },
+        "description": "Returns every member of the authenticated caller's organization with the role each holds. Any member can read the roster. The list is complete and takes no pagination parameters. Returns 404 when the caller does not belong to an organization, or 403 when organizations are unavailable to the caller.",
+        "tags": [
+          "Organization"
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListOrganizationUsersResponse"
+                },
+                "examples": {
+                  "users": {
+                    "summary": "Organization members",
+                    "value": {
+                      "users": [
+                        {
+                          "id": "user_id_abc_123",
+                          "email": "owner@example.com",
+                          "role": {
+                            "id": "builtin:admin",
+                            "type": "builtin"
+                          }
+                        },
+                        {
+                          "id": "user_id_def_456",
+                          "email": "member@example.com",
+                          "role": {
+                            "id": "builtin:dev",
+                            "type": "builtin"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/organization/users/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "User identifier",
+          "example": "user_id_abc_123"
+        }
+      ],
+      "get": {
+        "operationId": "getOrganizationUser",
+        "x-runpod-scope": "membership:read",
+        "summary": "Get an organization member",
+        "x-mint": {
+          "metadata": {
+            "description": "Get one member of your organization by user ID."
+          }
+        },
+        "description": "Returns one member of the authenticated caller's organization by user ID, with the role they hold. Any member can read it. A user who is not a member, including one from another organization, returns 404. Returns 404 when the caller does not belong to an organization, or 403 when organizations are unavailable to the caller.",
+        "tags": [
+          "Organization"
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationUser"
+                },
+                "examples": {
+                  "user": {
+                    "summary": "Organization member",
+                    "value": {
+                      "id": "user_id_abc_123",
+                      "email": "owner@example.com",
+                      "role": {
+                        "id": "builtin:admin",
+                        "type": "builtin"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v2/account/secrets": {
       "get": {
         "operationId": "listSecrets",
@@ -6554,6 +6869,9 @@
           },
           "403": {
             "$ref": "#/components/responses/ForbiddenError"
+          },
+          "413": {
+            "$ref": "#/components/responses/ResponseTooLargeError"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequestsError"
@@ -7515,6 +7833,9 @@
           "403": {
             "$ref": "#/components/responses/ForbiddenError"
           },
+          "413": {
+            "$ref": "#/components/responses/ResponseTooLargeError"
+          },
           "429": {
             "$ref": "#/components/responses/TooManyRequestsError"
           },
@@ -7973,6 +8294,9 @@
           },
           "403": {
             "$ref": "#/components/responses/ForbiddenError"
+          },
+          "413": {
+            "$ref": "#/components/responses/ResponseTooLargeError"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequestsError"
@@ -8842,6 +9166,9 @@
           "404": {
             "$ref": "#/components/responses/NotFoundError"
           },
+          "413": {
+            "$ref": "#/components/responses/ResponseTooLargeError"
+          },
           "429": {
             "$ref": "#/components/responses/TooManyRequestsError"
           },
@@ -8952,6 +9279,9 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFoundError"
+          },
+          "413": {
+            "$ref": "#/components/responses/ResponseTooLargeError"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequestsError"
@@ -9294,6 +9624,9 @@
           },
           "403": {
             "$ref": "#/components/responses/ForbiddenError"
+          },
+          "413": {
+            "$ref": "#/components/responses/ResponseTooLargeError"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequestsError"
@@ -9827,6 +10160,9 @@
           "403": {
             "$ref": "#/components/responses/ForbiddenError"
           },
+          "413": {
+            "$ref": "#/components/responses/ResponseTooLargeError"
+          },
           "429": {
             "$ref": "#/components/responses/TooManyRequestsError"
           },
@@ -10284,6 +10620,9 @@
           },
           "403": {
             "$ref": "#/components/responses/ForbiddenError"
+          },
+          "413": {
+            "$ref": "#/components/responses/ResponseTooLargeError"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
@@ -12237,6 +12576,9 @@
           },
           "403": {
             "$ref": "#/components/responses/ForbiddenError"
+          },
+          "413": {
+            "$ref": "#/components/responses/ResponseTooLargeError"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
