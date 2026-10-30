@@ -47,7 +47,9 @@ def list_resources(path: str, key: str, prefix: str) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     params: dict[str, Any] = {"limit": 1000}
     while True:
-        resp = requests.get(f"{API_BASE}/{path}", headers=get_headers(), params=params)
+        resp = requests.get(
+            f"{API_BASE}/{path}", headers=get_headers(), params=params, timeout=30
+        )
         resp.raise_for_status()
         body = resp.json()
         items.extend(body.get(key, []))
@@ -78,28 +80,36 @@ def list_network_volumes(prefix: str) -> list[dict[str, Any]]:
     return list_resources("network-volumes", "networkVolumes", prefix)
 
 
-def delete_resource(path: str, resource_id: str) -> bool:
+def delete_resource(path: str, resource_id: str) -> tuple[bool, str]:
     """Delete a resource by ID. REST v2 returns 204 No Content on success."""
-    resp = requests.delete(f"{API_BASE}/{path}/{resource_id}", headers=get_headers())
-    return resp.status_code in (200, 204)
+    resp = requests.delete(
+        f"{API_BASE}/{path}/{resource_id}", headers=get_headers(), timeout=30
+    )
+    if resp.status_code == 204:
+        return True, ""
+    try:
+        detail = resp.json().get("detail")
+    except ValueError:
+        detail = resp.text
+    return False, f"HTTP {resp.status_code}" + (f": {detail}" if detail else "")
 
 
-def delete_pod(pod_id: str) -> bool:
+def delete_pod(pod_id: str) -> tuple[bool, str]:
     """Delete a pod by ID."""
     return delete_resource("pods", pod_id)
 
 
-def delete_endpoint(endpoint_id: str) -> bool:
+def delete_endpoint(endpoint_id: str) -> tuple[bool, str]:
     """Delete an endpoint by ID."""
     return delete_resource("serverless", endpoint_id)
 
 
-def delete_template(template_id: str) -> bool:
+def delete_template(template_id: str) -> tuple[bool, str]:
     """Delete a template by ID."""
     return delete_resource("templates", template_id)
 
 
-def delete_network_volume(volume_id: str) -> bool:
+def delete_network_volume(volume_id: str) -> tuple[bool, str]:
     """Delete a network volume by ID."""
     return delete_resource("network-volumes", volume_id)
 
@@ -140,11 +150,12 @@ def main():
         if dry_run:
             print(f"  Would delete: {name} ({pod_id})")
         else:
-            if delete_pod(pod_id):
+            succeeded, detail = delete_pod(pod_id)
+            if succeeded:
                 print(f"  Deleted: {name} ({pod_id})")
                 deleted["pods"] += 1
             else:
-                print(f"  Failed to delete: {name} ({pod_id})")
+                print(f"  Failed to delete: {name} ({pod_id}): {detail}")
 
     # Endpoints
     print("\nEndpoints:")
@@ -158,11 +169,12 @@ def main():
         if dry_run:
             print(f"  Would delete: {name} ({endpoint_id})")
         else:
-            if delete_endpoint(endpoint_id):
+            succeeded, detail = delete_endpoint(endpoint_id)
+            if succeeded:
                 print(f"  Deleted: {name} ({endpoint_id})")
                 deleted["endpoints"] += 1
             else:
-                print(f"  Failed to delete: {name} ({endpoint_id})")
+                print(f"  Failed to delete: {name} ({endpoint_id}): {detail}")
 
     # Templates
     print("\nTemplates:")
@@ -176,11 +188,12 @@ def main():
         if dry_run:
             print(f"  Would delete: {name} ({template_id})")
         else:
-            if delete_template(template_id):
+            succeeded, detail = delete_template(template_id)
+            if succeeded:
                 print(f"  Deleted: {name} ({template_id})")
                 deleted["templates"] += 1
             else:
-                print(f"  Failed to delete: {name} ({template_id})")
+                print(f"  Failed to delete: {name} ({template_id}): {detail}")
 
     # Network Volumes
     print("\nNetwork Volumes:")
@@ -194,11 +207,12 @@ def main():
         if dry_run:
             print(f"  Would delete: {name} ({volume_id})")
         else:
-            if delete_network_volume(volume_id):
+            succeeded, detail = delete_network_volume(volume_id)
+            if succeeded:
                 print(f"  Deleted: {name} ({volume_id})")
                 deleted["volumes"] += 1
             else:
-                print(f"  Failed to delete: {name} ({volume_id})")
+                print(f"  Failed to delete: {name} ({volume_id}): {detail}")
 
     # Summary
     print("\n" + "=" * 40)
