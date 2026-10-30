@@ -170,8 +170,21 @@ vLLM compiles the model with torch.compile when a worker starts, which can add t
 | Variable | Default | Type | Description |
 | --- | --- | --- | --- |
 | `VLLM_CACHE_ROOT` | `/runpod-volume/vllm-cache` | `str` | Where vLLM stores its torch.compile cache. Set it to `/root/.cache/vllm` to keep the cache in the container. |
+| `VLLM_ENABLE_STARTUP_PLAN` | `0` | `0`, `1` | Set to `1` to save the KV cache memory budget vLLM measures at startup and reuse it on later cold starts. Use `1`, not `true`, which makes the worker fail to start. |
 
 If the cache directory isn't writable or the volume has less than 1 GiB free, the worker compiles into the container for that start. If the volume runs out of space during startup, the worker relaunches once with the cache in the container. vLLM never removes old cache entries, so the folder grows with each new vLLM version, model configuration, and GPU type. You can delete `vllm-cache` from the network volume while no worker is starting (for example, with the endpoint scaled to zero). vLLM rebuilds it on the next start.
+
+To shorten cold starts further, set `VLLM_ENABLE_STARTUP_PLAN=1`. On the first start, vLLM measures how much GPU memory it can give the KV cache and saves the result to `startup_plan/` in the cache directory. Later cold starts with the same vLLM version, model, engine configuration, and GPU type reuse that result. Skipping the measurement can save several seconds per cold start. vLLM measures memory as usual when:
+
+- Any of these settings differ from the first start.
+- Less GPU memory is free than on the first start.
+- You set `KV_CACHE_MEMORY_BYTES`.
+
+<Warning>
+
+vLLM doesn't check `GPU_MEMORY_UTILIZATION` when it reuses a saved result. If you change `GPU_MEMORY_UTILIZATION`, for example after an out-of-memory error, workers keep the old memory budget. To apply the new value, delete `startup_plan/` from the cache directory while no worker is starting, or remove `VLLM_ENABLE_STARTUP_PLAN` from the endpoint.
+
+</Warning>
 
 ## Advanced settings
 
