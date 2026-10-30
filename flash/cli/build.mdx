@@ -2,7 +2,12 @@
 title: "build"
 sidebarTitle: "build"
 description: "Build a deployment-ready Flash application artifact without deploying, with controls for dependencies, exclusions, and output files."
+canonical: "https://docs.runpod.io/sdk/cli"
 ---
+
+<Warning>
+  The Flash CLI is now part of the `rp` CLI that ships with the [Runpod SDK](/sdk/overview). This page documents the standalone `flash` command from the `runpod-flash` package, which stops getting fixes and updates after its [deprecation date](/flash/overview). For new projects, use the [`rp` CLI](/sdk/cli). To see how `flash` commands map to `rp flash`, see [Migrating from Flash](/sdk/migrate-from-flash#step-2-update-your-cli-commands).
+</Warning>
 
 Build a deployment-ready artifact for your Flash application without deploying. Use this for more control over the build process or to inspect the artifact before deploying.
 
@@ -45,14 +50,14 @@ Comma-separated list of packages to exclude from the build (e.g., `torch,torchvi
 </ResponseField>
 
 <ResponseField name="--python-version" type="string">
-Target Python version for worker images (3.10, 3.11, 3.12, or 3.13). Overrides per-resource `python_version` declarations and local interpreter detection.
+Target Python version for worker images (3.10, 3.11, 3.12, or 3.13). Defaults to the `python_version` declared on your resource configs, or 3.12 if none declares one. The build fails if the flag conflicts with a declared `python_version`.
 </ResponseField>
 
 ## What happens during build
 
-1. **Python version resolution**: Resolves the target Python version from CLI flag, resource configs, or your local interpreter.
-2. **Function discovery**: Finds all `@Endpoint` decorated functions.
-3. **Grouping**: Groups functions by their endpoint configuration.
+1. **Function discovery**: Finds all `@Endpoint` decorated functions.
+2. **Grouping**: Groups functions by their endpoint configuration.
+3. **Python version resolution**: Resolves the target Python version from the CLI flag, resource configs, or the 3.12 default.
 4. **Manifest generation**: Creates `.flash/flash_manifest.json` with endpoint definitions.
 5. **Source fingerprinting**: Computes a SHA-256 fingerprint of your source files to detect code changes between deployments.
 6. **Dependency installation**: Installs Python packages for Linux x86_64.
@@ -83,7 +88,7 @@ Local (non-pip) modules that your endpoints import are bundled automatically, pr
 
 If shipped code imports a local module that an ignore rule excludes (for example, a `test_*.py` sibling or a file under `tests/`), the build fails with a `LocalModuleResolutionError` instead of silently overriding your ignore rules or shipping a broken artifact. Flash names each excluded file and the file that imports it:
 
-```
+```text
 Shipped code imports local modules that the build ignore rules (.gitignore or built-in defaults) exclude:
   utils/helpers.py (imported by endpoint.py)
 
@@ -111,36 +116,32 @@ Flash automatically handles cross-platform builds:
 
 ### Python version in deployed workers
 
-Flash workers support Python 3.10, 3.11, 3.12, and 3.13. The target version is determined by:
+Flash workers support Python 3.10, 3.11, 3.12, and 3.13. Your local Python version doesn't change the worker version. Flash picks the worker version in this order:
 
-1. **CLI flag:** The `--python-version` flag takes precedence.
-2. **Resource config:** The `python_version` parameter on your endpoint configs.
-3. **Local interpreter:** Your local Python version (from `sys.version_info`) when neither is specified.
+1. **CLI flag:** `--python-version`.
+2. **Resource config:** the `python_version` field on a resource config class such as `LiveServerless`. The `@Endpoint` decorator has no `python_version` parameter.
+3. **Default:** Python 3.12.
 
-All resources in a Flash app must use the same Python version because Flash ships a single tarball for the entire app. If resources declare conflicting versions, the build fails.
-
-<Warning>
-**Breaking change in Flash 0.x:** Flash now matches your local Python version by default instead of always defaulting to Python 3.12. If you upgrade Flash and your local Python differs from 3.12, your first deploy will trigger a rolling release. To maintain consistent behavior across team members, declare `python_version` explicitly on your resource configs or use `--python-version` on the CLI.
-</Warning>
+All endpoints in an app use the same version because Flash ships a single tarball for the entire app. The build fails if resources declare different versions, or if `--python-version` conflicts with a version a resource declares.
 
 | Version | Cold start | Notes |
 |---------|------------|-------|
 | 3.12 | No overhead | PyTorch pre-installed in base image |
-| 3.13 | +~7 GB on GPU | Alternative Python install required |
-| 3.11 | +~7 GB on GPU | Alternative Python install required |
+| 3.13 | +~7 GB on GPU | PyTorch reinstalled for this interpreter |
+| 3.11 | +~7 GB on GPU | PyTorch reinstalled for this interpreter |
 | 3.10 | +~7 GB on GPU | EOL 2026-10-31; consider migrating to 3.11+ |
 
-If your local Python version is not supported (for example, 3.9 or 3.14), the build fails with an actionable error message listing the supported versions.
+You can run `flash build` from any local Python version from 3.10 to 3.14. Flash downloads dependency wheels for the worker's Python version, not your local one.
 
 Image tags follow the pattern `py{version}-{tag}` (for example, `runpod/flash:py3.12-latest`).
 
 ## Managing deployment size
 
-Runpod Serverless has a **1.5GB deployment limit**. Flash automatically excludes packages that are pre-installed in the base image:
+Runpod Serverless has a **1.5GB deployment limit**. Flash automatically leaves these packages out of the archive because the GPU worker images provide them:
 
 - `torch`, `torchvision`, `torchaudio`, `triton`
 
-These packages are excluded at archive time, so you don't need to specify them manually.
+You don't need to exclude them manually. CPU worker images don't include them, so code on CPU workers can't import these packages.
 
 ### Manual exclusions
 
