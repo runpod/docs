@@ -1,47 +1,78 @@
 ---
 title: "Storage overview"
 sidebarTitle: "Overview"
-description: "Compare Runpod network volumes and global volumes, and learn how to attach persistent storage to Pods, Serverless endpoints, and Runpod SDK apps."
+description: "Compare Runpod's storage types (volume disk, network volumes, global volumes, and external volumes) by where data lives, what it survives, and where your compute can run."
 ---
 
-Runpod offers persistent storage that exists independently of your compute resources. Data on a persistent volume stays available after a Pod stops or a Serverless worker shuts down, and you can attach the same volume to multiple resources.
+Runpod offers four kinds of storage that keep your data beyond a single session. They differ in where the data lives, what it survives, and how much they limit where your compute can run. The closer the storage is to your machine, the faster it is and the more it constrains placement.
 
-Pods and Serverless workers also include temporary disks that are tied to the resource's lifecycle. To learn about those, see [Pod storage options](/pods/storage/types) and [Serverless storage](/serverless/storage/overview).
+Every Pod and Serverless worker also has a container disk for the operating system and temporary files. The container disk is wiped whenever a Pod stops or restarts, so don't keep anything on it that you need later. See [Pod storage options](/pods/storage/types) and [Serverless storage](/serverless/storage/overview).
 
-## Storage options
+## Storage types at a glance
 
-- **[Network volumes](/storage/network-volumes)**: Persistent storage located in a single data center. Network volumes are available in a standard tier and a [high-performance tier](/storage/high-performance-storage) that provides up to 3x the throughput and 4x the IOPS.
-- **[Global volumes](/storage/globalvolume/overview)** (beta): Persistent storage that's available across data centers, so you can access the same files from compute in any supported region.
-- **[S3-compatible API](/storage/s3-api)**: Manage files on your network volumes using standard S3 tools, without starting a Pod or worker.
+| | Volume disk | Network volume | Global volume | External volume |
+| --- | --- | --- | --- | --- |
+| **Where data lives** | On the Pod's host machine. | In one Runpod data center, attached over its network. | In Runpod object storage, reachable from any data center. | In your own S3-compatible bucket. |
+| **Survives Pod stop and restart** | Yes. | Yes. | Yes. | Yes. |
+| **Survives Pod deletion** | No. | Yes. | Yes. | Yes. Runpod never deletes your bucket's data. |
+| **Where compute can run** | Only on that machine. If it's busy, the Pod must [migrate](/pods/troubleshooting/pod-migration). | Only in the volume's data center, which limits the GPUs you can choose. | Any data center. | Any data center. |
+| **Performance** | Fast (local disk). | Fastest of the volumes that outlive a Pod. | Optimized for reads. Eventually consistent. | Depends on your bucket and its distance from the Pod. |
+| **Best for** | Scratch work on one Pod. | Training, checkpoints, and frequent writes. | Model weights and data read often, written rarely. | Data you already keep in S3 and don't want to copy. |
+| **API field** | `mounts.persistent` | `mounts.network` | `mounts.global` | `mounts.external` |
 
-## Compare network and global volumes
+## Volume disk
 
-| | Network volume | Global volume |
-| --- | --- | --- |
-| **Location** | One data center. Compute that mounts it runs in that data center. | Not tied to a data center. Compute in any supported data center can mount it. |
-| **Best for** | Workloads that write often, such as training and checkpointing. | Workloads that write rarely and read often, such as loading model weights for inference. |
-| **Consistency** | Changes are visible right away. | Eventually consistent. Changes made after a worker starts may not be visible immediately. |
-| **File system** | Full file system behavior. | Object-backed. No file locking, atomic rename, hard links, or permission bits. |
-| **Compute** | GPU and CPU. | GPU only. |
-| **Capacity** | You set the size and can increase it later. | Grows automatically with your data. |
-| **Pricing** | Billed per GB per month. See [Network volumes](/storage/network-volumes). | Billed for storage plus read and write requests. See [Global volumes](/storage/globalvolume/overview). |
+The volume disk is a disk on the physical machine that runs your Pod, mounted at `/workspace` by default. Data survives stopping and restarting the Pod, but it's deleted when you delete the Pod, and it can be lost if the machine fails. Because the data is on one machine, your Pod can only start where that machine has a free GPU. Otherwise you must [migrate the Pod](/pods/troubleshooting/pod-migration), which copies the volume disk to a new machine.
+
+Use the volume disk for data you can recreate. For anything you can't, use a network volume. The volume disk is available on GPU Pods only, and can't be combined with a network, global, or external volume.
+
+## Network volume
+
+A [network volume](/storage/network-volumes) lives in one data center and attaches to your Pod or worker over that data center's high-speed network. It's the fastest storage that exists independently of your compute: it survives Pod deletion, and you can attach it to many Pods and endpoints. A [high-performance tier](/storage/high-performance-storage) offers up to 3x the throughput and 4x the IOPS of the standard tier.
+
+The tradeoff is placement. Compute that mounts a network volume must run in the volume's data center, so you can only choose GPUs that data center has available.
+
+## Global volume
+
+A [global volume](/storage/globalvolume/overview) (beta) isn't tied to a data center, so compute in any supported data center can mount it and the volume doesn't limit which GPUs you can use. Capacity grows with your data, and you're billed for storage plus read and write requests.
+
+Global volumes are object-backed and eventually consistent, and don't support file locking, atomic rename, or hard links. They work best for data you write rarely and read often, such as model weights for inference. For frequent writes, use a network volume.
+
+## External volume
+
+An external volume connects an S3-compatible bucket you already own, such as Amazon S3 or Backblaze B2, to Runpod. You register the bucket once with an access key, optionally scoped to a key prefix, and then mount it like any other volume. Your data stays in your bucket, so there's nothing to upload to Runpod first, and compute in any data center can mount it.
+
+Performance depends on your storage provider and how far the bucket is from the data center your compute runs in. Your provider bills you for storage and requests as usual.
 
 ## Choose a storage option
 
+- Use the **volume disk** for scratch data on a single Pod that you can afford to lose.
 - Use a **network volume** when your workload runs in one data center and needs fast, consistent reads and writes, such as training checkpoints or a shared model cache for an endpoint.
-- Use a **global volume** when you deploy to multiple regions and want the same models or datasets available everywhere without copying them.
-- Use the **S3-compatible API** when you want to upload or download files on a network volume from your local machine or a CI pipeline.
+- Use a **global volume** when you deploy to multiple regions, or want the widest choice of GPUs, and need the same models or datasets everywhere without copying them.
+- Use an **external volume** when your data already lives in S3-compatible storage and you want to use it on Runpod without moving it.
+- Use the **[S3-compatible API](/storage/s3-api)** to upload or download files on a network volume from your local machine or a CI pipeline.
 
 ## Where volumes mount
 
 | Compute | Mount path | Limits |
 | --- | --- | --- |
-| **Pods** | Network volumes mount at `/workspace`. Global volumes mount at `/workspace`, or at `/workspace-global` when a network volume is also attached. | One network volume and one global volume per Pod. |
-| **Serverless endpoints** | Both volume types mount at `/runpod-volume`. | An endpoint can attach network volumes or one global volume, not both. |
+| **Pods** | Network volumes mount at `/workspace`. Global volumes mount at `/workspace`, or at `/workspace-global` when a network volume is also attached. | One network volume and one global or external volume per Pod. |
+| **Serverless endpoints** | All volume types mount at `/runpod-volume`. | An endpoint can attach network volumes, one global volume, or one external volume. GPU endpoints only for global and external volumes. |
 | **Runpod SDK apps** | Set with the `mounts` parameter. Queue and API resources mount one volume at `/runpod-volume`. | Tasks can mount one network volume and one global volume at different paths. |
 
 ## Next steps
 
-- [Create a network volume](/storage/network-volumes).
-- [Get started with global volumes](/storage/globalvolume/overview).
-- [Transfer files with the S3-compatible API](/storage/s3-api).
+<CardGroup cols={2}>
+  <Card title="Network volumes" href="/storage/network-volumes" icon="hard-drive" horizontal>
+    Create a volume in one data center.
+  </Card>
+  <Card title="Global volumes" href="/storage/globalvolume/overview" icon="globe" horizontal>
+    Mount the same data in any data center.
+  </Card>
+  <Card title="S3-compatible API" href="/storage/s3-api" icon="upload" horizontal>
+    Transfer files to a network volume.
+  </Card>
+  <Card title="Pod storage options" href="/pods/storage/types" icon="server" horizontal>
+    Container disk, volume disk, and resizing.
+  </Card>
+</CardGroup>
