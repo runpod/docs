@@ -17,7 +17,7 @@ This tutorial shows you how to build a text generation script using Flash and Hu
 
 - You've [created a Runpod account](/accounts-billing/manage-accounts).
 - You've [created a Runpod API key](/get-started/credentials).
-- You've installed [Python 3.10, 3.11, 3.12, or 3.13](https://www.python.org/downloads/).
+- You've installed [Python 3.10 to 3.14](https://www.python.org/downloads/).
 - You've completed the [Flash quickstart](/flash/quickstart) or are familiar with Flash basics.
 
 ## What you'll build
@@ -43,292 +43,322 @@ Install Flash using [uv](https://docs.astral.sh/uv/):
 ```bash
 uv venv
 source .venv/bin/activate
-uv pip install runpod-flash python-dotenv
+uv pip install runpod-flash
 ```
 
-Create a `.env` file with your Runpod API key:
+Log in so Flash can deploy and call endpoints on your account:
 
 ```bash
-touch .env && echo "RUNPOD_API_KEY=YOUR_API_KEY" > .env
+flash login
 ```
 
-Replace `YOUR_API_KEY` with your actual API key from the [Runpod console](https://console.runpod.io/user/settings).
+Alternatively, create a `.env` file with your API key. Flash loads `.env` from the current directory automatically:
+
+```bash
+echo "RUNPOD_API_KEY=YOUR_API_KEY" > .env
+```
+
+Replace `YOUR_API_KEY` with your API key from the [Runpod console](https://console.runpod.io/user/settings).
+
+<Note>
+The directory name becomes your Flash app name. Run `flash deploy` and your script from this directory.
+</Note>
 
 ## Step 2: Understand the Hugging Face transformers library
 
-[Hugging Face transformers](https://huggingface.co/docs/transformers/index) is a popular Python library for working with pretrained language models. It provides:
+[Hugging Face transformers](https://huggingface.co/docs/transformers/index) is a Python library for running pretrained language models. The same API loads thousands of models from the [Hugging Face Hub](https://huggingface.co/models).
 
-- **Thousands of pretrained models**: GPT-2, GPT-3, BERT, T5, LLaMA, and more
-- **Unified API**: Same code works across different model architectures
-- **Model hub integration**: Download models directly from [Hugging Face Hub](https://huggingface.co/models)
-- **Production-ready**: Used by companies and researchers worldwide
-
-For this tutorial, we'll use **GPT-2**, a 124M parameter language model from OpenAI. It's small enough to load quickly but powerful enough to generate coherent text.
+This tutorial uses **GPT-2**, a 124M-parameter model from OpenAI. It's small (about 500 MB), loads in seconds, and needs less than 2 GB of VRAM. It continues text rather than following instructions, so expect creative completions, not answers.
 
 ## Step 3: Create your project file
 
-Create a new file called `text_generation.py`:
-
-```bash
-touch text_generation.py
-```
-
-Open this file in your code editor. The following steps walk through building the text generation application.
+Create a file called `text_generation.py` in your project directory. The next three steps build it up section by section. The [complete file](#complete-file) is at the end of Step 6.
 
 ## Step 4: Add imports and configuration
 
-Add the necessary imports and Flash configuration:
-
 ```python
 import asyncio
-from dotenv import load_dotenv
+
 from runpod_flash import Endpoint, GpuGroup
 
-# Load environment variables from .env file
-load_dotenv()
+MODEL_NAME = "gpt2"
+
+# Each worker keeps the loaded model here between requests.
+_model = None
+_tokenizer = None
 ```
+
+`_model` and `_tokenizer` cache the model on the worker, so only the first request on each worker loads it.
 
 ## Step 5: Define the text generation function
 
-Add the endpoint function that will run on the GPU worker:
+Add the endpoint function that runs on the GPU worker:
 
 ```python
 @Endpoint(
     name="text-generation",
-    gpu=[GpuGroup.AMPERE_24, GpuGroup.ADA_24],  # 24GB GPUs
+    gpu=[GpuGroup.AMPERE_24, GpuGroup.ADA_24],  # 24 GB GPUs
     workers=3,
-    idle_timeout=600,  # 10 minutes
-    dependencies=["transformers", "torch", "accelerate"]
+    idle_timeout=600,  # Keep workers warm for 10 minutes
+    dependencies=["transformers", "torch"],
 )
-def generate_text(prompt, max_length=50):
-    """Generate text using a pretrained language model."""
+def generate_text(prompt, max_new_tokens=50, temperature=0.7):
+    """Continue a prompt with GPT-2."""
+    import time
+
     import torch
-    from transformers import AutoTokenizer, AutoModelForCausalLM
+    from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    # Load the GPT-2 model and tokenizer
-    model_name = "gpt2"
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(model_name)
+    global _model, _tokenizer
+    cached = _model is not None
+    start = time.perf_counter()
+    if _model is None:
+        _tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+        _model = AutoModelForCausalLM.from_pretrained(MODEL_NAME).to("cuda")
+    load_seconds = time.perf_counter() - start
 
-    # Move model to GPU if available
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    device_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
-    model = model.to(device)
-
-    # Tokenize the input prompt
-    inputs = tokenizer(prompt, return_tensors="pt").to(device)
-
-    # Generate text
+    inputs = _tokenizer(prompt, return_tensors="pt").to("cuda")
+    start = time.perf_counter()
     with torch.no_grad():
-        outputs = model.generate(
+        outputs = _model.generate(
             **inputs,
-            max_length=max_length,
-            num_return_sequences=1,
-            temperature=0.7,
+            max_new_tokens=max_new_tokens,
             do_sample=True,
-            pad_token_id=tokenizer.eos_token_id
+            temperature=temperature,
+            pad_token_id=_tokenizer.eos_token_id,
         )
-
-    # Decode the generated tokens back to text
-    generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    generate_seconds = time.perf_counter() - start
 
     return {
-        "prompt": prompt,
-        "generated_text": generated_text,
-        "model_name": model_name,
-        "device": device,
-        "device_name": device_name,
-        "max_length": max_length
+        "generated_text": _tokenizer.decode(outputs[0], skip_special_tokens=True),
+        "gpu": torch.cuda.get_device_name(0),
+        "model_cached": cached,
+        "load_seconds": round(load_seconds, 1),
+        "generate_seconds": round(generate_seconds, 2),
     }
 ```
 
 **Configuration breakdown**:
 
-- **`name="text-generation"`**: Identifies your endpoint in the Runpod console
-- **`gpu=[GpuGroup.AMPERE_24, GpuGroup.ADA_24]`**: Allows workers to use L4, A5000, RTX 3090, or RTX 4090 GPUs (all have 24GB VRAM)
-- **`workers=3`**: Allows up to 3 parallel workers for concurrent requests
-- **`idle_timeout=600`**: Keeps workers active for 10 minutes after last use (reduces cold starts)
+- **`name="text-generation"`**: Identifies your endpoint in the Runpod console.
+- **`gpu=[GpuGroup.AMPERE_24, GpuGroup.ADA_24]`**: Uses 24 GB GPUs such as the RTX 3090, RTX 4090, L4, or A5000. GPT-2 needs far less, so any of them work.
+- **`workers=3`**: Allows up to 3 parallel workers for concurrent requests.
+- **`idle_timeout=600`**: Keeps a worker running for 10 minutes after its last request, so the loaded model stays in memory.
+- **`dependencies`**: Installed into your build. `torch` is already in the worker image, so Flash leaves it out of the upload.
 
-<Tip>
-GPT-2 only requires about 2GB of VRAM, so 24GB GPUs are more than sufficient. For larger models like LLaMA or GPT-J, you might need 48GB or 80GB GPUs.
-</Tip>
-
-This function:
-- Loads the GPT-2 model from Hugging Face.
-- Moves the model to the GPU.
-- Tokenizes the input prompt.
-- Generates text from the prompt.
-- Decodes the generated tokens back to text.
-- Returns the generated text and other metadata.
-
-Expand this section for a full breakdown:
+<Warning>
+Don't add `accelerate` to `dependencies`. GPT-2 doesn't need it, and because it requires `torch`, on Linux `flash deploy` downloads `torch` and several GB of CUDA libraries into the local build. Without it, the build is about 40 MB.
+</Warning>
 
 <Accordion title="Code breakdown">
 
-**Dependencies**: The function requires three packages:
-   - `transformers`: Hugging Face library for language models
-   - `torch`: PyTorch for GPU computation
-   - `accelerate`: Helper library for loading large models efficiently
+**Imports inside the function**: `torch` and `transformers` are imported inside `generate_text` because they're installed on the worker, not on your machine.
 
-**Model loading**:
+**Model caching**:
    ```python
-   tokenizer = AutoTokenizer.from_pretrained(model_name)
-   model = AutoModelForCausalLM.from_pretrained(model_name)
+   global _model, _tokenizer
+   if _model is None:
+       _tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+       _model = AutoModelForCausalLM.from_pretrained(MODEL_NAME).to("cuda")
    ```
-   These lines download and load the GPT-2 model from Hugging Face Hub. The first time this runs, it downloads ~500MB of model weights. Subsequent runs use the cached version.
-
-**GPU acceleration**:
-   ```python
-   device = "cuda" if torch.cuda.is_available() else "cpu"
-   model = model.to(device)
-   ```
-   This moves the model to GPU for faster inference. On Runpod workers, `torch.cuda.is_available()` returns `True`.
+   The worker imports your file once and keeps it in memory between requests, so module-level variables persist. The first request on a worker downloads and loads GPT-2. Later requests on the same worker reuse it. `model_cached` in the result tells you which happened.
 
 **Tokenization**:
    ```python
-   inputs = tokenizer(prompt, return_tensors="pt").to(device)
+   inputs = _tokenizer(prompt, return_tensors="pt").to("cuda")
    ```
-   Converts your text prompt into token IDs that the model understands. The `.to(device)` moves these tokens to GPU memory.
+   Converts the prompt into token IDs on the GPU.
 
 **Generation parameters**:
-   - `max_length=50`: Maximum number of tokens to generate
-   - `temperature=0.7`: Controls randomness (0.0 = deterministic, 1.0+ = very random)
-   - `do_sample=True`: Use sampling instead of greedy decoding for more diverse outputs
-   - `num_return_sequences=1`: Generate one completion per prompt
+   - `max_new_tokens`: How many tokens to generate after the prompt.
+   - `do_sample=True`: Samples from the model's predictions instead of always picking the most likely token, so each run gives a different completion.
+   - `temperature`: Controls randomness when sampling. Lower values are more predictable, higher values more varied.
+   - `pad_token_id`: GPT-2 has no padding token, so this reuses the end-of-text token and avoids a warning.
 
-**No gradient tracking**:
-   ```python
-   with torch.no_grad():
-   ```
-   Disables gradient computation, reducing memory usage and speeding up inference.
+**No gradient tracking**: `torch.no_grad()` skips the bookkeeping needed for training, which saves memory during inference.
 
 </Accordion>
 
 ## Step 6: Add the main function
 
-Create the main function to test your text generator:
+Add a `main()` function that calls the endpoint. It runs on your machine:
 
 ```python
 async def main():
-    print("Starting text generation on Runpod GPU...")
+    print("Generating text with GPT-2 on a Runpod GPU...")
+    result = await generate_text("The future of artificial intelligence is", max_new_tokens=60)
+    print(f"\n{result['generated_text']}\n")
+    print(f"GPU: {result['gpu']}")
+    print(f"Model already loaded: {result['model_cached']}")
+    print(f"Model load: {result['load_seconds']}s, generation: {result['generate_seconds']}s")
 
-    # Define a prompt
-    prompt = "The future of artificial intelligence is"
-
-    # Generate text
-    result = await generate_text(prompt, max_length=100)
-
-    # Display results
-    print("\n" + "="*60)
-    print("TEXT GENERATION RESULTS")
-    print("="*60)
-    print(f"\nPrompt: {result['prompt']}")
-    print(f"\nGenerated text:\n{result['generated_text']}")
-    print("\n" + "-"*60)
-    print(f"Model: {result['model_name']}")
-    print(f"Device: {result['device']}")
-    print(f"GPU: {result['device_name']}")
-    print(f"Max length: {result['max_length']} tokens")
-    print("="*60)
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-This main function:
+Keep the `if __name__ == "__main__":` block at the end of the file. Without it, the script exits without doing anything.
 
-- Calls the remote function with `await` (runs asynchronously).
-- Waits for the GPU worker to complete text generation.
-- Displays the results in a formatted output.
+### Complete file
 
-## Step 7: Run your first generation
+<Accordion title="text_generation.py">
 
-Run the application:
+```python
+import asyncio
+
+from runpod_flash import Endpoint, GpuGroup
+
+MODEL_NAME = "gpt2"
+
+# Each worker keeps the loaded model here between requests.
+_model = None
+_tokenizer = None
+
+
+@Endpoint(
+    name="text-generation",
+    gpu=[GpuGroup.AMPERE_24, GpuGroup.ADA_24],  # 24 GB GPUs
+    workers=3,
+    idle_timeout=600,  # Keep workers warm for 10 minutes
+    dependencies=["transformers", "torch"],
+)
+def generate_text(prompt, max_new_tokens=50, temperature=0.7):
+    """Continue a prompt with GPT-2."""
+    import time
+
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    global _model, _tokenizer
+    cached = _model is not None
+    start = time.perf_counter()
+    if _model is None:
+        _tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+        _model = AutoModelForCausalLM.from_pretrained(MODEL_NAME).to("cuda")
+    load_seconds = time.perf_counter() - start
+
+    inputs = _tokenizer(prompt, return_tensors="pt").to("cuda")
+    start = time.perf_counter()
+    with torch.no_grad():
+        outputs = _model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=True,
+            temperature=temperature,
+            pad_token_id=_tokenizer.eos_token_id,
+        )
+    generate_seconds = time.perf_counter() - start
+
+    return {
+        "generated_text": _tokenizer.decode(outputs[0], skip_special_tokens=True),
+        "gpu": torch.cuda.get_device_name(0),
+        "model_cached": cached,
+        "load_seconds": round(load_seconds, 1),
+        "generate_seconds": round(generate_seconds, 2),
+    }
+
+
+async def main():
+    print("Generating text with GPT-2 on a Runpod GPU...")
+    result = await generate_text("The future of artificial intelligence is", max_new_tokens=60)
+    print(f"\n{result['generated_text']}\n")
+    print(f"GPU: {result['gpu']}")
+    print(f"Model already loaded: {result['model_cached']}")
+    print(f"Model load: {result['load_seconds']}s, generation: {result['generate_seconds']}s")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+</Accordion>
+
+## Step 7: Deploy and run your first generation
+
+Deploy the endpoint from your project directory:
+
+```bash
+flash deploy
+
+# If using uv:
+uv run flash deploy
+```
+
+```text
+✓ built flash-text-generation  1 files, 1 deps, 37.8 MB
+No app 'flash-text-generation' found. Creating app and 'production' environment...
+
+✓ uploaded  37.8 MB  2.1s
+✓ deployed to production  1.9s
+
+  text-generation  https://api.runpod.ai/v2/abc123xyz/runsync
+
+curl -X POST https://api.runpod.ai/v2/abc123xyz/runsync \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -d '{"input": {}}'
+```
+
+Then run the script from the same directory:
 
 ```bash
 python text_generation.py
 ```
 
-**First run output** (takes 60-90 seconds):
+The first run takes about a minute while a worker starts and loads the model:
 
 ```text
-Starting text generation on Runpod GPU...
-Creating endpoint: server_Endpoint_a1b2c3d4
-Provisioning Serverless endpoint...
-Endpoint ready
-Registering Runpod endpoint at https://api.runpod.ai/xvf32dan8rcilp
-Executing function on Runpod endpoint ID: xvf32dan8rcilp
-Initial job status: IN_QUEUE
-Installing dependencies: transformers torch accelerate
-Downloading model weights...
-Job completed, output received
+Generating text with GPT-2 on a Runpod GPU...
 
-============================================================
-TEXT GENERATION RESULTS
-============================================================
+The future of artificial intelligence is bright, and it will be exciting to see if we can add a few more layers of complexity into our lives to become a better person.
 
-Prompt: The future of artificial intelligence is
-
-Generated text:
-The future of artificial intelligence is bright and full of possibilities. With advancements in machine learning and deep learning, we're seeing AI systems that can understand natural language, recognize images, and even create art. The potential applications are endless, from healthcare to transportation to education.
-
-------------------------------------------------------------
-Model: gpt2
-Device: cuda
 GPU: NVIDIA GeForce RTX 4090
-Max length: 100 tokens
-============================================================
+Model already loaded: False
+Model load: 9.1s, generation: 0.76s
 ```
 
-**Subsequent runs** (takes 2-5 seconds):
+Run it again while the worker is warm. The model is already loaded, so the whole run takes about 2 seconds:
 
 ```text
-Starting text generation on Runpod GPU...
-Resource Endpoint_a1b2c3d4 already exists, reusing.
-Registering Runpod endpoint at https://api.runpod.ai/xvf32dan8rcilp
-Executing function on Runpod endpoint ID: xvf32dan8rcilp
-Initial job status: IN_QUEUE
-Job completed, output received
-
-[Results appear immediately]
+Model already loaded: True
+Model load: 0.0s, generation: 0.51s
 ```
 
-Notice the dramatic speed improvement on subsequent runs—the endpoint is already provisioned, dependencies are installed, and the model is cached.
+Your completions will differ because `do_sample=True` picks tokens at random.
 
-## Step 8: Experiment with different prompts
+<Warning>
+The first request on a new worker can take longer than the 90 seconds `runpod-flash` 1.21.0 waits for a result, especially if the worker has to wait for a free GPU. If the script fails with `timed out after 90s. the endpoint may not be deployed or the worker is still starting` or `KeyError: 'generated_text'`, the endpoint is deployed and the worker is still starting. Run the script again. See [First run fails after 90 seconds](#first-run-fails-after-90-seconds).
+</Warning>
 
-Modify the main function to try different prompts:
+## Step 8: Try several prompts in parallel
+
+Replace `main()` with a version that sends three prompts at once:
 
 ```python
 async def main():
-    print("Starting text generation on Runpod GPU...")
-
-    # Try multiple prompts
     prompts = [
         "Once upon a time in a distant galaxy",
         "The secret to happiness is",
-        "In the year 2050, technology will"
+        "In the year 2050, technology will",
     ]
+    results = await asyncio.gather(
+        *(generate_text(prompt, max_new_tokens=40) for prompt in prompts)
+    )
+    for result in results:
+        print(f"\n{result['generated_text']}")
 
-    for prompt in prompts:
-        print(f"\n{'='*60}")
-        print(f"Generating for: {prompt}")
-        print('='*60)
-
-        result = await generate_text(prompt, max_length=80)
-        print(f"\n{result['generated_text']}\n")
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Run it again:
+You only changed code outside the `@Endpoint` function, so you don't need to redeploy. Run it again:
 
 ```bash
 python text_generation.py
 ```
 
-You'll see three different completions generated sequentially on the same GPU worker.
+All three requests are sent at once. A warm worker returned all three completions in about 3 seconds. If requests queue up, Flash starts more workers, up to `workers=3`, and each new worker loads the model on its first request.
 
 ## Troubleshooting
 
@@ -354,7 +384,7 @@ You'll see three different completions generated sequentially on the same GPU wo
 
 **Solutions**:
 1. Use smaller models (GPT-2 instead of GPT-2 Large).
-2. Reduce `max_length` parameter.
+2. Reduce `max_new_tokens`.
 3. Use larger GPUs:
    ```python
    gpu=GpuGroup.AMPERE_48  # 48GB GPUs
@@ -362,20 +392,44 @@ You'll see three different completions generated sequentially on the same GPU wo
 
 ### Slow generation
 
-**Issue**: Text generation takes >30 seconds per request.
+**Issue**: Every request takes much longer than a few seconds.
 
-**Possible causes**:
-1. Worker scaled down (cold start).
-2. Model not cached.
-3. Large `max_length` value.
+**Check `model_cached` in the result.** If it's `False` on most requests, workers are loading the model again:
 
-**Solutions**:
-1. Increase `idle_timeout` to keep workers active:
+1. Make sure `_model` and `_tokenizer` are module-level variables and `generate_text` declares `global _model, _tokenizer`.
+2. Increase `idle_timeout` so workers stay up between requests:
    ```python
-   idle_timeout=1800  # Keep active for 30 minutes
+   idle_timeout=1800  # Keep workers warm for 30 minutes
    ```
-2. Set `workers=(1, 3)` to always have a warm worker ready.
-3. Reduce `max_length` to generate fewer tokens.
+3. Set `workers=(1, 3)` to keep one worker running at all times. You pay for that worker while it's idle.
+
+If `model_cached` is `True` and generation is still slow, reduce `max_new_tokens`.
+
+### First run fails after 90 seconds
+
+**Issue**: The first run fails with one of these errors:
+
+```text
+RuntimeError: request to endpoint 'text-generation' timed out after 90s. the endpoint may not be deployed or the worker is still starting. deploy with 'flash deploy' or increase timeout with FLASH_SENTINEL_TIMEOUT env var.
+```
+
+```text
+KeyError: 'generated_text'
+```
+
+**Cause**: `runpod-flash` 1.21.0 waits up to 90 seconds for a result. The first request on a new worker can take longer: the worker may wait for a free GPU, then it starts and loads the model. The endpoint is deployed, and the request keeps running after the error.
+
+**Solution**: Run the script again. The worker keeps starting after the error, so the next run is faster. Raising `FLASH_SENTINEL_TIMEOUT` above 90 doesn't help in 1.21.0: the request returns at 90 seconds with the job still running, and the script fails with the `KeyError` instead.
+
+To see whether a worker is up, check the endpoint's health with its ID from `flash deploy`. `curl` reads your API key from the `RUNPOD_API_KEY` environment variable, which `flash login` doesn't set, so export it first:
+
+```bash
+export RUNPOD_API_KEY="your_key"
+curl https://api.runpod.ai/v2/ENDPOINT_ID/health \
+  -H "Authorization: Bearer $RUNPOD_API_KEY"
+```
+
+A non-zero `workers.throttled` means the worker is waiting for a GPU. A non-zero `workers.idle`, `workers.ready`, or `workers.running` means a worker is up.
 
 ### Generation quality is poor
 
@@ -385,9 +439,9 @@ You'll see three different completions generated sequentially on the same GPU wo
 1. Adjust `temperature` (try 0.7-0.9)
 2. Add `top_p` and `top_k` sampling:
    ```python
-   outputs = model.generate(
+   outputs = _model.generate(
        **inputs,
-       max_length=max_length,
+       max_new_tokens=max_new_tokens,
        temperature=0.8,
        top_p=0.9,
        top_k=50,
@@ -404,15 +458,17 @@ Now that you've built a text generation script with Flash, you can:
 
 Try different models from Hugging Face:
 
+Change `MODEL_NAME` and run `flash deploy` again:
+
 ```python
-# Instruction-following model
-model_name = "facebook/opt-1.3b"
+# Larger general-purpose model (1.3B parameters)
+MODEL_NAME = "facebook/opt-1.3b"
 
 # Code generation model
-model_name = "Salesforce/codegen-350M-mono"
+MODEL_NAME = "Salesforce/codegen-350M-mono"
 
 # Dialogue model
-model_name = "microsoft/DialoGPT-medium"
+MODEL_NAME = "microsoft/DialoGPT-medium"
 ```
 
 ### Build a chat interface
@@ -439,17 +495,16 @@ Convert your script to a production [Flash app](/flash/apps/overview):
 
 ```bash
 flash init text-generation-app
-# Move your function to workers/gpu/endpoint.py
-# Add FastAPI routes
+cd text-generation-app
+# Move generate_text into gpu_worker.py
+# Add HTTP routes in lb_worker.py
 flash deploy
-
-# If using uv:
-uv run flash init text-generation-app
-uv run flash deploy
 ```
 
+`flash init` creates `gpu_worker.py`, `cpu_worker.py`, and `lb_worker.py` at the project root.
+
 <Note>
-When deploying queue-based functions with `flash deploy`, each function must have its own unique endpoint configuration. If your script has multiple functions sharing the same config (like `generate_text` and `chat` in this tutorial), create separate endpoints for each function when converting to a Flash app. See [understanding endpoint architecture](/flash/apps/deploy-apps#understanding-endpoint-architecture) for details.
+When deploying queue-based functions with `flash deploy`, each function must have its own unique endpoint configuration. `generate_text` and `chat` in this tutorial already have separate configs (`name="text-generation"` and `name="chat"`), so keep them that way when you move them into a Flash app. See [understanding endpoint architecture](/flash/apps/deploy-apps#understanding-endpoint-architecture) for details.
 </Note>
 
 ### Optimize performance
