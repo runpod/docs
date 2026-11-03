@@ -269,6 +269,25 @@ runpod.stop_pod(pod["id"])
 runpod.terminate_pod(pod["id"])
 ```
 
+### Rate limits
+
+API wrapper functions that call the [REST API](/api-reference-v2/overview) follow its [rate limits](/api-reference-v2/rate-limits) for you, so you don't need your own retry logic. Calls in the same process that use the same API key share one quota. The SDK reads the remaining quota from each response and waits before sending a request that would exceed it. After a 429 response, the SDK waits for the time in the `Retry-After` header. If the header is missing, it uses exponential backoff with jitter.
+
+Each call retries a 429 response up to three times and spends at most 60 seconds waiting on rate limits. When either budget runs out, the call raises `runpod.error.RateLimitError`. Its `retry_after` attribute gives the number of seconds to wait before you try again:
+
+```python
+import runpod
+
+try:
+    pods = runpod.get_pods()
+except runpod.error.RateLimitError as err:
+    print(f"Rate limit reached. Retry after {err.retry_after:.1f} seconds.")
+```
+
+`RateLimitError` is a subclass of `runpod.error.QueryError`, so code that already catches `QueryError` also catches rate limit errors. The SDK doesn't retry network failures or other HTTP errors. A request that failed on your side may still have created or changed a resource.
+
+Separate processes don't share quota tracking, even when they use the same API key. If you run several processes, expect some calls to wait or raise `RateLimitError`.
+
 {/* TODO(DOCS-504): CON-597 and CON-598 (Done) add resource classes such as runpod.Pod, runpod.Volume, runpod.Template, and runpod.Registry with create/list/get class methods. CON-599 (Ready, not shipped) will add a DeprecationWarning to the flat functions above, pointing at the class methods. Confirm the shipped class API and whether it is part of the first release, then document it here and update the example. Also confirm how runpod.Model (Hugging Face model reference in apps) relates to the Model class from CON-598. */}
 
 ## Limitations
