@@ -43,8 +43,9 @@ If you have data on a network volume that you want to move to a global volume, y
 2. Run the following command from the Pod's **Console** tab:
 
 ```bash
-rsync --archive --verbose --human-readable /workspace/ /workspace-global/
+rsync --archive --no-owner --no-group --no-perms --verbose --human-readable /workspace/ /workspace-global/
 ```
+The `--no-owner`, `--no-group`, and `--no-perms` flags stop `rsync` from copying file ownership and permissions. Global volumes can't store them, so without these flags `rsync` can report ownership or permission errors.
 
 3. Once the data is copied, delete the Pod.
 4. You can now delete the network volume from the **Storage** page.
@@ -78,11 +79,11 @@ Workloads that write frequently or loop over large directory listings can accumu
 
 ## Limitations
 
-Global volumes use object-backed storage, not a fully POSIX compliant file system. Review the following before using global volumes in production.
+Global volumes are built on object storage, so they don't behave exactly like a regular disk. Tools that read and write whole files, such as loading model weights or saving outputs, work normally. Review the following before using global volumes in production.
 
 - **CPU Pods through the API only:** The console attaches global volumes to GPU Pods only. To attach one to a CPU Pod, create the Pod with the [REST API](/api-reference-v2/pods/create-a-pod) (`mounts.global`). Global volumes can't be attached to CPU Serverless endpoints.  
-- **Limited POSIX semantics:** Global volumes do not support file locking, atomic rename, or hard links. Applications that depend on POSIX behavior may fail or produce unexpected results.
-- **No permission bits:** Global volumes cannot set file permission bits. This may produce warnings when downloading models from sources such as Hugging Face. It also means templates that install a Python environment into `/workspace`, such as the official ComfyUI template, don't work with a global volume as their primary volume: the deploy page shows an **Unsupported volume type** warning. For those templates, keep `/workspace` on the volume disk or a network volume, and mount the global volume at a second path, such as `/workspace-global`, for model files only.
+- **Some file operations aren't supported:** Global volumes don't support file locking, atomic rename, or hard links, so they aren't fully POSIX-compliant. Software that relies on these, such as databases like SQLite, may fail or behave unexpectedly. If your application needs them, use a network volume.
+- **No file ownership or permissions:** Global volumes can't store file ownership or permission bits, so commands such as `chown` and `chmod` can fail. This may produce warnings when downloading models from sources such as Hugging Face, and errors from tools that copy ownership, such as `rsync --archive` (see [Migrate data from a network volume](#migrate-data-from-a-network-volume)). It also means templates that install a Python environment into `/workspace`, such as the official ComfyUI template, don't work with a global volume as their primary volume: the deploy page shows an **Unsupported volume type** warning. For those templates, keep `/workspace` on the volume disk or a network volume, and mount the global volume at a second path, such as `/workspace-global`, for model files only.
 - **Concurrent writes to the same file:** Multiple Pods can write to a global volume concurrently, but when two Pods write to the same file at the same time, the last write wins. For workloads that require file locking or high-concurrency writes, use a network volume instead.
 - **Eventual consistency:** Global volumes use object storage, which means updates made to the volume after a Pod or worker starts may not be immediately visible inside the container. Plan your workload around the state of the volume at mount time.
 
