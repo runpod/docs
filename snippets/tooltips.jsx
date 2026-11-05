@@ -40,7 +40,7 @@ export const ServerlessTooltip = () => {
 
 export const ColdStartTooltip = () => {
   return (
-  <Tooltip headline="Cold start" tip="The time between when an endpoint with no running workers receives a request, and when a worker is fully warmed up and ready to handle the request." cta="Learn more about cold starts" href="/serverless/overview#cold-starts">cold start</Tooltip>
+  <Tooltip headline="Cold start" tip="The time from when Runpod starts a worker until it is ready to take its first job, mostly spent loading your model." cta="Learn more about cold starts" href="/serverless/overview#cold-starts">cold start</Tooltip>
   );
 };
 

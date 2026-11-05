@@ -1,0 +1,228 @@
+---
+title: "Resource parameters"
+sidebarTitle: "Parameters"
+description: "Reference for every resource parameter on @app.queue, @app.api, and @app.task in the Runpod SDK, including defaults and which decorators support each one."
+---
+
+Every resource in a Runpod SDK app is configured through keyword arguments on its decorator: `@app.queue`, `@app.api`, or `@app.task`. This page lists each parameter, its default, and which decorators accept it.
+
+<Note>
+  The parameters on this page require `runpod` 2.0 or later. To test before the stable release, install the release candidate with `pip install runpod==2.0.0rc1`.
+</Note>
+
+## Parameter overview
+
+| Parameter | Type | Default | Queue | API | Task |
+| --- | --- | --- | --- | --- | --- |
+| `name` | `str` | Function or class name | Yes | Yes | Yes |
+| `gpu` | `str`, `GpuGroup`, `GpuType`, or a list | Any GPU | Yes | Yes | Yes |
+| `cpu` | `str` or a list | `None` | Yes | Yes | Yes |
+| `gpu_count` | `int` | `1` | Yes | Yes | Yes |
+| `workers` | `int` or `(min, max)` | `(0, 3)` | Yes | Yes | No |
+| `idle_timeout` | `int` (seconds) | `60` | Yes | Yes | No |
+| `dependencies` | `list[str]` | `None` | Yes | Yes | Yes |
+| `system_dependencies` | `list[str]` | `None` | Yes | Yes | Yes |
+| `mounts` | `dict[str, Volume]` | `None` | Yes | Yes | Yes |
+| `env` | `dict` | `None` | Yes | Yes | Yes |
+| `datacenter` | `str` or a list | `None` (any) | Yes | Yes | Yes |
+| `image` | `str` | Runpod runtime image | Yes | Yes | Yes |
+| `registry_auth` | `str` | `None` | Yes | Yes | Yes |
+| `model` | `runpod.Model` | `None` | Yes | Yes | No |
+| `max_concurrency` | `int` | `1` | Yes | No | No |
+| `execution_timeout_ms` | `int` | `0` (no limit) | Yes | Yes | No |
+| `flashboot` | `bool` | `True` | Yes | Yes | No |
+| `scaler_type` | `str` | Depends on resource type | Yes | Yes | No |
+| `scaler_value` | `int` | `4` | Yes | Yes | No |
+| `min_cuda_version` | `str` | `None` | Yes | Yes | Yes |
+| `accelerate_downloads` | `bool` | `True` | Yes | Yes | Yes |
+| `container_disk_gb` | `int` | 30 (GPU), 10 (CPU) | Yes | Yes | Yes |
+
+The SDK validates parameters when the decorator runs, so a typo in a GPU name or an invalid worker range fails when you import the module, not when you deploy.
+
+## Hardware
+
+### gpu
+
+The GPU or GPUs to run on. Accepts a short name such as `"4090"`, `"H100"`, or `"B200"`, a GPU pool such as `runpod.GpuGroup.ADA_24`, an exact device such as `runpod.GpuType.NVIDIA_H100_80GB_HBM3`, or a list of these.
+
+```python
+@app.queue(gpu="H100")
+def infer(prompt: str): ...
+
+@app.queue(gpu=["H100", "A100"])
+def infer_with_fallback(prompt: str): ...
+```
+
+If you set neither `gpu` nor `cpu`, the resource can run on any GPU. See [GPU types](/sdk/configuration/gpu-types) for every option and how each form is matched to hardware.
+
+### cpu
+
+A CPU instance type, such as `"cpu3c-1-2"`, or a list of them. `cpu` and `gpu` are mutually exclusive. See [CPU types](/sdk/configuration/cpu-types).
+
+```python
+@app.queue(cpu="cpu3c-2-4")
+def preprocess(data: dict): ...
+```
+
+### gpu_count
+
+The number of GPUs per worker, or per Pod for tasks. Must be 1 or higher.
+
+```python
+@app.task(gpu="H100", gpu_count=4)
+def train(): ...
+```
+
+### min_cuda_version
+
+The minimum CUDA version the host must support. Valid values are `"11.8"` and `"12.0"` through `"13.0"`. Setting it on a CPU resource raises an error.
+
+```python
+@app.queue(gpu="4090", min_cuda_version="12.8")
+def infer(): ...
+```
+
+### container_disk_gb
+
+The size of the worker's container disk in GB. Defaults to 30 GB for GPU resources and 10 GB for CPU resources. Increase it when your function writes large temporary files.
+
+## Scaling
+
+Scaling parameters apply to queue and API resources. Tasks don't scale: each call provisions one Pod.
+
+### workers
+
+The minimum and maximum number of workers. Pass a tuple `(min, max)`, or an integer to set only the maximum with a minimum of 0.
+
+```python
+@app.queue(gpu="4090", workers=5)        # Scales between 0 and 5
+def a(): ...
+
+@app.queue(gpu="4090", workers=(1, 10))  # Keeps 1 warm, scales to 10
+def b(): ...
+```
+
+The default is `(0, 3)`, so resources scale to zero when idle.
+
+### idle_timeout
+
+How many seconds a worker stays running after it finishes a request before it scales down. The default is 60.
+
+### scaler_type and scaler_value
+
+The autoscaling strategy and its threshold. `scaler_type` is `"QUEUE_DELAY"` or `"REQUEST_COUNT"`. Queue resources default to `QUEUE_DELAY`, and API resources default to `REQUEST_COUNT`. `scaler_value` defaults to 4. To learn how each strategy works, see [Endpoint settings](/serverless/endpoints/endpoint-configurations).
+
+### max_concurrency
+
+How many jobs a single queue worker processes at the same time. The default is 1. Raise it for I/O-bound functions that spend most of their time waiting.
+
+### execution_timeout_ms
+
+The maximum time a single job can run, in milliseconds. The default is 0, which means no limit.
+
+### flashboot
+
+Whether to use FlashBoot to reduce cold starts. Enabled by default.
+
+## Code and dependencies
+
+### dependencies and system_dependencies
+
+Python packages and system (apt) packages to install on the worker. Import Python packages inside the function body, not at the top of the file, so your local machine doesn't need them.
+
+```python
+@app.queue(
+    gpu="4090",
+    dependencies=["transformers", "pillow"],
+    system_dependencies=["ffmpeg"],
+)
+def caption(image_url: str):
+    from transformers import pipeline
+    ...
+```
+
+When you deploy, the SDK also installs the packages listed in your project's `requirements.txt`. On the built-in GPU images, `torch`, `torchvision`, `torchaudio`, and `triton` are already installed, so they're left out of the build. See [Deploy an app](/sdk/apps/deploy#what-goes-into-a-build).
+
+### accelerate_downloads
+
+Uses faster downloads for dependencies and model files. Enabled by default. Disable it if you run into compatibility issues.
+
+### image and registry_auth
+
+By default, resources run on Runpod's runtime images, which already include Python and the SDK runtime. Use `image` to run on your own container image, and `registry_auth` to name saved credentials for a private registry:
+
+```python
+@app.queue(
+    gpu="4090",
+    image="ghcr.io/my-org/my-image:latest",
+    registry_auth="my-ghcr",
+)
+def infer(): ...
+```
+
+Save registry credentials with `rp registry add`. See [Secrets and registries](/sdk/cli#secrets-and-registries).
+
+## Data and environment
+
+### mounts
+
+Maps paths on the worker to volumes. Queue and API resources support one volume at `/runpod-volume`. Tasks support one network volume and one global volume at different paths.
+
+```python
+models = runpod.NetworkVolume("models", size=100)
+
+@app.queue(gpu="4090", mounts={"/runpod-volume": models})
+def infer(): ...
+```
+
+See [Storage](/sdk/configuration/storage).
+
+### env
+
+Environment variables for the worker. Values can be plain strings or `runpod.Secret` references, which the platform decrypts when the worker starts:
+
+```python
+@app.queue(
+    gpu="4090",
+    env={
+        "LOG_LEVEL": "INFO",
+        "HF_TOKEN": runpod.Secret("hf-token"),
+    },
+)
+def infer(): ...
+```
+
+Create secrets with `rp secret add`. Secret values never pass through the SDK.
+
+<Warning>
+  Values in a local `.env` file aren't sent to workers, and `.env` files are always left out of deployments. Pass every variable your workers need through `env`.
+</Warning>
+
+### model
+
+A Hugging Face model that Runpod stages on the host before the worker starts, so cold starts don't download weights. Available on queue and API resources. Tasks download weights themselves.
+
+```python
+llama = runpod.Model("meta-llama/Llama-3.1-8B-Instruct")
+
+@app.queue(gpu="H100", model=llama, env={"HF_TOKEN": runpod.Secret("hf-token")})
+def chat(prompt: str):
+    import vllm
+
+    llm = vllm.LLM(model=str(llama.path))
+    return llm.generate(prompt)
+```
+
+Inside the worker, `llama.path` points to the staged weights. Libraries that use the standard Hugging Face cache, such as `transformers` and `vllm`, also find the weights automatically. Gated models need an `HF_TOKEN` on the same resource.
+
+### datacenter
+
+Restricts the resource to one or more data centers, such as `"US-KS-2"` or `["US-KS-2", "EU-RO-1"]`. Lowercase and underscores are accepted. By default, the resource can run in any data center.
+
+Supported values: `US-CA-2`, `US-IL-1`, `US-KS-2`, `US-MO-1`, `US-MO-2`, `US-NC-2`, `US-NE-1`, `US-WA-1`, `EU-CZ-1`, `EU-RO-1`, and `EUR-NO-1`.
+
+## Next steps
+
+- [Choose GPUs](/sdk/configuration/gpu-types) for your resources.
+- [Attach storage](/sdk/configuration/storage) with `mounts`.
+- [Review recommended settings](/sdk/configuration/best-practices) for production and development.

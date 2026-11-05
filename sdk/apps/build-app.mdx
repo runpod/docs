@@ -1,0 +1,245 @@
+---
+title: "Build an app"
+sidebarTitle: "Build an app"
+description: "Build a Runpod SDK app step by step: run a function on a GPU, add a load-balanced HTTP service, share data between tasks, and deploy it."
+---
+
+This tutorial builds a small Runpod SDK app one resource at a time. You'll create a project, run a function on a GPU, add an HTTP service, stream results, share files between two tasks through a network volume, and deploy the app.
+
+## What you'll learn
+
+- How to scaffold a project with `rp flash init`.
+- How to run queue functions on CPUs and GPUs with `@app.queue`.
+- How to serve a stateful HTTP class with `@app.api`.
+- How to stream results from a generator function.
+- How to share data between tasks with a network volume.
+- How to deploy the app with `rp flash deploy`.
+
+## Requirements
+
+- A [Runpod account](https://www.runpod.io/console/signup) with credits.
+- Python 3.10 to 3.14 on your machine.
+- The `runpod` package, version 2.0 or later. To use the release candidate, run `pip install runpod==2.0.0rc1`.
+- Credentials saved with `rp login`. See [Authenticate](/sdk/overview#authenticate).
+
+## Step 1: Create a project
+
+Scaffold a new project:
+
+```bash
+rp flash init my-app
+cd my-app
+```
+
+This creates three files:
+
+- `main.py`: An app with one queue function and a local entrypoint.
+- `requirements.txt`: Packages your workers need. They're also installed locally for dev sessions.
+- `.runpodignore`: Files to leave out of deployments. See [Ignore rules](/sdk/apps/deploy#ignore-rules).
+
+Open `main.py`. It contains a complete app:
+
+```python main.py
+import runpod
+from runpod import App
+
+app = App("my-app")
+
+
+@app.queue(cpu="cpu3c-1-2")
+def hello(name: str):
+    # this print streams back to your terminal during rp flash dev
+    print(f"running in the cloud, greeting {name}")
+    return f"hello {name}!"
+
+
+@runpod.local_entrypoint
+def main():
+    # runs on your machine; hello() runs on a cloud worker
+    print(hello.remote("world"))
+```
+
+`@app.queue` turns `hello` into a queue-based Serverless endpoint running on a small CPU worker. `main` is marked with `@runpod.local_entrypoint`, so it runs on your machine and calls `hello` remotely.
+
+## Step 2: Run it in a dev session
+
+Start a dev session:
+
+```bash
+rp flash dev main.py
+```
+
+The SDK creates a temporary endpoint for `hello`, runs `main`, and streams the worker's `print` output to your terminal. Leave the session running. Change the greeting in `hello`, save the file, and press Enter to re-run. Workers pick up the new code automatically.
+
+Press Ctrl-C when you're done. The session deletes its temporary endpoints. To learn more, see [Dev sessions](/sdk/apps/dev-sessions).
+
+## Step 3: Run a function on a GPU
+
+Add a GPU function to `main.py`:
+
+```python main.py
+@app.queue(gpu="4090", dependencies=["numpy"])
+def matmul_benchmark(size: int = 4096):
+    import time
+
+    import torch
+
+    device = torch.cuda.get_device_name(0)
+    a = torch.randn(size, size, device="cuda")
+    b = torch.randn(size, size, device="cuda")
+
+    torch.cuda.synchronize()
+    start = time.time()
+    for _ in range(10):
+        _ = a @ b
+    torch.cuda.synchronize()
+    elapsed = time.time() - start
+
+    tflops = 10 * 2 * size**3 / elapsed / 1e12
+    return {"device": device, "tflops": round(tflops, 1)}
+```
+
+Then call it from `main`:
+
+```python main.py
+@runpod.local_entrypoint
+def main():
+    print(hello.remote("world"))
+    print(matmul_benchmark.remote())
+```
+
+A few things to notice:
+
+- `gpu="4090"` requests an RTX 4090. See [GPU types](/sdk/configuration/gpu-types) for other options.
+- Packages are imported inside the function, so your machine doesn't need them. `torch` is already installed on the built-in GPU images, so it doesn't need to be listed in `dependencies`.
+
+## Step 4: Add an HTTP service
+
+Use `@app.api` to serve a class over HTTP. Mark routes with `@runpod.get` and `@runpod.post`, and setup code with `@runpod.init`:
+
+```python main.py
+@app.api(cpu="cpu3c-1-2")
+class Counter:
+    @runpod.init
+    def setup(self):
+        # runs once when a worker starts, before any request
+        self.count = 0
+
+    @runpod.post("/bump")
+    async def bump(self, body: dict):
+        self.count += body.get("by", 1)
+        return {"count": self.count}
+
+    @runpod.get("/value")
+    async def value(self):
+        return {"count": self.count}
+```
+
+Call the routes through the class:
+
+```python main.py
+@runpod.local_entrypoint
+def main():
+    print(Counter.post("/bump", {"by": 3}))  # {'count': 3}
+    print(Counter.get("/value"))             # {'count': 3}
+```
+
+`Counter` runs on a load-balanced endpoint. Each worker keeps its own state in memory between requests.
+
+## Step 5: Stream results
+
+A generator function streams its output. Call `.stream()` to receive each chunk as the worker yields it:
+
+```python main.py
+@app.queue(cpu="cpu3c-1-2")
+def tokens(prompt: str):
+    import time
+
+    for word in f"you said: {prompt}".split():
+        time.sleep(0.2)
+        yield word
+
+
+@runpod.local_entrypoint
+def main():
+    for chunk in tokens.stream("hello streaming world"):
+        print(chunk, end=" ", flush=True)
+    print()
+```
+
+Calling `.remote()` on a generator returns every chunk at once. You can also call `.spawn()` and stream the job later with `job.stream()`.
+
+## Step 6: Share data between tasks
+
+Tasks run on a dedicated Pod that terminates when the function returns. To pass files between tasks, mount the same network volume on both:
+
+```python main.py
+checkpoints = runpod.NetworkVolume("checkpoints", size=10)
+
+
+@app.task(gpu="4090", mounts={"/checkpoints": checkpoints})
+def train(steps: int = 200):
+    import torch
+    import torch.nn as nn
+
+    x = torch.randn(2048, 1, device="cuda")
+    y = 3 * x + 1 + torch.randn_like(x) * 0.05
+
+    model = nn.Linear(1, 1).to("cuda")
+    opt = torch.optim.SGD(model.parameters(), lr=0.05)
+    for _ in range(steps):
+        loss = ((model(x) - y) ** 2).mean()
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+
+    run_dir = checkpoints.path / "linear"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    torch.save(model.state_dict(), run_dir / "model.pt")
+    return {"checkpoint": "linear", "final_loss": round(loss.item(), 5)}
+
+
+@app.task(gpu="4090", mounts={"/checkpoints": checkpoints})
+def evaluate(checkpoint: str):
+    import torch
+    import torch.nn as nn
+
+    model = nn.Linear(1, 1)
+    model.load_state_dict(torch.load(checkpoints.path / checkpoint / "model.pt"))
+    return {"weight": round(model.weight.item(), 2), "bias": round(model.bias.item(), 2)}
+
+
+@runpod.local_entrypoint
+def main():
+    out = train.remote()
+    print("train finished:", out)
+    print("evaluation:", evaluate.remote(out["checkpoint"]))
+```
+
+The volume is created the first time you use it, and both tasks are placed in its data center. `checkpoints.path` returns the mount path on each Pod. See [Storage](/sdk/configuration/storage).
+
+<Warning>
+  The network volume keeps incurring storage charges after the session ends. Delete it from the [Storage page](https://console.runpod.io/user/storage) in the console when you no longer need it.
+</Warning>
+
+## Step 7: Deploy the app
+
+When the app works in a dev session, deploy it:
+
+```bash
+rp flash deploy
+```
+
+This builds your code and dependencies into an artifact and creates long-running endpoints in the app's `default` environment. To deploy to another environment, add `--env`, for example `rp flash deploy --env production`. See [Deploy an app](/sdk/apps/deploy).
+
+To remove the deployed endpoints:
+
+```bash
+rp flash undeploy --app my-app
+```
+
+## Next steps
+
+- [Learn how dev sessions work](/sdk/apps/dev-sessions).
+- [Organize deployments with apps and environments](/sdk/apps/apps-and-environments).
+- [Browse the examples](https://github.com/runpod/runpod-python/tree/main/examples/apps) in the runpod-python repository.
