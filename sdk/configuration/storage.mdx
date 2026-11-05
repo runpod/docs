@@ -77,6 +77,39 @@ Keep these rules in mind:
 - Accessing `.path` raises an error if the volume isn't mounted on the current worker, or if it's mounted more than once.
 - `fn.local()` runs your function on your machine without mounting remote storage.
 
+## Upload and download files
+
+To move files between your machine and an existing network volume without starting a worker, call `upload` or `download` on a `NetworkVolume`. Both methods transfer a single file or a folder through the [S3-compatible API](/storage/s3-api):
+
+```python
+from runpod import NetworkVolume
+
+volume = NetworkVolume("my-volume")  # The volume's name or ID
+volume.upload("./dataset", "datasets/dataset")
+volume.download("outputs/", "./outputs")
+```
+
+The volume must already exist, and it must be in a [data center that supports the S3-compatible API](/storage/s3-api#datacenter-availability). `upload` and `download` don't create the volume. The SDK finds the volume and its data center with your Runpod API key.
+
+Transfers also need an S3 API key, which is separate from your Runpod API key. To create one, follow the [S3 API key setup steps](/storage/s3-api#setup-and-authentication). The SDK uses the first complete key pair it finds in this order:
+
+1. The `access_key` and `secret_key` arguments.
+2. The `RUNPOD_S3_ACCESS_KEY` and `RUNPOD_S3_SECRET_KEY` environment variables.
+3. `s3_access_key` and `s3_secret_key` in your profile in `~/.runpod/config.toml`.
+
+Both methods take these keyword arguments:
+
+| Argument | Description |
+| --- | --- |
+| `access_key`, `secret_key` | The S3 API key pair. |
+| `concurrency` | The number of parallel requests. Defaults to `4`. |
+| `force` | When `True`, transfer every file, including files that the size and modification time check treats as unchanged. Defaults to `False`. |
+| `progress` | A callback, `progress(event, path, nbytes)`, that receives `"start"`, `"advance"`, `"reuse"`, `"skip"`, and `"done"` events. |
+
+Each call returns a dictionary with `files_transferred`, `files_skipped`, and `bytes_transferred`. `bytes_transferred` counts only the bytes that call moved.
+
+To resume an interrupted transfer, call the same method with the same arguments again. Unchanged files are skipped, a large upload reuses the parts it already sent, and a download keeps its finished chunks. Path handling and resume behavior match [`rp volume upload` and `download`](/sdk/cli#upload-and-download-files).
+
 ## Cache model weights
 
 To load a Hugging Face model without managing a volume yourself, use the `model` parameter instead. Runpod stages the weights on the host before the worker starts. See [`model`](/sdk/configuration/parameters#model).

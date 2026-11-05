@@ -55,6 +55,8 @@ rp catalog h100
 # Volumes
 rp volume list
 rp volume create --name models --size 100 --region eu
+rp volume upload VOLUME ./dataset datasets/dataset
+rp volume download VOLUME outputs/ ./outputs
 rp volume delete VOLUME_ID
 
 # Shell completion
@@ -508,7 +510,7 @@ To use what you find in an app, see [GPU types](/sdk/configuration/gpu-types) an
 
 ## rp volume
 
-Create and manage network volumes and global volumes. Commands act on network volumes by default. Add `--global` to act on global volumes instead.
+Create and manage network volumes and global volumes, and transfer files to and from network volumes. Commands act on network volumes by default. Add `--global` to act on global volumes instead.
 
 ```bash
 rp volume list                                          # List network volumes
@@ -518,6 +520,8 @@ rp volume create --name models --size 100 --region eu   # Network volume in a Eu
 rp volume create --name shared --global                 # Global volume
 rp volume update VOLUME_ID --name new-name              # Rename a volume
 rp volume expand VOLUME_ID --size +50                   # Add 50 GB to a network volume
+rp volume upload VOLUME ./dataset datasets/dataset      # Upload a folder to a network volume
+rp volume download VOLUME outputs/ ./outputs            # Download a folder from a network volume
 rp volume delete VOLUME_ID                              # Delete a volume and its data
 ```
 
@@ -543,6 +547,51 @@ A global volume isn't tied to a data center and grows with your data, so `rp vol
 Network volumes can grow but can't shrink. `rp volume expand` takes a new total size, such as `--size 200`, or an amount to add, such as `--size +50`. The total can't exceed 4096 GB.
 
 `rp volume update` renames a volume with `--name`, sets a new total size for a network volume with `--size`, or does both. To rename a global volume, add `--global`. Global volumes have no size to change.
+
+### Upload and download files
+
+`rp volume upload` and `rp volume download` move files and folders between your machine and a network volume without starting a Pod:
+
+```bash
+rp volume upload VOLUME LOCAL_PATH [REMOTE_PATH]
+rp volume download VOLUME REMOTE_PATH [LOCAL_PATH]
+```
+
+`VOLUME` is the network volume's ID or name. In an interactive shell, you can leave it out, such as `rp volume upload ./data`, and the CLI lists your network volumes so you can pick one. A script must pass `VOLUME`.
+
+For example, upload a model file into the `models/` folder and a local `dataset` folder to `datasets/dataset`, then download a file and a folder:
+
+```bash
+rp volume upload VOLUME ./model.safetensors models/
+rp volume upload VOLUME ./dataset datasets/dataset
+rp volume download VOLUME models/model.safetensors
+rp volume download VOLUME outputs/ ./outputs
+```
+
+`REMOTE_PATH` defaults to the local file or folder name. When you upload a file to a remote path that ends in `/`, the file keeps its name inside that folder. When you upload a folder, its contents land under `REMOTE_PATH`. For a download, a `REMOTE_PATH` that ends in `/` is a folder, and `LOCAL_PATH` defaults to the remote name.
+
+Transfers go through the [S3-compatible API](/storage/s3-api), so the volume must be in a [data center that supports the S3-compatible API](/storage/s3-api#datacenter-availability). The CLI looks up the volume with your Runpod API key and offers to log you in if you haven't. Transfers also need an S3 API key, which is separate from your Runpod API key. To create one, follow the [S3 API key setup steps](/storage/s3-api#setup-and-authentication). The CLI uses the first complete key pair it finds in this order:
+
+1. The `--s3-access-key` and `--s3-secret-key` flags.
+2. The `RUNPOD_S3_ACCESS_KEY` and `RUNPOD_S3_SECRET_KEY` environment variables.
+3. `s3_access_key` and `s3_secret_key` in your profile in `~/.runpod/config.toml`.
+
+If it finds no keys in an interactive shell, the CLI asks for them and offers to save them to `~/.runpod/config.toml`.
+
+If a transfer stops because of a network drop, a crash, or Ctrl+C, run the same command again to resume it. On a rerun, the CLI skips files that are already complete. A file counts as unchanged when the destination copy has the same size and isn't older than the source, compared to the second. Downloaded files get the remote copy's modification time. To transfer every file again, such as after an edit that kept the file's size and an older modification time, add `--force`.
+
+Files larger than 64 MB upload in parts using S3 multipart upload. The CLI stores the upload state in `~/.runpod/transfers/`, and a rerun reuses every part that matches the local file. Downloads write each file in 64 MB chunks to `FILE_NAME.rpdownload`, and a rerun fetches only the missing chunks. The file appears under its real name only after it's complete.
+
+Parts of a multipart upload that you never resume stay in the volume's hidden `.s3compat_uploads` folder and count toward the volume's size. If an upload fails because the volume is full, add space with `rp volume expand VOLUME --size +GB`, then rerun the upload to resume it.
+
+| Flag | Description |
+| --- | --- |
+| `--s3-access-key KEY` | The S3 API access key. |
+| `--s3-secret-key KEY` | The S3 API secret key. |
+| `--concurrency N` | The number of parallel requests, from 1 to 64. Defaults to 4. |
+| `--force` | Transfer every file, including files that the size and modification time check treats as unchanged. |
+
+To transfer files from Python code, see [Upload and download files](/sdk/configuration/storage#upload-and-download-files). [`runpodctl network-volume upload` and `download`](/runpodctl/reference/runpodctl-network-volume) provide the same transfers in `runpodctl`.
 
 ### Delete a volume
 
