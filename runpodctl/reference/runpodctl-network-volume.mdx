@@ -1,10 +1,10 @@
 ---
 title: "network-volume"
 sidebarTitle: "network-volume"
-description: "Use runpodctl to create, inspect, list, update, and remove persistent network volumes shared by Pods and Serverless endpoints."
+description: "Use runpodctl to create, list, update, and delete network volumes, and to upload or download their files through the S3-compatible API."
 ---
 
-Manage network volumes for persistent shared storage across Pods and Serverless endpoints.
+Manage network volumes for persistent shared storage across Pods and Serverless endpoints, and move files to and from them without starting a Pod.
 
 <RequestExample>
 ```bash Command
@@ -35,7 +35,7 @@ runpodctl network-volume list
 Get detailed information about a specific network volume:
 
 ```bash
-runpodctl network-volume get <volume-id>
+runpodctl network-volume get VOLUME_ID
 ```
 
 ### Create a network volume
@@ -65,7 +65,7 @@ Datacenter ID where the volume will be created. Use [`runpodctl datacenter list`
 Update network volume configuration:
 
 ```bash
-runpodctl network-volume update <volume-id> --name "new-name"
+runpodctl network-volume update VOLUME_ID --name "new-name"
 ```
 
 #### Update flags
@@ -78,12 +78,92 @@ New volume name.
 New volume size in GB. Must be larger than the current size.
 </ResponseField>
 
+### Upload files to a network volume
+
+Upload a local file or folder to a network volume:
+
+```bash
+runpodctl network-volume upload VOLUME_ID LOCAL_PATH [REMOTE_PATH]
+```
+
+For example, upload a model file into the `models/` folder, and a local `dataset` folder to `datasets/dataset`:
+
+```bash
+runpodctl network-volume upload VOLUME_ID ./model.safetensors models/
+runpodctl network-volume upload VOLUME_ID ./dataset datasets/dataset
+```
+
+`REMOTE_PATH` defaults to the local file or folder name. When you upload a file to a remote path that ends in `/`, the file keeps its name inside that folder. When you upload a folder, its contents land under `REMOTE_PATH`.
+
+### Download files from a network volume
+
+Download a file or folder from a network volume to your machine:
+
+```bash
+runpodctl network-volume download VOLUME_ID REMOTE_PATH [LOCAL_PATH]
+```
+
+For example, download a single model file, and the `outputs/` folder into a local `outputs` folder:
+
+```bash
+runpodctl network-volume download VOLUME_ID models/model.safetensors
+runpodctl network-volume download VOLUME_ID outputs/ ./outputs
+```
+
+`REMOTE_PATH` is treated as a folder when it ends in `/` or has files under it. Use `/` to download the entire volume. `LOCAL_PATH` defaults to the remote name, and a file downloaded into an existing local folder keeps its name.
+
+#### Requirements for uploads and downloads
+
+The `upload` and `download` subcommands transfer files through the [S3-compatible API](/storage/s3-api), so they work only for network volumes in a [data center that supports the S3-compatible API](/storage/s3-api#datacenter-availability). They also need an S3 API key, which is separate from your Runpod API key. To create one, follow the [S3 API key setup steps](/storage/s3-api#setup-and-authentication), then provide the key in one of these ways:
+
+- Set the `RUNPOD_S3_ACCESS_KEY` and `RUNPOD_S3_SECRET_KEY` environment variables.
+- Pass the `--s3-access-key` and `--s3-secret-key` flags.
+- Add `s3AccessKey` and `s3SecretKey` to `~/.runpod/config.toml`.
+
+runpodctl looks up the volume's data center with your Runpod API key. To skip the lookup, pass `--data-center-id`.
+
+#### Resume an interrupted transfer
+
+If a transfer stops because of a network drop, a crash, or Ctrl+C, run the same command again to resume it. The command exits with the error code `transfer_incomplete` when a rerun can resume the transfer.
+
+On a rerun, runpodctl skips files that are already complete. A file counts as unchanged when the destination copy has the same size and isn't older than the source, compared to the second. Downloads set each local file's modification time to match the remote copy, so a folder you download and upload back without edits is skipped. If you edit a file without changing its size and the edit keeps an older modification time (for example, after `cp -p`, `rsync -a`, or `tar x`), pass `--force` to transfer every file again.
+
+Files larger than 64 MB upload in parts using S3 multipart upload. runpodctl stores the upload state in `~/.runpod/transfers/`, and a rerun reuses every part that matches the local file. If the local file changes during the upload, the rerun starts that file over.
+
+Files larger than 64 MB download in 64 MB chunks to `FILE_NAME.rpdownload`, with finished chunks tracked in `FILE_NAME.rpdownload.json`. A rerun fetches only the missing chunks, unless the remote file changed, in which case the download restarts. The file appears under its real name only after it's complete.
+
+Parts of a multipart upload that you never resume stay in the volume's hidden `.s3compat_uploads/` folder and count toward the volume's size. If an upload fails with the error code `volume_full`, increase the volume size with `runpodctl network-volume update VOLUME_ID --size NEW_SIZE_GB`, then rerun the upload to resume it.
+
+A folder download fails before it starts if two remote files would map to the same local path, such as names that differ only in case.
+
+#### Upload and download flags
+
+<ResponseField name="--s3-access-key" type="string">
+S3 API access key. Defaults to the `RUNPOD_S3_ACCESS_KEY` environment variable.
+</ResponseField>
+
+<ResponseField name="--s3-secret-key" type="string">
+S3 API secret key. Defaults to the `RUNPOD_S3_SECRET_KEY` environment variable.
+</ResponseField>
+
+<ResponseField name="--data-center-id" type="string">
+The volume's data center ID (for example, `EU-RO-1`). If you omit this flag, runpodctl looks it up from the volume.
+</ResponseField>
+
+<ResponseField name="--concurrency" type="int" default="4">
+Number of parallel requests (1-64).
+</ResponseField>
+
+<ResponseField name="--force" type="bool">
+Transfer every file, including files that the size and modification time check treats as unchanged.
+</ResponseField>
+
 ### Delete a network volume
 
 Delete a network volume:
 
 ```bash
-runpodctl network-volume delete <volume-id>
+runpodctl network-volume delete VOLUME_ID
 ```
 
 <Warning>
@@ -96,3 +176,4 @@ Deleting a network volume permanently removes all data stored on it. Make sure t
 
 - [`runpodctl pod create`](/runpodctl/reference/runpodctl-pod)
 - [`runpodctl datacenter list`](/runpodctl/reference/runpodctl-datacenter)
+- [S3-compatible API](/storage/s3-api)
