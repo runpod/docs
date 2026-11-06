@@ -4,68 +4,42 @@ sidebarTitle: "Storage"
 description: "Choose storage for Runpod sandboxes: the container disk, network volumes, and global volumes, and move files in and out with the S3-compatible API."
 ---
 
-Every sandbox has a temporary container disk. To keep data after a sandbox ends, or to share data between sandboxes, mount a [network volume](/storage/network-volumes) or a [global volume](/storage/globalvolume/overview). To move files into and out of a sandbox from your own machine or code, use the [S3-compatible API](/storage/s3-api) with a network volume.
+Every sandbox has a temporary container disk. To keep data after a sandbox ends, or to share data between sandboxes, mount a network volume or a global volume. This page covers what's specific to sandboxes. For how each storage type works, follow the links to its own page.
 
 ## Storage options
 
 | | Container disk | Network volume | Global volume |
 | --- | --- | --- | --- |
 | **Lifetime** | Deleted when the sandbox terminates | Persists until you delete it | Persists until you delete it |
-| **Location** | The sandbox's host | One data center. The sandbox is placed in that data center. | Not tied to a data center |
-| **Shared between sandboxes** | No | Yes | Yes |
-| **Mount path** | Root file system | `/workspace` by default | `/workspace-global` by default |
-| **Size** | 10 GB by default, set with `disk` | You set it when you create the volume | Grows with your data |
-| **S3-compatible API** | No | Yes, in [supported data centers](/storage/s3-api#datacenter-availability) | No |
-| **Best for** | Code, repositories, dependencies, many small files | Data that needs fast, consistent reads and writes | Shared, read-heavy data such as model weights |
-| **Pricing** | Included in the sandbox price | [Billed per GB per month](/storage/network-volumes) | [Storage plus read and write requests](/storage/globalvolume/overview#request-costs) |
+| **Mount path in a sandbox** | Root file system | `/workspace` by default | `/workspace-global` by default |
+| **S3-compatible API** | No | Yes | No |
+| **Learn more** | [Below](#container-disk) | [Network volumes](/storage/network-volumes) | [Global volumes](/storage/globalvolume/overview) |
+
+To compare network and global volumes in detail, see the [Storage overview](/storage/overview#compare-network-and-global-volumes).
 
 You can mount at most **one network volume and one global volume** per sandbox.
 
 ## Container disk
 
-The container disk holds the sandbox's root file system: the image, anything you install, and files you create outside a mounted volume. It's the fastest storage for a sandbox, especially for workloads that create many small files.
+The container disk holds the sandbox's root file system: the image, anything you install, and files you create outside a mounted volume. It's the fastest storage for a sandbox, so keep code, repositories and dependencies here.
 
-- **Size:** 10 GB by default. Set `disk` (in GB) when you create the sandbox to change it. The maximum depends on the CPU flavor and vCPU count; a larger value returns `400`.
-- **Lifetime:** the container disk is deleted when the sandbox terminates. Copy anything you want to keep to a volume first.
+- **Size:** 10 GB by default. Set `disk` (in GB) when you create the sandbox. The maximum depends on the CPU size; a larger value returns `400`.
+- **Lifetime:** deleted when the sandbox terminates. Copy anything you want to keep to a volume first.
+- **`/tmp` uses memory,** not the container disk. Write large files somewhere else.
 
-```json
-{"disk": 20}
-```
+## Mount a network volume
 
-<Warning>
-
-`/tmp` is stored in memory, not on the container disk. Large files in `/tmp` count against the sandbox's memory and can stop it. Write large files to your home directory or a volume instead.
-
-</Warning>
-
-## Network volumes
-
-A [network volume](/storage/network-volumes) is persistent storage in a single data center. It gives full file system behavior and the fastest reads and writes of the two volume types, so it suits data a sandbox writes often.
-
-### Mount a network volume
-
-1. [Create a network volume](/storage/network-volumes#create-a-network-volume) in a data center that offers sandboxes, or find an existing one with `GET /v2/network-volumes`. Note its ID.
-2. Add it to `mounts.network` when you create the sandbox:
+[Create a network volume](/storage/network-volumes#create-a-network-volume) in a data center that offers sandboxes, then add its ID to `mounts.network` when you create the sandbox:
 
 ```json
-{
-  "mounts": {
-    "network": [{"volumeId": "YOUR_NETWORK_VOLUME_ID", "path": "/workspace"}]
-  }
-}
+{"mounts": {"network": [{"volumeId": "YOUR_NETWORK_VOLUME_ID"}]}}
 ```
 
-`path` is optional and defaults to `/workspace`.
+In a sandbox:
 
-### Placement
-
-A network volume lives in one data center, so a sandbox that mounts it is placed in that data center. If you also set `dataCenterIds`, include the volume's data center. If that data center doesn't offer sandboxes, or has no capacity, the create fails.
-
-### Limitations
-
-- **Root user only:** on a network volume, a process that doesn't run as root can't create files. Use an image that runs as root, or a global volume.
-- **Some data centers don't support writes yet.** Network volumes in some data centers, including EU-RO-1, can be read but not written to from a sandbox. Use a global volume until this is fixed.
-- **Many small files are slow.** Keep repositories, virtual environments and build output on the container disk.
+- **Placement:** the sandbox is placed in the volume's data center. If you set `dataCenterIds`, include that data center.
+- **Root user only:** a process that doesn't run as root can't create files on the volume.
+- **Writes don't work in some data centers yet,** including EU-RO-1. See [Known limitations](/sandboxes/limitations).
 
 <Warning>
 
@@ -73,132 +47,32 @@ A network volume lives in one data center, so a sandbox that mounts it is placed
 
 </Warning>
 
-## Global volumes
+## Mount a global volume
 
-A [global volume](/storage/globalvolume/overview) is persistent storage that isn't tied to a data center. Every sandbox that mounts it sees the same files, wherever the sandbox runs. Global volumes are in beta.
-
-### Mount a global volume
-
-1. [Create a global volume](/storage/globalvolume/overview#create-a-global-volume) in the console, or with `POST /v2/global-volumes`. Find existing ones with `GET /v2/global-volumes`. Note its ID.
-2. Add it to `mounts.global` when you create the sandbox:
+[Create a global volume](/storage/globalvolume/overview#create-a-global-volume), then add its ID to `mounts.global` when you create the sandbox:
 
 ```json
-{
-  "mounts": {
-    "global": [{"volumeId": "YOUR_GLOBAL_VOLUME_ID", "path": "/workspace-global"}]
-  }
-}
+{"mounts": {"global": [{"volumeId": "YOUR_GLOBAL_VOLUME_ID"}]}}
 ```
 
-`path` is optional and defaults to `/workspace-global`.
+A global volume isn't tied to a data center, so it doesn't limit where the sandbox runs. Global volumes aren't a full file system, which affects common sandbox tasks such as `git init` and making scripts executable. Check the [global volume limitations](/storage/globalvolume/overview#limitations) and [request costs](/storage/globalvolume/overview#request-costs) before you use one.
 
-### How global volumes behave
-
-Global volumes use object-backed storage, not a full file system. Before you use one, check that your workload works with these limits:
-
-- **File operations:** `chmod` and `utime` fail, files can't be made executable, and `git init` fails. There's no file locking, atomic rename, or hard links.
-- **Shared writes:** when two sandboxes write to the same file at the same time, the last write wins.
-- **Eventual consistency:** changes made after a sandbox starts may not be visible inside it right away.
-- **Speed:** writing many small files is much slower than on the container disk.
-- **No S3-compatible API:** to add files, mount the volume in a sandbox or Pod and copy them there.
-- **Request costs:** you pay for read and write requests as well as storage, so loops over large directories can add up. See [Request costs](/storage/globalvolume/overview#request-costs).
-
-<Warning>
-
-If your account balance reaches $0, your global volume is flagged and permanently deleted after 15 days. Enable [low balance notifications](/accounts-billing/billing#low-balance-notifications) to avoid losing data.
-
-</Warning>
+To mount both types, add both keys. Each gets its own path.
 
 ## Move files in and out
 
-There's no file upload or download endpoint for sandboxes yet, and you can't stream data into a sandbox. Use one of these methods instead:
+There's no file upload or download endpoint for sandboxes yet. Use one of these instead:
 
-| Method | Best for | Works with |
+| Method | Best for | How |
 | --- | --- | --- |
-| [S3-compatible API](#use-the-s3-compatible-api) | Uploading and downloading files of any size from your machine, CI or code | Network volumes |
-| [Download from inside the sandbox](#download-from-inside-the-sandbox) | Public files, packages and repositories | Any storage |
-| [Send content in a command](#send-content-in-a-command) | Small files and text | Any storage |
-| [Copy between mounts](#copy-between-mounts) | Moving data between the container disk and a volume | Network and global volumes |
-
-### Use the S3-compatible API
-
-The S3-compatible API lets you work with files on a network volume using standard S3 tools, without starting a sandbox. Files you upload appear at the volume's mount path in any sandbox that mounts it, and files a sandbox writes there can be downloaded the same way.
-
-1. Create the network volume in a data center that [supports the S3-compatible API](/storage/s3-api#datacenter-availability), such as EU-RO-1.
-2. Create an S3 API key on the [Credentials page](https://console.runpod.io/user/credentials) and configure the AWS CLI with it. See [Setup and authentication](/storage/s3-api#setup-and-authentication).
-3. Upload a file. The bucket is the network volume ID, the region is the data center ID, and the endpoint URL depends on the data center:
-
-```bash
-aws s3 cp ./dataset.csv s3://YOUR_NETWORK_VOLUME_ID/data/dataset.csv \
-  --region EU-RO-1 \
-  --endpoint-url https://s3api-eu-ro-1.runpod.io/
-```
-
-4. Create a sandbox that mounts the volume. The file is at `/workspace/data/dataset.csv`.
-5. To get results out, have the sandbox write them to the volume, then download them:
-
-```bash
-aws s3 cp s3://YOUR_NETWORK_VOLUME_ID/results/ ./results/ --recursive \
-  --region EU-RO-1 \
-  --endpoint-url https://s3api-eu-ro-1.runpod.io/
-```
-
-Files larger than 500 MB use multipart uploads, which the AWS CLI handles for you. For Python, examples with Boto3, and the full list of supported operations, see [S3-compatible API](/storage/s3-api).
-
-<Note>
-
-The S3 API key is separate from your Runpod API key. Keep both secret, and don't pass them to code running inside the sandbox unless it needs them.
-
-</Note>
-
-### Download from inside the sandbox
-
-Sandboxes have open outbound internet access, so a command can fetch what it needs directly:
-
-```json
-{"command": ["sh", "-c", "git clone https://github.com/OWNER/REPO.git /root/repo && pip install -r /root/repo/requirements.txt"]}
-```
-
-Use the [commands API](/api-reference-v2/sandboxes/start-a-command-in-a-sandbox) for downloads that take more than a few seconds.
-
-### Send content in a command
-
-For small files, send the content in a command. Each request body is limited to 1 MiB, so split larger content into several commands:
-
-```json
-{"command": ["sh", "-c", "printf '%s' \"$CONTENT\" > /root/config.json"], "env": {"CONTENT": "{\"debug\": true}"}}
-```
-
-To read a small file back, `cat` it with exec and read `stdout` from the response. Exec returns up to 4 MiB of output.
-
-### Copy between mounts
-
-Inside a sandbox, use normal tools to move data between storage types, for example to work on a dataset on the fast container disk and save the results to a volume:
-
-```json
-{"command": ["sh", "-c", "cp -r /workspace/data /root/data && python /root/train.py && cp -r /root/output /workspace/output"]}
-```
-
-## Choose storage for your workload
-
-- **Scratch work, code and dependencies:** use the container disk. It's the fastest and needs no setup.
-- **Upload inputs from your machine or CI, and download results:** use a network volume with the S3-compatible API.
-- **Data that changes often and must be consistent:** use a network volume.
-- **Read-heavy data shared by many sandboxes in different places, such as model weights:** use a global volume.
-- **Both:** mount one network volume and one global volume in the same sandbox, at different paths.
-
-```json
-{
-  "mounts": {
-    "network": [{"volumeId": "YOUR_NETWORK_VOLUME_ID"}],
-    "global": [{"volumeId": "YOUR_GLOBAL_VOLUME_ID"}]
-  }
-}
-```
+| **S3-compatible API** | Uploading inputs and downloading results from your machine or CI | Upload to a network volume with the [S3-compatible API](/storage/s3-api), then mount the volume. A file uploaded to `data/input.csv` appears at `/workspace/data/input.csv` in the sandbox. Results the sandbox writes to the volume can be downloaded the same way. |
+| **Download from inside** | Public files, packages and repositories | Run `curl`, `pip` or `git clone` in the sandbox. Use the [commands API](/sandboxes/run-commands) for downloads that take more than a few seconds. |
+| **Send content in a command** | Small files and text | Pass the content in a command's `env` or arguments and write it to a file. Each request body is limited to 1 MiB. |
+| **Copy between mounts** | Working on fast local disk and saving results | Copy from a volume to the container disk, work there, then copy results back. |
 
 ## Learn more
 
-- [Storage overview](/storage/overview): compare storage across Runpod products.
-- [Network volumes](/storage/network-volumes): create, resize and manage network volumes.
-- [Global volumes](/storage/globalvolume/overview): create global volumes, request costs and limitations.
-- [S3-compatible API](/storage/s3-api): data centers, setup, examples and supported operations.
+- [Storage overview](/storage/overview)
+- [Network volumes](/storage/network-volumes)
+- [Global volumes](/storage/globalvolume/overview)
+- [S3-compatible API](/storage/s3-api)
