@@ -1,0 +1,62 @@
+---
+title: "Configure a sandbox"
+sidebarTitle: "Configure"
+description: "Configure a Runpod sandbox: choose an image or template, set a start command, pick a CPU size, and add environment variables, secrets, and labels."
+---
+
+When you create a sandbox, every field is optional. An empty request body (`{}`) creates a sandbox from the default image with the default size and timeouts. This page covers the settings you can change. For timeouts, see [Lifecycle and timeouts](/sandboxes/lifecycle). For volumes, see [Storage](/sandboxes/storage). For ports and SSH, see [Networking](/sandboxes/networking).
+
+## Images and templates
+
+You can start a sandbox in three ways:
+
+- **Default image:** send an empty request body (`{}`) and the sandbox runs Runpod's default sandbox image.
+- **Template:** set `templateId` to a Runpod sandbox template. Templates start fastest because their images are cached on Runpod hosts.
+- **Container image:** set `image` to any container image, for example `python:3.12-slim`. For a private image, also set `registry` to the ID of one of your saved container registry credentials (from `/v2/registries`). Your own images start slower the first time, because they have to be downloaded (see [Cold starts](/sandboxes/lifecycle#cold-starts)).
+
+`image` and `templateId` can't be used together.
+
+Runpod provides these sandbox templates:
+
+| Template | Template ID | Use it for |
+| --- | --- | --- |
+| Ubuntu | `TEMPLATE_ID` | A general-purpose Linux environment. |
+| Browser | `n2mv38hebo` | Headless browser work: screenshots, UI checks and end-to-end tests with Playwright and Chromium. |
+| Harbor | `TEMPLATE_ID` | Running Harbor agent evaluations. |
+| OpenClaw | `TEMPLATE_ID` | Running the OpenClaw agent. |
+
+<Warning>
+
+**Review question:** What are the prod template IDs for Ubuntu, Harbor and OpenClaw, and are all four templates public at launch? What's the default sandbox image name? _Remove this box before merging._
+
+</Warning>
+
+If you start a sandbox from an image without a start command, it runs a keepalive process so it stays up for you to run commands in. To run your own main process, set `cmd` (and optionally `entrypoint`) in exec form, for example `["python", "-m", "http.server", "8080"]`. When that process exits, the container stops and the sandbox no longer accepts commands, so use a long-running process.
+
+## CPU size
+
+Sandboxes run on CPU compute. Set the CPU flavor and vCPU count in `cpu`, or omit it to get the default sandbox flavor with 2 vCPUs. `vcpuCount` must be a power of two (2, 4, 8, 16 or 32), and memory and container disk scale with the flavor. The `cpu` and `compute` fields in the response show what the sandbox is running on.
+
+```json
+{"cpu": {"vcpuCount": 4}}
+```
+
+Larger sizes cost more. See [Pricing](/sandboxes/pricing).
+
+## Environment variables and secrets
+
+Pass environment variables in `env`. You can reference a [Runpod secret](/pods/templates/secrets) with `{{ RUNPOD_SECRET_name }}`. A create that references a secret you can't access is rejected.
+
+`env`, `cmd` and `entrypoint` together must fit in about 100 KB, otherwise create returns `413`.
+
+<Warning>
+
+`env` is returned as written in API responses, so anyone who can read the sandbox can see plain values. Use secret references for credentials instead of plain values.
+
+</Warning>
+
+## Labels
+
+Attach `labels` (string key-value pairs) when you create a sandbox to track which job, user, or environment it belongs to. You can add up to 20 labels. Keys can be up to 64 letters, numbers, `_` or `-`, and values up to 255 characters.
+
+You can filter `GET /v2/sandboxes` by one or more labels, written as `key=value`.
