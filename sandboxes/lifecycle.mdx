@@ -1,0 +1,100 @@
+---
+title: "Sandbox lifecycle and timeouts"
+sidebarTitle: "Lifecycle and timeouts"
+description: "Learn how a Runpod sandbox moves from creating to running to terminated, how cold starts and idle timeouts work, and how to retry creates safely."
+---
+
+A sandbox is created, runs until you terminate it or a timeout ends it, and is never restarted. This page explains each state, what affects start time, and how timeouts decide when a sandbox stops and billing ends.
+
+## States
+
+A sandbox moves through these states:
+
+| State | Meaning |
+| --- | --- |
+| `CREATING` | Compute is being allocated. |
+| `RUNNING` | Compute is up. The container may still be starting, so commands can briefly return `409` with code `sandbox_starting`. |
+| `TERMINATED` | The sandbox has stopped. `terminationReason` says why. Billing has stopped. |
+| `FAILED` | The sandbox couldn't start, for example because no capacity was available or the image couldn't be pulled. It isn't billed. |
+
+`POST /v2/sandboxes` returns `201` with the new sandbox, usually still in the `CREATING` state. Poll `GET /v2/sandboxes/{id}` until `state` is `RUNNING` before you send commands.
+
+`terminationReason` is one of these values (more may be added):
+
+| Value | Meaning |
+| --- | --- |
+| `USER_REQUESTED` | You terminated the sandbox. |
+| `IDLE_TIMEOUT` | The sandbox reached its idle timeout. |
+| `MAX_LIFETIME` | The sandbox reached its maximum lifetime. |
+| `FAILED` | The create failed. |
+| `ADMIN_TERMINATED` | Runpod terminated the sandbox. |
+| `RECONCILED` | Its compute was stopped outside the sandbox API. |
+
+### Retry creates safely
+
+Send an `Idempotency-Key` header with each create request. If the response is lost and you retry with the same key and the same body, the API returns the sandbox the first request created instead of creating, and billing for, a second one.
+
+- If the create was rejected for its input or because you've reached the sandbox limit (`400`), the key isn't used, so you can retry with it.
+- If the create was accepted and then failed, for example because no capacity was available or the image couldn't be pulled, the key is spent. Every retry with it returns `409`, so retry with a new key.
+
+### Termination is final
+
+A terminated sandbox can't be restarted. To run more work, create a new sandbox. You can still read a terminated sandbox with `GET /v2/sandboxes/{id}` for a while, but don't depend on it staying available.
+
+Terminating a sandbox that's already terminated succeeds, so it's safe to retry `DELETE /v2/sandboxes/{id}`.
+
+## Cold starts
+
+A cold start is the time from your create request to the first command that succeeds. Most of it is spent downloading the container image and starting the container on a host.
+
+To get the fastest start:
+
+- **Use a Runpod template or the default image.** Their images are cached on Runpod hosts, so they don't need to be downloaded.
+- **Expect a slower first start with your own image.** It has to be downloaded to the host the first time it runs there. Smaller images download faster.
+- **Wait for the sandbox to accept commands.** A sandbox can report `RUNNING` a few seconds before its container is ready. Until then, commands return `409` with code `sandbox_starting`, so retry after a short delay.
+
+Runpod is working to make cold starts shorter.
+
+<Warning>
+
+**Review question:** Should we publish expected cold start times (currently 20–60 s, target under 5 s after launch)? Does mounting a network volume make the cold start longer? _Remove this box before merging._
+
+</Warning>
+
+## Timeouts
+
+Every sandbox has two timeouts. Whichever runs out first terminates the sandbox and stops billing.
+
+| Timeout | Field | Default | Minimum | Maximum |
+| --- | --- | --- | --- | --- |
+| Idle timeout: how long the sandbox can go without activity | `idleTimeoutSeconds` | 10 minutes (600) | 90 seconds | 2 hours (7200) |
+| Maximum lifetime: total time from creation | `maxLifetimeSeconds` | 1 hour (3600) | | 24 hours (86400) |
+
+On create, values above the maximum are lowered to it and idle timeouts under 90 seconds are raised to 90. The response shows the values that were applied. The idle timeout can't be turned off. The deadlines are reported in `idleExpiresAt` and `expiresAt`.
+
+To change the timeouts of a running sandbox:
+
+- [Update a sandbox](/api-reference-v2/sandboxes/update-a-sandbox) (`PATCH /v2/sandboxes/{id}`) to raise or lower either timeout.
+- [Extend a sandbox's lifetime](/api-reference-v2/sandboxes/extend-a-sandbox) (`POST /v2/sandboxes/{id}/extend`) to raise the maximum lifetime only.
+
+### What counts as activity
+
+These reset the idle timer:
+
+- A command that the sandbox accepts, through exec or the commands API, whatever its exit code.
+- Reading a command's status or output.
+- An open log stream, for the sandbox or a command.
+
+These **don't** reset the idle timer:
+
+- A process that's already running inside the sandbox, such as a server you started.
+- An SSH session.
+- Traffic to the sandbox's ports.
+
+Activity is recorded at most once every 30 seconds. If your sandbox runs a long job or serves traffic, set a longer `idleTimeoutSeconds` or keep sending activity, otherwise it's terminated as idle.
+
+<Tip>
+
+Terminate sandboxes explicitly when you're finished, including in your error-handling code. Don't rely on a timeout to stop billing.
+
+</Tip>

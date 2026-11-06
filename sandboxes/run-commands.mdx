@@ -1,0 +1,55 @@
+---
+title: "Run commands in a sandbox"
+sidebarTitle: "Run commands"
+description: "Run short commands with exec or long-running work with the commands API in a Runpod sandbox, and read command output and sandbox logs."
+---
+
+There are two ways to run a command in a sandbox. Both take the command as an argv array, for example `["python", "script.py"]`. Commands aren't run through a shell, so wrap them in `["sh", "-c", "..."]` to use pipes, redirects or `&&`.
+
+| | [Exec](/api-reference-v2/sandboxes/run-a-command-in-a-sandbox) | [Commands](/api-reference-v2/sandboxes/start-a-command-in-a-sandbox) |
+| --- | --- | --- |
+| Use it for | Short commands where you want the result in the same request | Builds, test suites, servers and other long-running work |
+| How it works | Waits for the command to finish and returns its output and exit code | Returns as soon as the command starts. Check its status and read its output with later requests, or cancel it. |
+| Time limit | Up to `timeoutSeconds` (default 30, max 50). On some sandboxes the limit is lower. | Up to `timeoutSeconds` (default 1 hour, max 24 hours) |
+| Output | Up to 4 MiB in the response | Up to 32 MiB, readable for about 20 minutes after the command finishes |
+
+Both accept `cwd` (the directory to run in) and `env` (environment variables for that command only). A sandbox runs at most **8 commands at once** through the commands API.
+
+## Run a short command with exec
+
+Exec waits for the command to finish and returns `output`, `stdout`, `stderr` and `exitCode` in the same response. Use it for quick checks, file reads and short scripts.
+
+```bash
+curl --request POST \
+  --url "$RUNPOD_API_URL/sandboxes/$SANDBOX_ID/exec" \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{"command": ["sh", "-c", "ls -la /root"], "cwd": "/root"}'
+```
+
+A command that runs past its limit is stopped, `error` is set and `exitCode` is `null`. See [Run a command in a sandbox](/api-reference-v2/sandboxes/run-a-command-in-a-sandbox).
+
+## Run long work with the commands API
+
+The commands API starts a command and returns `202` with its `id` right away. Then:
+
+1. Check its status with `GET /v2/sandboxes/{id}/commands/{commandId}`. Read the outcome from `status`: `running`, `exited`, `cancelled`, `timedOut`, `failed` or `unknown`.
+2. Read its output with `GET /v2/sandboxes/{id}/commands/{commandId}/logs`, as a snapshot or as a live stream with `stream=true`.
+3. Stop it early with `DELETE /v2/sandboxes/{id}/commands/{commandId}`.
+
+A finished command and its output stay readable for about 20 minutes. For a walkthrough, see [Step 5 of the quickstart](/sandboxes/quickstart#step-5-run-a-longer-command).
+
+## When commands can't run
+
+If a sandbox can't accept a command, the API returns `409` with a `code`:
+
+| Code | Meaning | What to do |
+| --- | --- | --- |
+| `sandbox_starting` | The container is still starting | Retry after a few seconds |
+| `command_limit_reached` | 8 commands are already running | Wait for one to finish or cancel one |
+| `container_exited` | The sandbox's main process has exited | Terminate the sandbox and create a new one |
+| `sandbox_terminated` | The sandbox has stopped or reached its maximum lifetime | Create a new sandbox |
+
+## Stream sandbox logs
+
+The sandbox log stream shows the output of the sandbox's main process (`container`) and lifecycle events such as image pulls (`system`), as Server-Sent Events. Output from exec and the commands API doesn't appear here; read it from the command instead. An open log stream counts as activity. See [Stream sandbox logs](/api-reference-v2/sandboxes/stream-sandbox-logs).

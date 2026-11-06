@@ -1,0 +1,78 @@
+---
+title: "Sandbox storage"
+sidebarTitle: "Storage"
+description: "Choose storage for Runpod sandboxes: the container disk, network volumes, and global volumes, and move files in and out with the S3-compatible API."
+---
+
+Every sandbox has a temporary container disk. To keep data after a sandbox ends, or to share data between sandboxes, mount a network volume or a global volume. This page covers what's specific to sandboxes. For how each storage type works, follow the links to its own page.
+
+## Storage options
+
+| | Container disk | Network volume | Global volume |
+| --- | --- | --- | --- |
+| **Lifetime** | Deleted when the sandbox terminates | Persists until you delete it | Persists until you delete it |
+| **Mount path in a sandbox** | Root file system | `/workspace` by default | `/workspace-global` by default |
+| **S3-compatible API** | No | Yes | No |
+| **Learn more** | [Below](#container-disk) | [Network volumes](/storage/network-volumes) | [Global volumes](/storage/globalvolume/overview) |
+
+To compare network and global volumes in detail, see the [Storage overview](/storage/overview#compare-network-and-global-volumes).
+
+You can mount at most **one network volume and one global volume** per sandbox.
+
+## Container disk
+
+The container disk holds the sandbox's root file system: the image, anything you install, and files you create outside a mounted volume. It's the fastest storage for a sandbox, so keep code, repositories and dependencies here.
+
+- **Size:** 10 GB by default. Set `disk` (in GB) when you create the sandbox. The maximum depends on the CPU size; a larger value returns `400`.
+- **Lifetime:** deleted when the sandbox terminates. Copy anything you want to keep to a volume first.
+- **`/tmp` uses memory,** not the container disk. Write large files somewhere else.
+
+## Mount a network volume
+
+[Create a network volume](/storage/network-volumes#create-a-network-volume) in a data center that offers sandboxes, then add its ID to `mounts.network` when you create the sandbox:
+
+```json
+{"mounts": {"network": [{"volumeId": "YOUR_NETWORK_VOLUME_ID"}]}}
+```
+
+In a sandbox:
+
+- **Placement:** the sandbox is placed in the volume's data center. If you set `dataCenterIds`, include that data center.
+- **Root user only:** a process that doesn't run as root can't create files on the volume.
+- **Writes don't work in some data centers yet,** including EU-RO-1. See [Known limitations](/sandboxes/limitations).
+
+<Warning>
+
+**Review question:** Will network volume writes from sandboxes work in EU-RO-1 (AI-262) by launch? Does mounting a network volume make a sandbox's cold start longer? _Remove this box before merging._
+
+</Warning>
+
+## Mount a global volume
+
+[Create a global volume](/storage/globalvolume/overview#create-a-global-volume), then add its ID to `mounts.global` when you create the sandbox:
+
+```json
+{"mounts": {"global": [{"volumeId": "YOUR_GLOBAL_VOLUME_ID"}]}}
+```
+
+A global volume isn't tied to a data center, so it doesn't limit where the sandbox runs. Global volumes aren't a full file system, which affects common sandbox tasks such as `git init` and making scripts executable. Check the [global volume limitations](/storage/globalvolume/overview#limitations) and [request costs](/storage/globalvolume/overview#request-costs) before you use one.
+
+To mount both types, add both keys. Each gets its own path.
+
+## Move files in and out
+
+There's no file upload or download endpoint for sandboxes yet. Use one of these instead:
+
+| Method | Best for | How |
+| --- | --- | --- |
+| **S3-compatible API** | Uploading inputs and downloading results from your machine or CI | Upload to a network volume with the [S3-compatible API](/storage/s3-api), then mount the volume. A file uploaded to `data/input.csv` appears at `/workspace/data/input.csv` in the sandbox. Results the sandbox writes to the volume can be downloaded the same way. |
+| **Download from inside** | Public files, packages and repositories | Run `curl`, `pip` or `git clone` in the sandbox. Use the [commands API](/sandboxes/run-commands) for downloads that take more than a few seconds. |
+| **Send content in a command** | Small files and text | Pass the content in a command's `env` or arguments and write it to a file. Each request body is limited to 1 MiB. |
+| **Copy between mounts** | Working on fast local disk and saving results | Copy from a volume to the container disk, work there, then copy results back. |
+
+## Learn more
+
+- [Storage overview](/storage/overview)
+- [Network volumes](/storage/network-volumes)
+- [Global volumes](/storage/globalvolume/overview)
+- [S3-compatible API](/storage/s3-api)
