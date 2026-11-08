@@ -142,12 +142,31 @@ export_env_vars() {
 }
 
 # Start jupyter lab
+#
+# A Pod's :8888 proxy URL is public, so JupyterLab started with no token hands a
+# root shell and your whole workspace to anyone who has that URL. This mirrors
+# the contract the official Runpod templates use: JUPYTER_PASSWORD becomes the
+# login token, and with neither variable set JupyterLab does not start at all.
 start_jupyter() {
+    local JUPYTER_TOKEN
+    if [[ ${JUPYTER_DISABLE_AUTH:-} == "true" ]]; then
+        echo "WARNING: JUPYTER_DISABLE_AUTH=true -- starting JupyterLab with NO authentication."
+        echo "WARNING: anyone with this Pod's :8888 proxy URL gets a root shell."
+        JUPYTER_TOKEN=""
+    elif [[ ${JUPYTER_PASSWORD:-} ]]; then
+        JUPYTER_TOKEN="$JUPYTER_PASSWORD"
+    else
+        echo "JUPYTER_PASSWORD is not set; skipping JupyterLab. Redeploy with"
+        echo "\"Start Jupyter notebook\" enabled, set JUPYTER_PASSWORD yourself, or set"
+        echo "JUPYTER_DISABLE_AUTH=true to run it with no password (understand the risk)."
+        return 0
+    fi
+
     echo "Starting Jupyter Lab..."
     mkdir -p "$WORKSPACE_DIR" && \
     cd / && \
-    nohup jupyter lab --allow-root --no-browser --port=8888 --ip=* --NotebookApp.token='' --NotebookApp.password='' --FileContentsManager.delete_to_trash=False --ServerApp.terminado_settings='{"shell_command":["/bin/bash"]}' --ServerApp.allow_origin=* --ServerApp.preferred_dir="$WORKSPACE_DIR" &> /jupyter.log &
-    echo "Jupyter Lab started without a password"
+    nohup jupyter lab --allow-root --no-browser --port=8888 --ip=* --IdentityProvider.token="$JUPYTER_TOKEN" --FileContentsManager.delete_to_trash=False --ServerApp.terminado_settings='{"shell_command":["/bin/bash"]}' --ServerApp.allow_origin=* --ServerApp.preferred_dir="$WORKSPACE_DIR" &> /jupyter.log &
+    echo "Jupyter Lab started"
 }
 
 # Call Python handler if mode is serverless or both
@@ -193,6 +212,7 @@ Here are some key features of this script:
 *   `case $MODE_TO_RUN in ... esac`: This structure directs the startup based on the mode.
 *   `serverless` mode: Executes `handler.py`, which then starts the Runpod Serverless worker. `exec` replaces the shell process with the Python process.
 *   `pod` mode: Starts up the JupyterLab server for Pod development, then runs `sleep infinity` to keep the container alive so you can connect to it (e.g., via SSH or `docker exec`). You would then manually run `python /app/handler.py` inside the Pod to test your handler logic.
+*   JupyterLab authentication: set `JUPYTER_PASSWORD` on the Pod and it becomes the login token. Deploying with **Start Jupyter notebook** enabled sets it for you. With it unset, `start_jupyter` logs why and returns without starting JupyterLab — a Pod's `:8888` proxy URL is public, so an unauthenticated notebook gives anyone holding that URL a root shell and full access to your workspace. `JUPYTER_DISABLE_AUTH=true` opts out deliberately and takes precedence.
 
 ## Step 4: Create the `Dockerfile`
 
