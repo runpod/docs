@@ -4,8 +4,6 @@ sidebarTitle: "Overview"
 description: "Use the runpod Python package to define GPU functions, deploy apps, call endpoints, build Serverless workers, and manage Runpod resources from one SDK."
 ---
 
-{/* TODO(DOCS-504): runpod 2.0.0rc1 was published on 2026-10-12. Publish these pages with the stable 2.0.0 release, and drop the release-candidate install notes then. */}
-
 The `runpod` Python package is the single SDK for building on Runpod. It includes the decorator-based app SDK that was previously shipped as Flash, the `rp` command-line interface, the client for calling existing Serverless endpoints, the Serverless worker SDK, and the API wrapper for managing Pods and other resources.
 
 ```python
@@ -56,9 +54,46 @@ pip install runpod
 uv add runpod
 ```
 
-Until 2.0.0 is released, install the release candidate with `pip install runpod==2.0.0rc1`.
-
 Installing the package also installs the `rp` CLI. The same CLI is available under the longer name `runpod`.
+
+### Upgrading from version 1
+
+`runpod` 2.0 is a major version, so an unpinned `pip install -U runpod` moves you from 1.x to 2.0 and can break existing code. To stay on 1.x while you upgrade, pin the version:
+
+```bash
+pip install "runpod<2"
+```
+
+If you use the standalone `runpod-flash` package, see [Migrating from Flash](/sdk/migrate-from-flash).
+
+#### CLI
+
+The `runpod` command now runs the same CLI as `rp`, which replaces the 1.x CLI:
+
+| 1.x command | 2.0 |
+|---|---|
+| `runpod config` | Removed. Use `rp login`, or set `RUNPOD_API_KEY`. |
+| `runpod project new`, `start`, `deploy` | Removed. Use `rp flash init`, `rp flash dev`, and `rp flash deploy`. |
+| `runpod exec python` | Removed. |
+| `runpod ssh list-keys` | `rp ssh list` |
+| `runpod ssh add-key` | `rp ssh add` |
+| `runpod pod create --gpu-type TYPE` | `rp pod create NAME --gpu TYPE`, with `--image` or `--template`. The interactive prompts are gone. |
+
+`rp pod list`, `rp pod connect`, and `rp pod sync` still work. See the [CLI reference](/sdk/cli).
+
+#### API wrapper functions
+
+Functions such as `runpod.get_pods` and `runpod.create_pod` keep their names, but they now call the [REST API v2](/api-reference-v2/overview) instead of GraphQL:
+
+- **Return values follow REST API v2.** Field names in the returned dictionaries change. For example, a pod's image is `image`, not `imageName`. If your code reads fields from these results, check them against the [API reference](/api-reference-v2/pods/get-a-pod).
+- **Some arguments now raise `ValueError`**, because REST API v2 doesn't support them:
+  - `create_pod`: `support_public_ip=True`, `country_code`, `min_download`, `min_upload`, and on CPU pods, `min_memory_in_gb` and `volume_mount_path` without a network volume.
+  - `resume_pod`: `gpu_count`. Call `runpod.resume_pod(pod_id)` instead.
+  - `create_endpoint`: `idle_timeout` with `scaler_type="REQUEST_COUNT"`.
+- **`create_pod` defaults changed.** `support_public_ip` now defaults to `False`.
+- **Internal GraphQL modules are removed.** If you imported queries or mutations from `runpod.api.queries` or `runpod.api.mutations` for pods, endpoints, GPUs, templates, or users, use the wrapper functions or the REST API instead.
+
+Your credentials file and `RUNPOD_API_KEY` carry over, and `runpod.Endpoint` and the Serverless worker SDK (`runpod.serverless.start`) work the same way.
 
 ## Authenticate
 
