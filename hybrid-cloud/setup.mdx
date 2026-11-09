@@ -1,6 +1,6 @@
 ---
-title: "Set up external compute"
-sidebarTitle: "Set up external compute"
+title: "Set up private compute"
+sidebarTitle: "Set up private compute"
 description: "Connect a machine you own to Runpod Hybrid Cloud by installing the host controller, then track it through verification until it's online."
 ---
 
@@ -8,28 +8,41 @@ This guide walks you through connecting a machine you own to Runpod. After you a
 
 ## Requirements
 
-- An [organization](/organizations/orgs-overview) with external compute enabled. During alpha, the Runpod team enables this for you.
+- An [organization](/organizations/orgs-overview) with Hybrid Cloud enabled. During alpha, the Runpod team enables this for you.
 - An organization role that allows you to add compute. See [Roles](/organizations/org-roles).
 - A single machine with at least one GPU. If you need multi-node support, such as machines connected by InfiniBand or a similar fabric, [contact the Runpod team](https://www.runpod.io/hybrid-cloud) to discuss your use case.
 - SSH access to the machine, with permission to install software.
 
-Your machine must also meet these hardware and network requirements:
+### Hardware requirements
+
+Your machine must meet these hardware requirements:
 
 | Requirement | Value |
 |---|---|
-| Operating system | Ubuntu 24.04, with a kernel from 6.8 through 7.0.x. |
+| Operating system | Ubuntu 22.04 or 24.04 with a kernel from 6.8 up to (but not including) 7.0, or Ubuntu 26.04 with a kernel from 7.0 up to (but not including) 8.0. |
 | GPU drivers | None preinstalled. The Runpod installer manages GPU drivers. |
 | Root disk | At least 200 GB. |
-| Docker disk | A dedicated disk of at least 600 GB. |
+| Docker disk | A dedicated disk of at least 6 TB. You select this disk during installation, and the installer formats it. |
 | Disk throughput | At least 150 MB/s. |
-| Outbound network | All TCP, UDP 4242 (Runpod control plane), UDP 53 (DNS), UDP 123 (time sync), and ICMP echo. |
-| Inbound network | TCP 10000–60000. |
+| Clock | Time synchronization through NTP (outbound UDP 123). |
+
+### Network requirements
+
+Your machine needs the following network access:
+
+| Direction | Traffic | When it's needed |
+|---|---|---|
+| Outbound | UDP 4242 | Always. Connects your machine to the Runpod control plane. |
+| Outbound | TCP 443 and DNS (port 53) | Always. Reaches the rest of the Runpod control plane. |
+| Outbound | UDP 123 | Always. Keeps the machine's clock in sync (NTP). |
+| Outbound | UDP to any port | Only if you need Pod migration or other host-to-host connections. |
+| Inbound | TCP and UDP within ports 10000–60000 | Only if you need non-HTTP access to your Pods, such as raw TCP or UDP ports. |
 
 ## Add your compute
 
 <Steps>
   <Step title="Start the add compute flow">
-    In the Runpod console, go to **Resources → External compute** and click **Add compute**.
+    In the Runpod console, select **Hybrid cloud** in the left sidebar and click **Add compute**.
   </Step>
   <Step title="Name your compute">
     Enter a name for your compute and click **Next**.
@@ -41,19 +54,21 @@ Your machine must also meet these hardware and network requirements:
   <Step title="Install the host controller">
     Copy the install command shown in the console. Open an SSH session on your machine, paste the command, and run it.
 
+    When the installer asks, select the dedicated Docker disk. The installer formats this disk, so make sure it doesn't contain data you need.
+
     The host controller is a small program that connects your machine to Runpod over an encrypted connection that the machine opens outbound.
   </Step>
   <Step title="Configure networking and reboot">
-    In the same onboarding window that shows the install command, copy the networking command and paste it into your SSH session. The command sets your machine's public and private IP addresses. Make sure the ports listed in [Requirements](#requirements) are open, then reboot the machine.
+    In the same onboarding window that shows the install command, copy the networking command and paste it into your SSH session. The command sets your machine's public and private IP addresses. Make sure the ports listed in [Network requirements](#network-requirements) are open, then reboot the machine.
   </Step>
   <Step title="Wait for verification">
-    Once the host controller reports in, Runpod configures the machine and runs automated hardware checks. Verification usually takes several minutes, and you don't need to do anything during this step. Follow progress on the **External compute** page.
+    Once the host controller reports in, Runpod configures the machine and runs automated hardware checks. Verification usually takes several minutes, and you don't need to do anything during this step. Follow progress on the **Hybrid Cloud** page.
   </Step>
 </Steps>
 
 ## Compute statuses
 
-Each entry on the **External compute** page shows one of these statuses:
+Each entry on the **Hybrid Cloud** page shows one of these statuses:
 
 | Status | What it means |
 |---|---|
@@ -64,11 +79,22 @@ Each entry on the **External compute** page shows one of these statuses:
 | Verification failed | The hardware checks found a problem. See [Troubleshooting](/hybrid-cloud/troubleshooting). |
 | Verification timed out | Runpod couldn't connect to the machine to run the hardware checks. See [Troubleshooting](/hybrid-cloud/troubleshooting#verification-timed-out). |
 | Offline | Runpod can't reach the machine's host controller. |
-| Under maintenance | The compute is temporarily not accepting new Pods. |
+| Under maintenance | The compute is in maintenance mode and isn't accepting new workloads. |
 
 Compute you add is visible only to your organization. It isn't listed on the Runpod marketplace or made available to other customers.
 
+## Validate your setup
+
+After your compute reaches **Online**, run a quick test to confirm it works end to end:
+
+1. Deploy a Pod to your compute. See [Deploy Pods on your private compute](/hybrid-cloud/deploy).
+2. Open a terminal in the Pod and run `nvidia-smi` to confirm the GPU is visible.
+3. Run a short GPU task and check that it produces the expected output.
+4. Check the Pod logs for errors.
+
+If any step fails, see [Troubleshooting](/hybrid-cloud/troubleshooting).
+
 ## Next steps
 
-- [Deploy a Pod on your external compute](/hybrid-cloud/deploy).
+- [Deploy a Pod on your private compute](/hybrid-cloud/deploy).
 - [Fix verification problems](/hybrid-cloud/troubleshooting).
