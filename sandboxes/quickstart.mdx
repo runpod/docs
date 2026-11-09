@@ -1,0 +1,321 @@
+---
+title: "Sandboxes quickstart"
+sidebarTitle: "Quickstart"
+description: "Create a Runpod sandbox with the REST API, run quick and long-running commands inside it, read their output, and terminate it when you're done."
+---
+
+Learn how to create a sandbox, run commands in it, and clean it up using the Runpod REST API v2.
+
+<Tip>
+
+Using a coding agent? In the [Runpod console](https://console.runpod.io/sandboxes), open **Sandboxes** and select **Setup guide** to get a prompt and skill file that walk your agent through these steps. See [Use sandboxes with a coding agent](/sandboxes/overview#use-sandboxes-with-a-coding-agent).
+
+</Tip>
+
+## What you'll learn
+
+- How to create a sandbox and wait until it's ready.
+- How to run a short command and read its output with exec.
+- How to run a longer command in the background with the commands API.
+- How to terminate the sandbox so billing stops.
+
+## Requirements
+
+- A Runpod account with a positive balance.
+- A [Runpod API key](/get-started/credentials) with **full access**. Scoped API keys don't work with sandboxes yet.
+- `curl` and [`jq`](https://jqlang.org/) for the command-line examples, or Python 3 with the `requests` package for the Python examples.
+
+## Step 1: Set up your environment
+
+In your terminal, set two environment variables. Replace `YOUR_API_KEY` with your API key. Keep the quotes.
+
+```bash
+export RUNPOD_API_KEY="YOUR_API_KEY"
+export RUNPOD_API_URL="https://api.runpod.io/v2"
+```
+
+<Warning>
+
+**Review question:** Should the examples use `https://api.runpod.io/v2` or `https://v2-rest-preview.runpod.io/v2` at launch? Sandbox routes don't work on `api.runpod.io` yet. _Remove this box before merging._
+
+</Warning>
+
+The examples on this page read both variables, so you don't need to paste your key into each command. They work in bash and zsh.
+
+## Step 2: Create a sandbox
+
+Create a sandbox from the default image with a five-minute idle timeout. The `Idempotency-Key` header makes the request safe to retry if the response is lost.
+
+<CodeGroup>
+
+```bash cURL
+curl --request POST \
+  --url "$RUNPOD_API_URL/sandboxes" \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
+  --header "Content-Type: application/json" \
+  --header "Idempotency-Key: quickstart-$(date +%s)" \
+  --data '{
+    "name": "quickstart-sandbox",
+    "idleTimeoutSeconds": 300,
+    "labels": {"project": "quickstart"}
+  }'
+```
+
+```python Python
+import os
+import time
+import uuid
+import requests
+
+BASE_URL = os.environ["RUNPOD_API_URL"]
+HEADERS = {"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}"}
+
+response = requests.post(
+    f"{BASE_URL}/sandboxes",
+    headers={**HEADERS, "Idempotency-Key": str(uuid.uuid4())},
+    json={
+        "name": "quickstart-sandbox",
+        "idleTimeoutSeconds": 300,
+        "labels": {"project": "quickstart"},
+    },
+)
+response.raise_for_status()
+sandbox = response.json()
+sandbox_id = sandbox["id"]
+print(sandbox_id, sandbox["state"])
+```
+
+</CodeGroup>
+
+The response is the new sandbox, usually in the `CREATING` state. Note its `id`, which you use in every later request:
+
+```json
+{
+  "id": "7h3sbx91kq",
+  "name": "quickstart-sandbox",
+  "state": "CREATING",
+  "templateId": null,
+  "image": null,
+  "idleTimeoutSeconds": 300,
+  "maxLifetimeSeconds": 3600,
+  "egressPolicy": {"mode": "ALLOW_ALL", "allow": []},
+  "labels": {"project": "quickstart"},
+  "...": "..."
+}
+```
+
+Save the ID in your terminal. Replace `7h3sbx91kq` with your sandbox's ID:
+
+```bash
+export SANDBOX_ID="7h3sbx91kq"
+```
+
+Every field in the request is optional, so an empty body (`{}`) also works. To use your own image, add `"image": "python:3.12-slim"`. To use a Runpod template, add `"templateId"`. See [Images and templates](/sandboxes/configure#images-and-templates).
+
+## Step 3: Wait for the sandbox to be ready
+
+Check the sandbox until its `state` is `RUNNING`. This usually takes a few seconds with the default image.
+
+<CodeGroup>
+
+```bash cURL
+curl --silent \
+  --url "$RUNPOD_API_URL/sandboxes/$SANDBOX_ID" \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" | jq -r .state
+```
+
+```python Python
+while True:
+    sandbox = requests.get(f"{BASE_URL}/sandboxes/{sandbox_id}", headers=HEADERS).json()
+    if sandbox["state"] == "RUNNING":
+        break
+    if sandbox["state"] in ("FAILED", "TERMINATED"):
+        raise RuntimeError(f"Sandbox stopped: {sandbox.get('terminationReason')}")
+    time.sleep(2)
+```
+
+</CodeGroup>
+
+If the state becomes `FAILED`, the sandbox couldn't start, for example because no capacity was available. Create a new sandbox with a new `Idempotency-Key`.
+
+## Step 4: Run a quick command
+
+Use exec to run a short command and get its output in the same response. Send the command as an argv array. It isn't run through a shell, so wrap it in `["sh", "-c", "..."]` to use shell syntax such as `&&`.
+
+<CodeGroup>
+
+```bash cURL
+curl --request POST \
+  --url "$RUNPOD_API_URL/sandboxes/$SANDBOX_ID/exec" \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{"command": ["sh", "-c", "echo hello && uname -a"]}'
+```
+
+```python Python
+def run(command, retries=15):
+    # The container can take a few seconds to start after RUNNING.
+    # Retry only while the API says it's still starting.
+    for _ in range(retries):
+        response = requests.post(
+            f"{BASE_URL}/sandboxes/{sandbox_id}/exec",
+            headers=HEADERS,
+            json={"command": command},
+        )
+        if response.status_code == 409 and response.json().get("code") == "sandbox_starting":
+            time.sleep(2)
+            continue
+        response.raise_for_status()
+        return response.json()
+    raise TimeoutError("Sandbox did not accept commands in time")
+
+result = run(["sh", "-c", "echo hello && uname -a"])
+print(result["stdout"], result["exitCode"])
+```
+
+</CodeGroup>
+
+The response contains the command's output and exit code:
+
+```json
+{
+  "output": "hello\nLinux ed9369fc3ae3 4.19.0-gvisor x86_64 Linux\n",
+  "stdout": "hello\nLinux ed9369fc3ae3 4.19.0-gvisor x86_64 Linux\n",
+  "stderr": "",
+  "exitCode": 0,
+  "error": null,
+  "durationMs": 412,
+  "truncated": false
+}
+```
+
+`exitCode` is `0` when the command succeeds. `output` always contains stdout and stderr combined.
+
+If you get `409` with code `sandbox_starting`, the container is still starting. Wait a few seconds and try again.
+
+<Note>
+
+Exec is for short commands. It waits up to `timeoutSeconds` (default 30, max 50), and the limit can be lower on some sandboxes. For anything longer, use the commands API in the next step.
+
+</Note>
+
+## Step 5: Run a longer command
+
+Use the commands API for builds, tests and other work that takes longer. It returns as soon as the command starts, and you read the output separately.
+
+Start a command that prints a line every two seconds:
+
+<CodeGroup>
+
+```bash cURL
+curl --request POST \
+  --url "$RUNPOD_API_URL/sandboxes/$SANDBOX_ID/commands" \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{"command": ["sh", "-c", "for i in 1 2 3 4 5; do echo step $i; sleep 2; done"]}'
+```
+
+```python Python
+response = requests.post(
+    f"{BASE_URL}/sandboxes/{sandbox_id}/commands",
+    headers=HEADERS,
+    json={"command": ["sh", "-c", "for i in 1 2 3 4 5; do echo step $i; sleep 2; done"]},
+)
+response.raise_for_status()
+command_id = response.json()["id"]
+```
+
+</CodeGroup>
+
+The response is `202` with the command and its ID:
+
+```json
+{
+  "id": "6f1c2b8e-3d4a-4f7b-9a0e-2c5d8e1f4a7b",
+  "status": "running",
+  "exitCode": null,
+  "error": null,
+  "streamsSeparated": true,
+  "outputBytes": 0,
+  "truncated": false,
+  "cancelRequested": false
+}
+```
+
+Save the command ID. Replace the value with your command's ID:
+
+```bash
+export COMMAND_ID="6f1c2b8e-3d4a-4f7b-9a0e-2c5d8e1f4a7b"
+```
+
+Stream the output as it's written. The stream ends when the command finishes:
+
+<CodeGroup>
+
+```bash cURL
+curl --no-buffer \
+  --url "$RUNPOD_API_URL/sandboxes/$SANDBOX_ID/commands/$COMMAND_ID/logs?stream=true" \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
+  --header "Accept: text/event-stream"
+```
+
+```python Python
+import json
+
+with requests.get(
+    f"{BASE_URL}/sandboxes/{sandbox_id}/commands/{command_id}/logs",
+    headers={**HEADERS, "Accept": "text/event-stream"},
+    params={"stream": "true"},
+    stream=True,
+) as response:
+    for line in response.iter_lines(decode_unicode=True):
+        if line and line.startswith("data:"):
+            print(json.loads(line[len("data:"):]))
+```
+
+</CodeGroup>
+
+Each line arrives as a `data` event. The last event is `end`, with the command's final status:
+
+```text
+data: {"line": "step 1", "ts": "2026-11-06T14:02:11.482Z", "stream": "stdout"}
+
+data: {"line": "step 5", "ts": "2026-11-06T14:02:19.502Z", "stream": "stdout"}
+
+event: end
+data: {"status": "exited", "exitCode": 0, "outputBytes": 35, "truncated": false}
+```
+
+To check a command without streaming, send `GET $RUNPOD_API_URL/sandboxes/$SANDBOX_ID/commands/$COMMAND_ID`. Read the result from `status`: `exited` means it finished on its own, and `exitCode` holds its exit code. To stop a command early, send `DELETE` to the same URL.
+
+## Step 6: Terminate the sandbox
+
+When you're done, terminate the sandbox to stop billing:
+
+<CodeGroup>
+
+```bash cURL
+curl --request DELETE \
+  --url "$RUNPOD_API_URL/sandboxes/$SANDBOX_ID" \
+  --header "Authorization: Bearer $RUNPOD_API_KEY"
+```
+
+```python Python
+requests.delete(f"{BASE_URL}/sandboxes/{sandbox_id}", headers=HEADERS).raise_for_status()
+```
+
+</CodeGroup>
+
+A successful request returns `204` with no body. Terminating a sandbox is final: you can still read it with `GET` for a while, but you can't restart it.
+
+<Tip>
+
+In your own code, terminate the sandbox in a `finally` block or equivalent, so it's cleaned up even when a command fails. If you forget, the sandbox terminates at its idle timeout or maximum lifetime, whichever comes first.
+
+</Tip>
+
+## Next steps
+
+- Learn about [cold starts and timeouts](/sandboxes/lifecycle) and [known limitations](/sandboxes/limitations).
+- [Choose storage and move files](/sandboxes/storage) in and out of a sandbox.
+- Browse the full [Sandboxes API reference](/api-reference-v2/sandboxes/create-a-sandbox).

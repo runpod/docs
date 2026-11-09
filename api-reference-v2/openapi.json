@@ -80,6 +80,12 @@
       "levels": [
         "read"
       ]
+    },
+    "sandboxes": {
+      "levels": [
+        "read",
+        "write"
+      ]
     }
   },
   "tags": [
@@ -130,6 +136,10 @@
     {
       "name": "Audit Logs",
       "description": "Record of who did what to which resource on the account."
+    },
+    {
+      "name": "Sandboxes",
+      "description": "Fast-launching, isolated CPU sandboxes for running untrusted code."
     }
   ],
   "components": {
@@ -855,6 +865,27 @@
           "type": "string",
           "format": "date-time"
         }
+      },
+      "SandboxLabelsFilter": {
+        "name": "labels",
+        "in": "query",
+        "required": false,
+        "style": "form",
+        "explode": true,
+        "allowReserved": true,
+        "description": "only return sandboxes carrying every one of these labels, each written `key=value`; repeat the parameter for more than one. A sandbox that lacks any listed label is left out. Keys and values match exactly and case-sensitively: there is no wildcard, prefix, or key-only match. At most 20 label filters are accepted per request; a request with more is rejected with 422.",
+        "schema": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "string",
+            "pattern": "^[^=,&+#;]+=[^=,&+#;]*$"
+          }
+        },
+        "example": [
+          "project=checkout",
+          "env=staging"
+        ]
       }
     },
     "schemas": {
@@ -7187,6 +7218,1215 @@
         "examples": [
           "\"minute\";q=180;w=60, \"hour\";q=3600;w=3600, \"day\";q=43200;w=86400"
         ]
+      },
+      "CreateSandboxCommandRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "Command to run, as an argv array. It is not interpreted by a\nshell; wrap in `[\"sh\", \"-c\", \"...\"]` to use shell syntax. It is\nnot echoed back in responses, since argv often carries secrets.\n",
+            "examples": [
+              [
+                "sh",
+                "-c",
+                "pytest -x"
+              ]
+            ]
+          },
+          "timeoutSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 86400,
+            "default": 3600,
+            "description": "How long the command may run before it is stopped and reported\nas `timedOut`. The command also ends when the sandbox does.\n",
+            "examples": [
+              1800
+            ]
+          },
+          "cwd": {
+            "type": "string",
+            "pattern": "^/[^\\x00-\\x1f\\x7f-\\x9f]*$",
+            "description": "Absolute path of the directory this command runs in. It must start\nwith `/`, be at most 4096 bytes and contain no control\ncharacters (U+0000 to U+001F, U+007F to U+009F). Omitted, the command runs in the sandbox's default\nworking directory.\n",
+            "examples": [
+              "/workspace"
+            ]
+          },
+          "env": {
+            "type": "object",
+            "maxProperties": 128,
+            "propertyNames": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^[^\\x00]*$"
+            },
+            "description": "Environment variables for this command only, layered over the\nsandbox's own environment: a name set here replaces the sandbox's\nvalue for this command. Names must match\n`^[A-Za-z_][A-Za-z0-9_]*$`. At most 128 variables; a name and its\nvalue together at most 128 KiB, within the 1 MiB limit on the\nwhole request body. A value must not contain a NUL byte. Values\nare plain text: `{{ RUNPOD_SECRET_* }}`\nreferences are not resolved here and reach the command literally.\nValues are not logged and are not echoed back.\n",
+            "examples": [
+              {
+                "FOO": "bar"
+              }
+            ]
+          }
+        }
+      },
+      "CreateSandboxErrorResponse": {
+        "description": "Problem body for a failed sandbox create: the standard error fields,\nplus `sandboxId` when the sandbox could not be cleaned up.\n",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ErrorResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "sandboxId": {
+                "type": "string",
+                "description": "Set only when the create failed and the sandbox could not be\ncleaned up: it may still hold compute and incur charges.\nTerminate it with `DELETE /v2/sandboxes/{id}`.\n",
+                "examples": [
+                  "7h3sbx91kq"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "CreateSandboxRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Supply at most one of `templateId` and `image` (or its deprecated alias\n`imageName`); supplying both is a 400. Supplying neither launches the default sandbox image. Every\nother field is optional and uses an account-policy default when\nomitted, so `{}` is a valid request.\n",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f\\x7f-\\x9f]+$",
+            "description": "Human-readable name, without control characters. Generated when omitted.",
+            "examples": [
+              "my-sandbox"
+            ]
+          },
+          "templateId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Template to launch the sandbox from. Mutually exclusive with `image`. When neither is given, the default sandbox image is used."
+          },
+          "image": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x20\\x7f-\\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+$",
+            "description": "Container image to run, as on a pod, without whitespace or control characters. Mutually exclusive with `templateId`. When neither is given, the default sandbox image is used.",
+            "examples": [
+              "python:3.12-slim"
+            ]
+          },
+          "imageName": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x20\\x7f-\\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+$",
+            "deprecated": true,
+            "x-deprecated-reason": "Use image.",
+            "description": "Deprecated: use `image`. Accepted as an alias; if both are given\nthey must be equal, otherwise the request is a 400.\n"
+          },
+          "registry": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Container registry credential ID (for private images), as on pod\ncreate: one of your registry credentials (see `/v2/registries`).\nAn ID that is not one of yours is ignored and the image is pulled\nwithout credentials, so a private image cannot be pulled; a\npublic one still starts.\n",
+            "examples": [
+              "reg_abc"
+            ]
+          },
+          "cpu": {
+            "description": "CPU flavor and vCPU count to back the sandbox, as on a CPU pod.\nMemory and container disk scale with the flavor. Omitted, the\nsandbox gets flavor `cpu3c` with 2 vCPUs and 4 GB of memory. A\n`vcpuCount` must be a power of two (2, 4, 8, 16 or 32 on `cpu3c`)\nwithin the flavor's range. A count below 2 or that is not an\ninteger fails the schema and is a 422; any other count outside\nthe rule or the flavor's range is a 400. A flavor whose name\ncontains \"Shared\" accepts any count in its range.\n",
+            "default": {
+              "id": "cpu3c",
+              "vcpuCount": 2
+            },
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CreateCpuConfig"
+              }
+            ]
+          },
+          "cpuFlavorId": {
+            "type": "string",
+            "minLength": 1,
+            "deprecated": true,
+            "x-deprecated-reason": "Use cpu.id.",
+            "description": "Deprecated: use `cpu.id`. Accepted as an alias; if both are given\nthey must be equal, otherwise the request is a 400.\n",
+            "examples": [
+              "cpu3c"
+            ]
+          },
+          "vcpuCount": {
+            "type": "integer",
+            "minimum": 1,
+            "deprecated": true,
+            "x-deprecated-reason": "Use cpu.vcpuCount.",
+            "description": "Deprecated: use `cpu.vcpuCount`. Accepted as an alias; if both are\ngiven they must be equal, otherwise the request is a 400.\n",
+            "examples": [
+              2
+            ]
+          },
+          "memoryInGb": {
+            "type": "integer",
+            "minimum": 1,
+            "deprecated": true,
+            "x-deprecated-reason": "Memory is derived from the flavor and vCPU count; see cpu.memory on the response.",
+            "description": "Deprecated. Memory is derived from the flavor (`vcpuCount` times\nits RAM multiplier); a value that does not match is rejected.\nRead the result as `cpu.memory`.\n"
+          },
+          "dataCenterIds": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Preferred data centers for placement, each one that offers\nsandboxes. Omit to let placement choose; an empty array is a 422.\nWith a network volume mounted, omit it or include the volume's data\ncenter.\n",
+            "examples": [
+              [
+                "US-KS-2"
+              ]
+            ]
+          },
+          "dataCenterId": {
+            "type": "string",
+            "minLength": 1,
+            "deprecated": true,
+            "x-deprecated-reason": "Use dataCenterIds.",
+            "description": "Deprecated: use `dataCenterIds`. A single preferred data center,\nthe same as passing it as a one-element `dataCenterIds`. Supplying\nboth is a 400.\n",
+            "examples": [
+              "US-KS-2"
+            ]
+          },
+          "env": {
+            "type": "object",
+            "propertyNames": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^[^\\x00]*$"
+            },
+            "description": "Environment variables as key-value pairs"
+          },
+          "idleTimeoutSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 600,
+            "description": "Seconds of inactivity before the sandbox becomes eligible for\ntermination. Omitted uses the default, 600 (10 minutes); a value\nover the maximum, 7200 (2 hours), is clamped to it, and one under\n90 is raised to 90 (activity is recorded at most once every 30\nseconds, and 90 tolerates one lost write). The idle timeout\ncannot be turned off: every sandbox has one. See `lastActivityAt`\nfor what counts as activity. Read the response for the value\napplied.\n"
+          },
+          "maxLifetimeSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 3600,
+            "description": "Ceiling on sandbox lifetime in seconds, past which the sandbox is\neligible for termination. Omitted uses the default, 3600 (1\nhour); a value over the maximum, 86400 (24 hours), is clamped to\nit.\n"
+          },
+          "labels": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Key-value labels for organizing and filtering sandboxes."
+          },
+          "egressMode": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SandboxEgressMode"
+              }
+            ],
+            "description": "Egress is open by default; restriction is opt-in. With neither\n`egressMode` nor `egressAllowlist`, the sandbox gets `ALLOW_ALL`.\n`DENY_ALL` blocks all outbound traffic. `ALLOW_LIST` requires a\nnon-empty `egressAllowlist`; `DENY_ALL` and `ALLOW_ALL` accept an\nomitted or empty one and reject a non-empty one.\nWhile restricted egress is not enabled for the account, a mode\nother than `ALLOW_ALL` is a 400.\n"
+          },
+          "egressAllowlist": {
+            "type": "array",
+            "maxItems": 20,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 253
+            },
+            "description": "Hostnames the sandbox may reach. Without `egressMode`, a non-empty\nlist means `ALLOW_LIST`, and an empty list is a 400: send\n`egressMode: DENY_ALL` to block all egress. Each entry is a\nlowercase public hostname matched exactly (`github.com` does not\nallow `api.github.com`); IP literals, wildcards, schemes, and\ninternal names such as `.local` or `.internal` are rejected.\nAt most 20 hostnames, each listed once; a duplicate is a 422. Stored but not yet enforced by the host.\n",
+            "examples": [
+              [
+                "pypi.org",
+                "files.pythonhosted.org"
+              ]
+            ]
+          },
+          "ports": {
+            "type": "array",
+            "maxItems": 15,
+            "items": {
+              "$ref": "#/components/schemas/SandboxPortInput"
+            },
+            "description": "Ports to expose, at most 15, each a `port` and a `protocol` only\n(`url`, `ip` and `publicPort` are read-only and a 422 here).\nA port number may appear once per transport: `http` binds the\ncontainer's TCP port, so `8888`/`http` and `8888`/`tcp` collide\n(a 400), while `53`/`tcp` and `53`/`udp` do not. `tcp` and `udp`\nports are a 400 while public ports are not enabled for sandboxes,\nand a template's `tcp` and `udp` ports are then dropped. An `http`\nport is reachable at its `ports[].url`; a `tcp` or `udp` port at\nits `ports[].ip`:`ports[].publicPort`.\n",
+            "examples": [
+              [
+                {
+                  "port": 3000,
+                  "protocol": "http"
+                }
+              ]
+            ]
+          },
+          "mounts": {
+            "$ref": "#/components/schemas/SandboxMountsInput"
+          },
+          "cmd": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[^\\x00]*$"
+            },
+            "description": "Container CMD in exec form, as on pod create. When the image\ndefines an ENTRYPOINT, this is the argument list passed to it.\n\nOmit `cmd` and `entrypoint` to keep the template's command, or,\nfor an image, a keepalive process that holds the sandbox open for\nexec. A command you supply becomes the container's main process:\nwhen it exits, the container exits and exec stops working, so run\nsomething long-lived.\n",
+            "examples": [
+              [
+                "python",
+                "-m",
+                "http.server",
+                "8080"
+              ]
+            ]
+          },
+          "entrypoint": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[^\\x00]*$"
+            },
+            "description": "Container ENTRYPOINT in exec form, overriding the image's own, as on pod create.",
+            "examples": [
+              [
+                "/bin/sh",
+                "-c"
+              ]
+            ]
+          },
+          "disk": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Container disk in GB (ephemeral). Defaults to 10. At most\n`vcpuCount` times the flavor's per-vCPU disk limit, the same\nlimit CPU pods have; a larger value is a 400.\n",
+            "examples": [
+              20
+            ]
+          },
+          "startSsh": {
+            "type": "boolean",
+            "description": "Create-time flag telling the provisioner to set up SSH access, as\non pod create: injects a `PUBLIC_KEY` environment variable\ncarrying your account's registered SSH public keys, unless the\nrequest already sets one. **Requires registered keys** (`PUT\n/v2/account/ssh-keys`) — with none registered the flag does\nnothing and the sandbox has no SSH access. Only images that honor\nthe convention start sshd from it (all Runpod official images\ndo). Connect using the sandbox's `ssh` block; the `ssh.direct`\nvariant additionally needs a `22/tcp` entry in `ports`.\n\nDefaults to the template's setting, else false. Not part of the\nsandbox's readable config — never returned by GET.\n",
+            "examples": [
+              true
+            ]
+          }
+        }
+      },
+      "ExecSandboxRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "Command to run, as an argv array. It is not interpreted by a\nshell; wrap in `[\"sh\", \"-c\", \"...\"]` to use shell syntax.\n",
+            "examples": [
+              [
+                "sh",
+                "-c",
+                "echo hello"
+              ]
+            ]
+          },
+          "timeoutSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 30,
+            "description": "How long the command may run before it is killed. The request is\nsynchronous, so the accepted range stays below the load balancer's\nidle timeout. The value you send is not always the time you get.\nOn some sandboxes the limit is 4 seconds whatever is asked, and\non some others it is shorter than the value sent. Elsewhere the\nlimit is the value you send, but the whole request is bounded at\nabout 54 seconds and time spent starting the command counts\nagainst that, so a slow first start leaves less.\nA command still running at the limit is killed, `error` is set and\n`exitCode` is `null`; `output` holds what it wrote before it stopped.\nDo not rely on this field to allow long-running commands: run them\nwith `background: true` instead.\n",
+            "examples": [
+              30
+            ]
+          },
+          "background": {
+            "type": "boolean",
+            "default": false,
+            "description": "Start the command detached and return as soon as it has started,\ninstead of waiting for it to finish. It is not subject to the\ntime limit above and keeps running after the response. The\nresponse carries no result of the command itself: `output`,\n`stdout` and `stderr` are empty and `exitCode` is 0, which only\nmeans the command started, not that it succeeded. The command's\noutput is not captured and does not appear in the sandbox log\nstream, so redirect it to a file inside the sandbox (for example\n`> /tmp/job.log 2>&1`) and read the file with a later exec call.\n",
+            "examples": [
+              false
+            ]
+          },
+          "cwd": {
+            "type": "string",
+            "pattern": "^/[^\\x00-\\x1f\\x7f-\\x9f]*$",
+            "description": "Absolute path of the directory this command runs in. It must start\nwith `/`, be at most 4096 bytes and contain no control\ncharacters (U+0000 to U+001F, U+007F to U+009F). Omitted, the command runs in the sandbox's default\nworking directory. Not available on every sandbox yet, and not\nwith `background: true`; where it is not available, a request\nwith `cwd` is a `422` and nothing runs.\n",
+            "examples": [
+              "/workspace"
+            ]
+          },
+          "env": {
+            "type": "object",
+            "maxProperties": 128,
+            "propertyNames": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^[^\\x00]*$"
+            },
+            "description": "Environment variables for this command only, layered over the\nsandbox's own environment: a name set here replaces the sandbox's\nvalue for this command. Names must match\n`^[A-Za-z_][A-Za-z0-9_]*$`. At most 128 variables; a name and its\nvalue together at most 128 KiB, within the 1 MiB limit on the\nwhole request body. A value must not contain a NUL byte. Values\nare plain text: `{{ RUNPOD_SECRET_* }}`\nreferences are not resolved here and reach the command literally.\nValues are not logged and are not echoed back. Not available on\nevery sandbox yet, and not with `background: true`; where it is\nnot available, a request with `env` is a `422` and nothing runs.\n",
+            "examples": [
+              {
+                "FOO": "bar"
+              }
+            ]
+          }
+        }
+      },
+      "ExecSandboxResponse": {
+        "type": "object",
+        "required": [
+          "output",
+          "stdout",
+          "stderr",
+          "exitCode",
+          "durationMs",
+          "truncated"
+        ],
+        "properties": {
+          "output": {
+            "type": "string",
+            "description": "Combined stdout and stderr of the command."
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Failure reported by the host — the command exited non-zero or ran\npast the per-command execution cap and was killed. Null when the\ncommand succeeded. `output` still carries whatever the command\nwrote before it stopped.\n"
+          },
+          "stdout": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The command's standard output alone. Null when the host does not\nreport the streams separately; `output` is always populated.\n"
+          },
+          "stderr": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The command's standard error alone. Null when the host does not\nreport the streams separately.\n"
+          },
+          "exitCode": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The command's exit status: 0 on success. Null when the command did\nnot exit on its own (for example it was killed at the time limit).\n",
+            "examples": [
+              0
+            ]
+          },
+          "durationMs": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Wall-clock time the exec call took, in milliseconds.",
+            "examples": [
+              42
+            ]
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "True when the command wrote more than the host's output cap and\nthe excess was dropped, so `output`, `stdout` and `stderr` are\nincomplete. The cap is the host's and counts some per-line\noverhead, so many short lines reach it with less output than the\ncap's size. Always false on hosts that do not report it. Redirect\nlarge output to a file inside the sandbox instead.\n",
+            "examples": [
+              false
+            ]
+          }
+        }
+      },
+      "ExtendSandboxRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "maxLifetimeSeconds"
+        ],
+        "properties": {
+          "maxLifetimeSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "description": "New total lifetime in seconds, measured from the sandbox's\n`createdAt` (the same meaning as on create), so `expiresAt`\nbecomes `createdAt + maxLifetimeSeconds`. Must be at least the\ncurrent `maxLifetimeSeconds` and at most the account policy's\nmaximum; anything else is a `400`, never clamped. Repeating the\ncurrent value succeeds, so a retried request is safe.\n",
+            "examples": [
+              7200
+            ]
+          }
+        }
+      },
+      "ListSandboxesResponse": {
+        "type": "object",
+        "required": [
+          "sandboxes"
+        ],
+        "properties": {
+          "sandboxes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Sandbox"
+            }
+          }
+        }
+      },
+      "Sandbox": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "state",
+          "idleTimeoutSeconds",
+          "maxLifetimeSeconds",
+          "lastActivityAt",
+          "idleExpiresAt",
+          "expiresAt",
+          "egressPolicy",
+          "createdAt",
+          "updatedAt",
+          "templateId",
+          "image",
+          "imageName",
+          "cpuFlavorId",
+          "dataCenterId",
+          "env",
+          "registry",
+          "startedAt",
+          "terminationReason",
+          "terminatedAt",
+          "ports",
+          "podId"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique sandbox identifier",
+            "examples": [
+              "7h3sbx91kq"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name (not required to be unique)",
+            "examples": [
+              "my-sandbox"
+            ]
+          },
+          "state": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SandboxState"
+              }
+            ],
+            "description": "Current lifecycle state."
+          },
+          "podId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "deprecated": true,
+            "x-deprecated-reason": "Will be replaced by the sandbox ID once the proxy and the other pod-keyed services address sandboxes directly.",
+            "description": "Deprecated: will be replaced by the sandbox ID and removed. Exposed\nfor the internal alpha only, so users can find the sandbox's proxy\nURL; do not build on it. ID of the pod backing the sandbox. Null\nwhile the sandbox is `CREATING` and after it is `TERMINATED`.\n",
+            "examples": [
+              "hwz61q83yllh8l"
+            ]
+          },
+          "templateId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Template the sandbox was created from, if any."
+          },
+          "image": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Container image the sandbox runs, if created from an image. Same as a pod's `image`."
+          },
+          "imageName": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "deprecated": true,
+            "x-deprecated-reason": "Use image.",
+            "description": "Deprecated: use `image`. Same value."
+          },
+          "cpuFlavorId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "deprecated": true,
+            "x-deprecated-reason": "Use cpu.id.",
+            "description": "Deprecated: use `cpu.id`. CPU flavor backing the sandbox.",
+            "examples": [
+              "cpu3c"
+            ]
+          },
+          "dataCenterId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Data center the sandbox was placed in. Null until it is placed.",
+            "examples": [
+              "US-KS-2"
+            ]
+          },
+          "env": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Environment variables as key-value pairs, as on a pod. Secret\nreferences are returned as written, not resolved. Empty when none\nare set; null when the backing pod could not be read.\n",
+            "examples": [
+              {
+                "LOG_LEVEL": "debug"
+              }
+            ]
+          },
+          "registry": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Container registry credential ID the image is pulled with, as on a pod.",
+            "examples": [
+              null
+            ]
+          },
+          "startedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When the sandbox's container was last started, as on a pod: set\nwhen compute is assigned, a few seconds before the process is up.\nNull without compute (while `CREATING` and after `TERMINATED`).\n"
+          },
+          "ssh": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PodSsh"
+              }
+            ],
+            "description": "SSH connection details, the same block a pod reports: via the\nRunpod proxy, or directly to the sandbox's published `22/tcp`\nport. SSH works only for a sandbox created with `startSsh` (or a\ntemplate that sets it). Absent when no connection details are\navailable for the sandbox.\n"
+          },
+          "terminationReason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the sandbox was terminated. Null while the sandbox is alive."
+          },
+          "idleTimeoutSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 7200,
+            "description": "Configured seconds of inactivity after which the sandbox becomes\neligible for termination. 600 when the create request omitted\nit. It cannot be turned off.\n"
+          },
+          "maxLifetimeSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 86400,
+            "description": "Configured ceiling on total sandbox lifetime in seconds, past\nwhich the sandbox becomes eligible for termination. 3600 when\nthe create request omitted it.\n"
+          },
+          "lastActivityAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp of the most recent recorded activity. An exec the host\naccepted (whatever the command's exit status) and an open log\nstream count as activity; a request the host refused does not.\nRecorded at most once every 30 seconds. Nothing else refreshes\nthe idle clock: a process already running inside the sandbox, an\nSSH session, and traffic to the sandbox's ports do not count.\n"
+          },
+          "idleExpiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Deadline after which the sandbox is eligible for idle termination if no further activity occurs."
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Deadline after which the sandbox is eligible for termination for reaching its maximum lifetime."
+          },
+          "labels": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "User-supplied key-value labels."
+          },
+          "egressPolicy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SandboxEgressPolicy"
+              }
+            ],
+            "description": "Outbound network policy the sandbox was created with."
+          },
+          "cmd": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Container CMD in exec form, as stored on the backing compute. A\nsandbox created from an image without a command reports the\nkeepalive `[\"tail\", \"-f\", \"/dev/null\"]`. Absent when `compute` is.\n"
+          },
+          "entrypoint": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Container ENTRYPOINT in exec form, as stored on the backing compute. Absent when `compute` is."
+          },
+          "cpu": {
+            "description": "CPU flavor, vCPU count and memory backing the sandbox, the same\nobject a CPU pod returns. Absent while the sandbox is `CREATING`\nand after it is `TERMINATED`.\n",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CpuConfig"
+              }
+            ]
+          },
+          "compute": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SandboxCompute"
+              }
+            ],
+            "description": "The compute currently backing the sandbox. Absent while the sandbox\nis `CREATING` and after it is `TERMINATED`. `vcpuCount` and\n`memoryInGb` repeat `cpu.vcpuCount` and `cpu.memory`.\n"
+          },
+          "mounts": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SandboxMounts"
+              }
+            ],
+            "description": "Volumes mounted into the sandbox, with their resolved paths. Absent\nwhile the sandbox is `CREATING` and after it is `TERMINATED`.\n"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "terminatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When the sandbox was terminated. Null while the sandbox is alive."
+          },
+          "ports": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/SandboxPort"
+            },
+            "description": "HTTP, TCP and UDP ports exposed on the sandbox. Null when the\nsandbox's pod could not be read; [] when it exposes no ports.\n"
+          },
+          "runtime": {
+            "description": "Live uptime and container CPU and memory use, the same object a\npod returns, without `gpus` or `ports` (see `ports`). The host\nreports it about every 30 seconds, so it can be that old. `cpu` is\na percentage of the sandbox's vCPUs combined. Returned by\n`GET /v2/sandboxes/{id}` only. Absent while the host has not\nreported the sandbox yet and when the host could not be reached.\nIt is not guaranteed after the sandbox is `TERMINATED`: a\nterminated sandbox can still carry the last snapshot while its\npod is being torn down, so do not read `runtime` as a sign that\nthe sandbox is alive; use `state`. `uptime` is the host's value\nas is: for a container that has exited it is negative, minus the\nseconds since the container exited.\n",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PodRuntime"
+              }
+            ]
+          }
+        }
+      },
+      "SandboxCommand": {
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "exitCode",
+          "error",
+          "streamsSeparated",
+          "outputBytes",
+          "truncated",
+          "cancelRequested"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Command identifier, scoped to its sandbox.",
+            "examples": [
+              "6f1c2b8e-3d4a-4f7b-9a0e-2c5d8e1f4a7b"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/SandboxCommandStatus"
+          },
+          "exitCode": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The command's exit code when `status` is `exited`; null otherwise.",
+            "examples": [
+              0
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the command failed to start or did not finish normally, if known."
+          },
+          "streamsSeparated": {
+            "type": "boolean",
+            "description": "Whether output lines are tagged as `stdout` or `stderr`. When\nfalse, the logs `streams` filter is unavailable.\n"
+          },
+          "outputBytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Bytes of output captured so far."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "True once output passed 32 MiB. Further output is dropped; the\ncommand keeps running.\n"
+          },
+          "cancelRequested": {
+            "type": "boolean",
+            "description": "True once a cancel has been requested."
+          }
+        }
+      },
+      "SandboxCommandLogs": {
+        "type": "object",
+        "required": [
+          "offset",
+          "nextOffset",
+          "output",
+          "eof"
+        ],
+        "properties": {
+          "offset": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Byte offset of the first byte of `output`."
+          },
+          "nextOffset": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Offset to pass as `offset` to continue after this read."
+          },
+          "output": {
+            "type": "string",
+            "description": "Output read. At most 256 KiB per call when `tail` is not set;\nwith `tail` (up to 2 MiB) a snapshot can be larger.\n"
+          },
+          "eof": {
+            "type": "boolean",
+            "description": "True when `output` reaches the end of what has been captured so\nfar. The command has finished only when `eof` is true and its\nstatus is terminal.\n"
+          }
+        }
+      },
+      "SandboxCommandStatus": {
+        "type": "string",
+        "enum": [
+          "running",
+          "exited",
+          "cancelled",
+          "timedOut",
+          "failed",
+          "unknown"
+        ],
+        "description": "`running` is the only non-terminal status.\n- `exited`: the command ended on its own; `exitCode` holds its code.\n- `cancelled`: stopped by `DELETE`.\n- `timedOut`: stopped at `timeoutSeconds`.\n- `failed`: never started; `error` says why.\n- `unknown`: the container went away while it ran, for example\n  because the sandbox stopped.\nRead the outcome from `status`, not `exitCode`.\n"
+      },
+      "SandboxCompute": {
+        "type": "object",
+        "required": [
+          "vcpuCount",
+          "memoryInGb",
+          "containerDiskInGb",
+          "costPerHr"
+        ],
+        "description": "The compute currently backing a sandbox.",
+        "properties": {
+          "vcpuCount": {
+            "type": "number",
+            "examples": [
+              2
+            ]
+          },
+          "memoryInGb": {
+            "type": "number",
+            "examples": [
+              4
+            ]
+          },
+          "containerDiskInGb": {
+            "type": "integer",
+            "examples": [
+              10
+            ]
+          },
+          "costPerHr": {
+            "type": "number",
+            "description": "Current cost per hour in USD.",
+            "examples": [
+              0.026
+            ]
+          }
+        }
+      },
+      "SandboxConflictCode": {
+        "type": "string",
+        "x-enum-varnames": [
+          "SandboxConflictCodeSandboxStarting",
+          "SandboxConflictCodeContainerExited",
+          "SandboxConflictCodeSandboxTerminated",
+          "SandboxConflictCodeCommandLimitReached"
+        ],
+        "enum": [
+          "sandbox_starting",
+          "container_exited",
+          "sandbox_terminated",
+          "command_limit_reached"
+        ],
+        "description": "Why the sandbox cannot serve the request, and whether retrying helps:\n- `sandbox_starting`: its container has not started yet. Retry in a\n  few seconds.\n- `container_exited`: its container has exited or been removed.\n  Retrying does not help; create a new sandbox.\n- `sandbox_terminated`: the sandbox is `TERMINATED` or `FAILED`, or\n  its `expiresAt` has passed even though it still reports `RUNNING`.\n  Retrying does not help.\n- `command_limit_reached`: only on starting a command. The sandbox\n  is already running 8 commands, the most it runs at once. Retry\n  once one finishes or after cancelling one.\n"
+      },
+      "SandboxConflictResponse": {
+        "description": "Problem body for a sandbox that cannot serve the request in its\ncurrent state: the standard error fields, plus a machine-readable\n`code` that says whether to retry. Branch on `code`, not on `detail`,\nwhich is prose and may change.\n",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ErrorResponse"
+          },
+          {
+            "type": "object",
+            "required": [
+              "code"
+            ],
+            "properties": {
+              "code": {
+                "$ref": "#/components/schemas/SandboxConflictCode"
+              }
+            }
+          }
+        ]
+      },
+      "SandboxEgressMode": {
+        "type": "string",
+        "x-enum-varnames": [
+          "SandboxEgressModeDenyAll",
+          "SandboxEgressModeAllowList",
+          "SandboxEgressModeAllowAll"
+        ],
+        "enum": [
+          "DENY_ALL",
+          "ALLOW_LIST",
+          "ALLOW_ALL"
+        ],
+        "description": "Outbound network posture of a sandbox. `ALLOW_ALL` is the default:\negress is open unless the create request restricts it.\n"
+      },
+      "SandboxEgressPolicy": {
+        "type": "object",
+        "required": [
+          "mode",
+          "allow"
+        ],
+        "description": "The sandbox's outbound network policy. Whatever the mode, loopback,\nprivate, link-local, and cloud metadata destinations are blocked once\nthe host enforces egress. Stored but not yet enforced by the host.\n",
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/SandboxEgressPolicyMode"
+          },
+          "allow": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Hostnames reachable when `mode` is `ALLOW_LIST`; empty otherwise.\nEach entry matches that exact hostname only, not its subdomains.\n",
+            "examples": [
+              [
+                "pypi.org",
+                "files.pythonhosted.org"
+              ]
+            ]
+          }
+        }
+      },
+      "SandboxEgressPolicyMode": {
+        "type": "string",
+        "x-enum-varnames": [
+          "SandboxEgressPolicyModeDenyAll",
+          "SandboxEgressPolicyModeAllowList",
+          "SandboxEgressPolicyModeAllowAll",
+          "SandboxEgressPolicyModeUnknown"
+        ],
+        "enum": [
+          "DENY_ALL",
+          "ALLOW_LIST",
+          "ALLOW_ALL",
+          "UNKNOWN"
+        ],
+        "description": "The egress mode a sandbox reports. The create modes, plus `UNKNOWN`:\nreturned when this API version does not recognise the sandbox's mode.\nTreat `UNKNOWN` as unrestricted until the API is upgraded.\n"
+      },
+      "SandboxGlobalMountInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "volumeId"
+        ],
+        "description": "Reference to a global volume (see `/v2/global-volumes`). Data\npersists after the sandbox ends and is shared by every sandbox that\nmounts the volume. See `SandboxMountsInput` for its limits.\n",
+        "properties": {
+          "volumeId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "ID of an existing global volume, as returned by `/v2/global-volumes`.",
+            "examples": [
+              "gsb_abc"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Absolute mount path inside the sandbox. Defaults to `/workspace-global`.",
+            "examples": [
+              "/workspace-global"
+            ]
+          }
+        }
+      },
+      "SandboxMount": {
+        "type": "object",
+        "required": [
+          "volumeId",
+          "path"
+        ],
+        "properties": {
+          "volumeId": {
+            "type": "string",
+            "examples": [
+              "vol_xyz"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "description": "Absolute mount path inside the sandbox.",
+            "examples": [
+              "/workspace"
+            ]
+          }
+        }
+      },
+      "SandboxMounts": {
+        "type": "object",
+        "required": [
+          "network",
+          "global"
+        ],
+        "description": "Volumes mounted into a sandbox.",
+        "properties": {
+          "network": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SandboxMount"
+            }
+          },
+          "global": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SandboxMount"
+            }
+          }
+        }
+      },
+      "SandboxMountsInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Volumes to mount into the sandbox: at most one network volume and at\nmost one global volume. A network volume lives in one data center, so\nthe sandbox is placed there: `dataCenterIds` may be omitted, must\ninclude the volume's if given, and the volume's data center must offer\nsandboxes. A global volume is not tied to a data center. An explicit empty\n`network` or `global` list is rejected with 400: omit the field instead.\n\nCreate a global volume with `POST /v2/global-volumes` or find one with\n`GET /v2/global-volumes`, and a network volume with `POST\n/v2/network-volumes` or `GET /v2/network-volumes`. Each mount item\nnames the volume by `volumeId` (not `id`; an unknown key is a 422):\n\n```json\n{\"mounts\": {\"global\": [{\"volumeId\": \"gsb_abc\", \"path\": \"/workspace-global\"}]}}\n```\n\nData on a volume outlives the sandbox. A global volume is shared by\nevery sandbox that mounts it, so what one sandbox writes is visible to\nthe others.\n\nKnown limits. On a network volume, a process that does not run as root\ncannot create files: use an image that runs as root, or a global\nvolume. On a global volume, `chmod` and `utime` are rejected, files\ncannot be made executable, `git init` fails, and writing many small\nfiles is much slower than on the container disk. Keep scripts and\nrepositories on the container disk and use the volume for data.\n",
+        "properties": {
+          "network": {
+            "type": "array",
+            "maxItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/SandboxNetworkMountInput"
+            }
+          },
+          "global": {
+            "type": "array",
+            "maxItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/SandboxGlobalMountInput"
+            }
+          }
+        }
+      },
+      "SandboxNetworkMountInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "volumeId"
+        ],
+        "description": "Reference to a network volume (see `/v2/network-volumes`), which must\nbe in a data center the sandbox can be placed in. A process that does\nnot run as root cannot create files on it; see `SandboxMountsInput`.\n",
+        "properties": {
+          "volumeId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "ID of an existing network volume.",
+            "examples": [
+              "vol_xyz"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Absolute mount path inside the sandbox. Defaults to the template's\nvolume mount path, then `/workspace`.\n",
+            "examples": [
+              "/workspace"
+            ]
+          }
+        }
+      },
+      "SandboxPort": {
+        "type": "object",
+        "required": [
+          "port",
+          "protocol"
+        ],
+        "properties": {
+          "port": {
+            "type": "integer",
+            "description": "The exposed container port, as requested on create.",
+            "examples": [
+              3000
+            ]
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "http",
+              "tcp",
+              "udp"
+            ],
+            "description": "How the port is reached: `http` through the proxy at `url`, `tcp`\nand `udp` directly at `ip`:`publicPort`, as on a pod.\n",
+            "examples": [
+              "http"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "description": "HTTP ports only (absent for `tcp` and `udp`): URL that proxies to\nthe exposed port. The hostname is opaque: do not parse it or\nassume its shape, it may change.\n",
+            "examples": [
+              "https://abc123-3000.proxy.runpod.net"
+            ]
+          },
+          "ip": {
+            "type": "string",
+            "description": "TCP and UDP ports only: the public IP the port is mapped on.\nAbsent until the sandbox is running with a public mapping.\n",
+            "examples": [
+              "203.0.113.7"
+            ]
+          },
+          "publicPort": {
+            "type": "integer",
+            "description": "TCP and UDP ports only: the public port mapped to this port,\nalongside `ip`.\n",
+            "examples": [
+              40022
+            ]
+          }
+        }
+      },
+      "SandboxPortInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "port",
+          "protocol"
+        ],
+        "properties": {
+          "port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535,
+            "description": "The container port to expose.",
+            "examples": [
+              3000
+            ]
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "http",
+              "tcp",
+              "udp"
+            ],
+            "description": "How the port is reached: `http` through the proxy, `tcp` and `udp`\ndirectly on a public IP and port, as on a pod.\n",
+            "examples": [
+              "http"
+            ]
+          }
+        }
+      },
+      "SandboxState": {
+        "type": "string",
+        "x-enum-varnames": [
+          "SandboxStateCreating",
+          "SandboxStateRunning",
+          "SandboxStateTerminated",
+          "SandboxStateFailed"
+        ],
+        "enum": [
+          "CREATING",
+          "RUNNING",
+          "TERMINATED",
+          "FAILED"
+        ],
+        "description": "Lifecycle state of a sandbox."
+      },
+      "UpdateSandboxRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "description": "Changes a running sandbox's timeouts. Supply either field or both;\nan omitted field, and its deadline, is left untouched. Values may\nraise or lower a timeout; a value over the account policy's\nmaximum is a `400`, never clamped (the same as\n`POST /v2/sandboxes/{id}/extend`). Changing a timeout does not\ncount as activity.\n",
+        "properties": {
+          "idleTimeoutSeconds": {
+            "type": "integer",
+            "minimum": 90,
+            "maximum": 2147483647,
+            "description": "Seconds of inactivity before the sandbox becomes eligible for\ntermination, measured from `lastActivityAt`, so `idleExpiresAt`\nbecomes `lastActivityAt + idleTimeoutSeconds`. At least 90\n(activity is recorded at most once every 30 seconds, and 90\ntolerates one lost write); unlike create, a lower value is\nrejected with a `422`, not raised. A value\nthat puts that deadline in the past, or exceeds the account\npolicy's maximum, is a `400`.\n",
+            "examples": [
+              1800
+            ]
+          },
+          "maxLifetimeSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "description": "Total lifetime in seconds, measured from `createdAt`, so\n`expiresAt` becomes `createdAt + maxLifetimeSeconds`. A value\nthat puts that deadline in the past, or exceeds the account\npolicy's maximum, is a `400`; to end the sandbox, terminate it.\n",
+            "examples": [
+              7200
+            ]
+          }
+        }
       }
     }
   },
@@ -17813,6 +19053,1530 @@
                 "$ref": "#/components/headers/RateLimit-Policy"
               }
             },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/sandboxes": {
+      "get": {
+        "operationId": "listSandboxes",
+        "x-runpod-scope": "sandboxes:read",
+        "x-runpod-strict-query": true,
+        "summary": "List sandboxes",
+        "x-mint": {
+          "metadata": {
+            "description": "List the authenticated user's live Runpod Sandboxes, with filters for state and an option to include terminated sandboxes."
+          }
+        },
+        "description": "Returns the authenticated user's live sandboxes. Terminated sandboxes\nare excluded unless `state=TERMINATED` asks for them; a terminated\nsandbox stays readable by ID either way. Filters combine with AND.\nA query parameter other than `state` or `labels` is rejected with\n422 rather than ignored, so a misspelled or differently encoded\nfilter (`label=`, `labels[]=`) never returns the unfiltered list.\nA query string that cannot be decoded (invalid percent-encoding or\nan unescaped `;`) is also rejected with 422, whichever parameter it\nis in.\n",
+        "tags": [
+          "Sandboxes"
+        ],
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SandboxState"
+            },
+            "description": "Only return sandboxes in this lifecycle state."
+          },
+          {
+            "$ref": "#/components/parameters/SandboxLabelsFilter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListSandboxesResponse"
+                },
+                "examples": {
+                  "sandboxes": {
+                    "summary": "Successful response",
+                    "value": {
+                      "sandboxes": [
+                        {
+                          "id": "7h3sbx91kq",
+                          "name": "my-sandbox",
+                          "state": "RUNNING",
+                          "templateId": null,
+                          "image": "python:3.12-slim",
+                          "imageName": "python:3.12-slim",
+                          "cpuFlavorId": "cpu3c",
+                          "dataCenterId": "US-KS-2",
+                          "env": {},
+                          "registry": null,
+                          "startedAt": "2026-08-21T11:30:09Z",
+                          "ssh": {
+                            "proxy": {
+                              "host": "ssh.runpod.io",
+                              "port": 22,
+                              "username": "k2m4n6p8q9-64411eb2",
+                              "command": "ssh k2m4n6p8q9-64411eb2@ssh.runpod.io"
+                            },
+                            "direct": null
+                          },
+                          "terminationReason": null,
+                          "idleTimeoutSeconds": 300,
+                          "maxLifetimeSeconds": 86400,
+                          "lastActivityAt": "2026-08-21T12:00:00Z",
+                          "idleExpiresAt": "2026-08-21T12:05:00Z",
+                          "expiresAt": "2026-08-22T12:00:00Z",
+                          "egressPolicy": {
+                            "mode": "ALLOW_ALL",
+                            "allow": []
+                          },
+                          "cpu": {
+                            "id": "cpu3c",
+                            "vcpuCount": 2,
+                            "memory": 4
+                          },
+                          "podId": "hwz61q83yllh8l",
+                          "compute": {
+                            "vcpuCount": 2,
+                            "memoryInGb": 4,
+                            "containerDiskInGb": 10,
+                            "costPerHr": 0.026
+                          },
+                          "createdAt": "2026-08-21T11:30:00Z",
+                          "updatedAt": "2026-08-21T12:00:00Z",
+                          "terminatedAt": null,
+                          "ports": []
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createSandbox",
+        "x-runpod-scope": "sandboxes:write",
+        "summary": "Create a sandbox",
+        "x-mint": {
+          "metadata": {
+            "description": "Create a Runpod Sandbox, an isolated fast-starting CPU environment for running untrusted code, billed per second while it runs."
+          }
+        },
+        "description": "Launches a new sandbox — an isolated, fast-starting CPU environment\nfor running untrusted code. Supply at most one of `templateId` and\n`image`; when neither is given the sandbox runs the default\nimage. Every other field is optional and omitted fields use\naccount-policy defaults, so an empty JSON object (`{}`) is a valid\nrequest. The sandbox is billed per second for as\nlong as it runs.\n\n`idleExpiresAt` and `expiresAt` record the deadlines the sandbox is\nsubject to. Terminate explicitly when finished, including on error\npaths, rather than relying on a deadline to stop billing.\n\nReturns `201` with the sandbox, typically still in the `CREATING`\nstate (a replay of a create that succeeded, with the same\n`Idempotency-Key`, also answers `201` with the original sandbox); poll\n`GET /v2/sandboxes/{id}` until it is `RUNNING`.\n",
+        "tags": [
+          "Sandboxes"
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "description": "Makes the create safe to retry after a lost response. Repeating the\nrequest with the same key and the same body returns the sandbox the\nfirst request created instead of creating another; the same key\nwith a different body is a 400. A key whose first create failed\n(for example no capacity) is spent: every retry with it replays\nthat failure as a `409`, so retry a failed create with a new key. Keys are unique per account and compared without\nregard to case: a key that differs from an earlier one only in\ncase is a 400, and replay needs the exact original key. Leading\nand trailing whitespace is not part of the key (HTTP strips it\nfrom header values).\n",
+            "example": "create-7f3c9a"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSandboxRequest"
+              },
+              "examples": {
+                "defaultImage": {
+                  "summary": "Empty JSON object ({}), runs the default image",
+                  "value": {}
+                },
+                "sandbox": {
+                  "summary": "Sandbox with defaults",
+                  "value": {
+                    "name": "my-sandbox",
+                    "image": "python:3.12-slim",
+                    "idleTimeoutSeconds": 300
+                  }
+                },
+                "egressAllowList": {
+                  "summary": "Sandbox that can reach only PyPI",
+                  "value": {
+                    "name": "my-sandbox",
+                    "image": "python:3.12-slim",
+                    "egressMode": "ALLOW_LIST",
+                    "egressAllowlist": [
+                      "pypi.org",
+                      "files.pythonhosted.org"
+                    ]
+                  }
+                },
+                "egressDenyAll": {
+                  "summary": "Sandbox with no outbound network access",
+                  "value": {
+                    "name": "my-sandbox",
+                    "image": "python:3.12-slim",
+                    "egressMode": "DENY_ALL"
+                  }
+                },
+                "globalVolume": {
+                  "summary": "Sandbox with a global volume mounted at the default path",
+                  "value": {
+                    "name": "my-sandbox",
+                    "image": "python:3.12-slim",
+                    "mounts": {
+                      "global": [
+                        {
+                          "volumeId": "gsb_abc"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sandbox"
+                },
+                "examples": {
+                  "sandbox": {
+                    "summary": "Successful response",
+                    "value": {
+                      "id": "7h3sbx91kq",
+                      "name": "my-sandbox",
+                      "state": "CREATING",
+                      "templateId": null,
+                      "image": "python:3.12-slim",
+                      "imageName": "python:3.12-slim",
+                      "cpuFlavorId": "cpu3c",
+                      "dataCenterId": null,
+                      "env": null,
+                      "registry": null,
+                      "startedAt": null,
+                      "terminationReason": null,
+                      "idleTimeoutSeconds": 300,
+                      "maxLifetimeSeconds": 86400,
+                      "lastActivityAt": "2026-08-21T11:30:00Z",
+                      "idleExpiresAt": "2026-08-21T11:35:00Z",
+                      "expiresAt": "2026-08-22T11:30:00Z",
+                      "egressPolicy": {
+                        "mode": "ALLOW_ALL",
+                        "allow": []
+                      },
+                      "podId": null,
+                      "createdAt": "2026-08-21T11:30:00Z",
+                      "updatedAt": "2026-08-21T11:30:00Z",
+                      "terminatedAt": null,
+                      "ports": []
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be processed because it is malformed or\nconflicts with request rules, or the account already has the\nmaximum number of live sandboxes. For the sandbox cap, `detail`\nstarts with `sandbox concurrency limit reached`; terminate a\nsandbox to free a slot, then retry.\n",
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateSandboxErrorResponse"
+                },
+                "examples": {
+                  "sandboxLimit": {
+                    "summary": "Sandbox concurrency cap reached",
+                    "value": {
+                      "title": "Bad Request",
+                      "status": 400,
+                      "detail": "sandbox concurrency limit reached: you can run at most 10 sandboxes at once"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "402": {
+            "description": "Account balance is insufficient to start the sandbox.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateSandboxErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "409": {
+            "description": "The `Idempotency-Key` was spent by a create that failed. Every retry with that key replays the failure; retry with a new key.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateSandboxErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "503": {
+            "description": "No capacity is currently available for the requested configuration. Retry later or relax placement constraints.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateSandboxErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateSandboxErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/sandboxes/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Sandbox identifier",
+          "example": "7h3sbx91kq"
+        }
+      ],
+      "get": {
+        "operationId": "getSandbox",
+        "x-runpod-scope": "sandboxes:read",
+        "summary": "Get a sandbox",
+        "x-mint": {
+          "metadata": {
+            "description": "Retrieve a Runpod Sandbox by ID with its state, compute, image, expiry deadlines, and termination details."
+          }
+        },
+        "description": "Returns a single sandbox by ID. Terminated sandboxes remain readable,\nwith `state`, `terminationReason`, and `terminatedAt` set.\n\n`RUNNING` means the backing compute is allocated, not that the\ncontainer has finished pulling and started, so a sandbox can report\n`RUNNING` a short while before it will accept work.\n",
+        "tags": [
+          "Sandboxes"
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sandbox"
+                },
+                "examples": {
+                  "sandbox": {
+                    "summary": "Successful response",
+                    "value": {
+                      "id": "7h3sbx91kq",
+                      "name": "my-sandbox",
+                      "state": "RUNNING",
+                      "templateId": null,
+                      "image": "python:3.12-slim",
+                      "imageName": "python:3.12-slim",
+                      "cpuFlavorId": "cpu3c",
+                      "dataCenterId": "US-KS-2",
+                      "env": {},
+                      "registry": null,
+                      "startedAt": "2026-08-21T11:30:09Z",
+                      "ssh": {
+                        "proxy": {
+                          "host": "ssh.runpod.io",
+                          "port": 22,
+                          "username": "k2m4n6p8q9-64411eb2",
+                          "command": "ssh k2m4n6p8q9-64411eb2@ssh.runpod.io"
+                        },
+                        "direct": null
+                      },
+                      "terminationReason": null,
+                      "idleTimeoutSeconds": 300,
+                      "maxLifetimeSeconds": 86400,
+                      "lastActivityAt": "2026-08-21T12:00:00Z",
+                      "idleExpiresAt": "2026-08-21T12:05:00Z",
+                      "expiresAt": "2026-08-22T12:00:00Z",
+                      "egressPolicy": {
+                        "mode": "ALLOW_ALL",
+                        "allow": []
+                      },
+                      "cpu": {
+                        "id": "cpu3c",
+                        "vcpuCount": 2,
+                        "memory": 4
+                      },
+                      "podId": "hwz61q83yllh8l",
+                      "compute": {
+                        "vcpuCount": 2,
+                        "memoryInGb": 4,
+                        "containerDiskInGb": 10,
+                        "costPerHr": 0.026
+                      },
+                      "createdAt": "2026-08-21T11:30:00Z",
+                      "updatedAt": "2026-08-21T12:00:00Z",
+                      "terminatedAt": null,
+                      "ports": []
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateSandbox",
+        "x-runpod-scope": "sandboxes:write",
+        "summary": "Update a sandbox's timeouts",
+        "x-mint": {
+          "metadata": {
+            "description": "Change the idle timeout and maximum lifetime of a running Runpod Sandbox; its deadlines are recomputed."
+          }
+        },
+        "description": "Partially updates a sandbox. This is a PATCH: only the fields present\nin the body are changed, and omitted fields are left untouched. See\n`UpdateSandboxRequest` for the full body.\n\nMutable fields: `idleTimeoutSeconds` and `maxLifetimeSeconds`, on a\n`RUNNING` sandbox. The deadline of each field supplied\n(`idleExpiresAt`, `expiresAt`) is recomputed; the other is left\nas is. A value over the account policy's maximum returns `400`,\nnever clamped, as does a `maxLifetimeSeconds` the sandbox has already\noutlived and a sandbox that is not `RUNNING` or is already past\n`expiresAt`. An `idleTimeoutSeconds` under 90 fails the schema and\nreturns `422`.\n\nReturns `200` with the full updated sandbox.\n",
+        "tags": [
+          "Sandboxes"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSandboxRequest"
+              },
+              "examples": {
+                "timeouts": {
+                  "summary": "Raise both timeouts",
+                  "value": {
+                    "idleTimeoutSeconds": 1800,
+                    "maxLifetimeSeconds": 7200
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "The sandbox with its updated timeouts and deadlines.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sandbox"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "terminateSandbox",
+        "x-runpod-scope": "sandboxes:write",
+        "summary": "Terminate a sandbox",
+        "x-mint": {
+          "metadata": {
+            "description": "Terminate a Runpod Sandbox, release its compute, and stop billing while keeping the sandbox record readable by ID."
+          }
+        },
+        "description": "Terminates a sandbox and releases its compute. Billing stops at\ntermination. The sandbox record remains readable via\n`GET /v2/sandboxes/{id}` afterward. Terminating an\nalready-terminated sandbox is a no-op and succeeds.\n",
+        "tags": [
+          "Sandboxes"
+        ],
+        "responses": {
+          "204": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Terminated. Response has no body."
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/sandboxes/{id}/extend": {
+      "post": {
+        "operationId": "extendSandbox",
+        "x-runpod-scope": "sandboxes:write",
+        "summary": "Extend a sandbox's lifetime",
+        "x-mint": {
+          "metadata": {
+            "description": "Raise the maximum lifetime of a running Runpod Sandbox, up to the account policy's ceiling."
+          }
+        },
+        "description": "Raises the maximum lifetime of a `RUNNING` sandbox. The new value is\nthe sandbox's total lifetime from `createdAt`, not an increment, so\nretrying a request is safe. It can only grow, and a value below the\ncurrent one or over the account policy's maximum is a `400`, never\nclamped. Does not count\nas activity: `idleExpiresAt` is unchanged. Use `PATCH` to lower a\ntimeout or to change the idle timeout.\n",
+        "tags": [
+          "Sandboxes"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Sandbox identifier",
+            "example": "7h3sbx91kq"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtendSandboxRequest"
+              },
+              "examples": {
+                "extend": {
+                  "summary": "Extend to two hours total",
+                  "value": {
+                    "maxLifetimeSeconds": 7200
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "The sandbox with its new `maxLifetimeSeconds` and `expiresAt`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sandbox"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "409": {
+            "description": "The sandbox's lifetime can no longer change. `code` is\n`sandbox_terminated`; retrying does not help.\n",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SandboxConflictResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/sandboxes/{id}/exec": {
+      "post": {
+        "operationId": "execSandbox",
+        "x-runpod-scope": "sandboxes:write",
+        "summary": "Run a command in a sandbox",
+        "x-mint": {
+          "metadata": {
+            "description": "Run a single command inside a running Runpod Sandbox and receive its combined stdout and stderr once it completes."
+          }
+        },
+        "description": "Runs one command inside the sandbox and returns its combined stdout\nand stderr once it completes. Execution is capped at a few seconds\nper command whatever `timeoutSeconds` asks for; a command that runs\npast the cap is killed, and the response has an `error` and a null\n`exitCode`.\n\nFor work that takes longer, set `background: true`. The call then\nreturns as soon as the command has started, without its output.\nRedirect the output to a file in the sandbox and read it back with a\nlater exec call; exec output is not part of the sandbox log stream.\n\nA sandbox accepts commands only once its container has started,\nwhich can lag the `RUNNING` state by a short while; until then this\nreturns `409`. Once the sandbox's `expiresAt` has passed it returns\n`409` with `sandbox_terminated`, even if the sandbox still reports\n`RUNNING`.\n",
+        "tags": [
+          "Sandboxes"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Sandbox identifier",
+            "example": "7h3sbx91kq"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecSandboxRequest"
+              },
+              "examples": {
+                "exec": {
+                  "summary": "Run a shell command",
+                  "value": {
+                    "command": [
+                      "sh",
+                      "-c",
+                      "echo hello && uname -a"
+                    ]
+                  }
+                },
+                "limit": {
+                  "summary": "Kill the command after 3 seconds",
+                  "value": {
+                    "command": [
+                      "sh",
+                      "-c",
+                      "python -c 'print(sum(range(10**6)))'"
+                    ],
+                    "timeoutSeconds": 3
+                  }
+                },
+                "background": {
+                  "summary": "Start a long-running process and return immediately",
+                  "value": {
+                    "command": [
+                      "sh",
+                      "-c",
+                      "python train.py > /tmp/train.log 2>&1"
+                    ],
+                    "background": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecSandboxResponse"
+                },
+                "examples": {
+                  "exec": {
+                    "summary": "Successful response",
+                    "value": {
+                      "output": "hello\nLinux ed9369fc3ae3 4.19.0-gvisor x86_64 Linux\n",
+                      "error": null,
+                      "stdout": "hello\nLinux ed9369fc3ae3 4.19.0-gvisor x86_64 Linux\n",
+                      "stderr": "",
+                      "exitCode": 0,
+                      "durationMs": 184,
+                      "truncated": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "409": {
+            "description": "The sandbox cannot accept commands in its current state. `code`\nsays which: `sandbox_starting` (retry shortly),\n`container_exited` or `sandbox_terminated` (retrying does not\nhelp).\n",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SandboxConflictResponse"
+                },
+                "examples": {
+                  "starting": {
+                    "summary": "Container still starting; retry",
+                    "value": {
+                      "title": "Conflict",
+                      "status": 409,
+                      "detail": "sandbox is not ready yet: its container is still starting; retry in a few seconds",
+                      "code": "sandbox_starting"
+                    }
+                  },
+                  "exited": {
+                    "summary": "Container exited; do not retry",
+                    "value": {
+                      "title": "Conflict",
+                      "status": 409,
+                      "detail": "sandbox container exited",
+                      "code": "container_exited"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "503": {
+            "description": "Command execution is temporarily unavailable. The sandbox itself is unaffected; retry later.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/sandboxes/{id}/logs": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Sandbox identifier",
+          "example": "7h3sbx91kq"
+        }
+      ],
+      "get": {
+        "operationId": "getSandboxLogs",
+        "x-runpod-scope": "sandboxes:read",
+        "summary": "Stream sandbox logs",
+        "x-mint": {
+          "metadata": {
+            "description": "Stream a Runpod Sandbox's container and system logs in real time as Server-Sent Events, with resumable reconnects via Last-Event-ID."
+          }
+        },
+        "description": "Streams the sandbox's logs as Server-Sent Events. The `source` query\nparameter selects which log source to include: `container` carries the\nstdout of the sandbox's main process, `system` carries lifecycle events\nsuch as image pulls and container starts. Output from `exec` commands\ndoes not appear here.\n\nThe SSE `data` payload shape is:\n`{ \"source\": \"container\", \"line\": \"...\", \"ts\": \"...\" }`.\nLog-event `id` values are the event `ts` timestamp so\nbrowser/EventSource reconnects can resume with `Last-Event-ID`.\n\nLogs become available only once the sandbox has a backing container,\nwhich can lag creation by a short while; until then this returns `409`.\n",
+        "tags": [
+          "Sandboxes"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/LogSourceParam"
+          },
+          {
+            "$ref": "#/components/parameters/LogTail"
+          },
+          {
+            "$ref": "#/components/parameters/LogSince"
+          },
+          {
+            "$ref": "#/components/parameters/LogLastEventID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sandbox log event stream",
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always `no-cache` for SSE responses."
+              },
+              "Connection": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always `keep-alive` to hold the SSE stream open."
+              },
+              "X-Accel-Buffering": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always `no` to disable proxy buffering of the SSE stream."
+              }
+            },
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "Server-Sent Events stream. Each event includes an `id:` line and a JSON `data:` payload with `source`, `line`, and `ts` fields."
+                },
+                "examples": {
+                  "logLine": {
+                    "summary": "Successful response",
+                    "value": "id: 2026-06-01T12:02:03Z/000000000001\ndata: {\"ts\":\"2026-06-01T12:02:03Z\",\"source\":\"container\",\"line\":\"Model loaded.\"}\n"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "409": {
+            "description": "The sandbox has no streamable logs in its current state. `code`\nsays which: `sandbox_starting` (retry shortly) or\n`sandbox_terminated` (retrying does not help). A `FAILED` sandbox\nstreams its logs while they are still available.\n",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SandboxConflictResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/sandboxes/{id}/commands": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Sandbox identifier",
+          "example": "7h3sbx91kq"
+        }
+      ],
+      "post": {
+        "operationId": "createSandboxCommand",
+        "x-runpod-scope": "sandboxes:write",
+        "summary": "Start a command in a sandbox",
+        "x-mint": {
+          "metadata": {
+            "description": "Start a long-running command inside a Runpod Sandbox and return at once, then follow its status and output."
+          }
+        },
+        "description": "Starts a command and returns as soon as it is running. Use it for\nwork that outlasts a request: builds, test suites, servers. Follow\nit with `GET /v2/sandboxes/{id}/commands/{commandId}` and its\n`/logs`, and stop it with `DELETE`. For a short command whose result\nyou want in the same request, use `POST /v2/sandboxes/{id}/exec`.\n\nA finished command and its output stay readable for about 20\nminutes. A sandbox runs at most 8 commands at once.\n",
+        "tags": [
+          "Sandboxes"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSandboxCommandRequest"
+              },
+              "examples": {
+                "tests": {
+                  "summary": "Run a test suite for up to 30 minutes",
+                  "value": {
+                    "command": [
+                      "sh",
+                      "-c",
+                      "cd /workspace && pytest -x"
+                    ],
+                    "timeoutSeconds": 1800
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "The command is running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SandboxCommand"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "409": {
+            "description": "The sandbox cannot accept commands in its current state. `code`\nsays which: `sandbox_starting` (retry shortly),\n`command_limit_reached` (the sandbox is running 8 commands; wait\nfor one to finish or cancel one, then retry),\n`container_exited` or `sandbox_terminated` (retrying does not\nhelp).\n",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SandboxConflictResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
+          "422": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Either the request is invalid (`application/problem+json`), or the\ncommand could not start (`application/json`: the command, with\nstatus `failed` and `error` set).\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SandboxCommand"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/sandboxes/{id}/commands/{commandId}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Sandbox identifier",
+          "example": "7h3sbx91kq"
+        },
+        {
+          "name": "commandId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[0-9A-Za-z-]{1,64}$"
+          },
+          "description": "Command identifier",
+          "example": "6f1c2b8e-3d4a-4f7b-9a0e-2c5d8e1f4a7b"
+        }
+      ],
+      "get": {
+        "operationId": "getSandboxCommand",
+        "x-runpod-scope": "sandboxes:read",
+        "summary": "Get a sandbox command",
+        "x-mint": {
+          "metadata": {
+            "description": "Read the status and exit code of a command started in a Runpod Sandbox."
+          }
+        },
+        "description": "Returns the command's status. A command that finished more than\nabout 20 minutes ago, or that ran in an earlier container of the\nsandbox, returns `404`.\n",
+        "tags": [
+          "Sandboxes"
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SandboxCommand"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "cancelSandboxCommand",
+        "x-runpod-scope": "sandboxes:write",
+        "summary": "Cancel a sandbox command",
+        "x-mint": {
+          "metadata": {
+            "description": "Stop a running command in a Runpod Sandbox."
+          }
+        },
+        "description": "Stops the command. Returns `202` while it is stopping, or `200` if\nit had already finished. Either way the body is the command;\npoll it until its status is terminal.\n",
+        "tags": [
+          "Sandboxes"
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "The command had already finished.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SandboxCommand"
+                }
+              }
+            }
+          },
+          "202": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "The command is stopping.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SandboxCommand"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/sandboxes/{id}/commands/{commandId}/logs": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Sandbox identifier",
+          "example": "7h3sbx91kq"
+        },
+        {
+          "name": "commandId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[0-9A-Za-z-]{1,64}$"
+          },
+          "description": "Command identifier",
+          "example": "6f1c2b8e-3d4a-4f7b-9a0e-2c5d8e1f4a7b"
+        }
+      ],
+      "get": {
+        "operationId": "getSandboxCommandLogs",
+        "x-runpod-scope": "sandboxes:read",
+        "summary": "Read or stream a sandbox command's output",
+        "x-mint": {
+          "metadata": {
+            "description": "Read a command's output from a Runpod Sandbox, or stream it live as Server-Sent Events with resumable offsets."
+          }
+        },
+        "description": "Without `stream`, returns a JSON snapshot of the output from\n`offset` (or about the last `tail` bytes). Page through it by passing\n`nextOffset` back as `offset`.\n\nWith `stream=true`, returns Server-Sent Events. Each output line is\na `data` event `{\"line\": \"...\", \"ts\": \"...\", \"stream\": \"stdout\"}`\n(`stream` only when `streamsSeparated`; `partial: true` marks a\nline cut at 64 KiB). The stream ends with `event: end`\n`{\"status\", \"exitCode\", \"outputBytes\", \"truncated\"}`. A stream open\nfor an hour ends with `event: timeout` `{\"nextOffset\"}`; reconnect\nwith that `offset`. If the host keeps failing to follow the output,\nthe stream ends with `event: error` `{\"error\", \"nextOffset\"}`\ninstead (`nextOffset` is left out when the host did not send one):\nalso an ending to expect, so reconnect with that `offset` too. To resume after a dropped connection, pass the\nlast `nextOffset` you saw, or count bytes yourself; `Last-Event-ID`\nis not used.\n",
+        "tags": [
+          "Sandboxes"
+        ],
+        "parameters": [
+          {
+            "name": "stream",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "Stream the output as Server-Sent Events instead of returning a snapshot."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            },
+            "description": "Byte offset to read from. Takes precedence over `tail` as the\nstart point, but `tail` still bounds how much is read, so\n`offset=N&tail=M` reads about `M` bytes from `N`.\n"
+          },
+          {
+            "name": "tail",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 2097152
+            },
+            "description": "Read about the last this many bytes. Snapshot only. The size is\napproximate: the host reads at least about 64 KiB whatever the\nvalue, and about 64 KiB more for a command whose output is\nseparated into stdout and stderr. With `offset`, it bounds how\nmuch is read from `offset`.\n"
+          },
+          {
+            "name": "streams",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "stdout",
+                "stderr"
+              ]
+            },
+            "description": "Only this stream's lines. `409` when the command's output is\nnot separated.\n"
+          }
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always `no-cache` for SSE responses."
+              },
+              "Connection": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always `keep-alive` to hold the SSE stream open."
+              },
+              "X-Accel-Buffering": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always `no` to disable proxy buffering of the SSE stream."
+              }
+            },
+            "description": "Output snapshot, or the event stream with `stream=true`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SandboxCommandLogs"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "409": {
+            "description": "The `streams` filter was given for a command whose output is not separated.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
             "description": "Error",
             "content": {
               "application/problem+json": {
