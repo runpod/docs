@@ -64,21 +64,28 @@ curl --request POST \
 <Tab title="Python">
 
 ```python
-import runpod
 import os
+
+import runpod
+from runpod.error import JobError
 
 runpod.api_key = os.getenv("RUNPOD_API_KEY")
 endpoint = runpod.Endpoint(os.getenv("ENDPOINT_ID"))
 
 try:
-    run_request = endpoint.run_sync(
+    output = endpoint.run_sync(
         {"prompt": "Hello, world!"},
         timeout=60,  # Client timeout in seconds
     )
-    print(run_request)
+    print(output)
 except TimeoutError:
-    print("Job timed out.")
+    print("Job didn't finish within the client timeout.")
+except JobError as err:
+    # The job ended FAILED, TIMED_OUT, or CANCELLED
+    print(f"Job {err.job_id} {err.status}: {err.error}")
 ```
+
+`run_sync` returns the job's output when the job completes. If the job ends with a `FAILED`, `TIMED_OUT`, or `CANCELLED` status, it raises `runpod.error.JobError`, whose `job_id`, `status`, and `error` attributes hold the job ID, final status, and error the worker reported. A completed job whose handler returned `None` still returns `None`.
 </Tab>
 
 <Tab title="JavaScript">
@@ -188,8 +195,10 @@ curl --request POST \
 
 <Tab title="Python">
 ```python
-import runpod
 import os
+
+import runpod
+from runpod.error import JobError
 
 runpod.api_key = os.getenv("RUNPOD_API_KEY")
 endpoint = runpod.Endpoint(os.getenv("ENDPOINT_ID"))
@@ -198,15 +207,17 @@ endpoint = runpod.Endpoint(os.getenv("ENDPOINT_ID"))
 run_request = endpoint.run({"prompt": "Hello, World!"})
 
 # Check initial status
-status = run_request.status()
-print(f"Initial job status: {status}")
+print(f"Initial job status: {run_request.status()}")
 
-if status != "COMPLETED":
-    # Poll for results with timeout
+try:
+    # Wait up to 60 seconds for the job to finish
     output = run_request.output(timeout=60)
-else:
-    output = run_request.output()
-print(f"Job output: {output}")
+    print(f"Job output: {output}")
+except TimeoutError:
+    print("Job didn't finish within 60 seconds.")
+except JobError as err:
+    # The job ended FAILED, TIMED_OUT, or CANCELLED
+    print(f"Job {err.job_id} {err.status}: {err.error}")
 ```
 </Tab>
 
@@ -310,7 +321,10 @@ curl --request GET \
 <Tab title="Python">
 
 ```python
+import os
+
 import runpod
+from runpod.error import JobError
 
 runpod.api_key = os.getenv("RUNPOD_API_KEY")
 endpoint = runpod.Endpoint(os.getenv("ENDPOINT_ID"))
@@ -320,16 +334,20 @@ input_payload = {"input": {"prompt": "Hello, World!"}}
 run_request = endpoint.run(input_payload)
 
 # Initial check without blocking, useful for quick tasks
-status = run_request.status()
-print(f"Initial job status: {status}")
+print(f"Initial job status: {run_request.status()}")
 
-if status != "COMPLETED":
-    # Polling with timeout for long-running tasks
+try:
+    # Poll with a timeout for long-running tasks
     output = run_request.output(timeout=60)
-else:
-    output = run_request.output()
-print(f"Job output: {output}")
+    print(f"Job output: {output}")
+except TimeoutError:
+    print("Job didn't finish within 60 seconds.")
+except JobError as err:
+    # The job ended FAILED, TIMED_OUT, or CANCELLED
+    print(f"Job {err.job_id} {err.status}: {err.error}")
 ```
+
+`output()` raises `runpod.error.JobError` when the job ends with a `FAILED`, `TIMED_OUT`, or `CANCELLED` status, and `TimeoutError` when the job doesn't finish within `timeout` seconds.
 </Tab>
 
 <Tab title="JavaScript">
@@ -608,8 +626,11 @@ curl --request POST \
 <Tab title="Python">
 
 ```python
+import os
 import time
+
 import runpod
+from runpod.error import JobError
 
 runpod.api_key = os.getenv("RUNPOD_API_KEY")
 endpoint = runpod.Endpoint(os.getenv("ENDPOINT_ID"))
@@ -627,15 +648,13 @@ try:
     status = run_request.status()
     print(f"Current job status: {status}")
 
-    if status == "COMPLETED":
-      output = run_request.output()
-      print("Job output:", output)
+    if status in ["COMPLETED", "FAILED", "TIMED_OUT", "CANCELLED"]:
+      try:
+        print("Job output:", run_request.output())
+      except JobError as err:
+        print(f"Job {err.status}: {err.error}")
       break
-    elif status in ["FAILED", "ERROR"]:
-      print("Job failed to complete successfully.")
-      break
-    else:
-      time.sleep(10)
+    time.sleep(10)
 except KeyboardInterrupt:  # Catch KeyboardInterrupt
   print("KeyboardInterrupt detected. Canceling the job...")
   if run_request:  # Check if a job is active
