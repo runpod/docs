@@ -222,43 +222,65 @@ If your agent can't load skills, the MCP server serves the same playbooks: `list
 
 #### Get an API key by email
 
-If the user doesn't have a Runpod account yet, or can't open the console, get a key from the REST API instead. These endpoints don't need an API key. The same flow signs in to an existing account or creates a new one, and the response is the same either way.
+If the user doesn't have a Runpod account yet, or can't open the console, you can get an API key by email. You don't need an API key for these steps. If the email address already has a Runpod account, this signs in to it. If not, it creates a new account.
 
-1. Generate a random `codeVerifier` (43 to 128 characters from `A-Z a-z 0-9 . _ ~ -`) and keep it private. The `codeChallenge` is its SHA-256 hash, base64url-encoded without padding.
-2. Start the attempt. Use a new UUID as the `Idempotency-Key` for each attempt. Runpod emails the user a 6-digit code and returns an `attemptId`. The attempt expires after about 10 minutes.
+**Step 1: Ask Runpod to send the code.** Replace `user@example.com` with the user's email address, then run this whole block:
 
-   ```bash
-   VERIFIER=$(python3 -c "import secrets;print(secrets.token_urlsafe(48))")
-   CHALLENGE=$(python3 -c "import sys,hashlib,base64;print(base64.urlsafe_b64encode(hashlib.sha256(sys.argv[1].encode()).digest()).rstrip(b'=').decode())" "$VERIFIER")
-   curl -s -X POST https://api.runpod.io/v2/signup/authentication-attempts \
-     -H 'Content-Type: application/json' -H "Idempotency-Key: $(uuidgen)" \
-     -d "{\"email\":\"user@example.com\",\"keyName\":\"my-agent\",\"codeChallenge\":\"$CHALLENGE\"}"
-   ```
+```bash
+python3 -c "import secrets; print(secrets.token_urlsafe(48))" > ~/.runpod-signup-secret
+CHALLENGE=$(python3 -c "import hashlib,base64; s=open('$HOME/.runpod-signup-secret').read().strip(); print(base64.urlsafe_b64encode(hashlib.sha256(s.encode()).digest()).rstrip(b'=').decode())")
+curl -s -X POST https://api.runpod.io/v2/signup/authentication-attempts \
+  -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: $(python3 -c 'import uuid; print(uuid.uuid4())')" \
+  -d "{\"email\":\"user@example.com\",\"keyName\":\"my-agent\",\"codeChallenge\":\"$CHALLENGE\"}"
+```
 
-3. > **User step.** Ask the user for the code in the **Your Runpod verification code** email. If you can read their inbox yourself, take the code from the newest message: some mail clients group new codes into the same thread as older ones.
-4. Exchange the code for a key:
+You'll see something like:
 
-   ```bash
-   curl -s -X POST https://api.runpod.io/v2/signup/authentication-attempts/<attemptId>/verify \
-     -H 'Content-Type: application/json' \
-     -d "{\"code\":\"<code>\",\"codeVerifier\":\"$VERIFIER\"}"
-   ```
+```json
+{"attemptId":"32a0ac2af9352852d128519d6e0e0737","expiresAt":"2026-11-10T17:26:53Z","resendAfter":"2026-11-10T17:17:23Z"}
+```
 
-   The key is in `credential.apiKey`, and it's returned only once. Set it as `RUNPOD_API_KEY` right away, and don't print it or write it to a log. The user can see and revoke it on the [Credentials page](https://console.runpod.io/user/settings).
+Write down the `attemptId`. Runpod has emailed a 6-digit code. You have 10 minutes to use it.
 
-A wrong code returns `422`, and five wrong codes lock the attempt. To send a new code, call `/resend` with the same `codeVerifier` after the `resendAfter` time. Accounts that use SSO or MFA, or that belong to an organization, get `403` and must create a key in the console instead. Full reference: [Signup endpoints](https://api.runpod.io/v2/docs#tag/signup).
+**Step 2: Get the code.**
+
+> **User step.** Ask the user for the 6-digit code in the **Your Runpod verification code** email. If you can read their inbox yourself, follow [Sign up on your own with inbox access](#sign-up-on-your-own-with-inbox-access) instead.
+
+**Step 3: Exchange the code for an API key.** Replace `ATTEMPT_ID` and `123456` with your values, then run:
+
+```bash
+curl -s -X POST https://api.runpod.io/v2/signup/authentication-attempts/ATTEMPT_ID/verify \
+  -H 'Content-Type: application/json' \
+  -d "{\"code\":\"123456\",\"codeVerifier\":\"$(cat ~/.runpod-signup-secret)\"}"
+rm ~/.runpod-signup-secret
+```
+
+The response contains `"apiKey":"rpa_..."`. Save that value as `RUNPOD_API_KEY` right away, because Runpod shows it only once. Don't print it or write it to a log. The user can see and revoke the key on the [Credentials page](https://console.runpod.io/user/settings).
+
+**If something goes wrong:**
+
+| You see | What it means | What to do |
+| --- | --- | --- |
+| `422` | The code is wrong or badly formatted | Check the code and try again. After 5 wrong codes, start over from step 1. |
+| `404` | The attempt expired or was already used | Start over from step 1. |
+| `403` | The account uses SSO or MFA, or belongs to an organization | Ask the user to create a key on the [Credentials page](https://console.runpod.io/user/settings). |
+| No email after a minute | It's delayed or in spam | Check spam, then call `/resend`. See the [Signup reference](https://api.runpod.io/v2/docs#tag/signup). |
 
 #### Sign up on your own with inbox access
 
-If you can read an email inbox the user has connected for you (for example through a Gmail connector or an IMAP tool), you can complete the whole email flow yourself, without the user step.
+If you can read an email inbox the user has connected for you (for example through a Gmail connector or an IMAP tool), you can do step 2 yourself.
 
 1. Use only an address whose inbox the user has connected for you. Before you start, tell the user you're about to sign in to Runpod with it, or create an account if none exists.
-2. Start the attempt as in step 2 above. Set `keyName` to something that identifies you, such as `codex-laptop`, so the user can find the key on the Credentials page later. Note the time you sent the request.
-3. Wait for an email from `noreply@runpod.io` with the subject **Your Runpod verification code** that arrived after that time. It usually arrives within 10 seconds. Search every folder, including spam. Read the newest matching message, not the whole thread, because mail clients often group a new code with older ones.
-4. Take the 6-digit code from the line **Use this code to finish signing in to Runpod**, then exchange it for a key as in step 4 above.
-5. If no email arrives within a minute, call `/resend` once `resendAfter` has passed. Don't start a second attempt for the same address while one is still open. Never guess a code: five wrong codes lock the attempt.
+2. Run step 1 above with that address. Set `keyName` to a name that says who you are, such as `codex-laptop`, so the user can find the key later. Note the time you ran it.
+3. Search the inbox for an email from `noreply@runpod.io` with the subject **Your Runpod verification code** that arrived after that time. It usually arrives within 10 seconds. If you don't find it, wait 10 seconds and search again. Include the spam folder.
+4. Open the newest matching message. Don't read the whole thread: mail clients often put a new code in the same thread as older ones, and an old code won't work.
+5. Find the line **Use this code to finish signing in to Runpod** and copy the 6-digit number after it.
+6. Run step 3 above with that code.
 
-Some agents aren't allowed to complete a sign-in themselves, even with inbox access. If that applies to you, stop after you've found the code. Give the user the verify command with the `attemptId`, code, and `codeVerifier` filled in, and let them run it.
+Don't start a second attempt while one is still open, and never guess a code.
+
+Some agents aren't allowed to complete a sign-in themselves, even with inbox access. If that applies to you, stop after you find the code. Give the user the step 3 command with `ATTEMPT_ID` and the code filled in, and let them run it.
 
 ---
 
