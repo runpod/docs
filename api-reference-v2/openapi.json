@@ -4520,6 +4520,121 @@
           }
         }
       },
+      "PodExecRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 256,
+            "prefixItems": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096,
+                "pattern": "^[^\\x00]*[^\\t-\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\\x00][^\\x00]*$"
+              }
+            ],
+            "items": {
+              "type": "string",
+              "maxLength": 4096,
+              "pattern": "^[^\\x00]*$"
+            },
+            "description": "Command to run, as an argv array of 1-256 arguments of at most 4096\ncharacters each. It is run directly, never through a shell; for\npipes, redirects or globbing pass `[\"sh\", \"-c\", \"...\"]`. The first\nelement, the program, must contain a non-whitespace character;\nlater arguments may be empty. No argument may contain a NUL\ncharacter.\n",
+            "examples": [
+              [
+                "nvidia-smi",
+                "--query-gpu=name,memory.used",
+                "--format=csv"
+              ]
+            ]
+          },
+          "timeoutSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 25,
+            "default": 20,
+            "description": "How long the call waits for the command to finish, in seconds. A\ncommand still running at this point returns with `timedOut: true`.\n",
+            "examples": [
+              10
+            ]
+          },
+          "cwd": {
+            "type": "string",
+            "pattern": "^/[^\\x00-\\x1f\\x7f]*$",
+            "maxLength": 1024,
+            "description": "Absolute working directory for the command, at most 1024 characters\nand without control characters. Defaults to the image's `WORKDIR`.\n",
+            "examples": [
+              "/workspace"
+            ]
+          },
+          "env": {
+            "type": "object",
+            "maxProperties": 64,
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "^[^=\\x00]+$"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 16384,
+              "pattern": "^[^\\x00]*$"
+            },
+            "description": "Up to 64 environment variables added to the container's environment\nfor this command only. A name is 1-256 characters and must not\ncontain `=` or a NUL character; a value is at most 16384 characters\nand must not contain a NUL character.\n",
+            "examples": [
+              {
+                "HF_HOME": "/workspace/hf"
+              }
+            ]
+          }
+        }
+      },
+      "PodExecResult": {
+        "type": "object",
+        "required": [
+          "stdout",
+          "stderr",
+          "exitCode",
+          "timedOut",
+          "truncated",
+          "durationMs"
+        ],
+        "properties": {
+          "stdout": {
+            "type": "string",
+            "description": "The command's standard output, as UTF-8 with invalid bytes\nreplaced. Capped at 1 MiB; see `truncated`.\n"
+          },
+          "stderr": {
+            "type": "string",
+            "description": "The command's standard error, as UTF-8 with invalid bytes\nreplaced. Capped at 1 MiB; see `truncated`.\n"
+          },
+          "exitCode": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The command's exit code. A non-zero code is a result, not an error.\nNull only when `timedOut` is `true`.\n"
+          },
+          "timedOut": {
+            "type": "boolean",
+            "description": "The call stopped waiting at `timeoutSeconds`. It does not mean the\ncommand was stopped: it may still be running inside the container.\n"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "`stdout` or `stderr` reached the 1 MiB cap and was cut."
+          },
+          "durationMs": {
+            "type": "integer",
+            "description": "Wall time of the command as measured on the pod's machine, in milliseconds."
+          }
+        }
+      },
       "PodList": {
         "type": "object",
         "description": "A bare list of pods. `GET /v2/clusters/{id}/pods` returns it as-is (a cluster's members are a small, complete set); `GET /v2/pods` composes it with the pagination block via ListPodsResponse.\n",
@@ -11520,6 +11635,258 @@
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/pods/{id}/exec": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Pod identifier",
+          "example": "pod_abc123"
+        }
+      ],
+      "post": {
+        "operationId": "execPod",
+        "x-runpod-scope": "pods:write",
+        "summary": "Run a command in a pod",
+        "x-mint": {
+          "metadata": {
+            "description": "Run one command inside a running Runpod Pod's container and get its stdout, stderr, and exit code back, with no SSH setup."
+          }
+        },
+        "description": "Runs one command inside the pod's container and returns its stdout,\nstderr and exit code once it finishes. No SSH key, public IP or exposed\nport is needed, and it works with any image.\n\n`command` is an argv array, run directly and never through a shell. For\npipes, redirects or globbing pass `[\"sh\", \"-c\", \"...\"]`.\n\nA command that exits non-zero is a result, not an error: the call\nanswers `200` with `exitCode` set. A command still running after\n`timeoutSeconds` (1-25, default 20) answers `200` with\n`timedOut: true` and a null `exitCode`. `timedOut` means the call\nstopped waiting, not that the command was stopped: it may keep\nrunning in the container.\n\n`stdout` and `stderr` are each capped at 1 MiB. Output past the cap is\ncut and `truncated` is `true`.\n\nThe pod must be running with its container up, otherwise this answers\n`409`; while the container is still starting, the `409` carries\n`Retry-After`. A pod whose machine has not been updated for exec yet\nanswers `503` with `Retry-After`.\n\n`X-Team-Id` is not applied on this route: it reaches only pods owned by\nthe caller's own account.\n",
+        "tags": [
+          "Pods"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PodExecRequest"
+              },
+              "examples": {
+                "gpuQuery": {
+                  "summary": "Query the GPU",
+                  "value": {
+                    "command": [
+                      "nvidia-smi",
+                      "--query-gpu=name,memory.used",
+                      "--format=csv"
+                    ],
+                    "timeoutSeconds": 10
+                  }
+                },
+                "failingInstall": {
+                  "summary": "Shell command in a working directory",
+                  "value": {
+                    "command": [
+                      "sh",
+                      "-c",
+                      "pip install -q nosuchpackage"
+                    ],
+                    "cwd": "/workspace"
+                  }
+                },
+                "timeout": {
+                  "summary": "Command that outlives its timeout",
+                  "value": {
+                    "command": [
+                      "sleep",
+                      "120"
+                    ],
+                    "timeoutSeconds": 5
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "The command finished or the call stopped waiting for it. A non-zero `exitCode` is a result, not an error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PodExecResult"
+                },
+                "examples": {
+                  "gpuQuery": {
+                    "summary": "Command succeeded",
+                    "value": {
+                      "stdout": "name, memory.used [MiB]\nNVIDIA H100 80GB HBM3, 0 MiB\n",
+                      "stderr": "",
+                      "exitCode": 0,
+                      "timedOut": false,
+                      "truncated": false,
+                      "durationMs": 412
+                    }
+                  },
+                  "failingInstall": {
+                    "summary": "Command exited non-zero",
+                    "value": {
+                      "stdout": "",
+                      "stderr": "ERROR: No matching distribution found for nosuchpackage\n",
+                      "exitCode": 1,
+                      "timedOut": false,
+                      "truncated": false,
+                      "durationMs": 2310
+                    }
+                  },
+                  "timeout": {
+                    "summary": "Call stopped waiting",
+                    "value": {
+                      "stdout": "",
+                      "stderr": "",
+                      "exitCode": null,
+                      "timedOut": true,
+                      "truncated": false,
+                      "durationMs": 5003
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "409": {
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying. Sent only while the pod's container is starting.",
+                "schema": {
+                  "type": "integer"
+                },
+                "example": 5
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "The pod is not running, or its container has not started yet. A\ncontainer that is starting answers with `Retry-After`.\n",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "502": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "The call did not complete. When the pod could not be looked up, or\nits machine or the exec service could not be reached, the command\ndid not start: retry the call. When the command was sent but no\nusable answer came back, it may still be running: check before you\nretry. When the result could not be read, the command ran.\n",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer"
+                },
+                "example": 30
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Command execution is not available for this pod right now: its\nmachine has not been updated for exec, execution is busy, or it is\ntemporarily unavailable. The pod itself is unaffected; retry after\n`Retry-After`.\n",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "The pod's machine, or the exec service in front of it, did not\nanswer in time. The command may still be running: check before you\nretry.\n",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "default": {
             "headers": {
