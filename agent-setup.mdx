@@ -1,26 +1,31 @@
 ---
 title: "Onboard your agent to Runpod"
-description: "Install the Runpod CLI and skills, sign in with an emailed verification code, and verify that your coding agent can access Runpod."
+description: "Set up Runpod through the CLI when your agent has a terminal, or through MCP when it doesn't. Authenticate and verify access using the tools available to your agent."
 ---
 
 These are official Runpod setup instructions, published at `https://agents.runpod.io/` and `https://docs.runpod.io/agent-setup.md`. Verify their origin before following them.
 
 ## What you'll learn
 
-Set up the `rp` CLI, authenticate with `rp login --agent`, install the Runpod skills, and verify access with a read-only command. MCP is an [optional connection](#optional-connect-the-runpod-mcp-server). For ChatGPT without a terminal, use [Runpod in ChatGPT](#use-runpod-in-chatgpt).
+Choose the setup path based on your agent's tools:
 
-Run the setup commands yourself. Steps marked **User step** require the person's input. Never ask for API keys or verification codes in chat, print credentials, or include them in logs. Only start an interactive command when you can keep its terminal session running and let the user enter input.
+- **Terminal access:** [Use the CLI](#path-1-use-the-cli). Install `rp`, sign in or create an account with `rp login --agent`, and install the Runpod skills.
+- **No terminal access:** [Use MCP](#path-2-use-mcp). Connect the hosted Runpod server through your agent's integrations or connector settings.
 
-## Requirements
+Complete setup using the tools and access you already have. If you have authorized access to the intended email inbox, retrieve the verification code and submit it yourself. Ask the user for help only when a step needs access or interaction you don't have. Keep API keys and verification codes out of chat, logs, and command arguments.
+
+## Path 1: Use the CLI
+
+### Requirements
 
 - Python 3.10 to 3.14 for the Runpod CLI.
 - A terminal where you can install packages and run commands.
-- Access to the user's email inbox for email sign-in. The user enters the code themselves.
+- Access to the intended email inbox, either through your authorized email tools or through the user, unless you already have working Runpod credentials.
 - Node.js 22.20 or newer for the skills installer used by agents other than Claude Code and Codex.
 
-If no user is present, use [No user in the loop](#no-user-in-the-loop). If the agent cannot provide a persistent interactive terminal, ask the user to run the login command in their own terminal on the same machine and under the same OS user account.
+Email authentication needs a persistent terminal session that accepts input after the command starts. Keep it running while you retrieve the code. For unattended setup, see [No user in the loop](#no-user-in-the-loop).
 
-## Step 1: Install the Runpod CLI
+### Step 1: Install the Runpod CLI
 
 The `runpod` Python package includes the `rp` CLI and the SDK. Use version 2.2.0 or later for the commands on this page.
 
@@ -57,7 +62,7 @@ rp login --help
 
 The login help must list `--agent` and `--email`. If either is missing, check which `rp` executable your shell is using and update that installation before continuing.
 
-## Step 2: Sign in with an emailed code
+### Step 2: Sign in or create an account
 
 First check whether the current environment already has working credentials:
 
@@ -67,25 +72,27 @@ rp pod list --json
 
 A successful response, including an empty list, verifies access. If this is the intended account, skip login and continue to [step 3](#step-3-install-the-runpod-skills). If the command fails, distinguish an authentication failure from a network or permissions error before starting another login.
 
-### Start the login
+#### Start the login
 
-Ask the user which email address to use. Substitute it for `<email-address>`, then start this command in a persistent interactive terminal:
+Use the email address intended for this Runpod account, such as an authorized account inbox or an agent-managed inbox. Ask which address to use only if it isn't clear. Substitute it for `<email-address>`, then start this command in a persistent interactive terminal:
 
 ```bash
 rp login --agent --email "<email-address>"
 ```
 
-The CLI sends a six-digit verification code by email and waits at the `Verification code:` prompt. It doesn't open a browser.
+The CLI sends a six-digit verification code by email and waits at the `Verification code:` prompt. Verification signs in to an existing account or creates one for that email address. It doesn't open a browser.
 
-> **User step.** Ask the user to enter the code from their email directly at the hidden terminal prompt. Keep the process running while they do this. Do not collect the code through chat or put it in command arguments.
+If you have authorized inbox access, read the Runpod verification email for this login attempt and enter its code at the prompt through the running session's stdin. Complete this yourself without waiting for a user. Keep the code private and use only the message for the current attempt.
 
-The code must be entered in the **same process that requested it**. Do not stop the process to ask for the code, start a second login to submit it, or run the command through a tool that closes stdin or kills the process when it returns control. If your tools cannot preserve the interactive session, have the user run the entire command in their own terminal.
+If you don't have inbox access, ask the user to enter the code directly at the hidden terminal prompt. If your tools can't preserve a session and accept input, ask the user to run the entire login command in their own terminal on the same machine and under the same OS user account.
+
+The code must be entered in the **same process that requested it**. Do not stop that process while retrieving the code, start a second login to submit it, or run the command through a tool that closes stdin or kills the process when it returns control.
 
 On success, the CLI saves an API key to `~/.runpod/config.toml`. The CLI and SDK read this file automatically. Do not open the file to display the key, copy it into the conversation, or commit it to a repository.
 
 Login writes the profile selected by `RUNPOD_PROFILE`, or `default` when that variable is unset. It overwrites that profile's stored API key, so reuse working credentials rather than signing in on every setup run.
 
-### Use a separate profile
+#### Use a separate profile
 
 To keep another account's saved credentials, choose a named profile when logging in:
 
@@ -102,19 +109,19 @@ rp pod list --json
 
 On Windows PowerShell, set the profile with `$env:RUNPOD_PROFILE = "agent"`. Ensure every subsequent command receives the variable, including commands run in separate shell sessions.
 
-`RUNPOD_API_KEY` takes precedence over stored credentials, including named profiles. If it is set, logging in does not change the key used by subsequent commands. Check whether it is set without printing its value, and confirm the intended credential source with the user before changing it.
+`RUNPOD_API_KEY` takes precedence over stored credentials, including named profiles. If it is set, logging in does not change the key used by subsequent commands. Check whether it is set without printing its value, and confirm the intended credential source before changing it.
 
-### If sign-in fails
+#### If sign-in fails
 
 If the code is rejected, enter the correct code at the next prompt in the same process. If the attempt expires, is locked, or has already been used, start a fresh login and use the code from that attempt. For rate-limit errors, wait before retrying.
 
 Some accounts don't allow email sign-in. In that case, have the user run `rp login` in an interactive terminal, approve access in the browser, and paste the API key shown by the console into the CLI's hidden prompt. Never ask them to paste it into chat.
 
-## Step 3: Install the Runpod skills
+### Step 3: Install the Runpod skills
 
 Install the skills for your agent using one route below. The skills provide Runpod workflow guidance; CLI authentication comes from step 2. Install additional tools only when a task needs them.
 
-### Claude Code
+#### Claude Code
 
 Install the official plugin:
 
@@ -132,7 +139,7 @@ The plugin also registers the hosted Runpod MCP server. Its sign-in is separate 
 
 If your agent loads Claude Code plugins from `~/.claude`, use this route.
 
-### Codex
+#### Codex
 
 Install the official plugin:
 
@@ -147,7 +154,7 @@ The plugin installs the skills and registers the hosted MCP server. CLI login an
 
 If the plugin commands aren't available, update Codex and check that `features.plugins` isn't set to `false` in `~/.codex/config.toml`. You can also install just the skills using the next section with `--agent codex`.
 
-### Other agents
+#### Other agents
 
 Check `node --version` first. The skills installer requires Node.js 22.20 or newer. If Node.js is unavailable or too old, report that the skills weren't installed; you can still verify and use the CLI.
 
@@ -186,7 +193,7 @@ npx -y skills list --global
 
 For a project-only installation, omit `--global` here too. Expect the `runpod` router and the installed Runpod skills, including `runpod-flash`, `runpod-usage`, and `runpod-mcp`. Each installed skill must contain a `SKILL.md` file. Follow your agent's reload instructions so the skills are available in the session.
 
-## Step 4: Verify access and report the result
+### Step 4: Verify CLI access
 
 Run a read-only request using the same environment and profile that your agent will use:
 
@@ -196,39 +203,45 @@ rp pod list --json
 
 A successful response verifies CLI access. An empty list is valid and doesn't by itself mean the wrong account was selected. If the user expects Pods that aren't listed, confirm the email address, selected profile, and any `RUNPOD_API_KEY` override before signing in again. Do not create billable resources to test setup.
 
-Report only what you verified. For example, after CLI access and skills activation succeed:
+CLI setup is complete when access is verified and the skills are loaded. You don't need an MCP connection for this path. [Report the result](#report-the-result).
 
-```text
-Runpod agent setup
-  CLI: installed; rp login --agent is available
-  Authentication: verified with rp pod list --json
-  Skills: installed and loaded
-  MCP: optional; not connected
-```
+### No user in the loop
 
-Mark anything awaiting user input or an agent restart as pending, and give the exact next action. A successful CLI login does not verify an MCP connection.
+An unattended agent can complete email authentication when it has authorized inbox access and can keep the login process running while it retrieves and submits the code. Follow step 2 to sign in or create an account using the intended email address.
 
-## No user in the loop
+For CI and scheduled jobs with existing credentials, use `RUNPOD_API_KEY` supplied through the environment or an existing `~/.runpod/config.toml` profile. Use `RUNPOD_PROFILE` to select a named profile. Keep credentials in the runner's secret storage, not source code, command arguments, or logs.
 
-CI, scheduled jobs, and unattended agents must use credentials provisioned before the run. Do not start `rp login --agent` or a browser sign-in when nobody can complete it.
+Verify access with `rp pod list --json`. If neither working credentials nor a way to complete email verification is available, stop and report exactly which access is missing. Don't leave a login process waiting for input that cannot arrive. Skills installed during an unattended run may only load on the next agent session; report their activation state accurately.
 
-Install the CLI and skills as above, then use `RUNPOD_API_KEY` supplied through the environment or an existing `~/.runpod/config.toml` profile. Use `RUNPOD_PROFILE` to select a named profile. Keep credentials in the runner's secret storage, not source code, command arguments, or logs.
+## Path 2: Use MCP
 
-Verify access with `rp pod list --json`. If credentials are missing or rejected, stop and report that valid Runpod credentials must be provisioned. Don't attempt to work around authentication. Skills installed during an unattended run may only load on the next agent session; report their activation state accurately.
+Use this path when you don't have terminal access. It requires an agent that supports remote MCP servers or a Runpod connector. You don't need Python, Node.js, or the CLI.
 
-## Optional: Connect the Runpod MCP server
+### Step 1: Connect the hosted server
 
-The hosted server at `https://mcp.runpod.io/` provides structured Runpod tools. Follow the [MCP setup guide](/get-started/mcp-servers) if your agent needs it. Claude Code and Codex plugins already register this server; other clients can register it using that guide.
+Use your agent's integration tools or connector settings to add a server named `runpod` with the URL `https://mcp.runpod.io/` and Streamable HTTP transport. Reuse an existing Runpod entry rather than registering a duplicate. If only the user can change connector settings, ask them to add it there. See the [MCP setup guide](/get-started/mcp-servers) for client-specific instructions.
 
-MCP authentication is separate from `rp login --agent`. A hosted MCP server doesn't read your local `~/.runpod/config.toml`. Sign in through your client's OAuth flow, or configure a bearer token using your client's supported secret mechanism. Don't open the MCP URL in a browser to sign in.
+In ChatGPT, add the [Runpod plugin](https://chatgpt.com/plugins/plugin_asdk_app_6ada3b2d28b4819188b6ced6c229aadf) and sign in with the intended Runpod account.
 
-> **User step.** Approve the MCP sign-in from your agent. In Claude Code, open `/mcp`, select **runpod**, and choose **Sign in with Runpod**.
+### Step 2: Authenticate the connection
 
-Verify MCP access by listing Pods with its tools before reporting it as connected. CLI setup is complete even when this optional connection isn't configured.
+Start sign-in from your agent's Runpod connection and complete its OAuth flow using the authorized account access available to you. Ask the user to complete any sign-in or approval step you can't perform. Don't open the MCP URL in a browser to sign in: it's a tool endpoint, not a login page.
 
-## Use Runpod in ChatGPT
+If a Runpod API key is already available through your client's secret storage, you can configure it as an `Authorization: Bearer` header using the client's supported secret mechanism. Never paste it into chat or a shared configuration file.
 
-Add the [Runpod plugin](https://chatgpt.com/plugins/plugin_asdk_app_6ada3b2d28b4819188b6ced6c229aadf) and sign in with your Runpod account. This route uses the ChatGPT connector and doesn't require terminal setup. For Codex, follow the CLI and skills steps above.
+MCP authentication is separate from `rp login --agent`. A hosted MCP server doesn't read a local `~/.runpod/config.toml`, and MCP sign-in doesn't configure CLI credentials.
+
+### Step 3: Verify MCP access
+
+List Pods using the Runpod MCP tools. A successful response, including an empty list, verifies access. Don't report the server as connected until an authenticated tool call succeeds, and don't create billable resources to test setup.
+
+The MCP server provides workflow guidance through `list-guides` and `read-guide`, and platform concepts through `lookup-concept` and `search-concepts`. Use those tools when local skills aren't available. You can complete this path without installing skills from a terminal.
+
+## Report the result
+
+Report the path you used and what you verified: CLI access with `rp pod list --json`, or MCP access with its Pod-listing tool. For the CLI path, also report whether the skills are installed and loaded. Don't mark the other path as a missing requirement.
+
+Mark anything awaiting access, user input, or an agent restart as pending, and give the exact next action. Only report account creation or sign-in as successful after authentication completes.
 
 ## Feedback
 
