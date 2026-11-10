@@ -202,7 +202,7 @@ After registering, the user approves the OAuth sign-in in the browser the first 
 
 OAuth sign-in works in Claude, ChatGPT, Codex, and Cursor, and in any client that receives the sign-in on a local address (`http://localhost` or `http://127.0.0.1`). Other clients may fail with `redirect_uri is not allowed`, or get a `403` error before the browser opens. If that happens, connect with an API key instead, even when a user is present:
 
-1. Ask the user to create a key on the [Credentials page](https://console.runpod.io/user/settings) and set it as `RUNPOD_API_KEY` in the environment your agent starts from.
+1. Ask the user to create a key on the [Credentials page](https://console.runpod.io/user/settings), or [get one by email](#get-an-api-key-by-email), and set it as `RUNPOD_API_KEY` in the environment your agent starts from.
 2. Send it as a header on the server entry, for example:
 
    ```json
@@ -219,6 +219,34 @@ OAuth sign-in works in Claude, ChatGPT, Codex, and Cursor, and in any client tha
    `${RUNPOD_API_KEY}` reads the key from the environment, but clients write this differently, so check your client's docs. If your client can't read environment variables, run the server locally instead, with `RUNPOD_API_KEY` set: `npx -y @runpod/mcp-server@latest`.
 
 If your agent can't load skills, the MCP server serves the same playbooks: `list-guides` and `read-guide` return them, and `lookup-concept` and `search-concepts` answer questions about how Runpod works.
+
+#### Get an API key by email
+
+If the user doesn't have a Runpod account yet, or can't open the console, get a key from the REST API instead. These endpoints don't need an API key. The same flow signs in to an existing account or creates a new one, and the response is the same either way.
+
+1. Generate a random `codeVerifier` (43 to 128 characters from `A-Z a-z 0-9 . _ ~ -`) and keep it private. The `codeChallenge` is its SHA-256 hash, base64url-encoded without padding.
+2. Start the attempt. Use a new UUID as the `Idempotency-Key` for each attempt. Runpod emails the user a 6-digit code and returns an `attemptId`. The attempt expires after about 10 minutes.
+
+   ```bash
+   VERIFIER=$(python3 -c "import secrets;print(secrets.token_urlsafe(48))")
+   CHALLENGE=$(python3 -c "import sys,hashlib,base64;print(base64.urlsafe_b64encode(hashlib.sha256(sys.argv[1].encode()).digest()).rstrip(b'=').decode())" "$VERIFIER")
+   curl -s -X POST https://api.runpod.io/v2/signup/authentication-attempts \
+     -H 'Content-Type: application/json' -H "Idempotency-Key: $(uuidgen)" \
+     -d "{\"email\":\"user@example.com\",\"keyName\":\"my-agent\",\"codeChallenge\":\"$CHALLENGE\"}"
+   ```
+
+3. > **User step.** Ask the user for the code in the **Your Runpod verification code** email. If you can read their inbox yourself, take the code from the newest message: some mail clients group new codes into the same thread as older ones.
+4. Exchange the code for a key:
+
+   ```bash
+   curl -s -X POST https://api.runpod.io/v2/signup/authentication-attempts/<attemptId>/verify \
+     -H 'Content-Type: application/json' \
+     -d "{\"code\":\"<code>\",\"codeVerifier\":\"$VERIFIER\"}"
+   ```
+
+   The key is in `credential.apiKey`, and it's returned only once. Set it as `RUNPOD_API_KEY` right away, and don't print it or write it to a log. The user can see and revoke it on the [Credentials page](https://console.runpod.io/user/settings).
+
+A wrong code returns `422`, and five wrong codes lock the attempt. To send a new code, call `/resend` with the same `codeVerifier` after the `resendAfter` time. Accounts that use SSO or MFA, or that belong to an organization, get `403` and must create a key in the console instead. Full reference: [Signup endpoints](https://api.runpod.io/v2/docs#tag/signup).
 
 ---
 
