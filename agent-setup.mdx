@@ -202,7 +202,7 @@ After registering, the user approves the OAuth sign-in in the browser the first 
 
 OAuth sign-in works in Claude, ChatGPT, Codex, and Cursor, and in any client that receives the sign-in on a local address (`http://localhost` or `http://127.0.0.1`). Other clients may fail with `redirect_uri is not allowed`, or get a `403` error before the browser opens. If that happens, connect with an API key instead, even when a user is present:
 
-1. Ask the user to create a key on the [Credentials page](https://console.runpod.io/user/settings), or [get one by email](#get-an-api-key-by-email), and set it as `RUNPOD_API_KEY` in the environment your agent starts from.
+1. Get a key. Either ask the user to create one on the [Credentials page](https://console.runpod.io/user/settings), or [get one yourself by email](#get-an-api-key-by-email). It must be set as `RUNPOD_API_KEY` in the environment your agent starts from.
 2. Send it as a header on the server entry, for example:
 
    ```json
@@ -224,27 +224,23 @@ If your agent can't load skills, the MCP server serves the same playbooks: `list
 
 If the user doesn't have a Runpod account yet, or can't open the console, you can get an API key by email. You don't need an API key for this. If the email address already has a Runpod account, this signs in to it. If not, it creates a new account.
 
-Run these steps yourself. The only things you need from the user are their email address and, unless you can read their inbox, the 6-digit code Runpod emails them.
+Run these steps yourself. The only things you need from the user are their email address and, unless you can read their inbox, the 6-digit code Runpod emails them. If no user is present, do this only when your task tells you to and you can read the inbox. Otherwise follow [No user in the loop](#no-user-in-the-loop).
 
-Never print the API key or let a command print it. Everything a command prints goes back to your model provider. Both options below save the key to a file and print only whether it worked.
+Never print the API key or let a command print it. Everything a command prints goes back to your model provider. The steps below save the key to a file and print only whether it worked. Don't run them with shell tracing (`set -x`) turned on, because tracing prints the key.
 
-**Option 1: the Runpod CLI.** Use this if your shell can send input to a command that's still running, for example a terminal tool that accepts input, or `tmux`.
-
-```bash
-pip install -U runpod
-runpod login --agent --email user@example.com
-```
-
-The CLI emails a 6-digit code and waits at a `Verification code:` prompt. Get the code, type it in, and the CLI saves the key to `~/.runpod/config.toml`. The Runpod CLI and Python SDK read it from there.
-
-**Option 2: the REST API.** Use this if your shell runs each command and waits for it to finish, so you can't type into a running command.
-
-**Step 1: Ask Runpod to send the code.** Replace `user@example.com` with the user's email address, then run this whole block:
+**Step 1: Ask Runpod to send the code.** Replace `user@example.com` with the user's email address and `my-agent` with a short name for yourself, such as `codex-laptop`. The user sees that name next to the key in the console. Then run this whole block once:
 
 ```bash
-python3 -c "import secrets; print(secrets.token_urlsafe(48))" > ~/.runpod-signup-secret
-CHALLENGE=$(python3 -c "import hashlib,base64; s=open('$HOME/.runpod-signup-secret').read().strip(); print(base64.urlsafe_b64encode(hashlib.sha256(s.encode()).digest()).rstrip(b'=').decode())")
-curl -s -X POST https://api.runpod.io/v2/signup/authentication-attempts \
+CHALLENGE=$(python3 -c "
+import base64, hashlib, os, secrets
+secret = secrets.token_urlsafe(48)
+fd = os.open(os.path.expanduser('~/.runpod-signup-secret'), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+os.fchmod(fd, 0o600)
+os.write(fd, secret.encode())
+os.close(fd)
+print(base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest()).rstrip(b'=').decode())
+")
+[ -n "$CHALLENGE" ] && curl -sS -X POST https://api.runpod.io/v2/signup/authentication-attempts \
   -H 'Content-Type: application/json' \
   -H "Idempotency-Key: $(python3 -c 'import uuid; print(uuid.uuid4())')" \
   -d "{\"email\":\"user@example.com\",\"keyName\":\"my-agent\",\"codeChallenge\":\"$CHALLENGE\"}"
@@ -256,11 +252,11 @@ You'll see something like:
 {"attemptId":"32a0ac2af9352852d128519d6e0e0737","expiresAt":"2026-11-10T17:26:53Z","resendAfter":"2026-11-10T17:17:23Z"}
 ```
 
-Write down the `attemptId`. Runpod has emailed a 6-digit code. You have 10 minutes to use it.
+Write down the `attemptId`. Runpod has emailed a 6-digit code. You have 10 minutes to use it. Don't run this block again while you wait: each run starts a new attempt and makes the old one unusable.
 
 **Step 2: Get the code.**
 
-> **User step.** Ask the user for the 6-digit code in the **Your Runpod verification code** email. If you can read their inbox yourself, follow [Sign up on your own with inbox access](#sign-up-on-your-own-with-inbox-access) instead.
+> **User step.** Ask the user for the 6-digit code in the **Your Runpod verification code** email. If you can read their inbox yourself, get the code with items 3 to 5 of [Sign up on your own with inbox access](#sign-up-on-your-own-with-inbox-access) instead.
 
 **Step 3: Exchange the code for an API key.** Replace `ATTEMPT_ID` and `123456` on the first line with your values, then run this whole block:
 
@@ -270,56 +266,104 @@ import json, os, sys, urllib.request, urllib.error
 attempt_id, code = sys.argv[1], sys.argv[2]
 home = os.path.expanduser("~")
 secret_file = os.path.join(home, ".runpod-signup-secret")
-body = json.dumps({"code": code, "codeVerifier": open(secret_file).read().strip()}).encode()
+try:
+    verifier = open(secret_file).read().strip()
+except OSError:
+    sys.exit("Failed: ~/.runpod-signup-secret is missing. Start over from step 1.")
+body = json.dumps({"code": code, "codeVerifier": verifier}).encode()
 url = f"https://api.runpod.io/v2/signup/authentication-attempts/{attempt_id}/verify"
 request = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
 try:
-    result = json.load(urllib.request.urlopen(request))
+    with urllib.request.urlopen(request, timeout=30) as response:
+        credential = json.load(response)["credential"]
+    api_key, key_id = str(credential["apiKey"]), str(credential["id"])
 except urllib.error.HTTPError as error:
-    sys.exit(f"Failed: HTTP {error.code}: {json.load(error).get('detail', '')}")
-os.makedirs(os.path.join(home, ".runpod"), exist_ok=True)
-key_file = os.path.join(home, ".runpod", "api-key")
-fd = os.open(key_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-os.write(fd, result["credential"]["apiKey"].encode())
-os.close(fd)
+    sys.exit(f"Failed: HTTP {error.code}. Look it up in the table below.")
+except OSError:
+    sys.exit("Failed: could not reach api.runpod.io. Check the network and run this block again.")
+except (ValueError, KeyError, TypeError):
+    sys.exit("Failed: unexpected response from Runpod. Start over from step 1.")
+
+def save(path, text):
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    os.fchmod(fd, 0o600)
+    os.write(fd, text.encode())
+    os.close(fd)
+
+runpod_dir = os.path.join(home, ".runpod")
+os.makedirs(runpod_dir, mode=0o700, exist_ok=True)
+save(os.path.join(runpod_dir, "api-key"), api_key)
+config_file = os.path.join(runpod_dir, "config.toml")
+if os.path.exists(config_file):
+    print("~/.runpod/config.toml already exists, so it was left unchanged.")
+else:
+    save(config_file, f'[default]\napi_key = "{api_key}"\n')
+    print("Wrote ~/.runpod/config.toml.")
 os.remove(secret_file)
-print(f"Saved API key {result['credential']['id']} to ~/.runpod/api-key")
+print(f"Saved API key {key_id} to ~/.runpod/api-key")
 EOF
 ```
 
-It prints `Saved API key key_... to ~/.runpod/api-key`, never the key itself. To use the key, load it without printing it:
+It prints `Saved API key key_... to ~/.runpod/api-key`, never the key itself. The user can see and revoke the key on the [Credentials page](https://console.runpod.io/user/settings).
 
-```bash
-export RUNPOD_API_KEY=$(cat ~/.runpod/api-key)
-```
+**Use the key without printing it.**
 
-The Runpod CLI, Python SDK, and `runpodctl` all read `RUNPOD_API_KEY`, and you can pass it to the MCP server as a header. Don't `cat` or `echo` the file on its own. The user can see and revoke the key on the [Credentials page](https://console.runpod.io/user/settings).
+- The Runpod CLI and Python SDK read `~/.runpod/config.toml` on their own. If the script left an existing `config.toml` unchanged, that file may hold an older key.
+- For anything else, set `RUNPOD_API_KEY` on the same line as the command that needs it. A separate `export` line is lost if your shell runs each command on its own.
+
+  ```bash
+  RUNPOD_API_KEY=$(cat ~/.runpod/api-key) runpodctl pod list
+  ```
+
+- For the MCP server header, the key must be in the environment your agent starts from. Ask the user to add `export RUNPOD_API_KEY=$(cat ~/.runpod/api-key)` to their shell profile and restart you.
+- Don't `cat` or `echo` the file on its own.
 
 **If something goes wrong:**
 
 | You see | What it means | What to do |
 | --- | --- | --- |
-| `HTTP 422` | The code is wrong or badly formatted | Check the code and try again. After 5 wrong codes, start over from step 1. |
-| `HTTP 404` | The attempt expired or was already used | Start over from step 1. |
+| `HTTP 422` | The code is wrong, or it isn't 6 digits | Check the code and run step 3 again. After 5 wrong codes, start over from step 1. |
+| `HTTP 404` | The attempt expired, was already used, or locked after 5 wrong codes, or step 1 was run again | Start over from step 1. |
 | `HTTP 403` | The account uses SSO or MFA, or belongs to an organization | Ask the user to create a key on the [Credentials page](https://console.runpod.io/user/settings). |
-| No email after a minute | It's delayed or in spam | Check spam, then call `/resend`. See the [Signup reference](https://api.runpod.io/v2/docs#tag/signup). |
+| `HTTP 429` | Too many requests | Wait a minute, then try again. |
+| Any other `HTTP` code | Runpod had a temporary problem | Wait a minute, then run the same step again. |
+| No email after a minute | It's delayed or in spam | Check spam, then send a new code with the command below. |
 
-**If you get stuck,** for example because `python3` isn't available or the steps keep failing, ask the user to run Option 1 in their own terminal and type the code in themselves.
+To send a new code, wait until the `resendAfter` time from step 1, replace `ATTEMPT_ID`, and run:
+
+```bash
+curl -sS -X POST https://api.runpod.io/v2/signup/authentication-attempts/ATTEMPT_ID/resend \
+  -H 'Content-Type: application/json' \
+  -d "{\"codeVerifier\":\"$(cat ~/.runpod-signup-secret)\"}"
+```
+
+The old code stops working, and the 10 minutes don't restart. The full API description is at `https://api.runpod.io/v2/openapi.json`.
+
+**Alternative: the Runpod CLI.** The CLI does all three steps in one command, but it waits at a `Verification code:` prompt. That makes it the one exception to the rule against commands that wait for input. Use it only if your shell can send input to a command that's still running, for example a terminal tool that accepts input, or `tmux`. In any other shell it sends the email and then fails.
+
+```bash
+pip install -U runpod
+runpod login --agent --email user@example.com
+```
+
+If `pip` fails with `externally-managed-environment`, run `pipx install runpod` or `uv tool install runpod` instead. Installing the CLI here is fine, even though the skills normally install it later. When the prompt appears, get the code, type it in, and the CLI saves the key to `~/.runpod/config.toml` without printing it.
+
+**If you get stuck,** for example because `python3` isn't available or the steps keep failing, ask the user to run the two CLI commands above in their own terminal and type the code in themselves.
 
 #### Sign up on your own with inbox access
 
-If you can read an email inbox the user has connected for you (for example through a Gmail connector or an IMAP tool), you can do step 2 yourself.
+If you can read an email inbox the user has connected for you (for example through a Gmail connector or an IMAP tool), you can get the code yourself and skip the user step.
 
 1. Use only an address whose inbox the user has connected for you. Before you start, tell the user you're about to sign in to Runpod with it, or create an account if none exists.
-2. Run step 1 of Option 2 above with that address. Set `keyName` to a name that says who you are, such as `codex-laptop`, so the user can find the key later. Note the time you ran it.
+2. If you haven't run step 1 above yet, run it now with that address. Note the time you ran it.
 3. Search the inbox for an email from `noreply@runpod.io` with the subject **Your Runpod verification code** that arrived after that time. It usually arrives within 10 seconds. If you don't find it, wait 10 seconds and search again. Include the spam folder.
 4. Open the newest matching message. Don't read the whole thread: mail clients often put a new code in the same thread as older ones, and an old code won't work.
 5. Find the line **Use this code to finish signing in to Runpod** and copy the 6-digit number after it.
-6. Run step 3 of Option 2 above with that code.
+6. Run step 3 above with that code.
 
 Don't start a second attempt while one is still open, and never guess a code.
 
-Some agents aren't allowed to complete a sign-in themselves, even with inbox access. If that applies to you, stop after you find the code. Give the user the Option 2, step 3 command with `ATTEMPT_ID` and the code filled in, and let them run it.
+Some agents aren't allowed to complete a sign-in themselves, even with inbox access. If that applies to you, stop after you find the code. Give the user the step 3 block with `ATTEMPT_ID` and the code filled in, and ask them to run it in a terminal on this machine, under the same user account, so it can find the secret file.
 
 ---
 
