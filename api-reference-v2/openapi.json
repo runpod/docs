@@ -92,6 +92,10 @@
       "description": "Account-scoped settings and primitives (SSH public keys)."
     },
     {
+      "name": "Signup",
+      "description": "Email sign-in and account creation for callers without an API key."
+    },
+    {
       "name": "Pods",
       "description": "GPU and CPU pod lifecycle, configuration, actions, and log streaming."
     },
@@ -3926,6 +3930,155 @@
                 "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILXGDN/SclOozk1xsDztpmhGiKkkrfQB9SKoO8dSIQQZ me@example.com"
               ]
             ]
+          }
+        }
+      },
+      "CreateAuthenticationAttemptRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "email",
+          "keyName",
+          "codeChallenge"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254,
+            "description": "Address to send the verification code to. It may belong to an existing account or a new one.",
+            "examples": [
+              "owner@example.com"
+            ]
+          },
+          "keyName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Name of the API key issued when verification succeeds.",
+            "examples": [
+              "laptop-cli"
+            ]
+          },
+          "codeChallenge": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "description": "Unpadded base64url SHA-256 hash of a random `codeVerifier` the caller keeps private. Verify and resend require the matching verifier.",
+            "examples": [
+              "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+            ]
+          }
+        }
+      },
+      "VerifyAuthenticationAttemptRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "codeVerifier"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[0-9]{6}$",
+            "description": "Verification code from the email.",
+            "examples": [
+              "123456"
+            ]
+          },
+          "codeVerifier": {
+            "$ref": "#/components/schemas/CodeVerifier"
+          }
+        }
+      },
+      "ResendAuthenticationAttemptRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "codeVerifier"
+        ],
+        "properties": {
+          "codeVerifier": {
+            "$ref": "#/components/schemas/CodeVerifier"
+          }
+        }
+      },
+      "CodeVerifier": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._~-]{43,128}$",
+        "description": "The random secret whose SHA-256 hash was sent as `codeChallenge`.",
+        "examples": [
+          "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+        ]
+      },
+      "AuthenticationAttempt": {
+        "type": "object",
+        "required": [
+          "attemptId",
+          "expiresAt",
+          "resendAfter"
+        ],
+        "properties": {
+          "attemptId": {
+            "type": "string",
+            "description": "Identifies the attempt in verify and resend.",
+            "examples": [
+              "att_3kq9x81mzp"
+            ]
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the attempt stops accepting codes. Resending does not extend it.",
+            "examples": [
+              "2026-10-16T18:10:00Z"
+            ]
+          },
+          "resendAfter": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Earliest time a resend is accepted.",
+            "examples": [
+              "2026-10-16T18:00:30Z"
+            ]
+          }
+        }
+      },
+      "AuthenticationAttemptResult": {
+        "type": "object",
+        "required": [
+          "userId",
+          "credential"
+        ],
+        "properties": {
+          "userId": {
+            "type": "string",
+            "examples": [
+              "user_2abc9xyz"
+            ]
+          },
+          "credential": {
+            "type": "object",
+            "required": [
+              "id",
+              "apiKey"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Identifies the key in the console, where it can be revoked.",
+                "examples": [
+                  "key_7Rk2m0pq"
+                ]
+              },
+              "apiKey": {
+                "type": "string",
+                "description": "The raw API key. It is returned once, so store it before doing anything else.",
+                "examples": [
+                  "rpa_EXAMPLEONLYEXAMPLEONLYEXAMPLEONLY"
+                ]
+              }
+            }
           }
         }
       },
@@ -9976,6 +10129,309 @@
                 "$ref": "#/components/headers/RateLimit-Policy"
               }
             },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/signup/authentication-attempts": {
+      "post": {
+        "operationId": "createAuthenticationAttempt",
+        "security": [],
+        "x-mint": {
+          "metadata": {
+            "description": "Email a verification code to sign in or create a Runpod account without an API key."
+          }
+        },
+        "summary": "Start an authentication attempt",
+        "description": "Emails a verification code to sign in to an existing account or create a new one, without an API key. The response is the same whether or not an account exists for the email.",
+        "tags": [
+          "Signup"
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "description": "Use an unpredictable unique key, such as a UUID, for each new attempt. Retrying with the same key and body returns the same attempt without sending another email. For the same email, the same key with a different body is a `422`.",
+            "example": "0f8c2d4e-6a1b-4c3d-9e7f-1a2b3c4d5e6f"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAuthenticationAttemptRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created. A verification code was emailed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationAttempt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed or its body could not be read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The incoming request body exceeds 4096 bytes (4 KiB).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/signup/authentication-attempts/{id}/verify": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "description": "The `attemptId` returned when the attempt started."
+        }
+      ],
+      "post": {
+        "operationId": "verifyAuthenticationAttempt",
+        "security": [],
+        "x-mint": {
+          "metadata": {
+            "description": "Exchange an emailed verification code for a new Runpod API key."
+          }
+        },
+        "summary": "Verify an authentication attempt",
+        "description": "Exchanges the emailed code and the `codeVerifier` whose hash started the attempt for a new API key, visible and revocable in the console. A wrong code is a `422`, and five wrong codes lock the attempt.",
+        "tags": [
+          "Signup"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyAuthenticationAttemptRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK. The attempt is consumed and the key is issued.",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationAttemptResult"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The account requires SSO or MFA, or belongs to an organization. Sign in through the console instead.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No usable attempt matches this id and `codeVerifier`. It does not exist, expired, already issued a key, or locked after five wrong codes.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed or its body could not be read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The incoming request body exceeds 4096 bytes (4 KiB).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/signup/authentication-attempts/{id}/resend": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "description": "The `attemptId` returned when the attempt started."
+        }
+      ],
+      "post": {
+        "operationId": "resendAuthenticationAttempt",
+        "security": [],
+        "x-mint": {
+          "metadata": {
+            "description": "Email a new verification code for a pending authentication attempt."
+          }
+        },
+        "summary": "Resend an authentication attempt's code",
+        "description": "Emails a new verification code and invalidates the previous one. The attempt's `expiresAt` and wrong-code count carry over. Resending before `resendAfter` is a `429` with `Retry-After`.",
+        "tags": [
+          "Signup"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResendAuthenticationAttemptRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK. A new code was emailed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationAttempt"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No usable attempt matches this id and `codeVerifier`. It does not exist, expired, already issued a key, or locked after five wrong codes.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed or its body could not be read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The incoming request body exceeds 4096 bytes (4 KiB).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
             "description": "Error",
             "content": {
               "application/problem+json": {
