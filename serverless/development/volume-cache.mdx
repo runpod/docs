@@ -57,10 +57,12 @@ vc.sync(background=False)     # persist new files back to the volume, inline
 | `volume_path` | `/runpod-volume` | Mount point of the network volume. |
 | `best_effort` | `True` | When `True`, cache errors are logged and swallowed instead of raised. Set to `False` while debugging. |
 | `max_workers` | `min(32, (os.cpu_count() or 4) * 4)` | Thread count for copying large files back to the volume during `sync()`. The work is I/O-bound, so the default oversubscribes the CPU count. |
-| `hydrate_workers` | `max_workers` if you set it, otherwise `64` | Number of concurrent range reads when `hydrate()` restores large files. |
-| `hydrate_chunk_size` | 8 MiB | Size in bytes of each range that `hydrate()` reads. |
+| `hydrate_workers` | `max_workers` if you set it, otherwise `8` | Number of concurrent range reads when `hydrate()` restores large files. |
+| `hydrate_chunk_size` | 512 MiB divided by `hydrate_workers`, up to 64 MiB | Size in bytes of each range that `hydrate()` reads. |
 
-Hydration holds about `hydrate_workers * hydrate_chunk_size` bytes in memory at its peak, which is 512 MiB with the defaults. Keep that total near the default. On [global volumes](/storage/globalvolume/overview), more than about 1 GiB in flight causes reads to fail under load.
+Hydration holds about `hydrate_workers * hydrate_chunk_size` bytes in memory at its peak. With the defaults, that's 8 ranges of 64 MiB, or 512 MiB. If you change `hydrate_workers` or `max_workers` without setting `hydrate_chunk_size`, the default range size shrinks to keep the total at or below 512 MiB. For example, `max_workers=32` gives 32 ranges of 16 MiB. `VolumeCache` never rescales a `hydrate_chunk_size` you set explicitly, so check the total yourself and keep it near 512 MiB. On [global volumes](/storage/globalvolume/overview), more than about 1 GiB in flight causes reads to fail under load.
+
+On a network volume, the defaults restore large files about twice as fast as 64 ranges of 8 MiB. On global volumes, both perform about the same. The first hydrate on a fresh worker reading from a global volume is slow whatever the settings. If that first cold start matters for your endpoint, measure it with `hydrate_workers=64`, which uses 8 MiB ranges.
 
 ## How it works
 
