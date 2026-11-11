@@ -36,6 +36,23 @@ def process_batch(items: list):
     ...
 ```
 
+To load a model once per worker instead of on every job, register a startup hook with `.init` on the function. `@app.queue` and `@app.task` accept functions, not classes, so keep shared state at module level:
+
+```python
+model = None
+
+@app.queue(gpu="4090", workers=(1, 10))
+def generate(prompt: str):
+    return model(prompt)
+
+@generate.init
+def load():
+    global model
+    model = load_model()  # Runs once per worker, before it takes jobs
+```
+
+The hook doesn't run when you call `generate.local()`.
+
 ### API resources
 
 HTTP clients expect an immediate response, so keep more workers ready and add a health route:
