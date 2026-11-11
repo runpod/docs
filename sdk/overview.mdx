@@ -103,7 +103,7 @@ from runpod import App, Model, NetworkVolume, Secret
 
 app = App("inference")
 
-models = NetworkVolume("models", size=100)
+checkpoints = NetworkVolume("checkpoints", size=100)
 llama = Model("meta-llama/Llama-3.1-8B-Instruct")
 
 # Autoscaling job queue on H100s, scales to zero when idle
@@ -111,21 +111,32 @@ llama = Model("meta-llama/Llama-3.1-8B-Instruct")
     gpu="H100",
     workers=(0, 3),
     dependencies=["vllm"],
-    mounts={"/runpod-volume": models},
     model=llama,
     env={"HF_TOKEN": Secret("hf-token")},
 )
 def chat(prompt: str):
     import vllm
 
-    llm = vllm.LLM(model=str(llama.path))
-    return llm.generate(prompt)
+    llm = vllm.LLM(model=str(llama.path))  # Weights are already on disk
+    result = llm.generate([prompt])[0]
+    return result.outputs[0].text  # Results must be JSON values
 
 # One ephemeral Pod per call
-@app.task(gpu="H100", gpu_count=2, mounts={"/models": models})
+@app.task(gpu="H100", mounts={"/checkpoints": checkpoints})
 def finetune(steps: int = 1000):
-    ...
-    return {"loss": 0.1}
+    import torch
+
+    model = torch.nn.Linear(1, 1).cuda()
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.05)
+    x = torch.randn(1024, 1, device="cuda")
+    y = 3 * x + 1
+    for _ in range(steps):
+        loss = ((model(x) - y) ** 2).mean()
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+    torch.save(model.state_dict(), checkpoints.path / "model.pt")
+    return {"loss": loss.item()}
 
 # Load-balanced HTTP service
 @app.api(cpu="cpu3c-1-2")
@@ -146,9 +157,19 @@ class Counter:
 
 In this example:
 
-- `chat` runs on an autoscaling queue endpoint with between 0 and 3 workers. Runpod stages the model weights on the host before the worker starts (`model=llama`), the network volume is mounted at `/runpod-volume`, and the `HF_TOKEN` environment variable is read from a Runpod secret.
-- `finetune` provisions a two-GPU Pod for each call and terminates it when the function returns.
+- `chat` runs on an autoscaling queue endpoint with between 0 and 3 workers. Runpod stages the model weights on the host before the worker starts (`model=llama`), and the `HF_TOKEN` environment variable is read from a Runpod secret. The function returns the generated text because remote results must be JSON values.
+- `finetune` provisions a single-GPU Pod for each call, saves a checkpoint to the `checkpoints` network volume, and terminates the Pod when the function returns.
 - `Counter` is served over HTTP. The method marked with `@runpod.init` runs once when each worker starts, and methods marked with `@runpod.get` and `@runpod.post` become routes. Workers keep state in memory between requests.
+
+Before you run the example, store your Hugging Face token as the `hf-token` secret. The command prompts for the value:
+
+```bash
+rp secret add hf-token
+```
+
+<Warning>
+  The `checkpoints` network volume persists after your app stops and keeps incurring storage charges. Delete it from the [Storage page](https://console.runpod.io/user/storage) in the console when you no longer need it.
+</Warning>
 
 Specify hardware with `gpu=` or `cpu=`, which are mutually exclusive. For GPUs, use a short name such as `"4090"`, `"H100"`, or `"B200"`, a `runpod.GpuGroup` pool such as `runpod.GpuGroup.ANY`, or a `runpod.GpuType` device. Pass a list to allow several options. If you don't set `workers`, resources scale between 0 and 3 workers.
 
@@ -178,8 +199,20 @@ Mark the function that drives your app with `@runpod.local_entrypoint`. It runs 
 @runpod.local_entrypoint
 def main():
     print(chat.remote("Why is the sky blue?"))  # Blocks for the result
-    job = finetune.spawn(steps=500)  # Returns a Job immediately
+    print(finetune.remote(steps=500))  # The Pod terminates when the task returns
 ```
+
+A spawned task keeps its Pod until you wait for it or cancel it, and `job.wait()` and `job.cancel()` are async. To run a task in the background, spawn it from an async entrypoint and wait for the result:
+
+```python
+@runpod.local_entrypoint
+async def main():
+    job = await finetune.spawn.aio(steps=500)  # Returns a Job immediately
+    # ... do other work ...
+    print(await job.wait())  # Waits for the result, then terminates the Pod
+```
+
+Call `await job.cancel()` instead to abandon the task and terminate its Pod.
 
 App discovery imports your modules synchronously. Keep blocking work inside an entrypoint or a remote function, not at the top level of a module.
 
