@@ -1,0 +1,329 @@
+---
+title: External volumes
+sidebarTitle: Overview
+description: "Mount your own S3-compatible bucket on Runpod Pods and Serverless endpoints as an external volume, without copying data or paying Runpod storage fees."
+---
+<Note>
+
+External volumes are in beta and available to enterprise accounts only. Features and behavior may change before general availability.
+
+</Note>
+
+An external volume lets you mount an S3-compatible bucket you already own on Pods and Serverless workers, in any data center. Your data stays in your bucket. Runpod doesn't copy, move, or delete it, and doesn't charge a storage fee. You pay your storage provider directly.
+
+External volumes work like [global volumes](/storage/globalvolume/overview): the bucket appears as a directory inside the container, so your code reads and writes files without an S3 client. The difference is who owns the bucket. Runpod provisions a global volume for you. An external volume is your existing bucket, plus the credentials Runpod needs to reach it.
+
+Use an external volume when:
+
+- Your datasets or model weights already live in a bucket and you don't want to migrate them.
+- Your data must stay with a specific provider or in a specific region.
+- You want Pods in any data center to read the same data, without duplicating volumes.
+
+## Requirements
+
+- An organization account with the external volumes entitlement. Contact [Runpod sales](https://www.runpod.io/contact) to enable it.
+- An S3-compatible bucket.
+- An access key for the bucket that can read and list objects under the path you want to mount. Add write access if your Pods will write to the bucket.
+- To use the REST API, a [Runpod API key](/get-started/api-keys) with the scopes listed in [Manage external volumes with the REST API](#manage-external-volumes-with-the-rest-api).
+
+## Supported providers
+
+External volumes support any storage that exposes an S3-compatible API with access key authentication, including:
+
+| Provider | Endpoint URL | Credential |
+| --- | --- | --- |
+| Amazon S3 | Leave blank. Runpod uses `https://s3.amazonaws.com`. | IAM access key ID and secret access key. |
+| Google Cloud Storage | `https://storage.googleapis.com` | HMAC key. |
+| Tigris, Wasabi, MinIO, Backblaze B2 | The provider's S3-compatible endpoint. | The provider's access key ID and secret. |
+| Oracle Cloud Infrastructure | The provider's S3-compatible endpoint. | Customer secret key. You must also set **Region**. |
+
+Azure Blob Storage and native Google Cloud Storage authentication (service account JSON) aren't supported.
+
+## Create a credential for your bucket
+
+Runpod needs a long-lived access key pair. Temporary credentials, such as AWS STS session tokens or assumed roles, aren't supported.
+
+Scope the key to the smallest set of permissions your workload needs. At minimum, the key must be able to:
+
+- List objects under the prefix you mount.
+- Read objects under that prefix.
+
+Add write and delete permissions if your Pods will create, change, or remove files.
+
+### Amazon S3
+
+Create an IAM user with a policy scoped to your bucket, then create an access key for that user. The following example grants read, write, and list access to the `datasets/` prefix of `BUCKET_NAME`:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::BUCKET_NAME",
+      "Condition": { "StringLike": { "s3:prefix": ["datasets/*"] } }
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+      "Resource": "arn:aws:s3:::BUCKET_NAME/datasets/*"
+    }
+  ]
+}
+```
+
+For read-only access, remove `s3:PutObject` and `s3:DeleteObject`. To mount the whole bucket, remove the `Condition` block and change the object resource to `arn:aws:s3:::BUCKET_NAME/*`.
+
+A key scoped to a prefix can only mount that prefix. Registering the same key at the bucket root fails the credential check.
+
+### Google Cloud Storage
+
+Google Cloud Storage connects through its S3-compatible API, which uses HMAC keys:
+
+1. In the Google Cloud console, go to **Cloud Storage** > **Settings** > **Interoperability**.
+2. Create an HMAC key for a service account that has access to your bucket.
+3. Copy the **Access ID** and **Secret**. Use them as the access key ID and secret access key when you create the external volume.
+4. Set the endpoint URL to `https://storage.googleapis.com`.
+
+### Other providers
+
+Create an access key in your provider's console, and copy the provider's S3-compatible endpoint URL. For Oracle Cloud, set **Region** to your OCI region identifier, such as `us-ashburn-1`. Region auto-detection doesn't work with Oracle Cloud.
+
+## Create an external volume
+
+When you create an external volume, Runpod checks the credential against your bucket before saving it. If the key can't reach, read, or list the location you entered, creation fails with a message describing what to fix.
+
+{/* Console steps based on the UX prototype. Verify labels against the shipped console (ORG-1084). */}
+
+<Steps>
+  <Step title="Open the storage type selector">
+    In the left nav, go to **Storage** and click **+ New volume**. Under **Storage type**, select **External volume**.
+  </Step>
+  <Step title="Name the volume">
+    Enter a **Name** to identify the volume in the console.
+  </Step>
+  <Step title="Enter the storage location">
+    - **Endpoint URL** (optional): leave blank for Amazon S3. For other providers, enter their S3-compatible endpoint.
+    - **Bucket**: the exact bucket name, not a URL or path.
+    - **Prefix** (optional): mount one folder instead of the whole bucket, for example `datasets/production`.
+    - **Region** (optional): leave blank to detect it automatically.
+
+    You can't change these fields after you create the volume.
+  </Step>
+  <Step title="Enter the credentials">
+    Enter the **Access key ID** and **Secret access key**. You can't view the secret again after saving.
+  </Step>
+  <Step title="Connect the bucket">
+    Optionally add tags, then click **Connect bucket**.
+  </Step>
+</Steps>
+
+The volume appears in your Storage list with the type **External**. Runpod can't see how much data your bucket holds, so the list shows no capacity or price for external volumes. Check your provider's console for usage.
+
+## Attach an external volume
+
+### Pods
+
+Attach an external volume when you deploy a Pod, from the **Storage** section of the deploy page. {/* Confirm exact console steps once ORG-1084 ships. */}
+
+On Pods:
+
+- The volume mounts at `/workspace-global` by default. You can choose a different mount path.
+- External volumes work on GPU and CPU Pods, in any data center.
+- A Pod can attach one external volume and one network volume.
+- A Pod can't attach a global volume and an external volume at the same time.
+- You can't add or remove an external volume after the Pod is created. You can change its mount path.
+
+### Serverless
+
+On Serverless endpoints:
+
+- External volumes work with GPU endpoints only.
+- The volume always mounts at `/runpod-volume`.
+- An endpoint can attach one external volume, and can't use it together with a network volume or a global volume.
+- You can attach, replace, or detach the volume on an existing endpoint. Workers redeploy to pick up the change.
+
+## Update credentials
+
+You can replace the access key for an external volume without recreating it or redeploying endpoints. Runpod checks the new key against your bucket first. If the check fails, the existing key stays in place.
+
+{/* Confirm against STO-1185 before publishing. */}
+Pods and Serverless workers that start after the update use the new key. Running Pods and workers keep using the old key until they restart, so keep the old key active until they do.
+
+## Delete an external volume
+
+Deleting an external volume removes its registration from Runpod. It never touches your bucket or its data.
+
+You can't delete an external volume while it's in use. First:
+
+- Terminate every Pod that mounts it. Stopped Pods count as using the volume.
+- Detach it from every Serverless endpoint.
+
+## Manage external volumes with the REST API
+
+The REST API supports the full lifecycle of an external volume. Use it to automate registration and key rotation.
+
+| Action | Request | API key scope |
+| --- | --- | --- |
+| List external volumes | `GET /v2/external-volumes` | `volumes:read` |
+| Get an external volume | `GET /v2/external-volumes/{id}` | `volumes:read` |
+| Create an external volume | `POST /v2/external-volumes` | `secrets:write` |
+| Rename an external volume | `PATCH /v2/external-volumes/{id}` | `volumes:write` |
+| Replace the credential | `PUT /v2/external-volumes/{id}/authentication` | `secrets:write` |
+| Delete an external volume | `DELETE /v2/external-volumes/{id}` | `volumes:write` |
+
+Attaching a volume uses `pods:write` or `serverless:write`, the same as network and global volumes.
+
+### Create an external volume
+
+The following request registers the `datasets` prefix of an Amazon S3 bucket:
+
+```bash
+curl --request POST \
+  --url https://api.runpod.io/v2/external-volumes \
+  --header 'Authorization: Bearer RUNPOD_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "name": "training-data",
+    "connection": {
+      "protocol": "S3",
+      "bucket": "BUCKET_NAME",
+      "prefix": "datasets",
+      "authentication": {
+        "type": "ACCESS_KEY",
+        "accessKeyId": "ACCESS_KEY_ID",
+        "secretAccessKey": "SECRET_ACCESS_KEY"
+      }
+    }
+  }'
+```
+
+For other providers, add `endpointUrl`, and add `region` when your provider requires it. Omit `prefix` to mount the whole bucket.
+
+A successful request returns `201` with the new volume. The response never includes the secret access key:
+
+```json
+{
+  "id": "obs_abc",
+  "name": "training-data",
+  "connection": {
+    "protocol": "S3",
+    "bucket": "BUCKET_NAME",
+    "endpointUrl": "https://s3.amazonaws.com",
+    "region": null,
+    "prefix": "datasets",
+    "authentication": { "type": "ACCESS_KEY", "accessKeyId": "ACCESS_KEY_ID" }
+  },
+  "createdAt": "2026-10-20T00:00:00Z",
+  "createdByUserId": "user_123"
+}
+```
+
+A `region` of `null` means the region is detected when the volume mounts.
+
+### Attach to a Pod
+
+Pass the volume ID under `mounts.external` when you create the Pod. The following example also attaches a network volume:
+
+```bash
+curl --request POST \
+  --url https://api.runpod.io/v2/pods \
+  --header 'Authorization: Bearer RUNPOD_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "name": "my-pod",
+    "mounts": {
+      "network": [{ "volumeId": "NETWORK_VOLUME_ID", "path": "/workspace" }],
+      "external": [{ "volumeId": "EXTERNAL_VOLUME_ID", "path": "/data" }]
+    }
+  }'
+```
+
+{/* Add the remaining required Pod fields (image, GPU) to match the current /v2/pods example in the API reference. */}
+
+`mounts.external` accepts one volume. Omit `path` to mount at `/workspace-global`.
+
+### Attach to a Serverless endpoint
+
+Pass the volume ID under `mounts.external` when you create or update a GPU endpoint:
+
+```bash
+curl --request PATCH \
+  --url https://api.runpod.io/v2/serverless/ENDPOINT_ID \
+  --header 'Authorization: Bearer RUNPOD_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{ "mounts": { "external": [{ "volumeId": "EXTERNAL_VOLUME_ID" }] } }'
+```
+
+On update, the `external` field works as follows:
+
+- Omit it to leave the current volume attached.
+- Set it to a volume to attach or replace the volume.
+- Set it to `[]` to detach the volume.
+
+### Replace the credential
+
+```bash
+curl --request PUT \
+  --url https://api.runpod.io/v2/external-volumes/EXTERNAL_VOLUME_ID/authentication \
+  --header 'Authorization: Bearer RUNPOD_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "protocol": "S3",
+    "authentication": {
+      "type": "ACCESS_KEY",
+      "accessKeyId": "NEW_ACCESS_KEY_ID",
+      "secretAccessKey": "NEW_SECRET_ACCESS_KEY"
+    }
+  }'
+```
+
+For the full schemas, see the [external volumes API reference](/api-reference-v2/external-volumes). {/* Confirm reference path once published. */}
+
+## Limitations
+
+- **S3-compatible storage only:** Azure Blob Storage and native Google Cloud Storage authentication aren't supported.
+- **Access keys only:** Temporary credentials and role assumption aren't supported.
+- **Location is fixed:** You can't change the endpoint, bucket, prefix, or region after creation. To change them, delete the volume and create a new one.
+- **No usage reporting:** Runpod doesn't show size, object count, or cost for external volumes.
+- **One object-storage volume per Pod:** A Pod can attach a global volume or an external volume, not both.
+- **GPU endpoints only:** Serverless endpoints on CPU can't attach external volumes.
+- **Revoked keys aren't detected on running Pods:** If you revoke a key or narrow its permissions while a Pod is running, reads and writes fail with I/O errors, but the mount still appears healthy.
+
+## Troubleshooting
+
+### Creating the volume fails
+
+Runpod checks the bucket before saving, and the error message names the problem. Common causes:
+
+- **The bucket doesn't exist:** check the bucket name for typos. Enter the name only, not a URL or path.
+- **Wrong region:** clear the **Region** field to detect it automatically. For Oracle Cloud, set your OCI region identifier.
+- **The key can't read or list the prefix:** update the key's permissions, or check that the prefix matches the one the key is scoped to.
+- **Couldn't reach the bucket:** check the endpoint URL and try again. The endpoint must be a public address.
+
+### A Pod fails to start
+
+If the key was revoked, its permissions changed, or the bucket was deleted after you created the volume, the Pod can't mount it and doesn't start. The Pod's system log shows an error like:
+
+```text
+error creating container: ContainerCreate: failed to mount global stores: bucket BUCKET_NAME is not available on this machine
+```
+
+{/* Update this message when STO-849 ships cause-specific errors. */}
+
+Fix the key or the bucket in your provider's console. If you created a new key, [update the credentials](#update-credentials) on the volume. Then start the Pod again.
+
+### Reads or writes fail on a running Pod
+
+If file operations fail with I/O errors while the mount looks healthy, the key was likely revoked or its permissions narrowed after the Pod started. Restore the key's access, or update the credentials and restart the Pod.
+
+### Deleting the volume fails
+
+The volume is still attached. Terminate the Pods that mount it, including stopped Pods, and detach it from any Serverless endpoints.
+
+## Next steps
+
+- [Global volumes overview](/storage/globalvolume/overview)
+- [Network volumes](/storage/network-volumes)
+- [Deploy a Pod](/pods/manage-pods)
