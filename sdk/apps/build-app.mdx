@@ -146,6 +146,32 @@ def main():
 
 `Counter` runs on a load-balanced endpoint. Each worker keeps its own state in memory between requests.
 
+Route paths in an `@app.api` class are literal, such as `/value`. A GET method takes only `self`. A POST, PUT, PATCH, or DELETE method can also take one required positional argument, which receives the complete JSON request body as a dictionary. Leave that argument unannotated or annotate it as `dict` or `dict[str, Any]`. The SDK doesn't validate the fields inside the body.
+
+The SDK checks each route when it imports your file. The import fails, and the worker doesn't start, if a route has any of these:
+
+- A path parameter, such as `/items/{item_id}`.
+- Any argument after `self` on a GET method, or more than one on other methods.
+- A body argument that has a default value, is keyword-only, or is variadic, such as `*args` or `**kwargs`.
+- Any other body annotation, such as a Pydantic model or `list`.
+
+To read path or query parameters or validate the body against a schema, decorate a function that takes no arguments and returns a FastAPI app. Declare the routes on that app:
+
+```python main.py
+@app.api(cpu="cpu3c-1-2")
+def catalog():
+    # FastAPI is installed on the worker, so import it inside the function
+    from fastapi import FastAPI
+
+    server = FastAPI()
+
+    @server.get("/items/{item_id}")
+    async def get_item(item_id: int, q: str = ""):
+        return {"item_id": item_id, "q": q}
+
+    return server
+```
+
 ## Step 5: Stream results
 
 A generator function streams its output. Call `.stream()` to receive each chunk as the worker yields it:
