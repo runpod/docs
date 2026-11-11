@@ -14,6 +14,21 @@ The command finds every app in the current directory, builds an artifact for eac
 
 To deploy a different directory, pass it as an argument: `rp flash deploy path/to/project`.
 
+## How the SDK finds your apps
+
+Before it builds anything, the SDK imports every Python file in the project under its normal Python import name. Modules that import each other share the same objects, so you can define an app in one file and attach resources to it from others. See [Split an app across files](/sdk/apps/apps-and-environments#split-an-app-across-files).
+
+Discovery skips the files that the [ignore rules](#ignore-rules) leave out of the artifact. It also skips hidden directories, virtual environments, `build/`, `dist/`, and `setup.py`. If the project directory contains an `__init__.py`, the SDK treats it as a package. The artifact keeps the package folder, so package-relative imports such as `from .app import app` work on the worker.
+
+Because a redeploy deletes the endpoints of resources that are no longer in the app, deploying part of an app would remove live endpoints. The deploy stops before building when:
+
+- **A project file fails to import.** Fix the error, or add the file to `.runpodignore` if it isn't part of your app. Rename or ignore any file whose name isn't a valid Python module name, such as `my-script.py`.
+- **A project module has the same name as a standard library or installed module**, such as `queue.py` or `json.py`. Rename the file.
+- **Two files create separate apps with the same name.** Create the app once and import it everywhere else, or give each app its own name.
+- **An app has no resources.** Check that the files defining its resources import the app instead of creating a new one.
+
+`rp flash dev` loads projects the same way, so a project that runs in a [dev session](/sdk/apps/dev-sessions) finds the same apps when you deploy it.
+
 ## Options
 
 | Flag | Description |

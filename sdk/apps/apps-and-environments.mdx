@@ -20,6 +20,28 @@ Every resource you attach with `@app.queue`, `@app.api`, or `@app.task` belongs 
 
 The app is registered on Runpod the first time you deploy it. A project can define more than one app; `rp flash deploy` deploys every app it finds.
 
+### Split an app across files
+
+To spread an app's resources across modules, create the app in one file and import it in the others:
+
+```python app.py
+import runpod
+
+app = runpod.App("inference")
+```
+
+```python workers.py
+from app import app
+
+@app.queue(cpu="cpu3c-1-2")
+def generate(prompt: str):
+    ...
+```
+
+`rp flash dev` and `rp flash deploy` import every file in the project, so `generate` belongs to the `inference` app even though no file imports `workers.py`. If the project is a package with an `__init__.py`, use a package-relative import such as `from .app import app`.
+
+Create each app only once. If two files each call `runpod.App` with the same name, the deploy stops with an error instead of deploying either one. See [How the SDK finds your apps](/sdk/apps/deploy#how-the-sdk-finds-your-apps).
+
 ## Environments
 
 An environment is an isolated deployment of an app, such as `dev`, `staging`, or `production`. Each environment has its own endpoints and runs its own build, so deploying to `staging` doesn't affect `production`.

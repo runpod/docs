@@ -4,20 +4,24 @@ sidebarTitle: "Dev sessions"
 description: "Use rp flash dev to run a Runpod SDK app against temporary endpoints, stream worker logs, re-run on code changes, and clean up when you finish."
 ---
 
-A dev session runs your app against real Runpod hardware while you edit it. Start one with `rp flash dev`, pointing it at the file that defines your app:
+A dev session runs your app against real Runpod hardware while you edit it. Start one from your project directory:
 
 ```bash
-rp flash dev main.py
+rp flash dev
 ```
+
+The session loads the current directory the same way [`rp flash deploy`](/sdk/apps/deploy#how-the-sdk-finds-your-apps) does, so it finds the same apps and resources that a deploy would. To use another project, pass its directory, for example `rp flash dev path/to/project`. To load a single file and the modules it imports, pass the file, for example `rp flash dev main.py`.
 
 ## What happens in a session
 
-1. The SDK imports your module and finds every `runpod.App` and its resources.
+1. The SDK imports your project's Python files and finds every `runpod.App` and its resources.
 2. It creates a temporary endpoint for each queue and API resource. Tasks provision a Pod each time they're called.
-3. It runs the function marked with `@runpod.local_entrypoint` on your machine. Calls such as `fn.remote()` go to the temporary endpoints.
+3. If your project has a function marked with `@runpod.local_entrypoint`, the session runs it on your machine. Calls such as `fn.remote()` go to the temporary endpoints.
 4. Output that your remote functions `print` streams back to your terminal.
-5. The session watches your project for file changes. When you save, it re-scans the app and refreshes the endpoints, so the next run uses your new code.
+5. The session watches your project for file changes. When you save, it re-scans the project and refreshes the endpoints, so the next run uses your new code.
 6. Press Enter to run the entrypoint again.
+
+A save can leave the project unable to load, for example when a file fails to import. The session then prints the error and keeps the current endpoints running until your next save that loads cleanly.
 
 Press Ctrl-C to end the session. It waits for the running entrypoint to finish and then deletes the temporary endpoints. If cleanup fails, the command exits with an error and lists the endpoint IDs you need to delete yourself.
 
@@ -25,15 +29,25 @@ Press Ctrl-C to end the session. It waits for the running entrypoint to finish a
   Dev sessions don't run a local HTTP server. Your entrypoint calls remote functions directly, and you call `@app.api` routes through the class, for example `Counter.post("/bump", {"by": 3})`.
 </Note>
 
-## Run once for scripts and CI
+## Choose an entrypoint
 
-To run the entrypoint a single time, clean up, and exit, add `--once`:
+A local entrypoint is optional. Without one, the session creates the temporary endpoints and refreshes them as you save changes until you press Ctrl-C.
+
+If your project marks more than one function with `@runpod.local_entrypoint`, select one with `--entrypoint` and its `module:function` name:
 
 ```bash
-rp flash dev main.py --once
+rp flash dev --entrypoint main:smoke_test
 ```
 
-The command exits with an error if the entrypoint fails, so you can use it as a smoke test in CI.
+## Run once for scripts and CI
+
+To run a session a single time and exit, add `--once`:
+
+```bash
+rp flash dev --once
+```
+
+The session creates the endpoints, runs the entrypoint once, and deletes the endpoints. Without an entrypoint, it creates and deletes the endpoints. If the project fails to load or the entrypoint fails, the command exits with an error. Use it as a smoke test in CI.
 
 ## Python version
 
@@ -41,7 +55,7 @@ In a dev session, and for every task call, the SDK sends your function to the wo
 
 ## Write code that works in a session
 
-- **Keep blocking work out of module scope.** The SDK imports your module to discover resources. Put long-running code inside the entrypoint or a remote function. If discovery hangs on an import, interrupt it with Ctrl-C.
+- **Keep blocking work out of module scope.** The SDK imports your modules to discover resources. Put long-running code inside the entrypoint or a remote function. If discovery hangs on an import, interrupt it with Ctrl-C.
 - **Import heavy packages inside functions.** Packages such as `torch` only need to exist on the worker.
 - **Read volume paths inside remote functions.** Volumes aren't mounted on your machine. See [Storage](/sdk/configuration/storage).
 - **Guard local-only code** with `runpod.is_local()`, which returns `True` everywhere except inside a Runpod worker.
