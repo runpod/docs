@@ -73,6 +73,20 @@ Hydration holds about `hydrate_workers * hydrate_chunk_size` bytes in memory at 
 - **All-or-nothing file restores:** Each large file is assembled in a temporary file and moved into place only after every range has copied. A file isn't restored if a range still fails after retries, or if the mirror file doesn't match the size in the manifest. In that case any existing local copy is left untouched. The other files still restore, and your code downloads the missing file as usual.
 - **Safety:** Symbolic links are never followed or copied. Every archive member and every large-file destination is checked to resolve inside one of your configured `dirs` before it is written, so a mirror entry can't write outside your cached directories.
 
+## Check hydration in your logs
+
+If a cold start is slower than expected, check your worker logs for the hydration summary. Each `hydrate()` that restores files, retries a range, or gives up on a range logs one line at info level:
+
+```text
+VolumeCache: hydrated 12 file(s) from /runpod-volume/.cache/ENDPOINT_ID (range retries: 3, ranges given up: 0)
+```
+
+`range retries` counts range reads that hit a transient error (`ENOMEM`, `EIO`, or `EAGAIN`) and that `VolumeCache` retried with backoff. A few retries are normal on object-store mounts such as global volumes. `ranges given up` counts ranges that still failed after their last retry or hit an error that isn't transient. Each one means a file wasn't restored, so your code downloads that file as usual.
+
+When a single hydrate passes 64 range retries, `VolumeCache` logs one warning that the volume mount is under sustained pressure. At that point backoff is noticeably slowing the restore. Each individual retry is also logged at debug level with the error name, the attempt number, the file, and the range offset.
+
+Some volumes, such as global volumes, reject `utime` or `chmod` with `EPERM`. On these volumes, `VolumeCache` logs the rejection once per sync or hydrate at debug level, then skips the rejected call for the remaining files.
+
 ## Limitations
 
 - **Concurrent cold-start write amplification:** If several workers cold-start at the same time, each may miss the still-empty mirror, download the model, and sync a full copy back. There's no coordination between concurrent syncs, so the mirror reflects whichever worker synced most recently.
