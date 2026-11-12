@@ -59,7 +59,7 @@ This runs automatically in CI via `.github/workflows/validate-tooltips.yml`.
 ## Publishing Workflow
 
 1. Create a pull request with changes.
-2. Request review from [@muhsinking](https://github.com/muhsinking).
+2. Request review from [@lavanya-gunreddi](https://github.com/lavanya-gunreddi).
 3. Changes deploy automatically to production after merge to `main` branch.
 
 ## Common Tasks

@@ -1,0 +1,105 @@
+---
+title: "GPU types"
+sidebarTitle: "GPU types"
+description: "Choose GPUs for Runpod SDK resources with short names, GPU pools, or exact device types, and learn how the SDK matches each form to available hardware."
+---
+
+Set the `gpu` parameter on `@app.queue`, `@app.api`, or `@app.task` to choose the hardware a resource runs on. You can use a short name, a GPU pool, an exact device, or a list of these.
+
+```python
+import runpod
+from runpod import GpuGroup, GpuType
+
+app = runpod.App("gpu-demo")
+
+@app.queue(gpu="4090")                          # Short name
+def a(): ...
+
+@app.queue(gpu=GpuGroup.AMPERE_80)              # Any GPU in a pool
+def b(): ...
+
+@app.queue(gpu=GpuType.NVIDIA_H100_80GB_HBM3)   # One exact device
+def c(): ...
+
+@app.queue(gpu=["H100", GpuGroup.AMPERE_80])    # Several options
+def d(): ...
+```
+
+If you don't set `gpu` or `cpu`, the resource can run on any GPU.
+
+## How GPU strings are matched
+
+The SDK resolves a string in this order and raises an error listing the valid options if nothing matches:
+
+1. `"any"`, which allows every GPU.
+2. A pool ID such as `"ADA_24"` (case-insensitive).
+3. An exact device name such as `"NVIDIA B200"`, or its enum name such as `"NVIDIA_B200"`.
+4. A fragment of a device name, such as `"4090"`, `"B200"`, or `"h100"`. Every device whose name contains the fragment matches, so `"H100"` selects all three H100 variants.
+
+Because strings are checked when the decorator runs, a typo fails when you import your module rather than at deploy time.
+
+<Note>
+  Serverless endpoints (queue and API resources) select hardware by pool. If you pass an exact device, the endpoint uses that device's pool, so workers can run on any GPU in the same pool. Tasks run on Pods, which select by device.
+</Note>
+
+## GPU pools
+
+Use `runpod.GpuGroup` to request any GPU in a pool.
+
+| `GpuGroup` | GPUs |
+| --- | --- |
+| `ANY` | Any available GPU |
+| `ADA_24` | NVIDIA GeForce RTX 4090 |
+| `ADA_32_PRO` | NVIDIA GeForce RTX 5090 |
+| `ADA_48_PRO` | NVIDIA RTX 6000 Ada Generation, NVIDIA L40, NVIDIA L40S |
+| `ADA_80_PRO` | NVIDIA H100 PCIe, NVIDIA H100 80GB HBM3, NVIDIA H100 NVL |
+| `AMPERE_16` | NVIDIA RTX A4000, NVIDIA RTX A4500, NVIDIA RTX 4000 Ada Generation, NVIDIA RTX 2000 Ada Generation |
+| `AMPERE_24` | NVIDIA RTX A5000, NVIDIA L4, NVIDIA GeForce RTX 3090 |
+| `AMPERE_48` | NVIDIA A40, NVIDIA RTX A6000 |
+| `AMPERE_80` | NVIDIA A100 80GB PCIe, NVIDIA A100-SXM4-80GB |
+| `HOPPER_141` | NVIDIA H200 |
+| `BLACKWELL_96` | NVIDIA RTX PRO 6000 Blackwell Server, Workstation, and Max-Q editions |
+| `BLACKWELL_180` | NVIDIA B200 |
+
+## GPU types
+
+Use `runpod.GpuType` to request one exact device.
+
+| `GpuType` | Device name |
+| --- | --- |
+| `NVIDIA_GEFORCE_RTX_4090` | NVIDIA GeForce RTX 4090 |
+| `NVIDIA_GEFORCE_RTX_5090` | NVIDIA GeForce RTX 5090 |
+| `NVIDIA_GEFORCE_RTX_3090` | NVIDIA GeForce RTX 3090 |
+| `NVIDIA_RTX_6000_ADA_GENERATION` | NVIDIA RTX 6000 Ada Generation |
+| `NVIDIA_RTX_4000_ADA_GENERATION` | NVIDIA RTX 4000 Ada Generation |
+| `NVIDIA_RTX_2000_ADA_GENERATION` | NVIDIA RTX 2000 Ada Generation |
+| `NVIDIA_RTX_PRO_6000_BLACKWELL_SERVER_EDITION` | NVIDIA RTX PRO 6000 Blackwell Server Edition |
+| `NVIDIA_RTX_PRO_6000_BLACKWELL_WORKSTATION_EDITION` | NVIDIA RTX PRO 6000 Blackwell Workstation Edition |
+| `NVIDIA_RTX_PRO_6000_BLACKWELL_MAX_Q_WORKSTATION_EDITION` | NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition |
+| `NVIDIA_RTX_A4000` | NVIDIA RTX A4000 |
+| `NVIDIA_RTX_A4500` | NVIDIA RTX A4500 |
+| `NVIDIA_RTX_A5000` | NVIDIA RTX A5000 |
+| `NVIDIA_RTX_A6000` | NVIDIA RTX A6000 |
+| `NVIDIA_L4` | NVIDIA L4 |
+| `NVIDIA_A40` | NVIDIA A40 |
+| `NVIDIA_A100_80GB_PCIe` | NVIDIA A100 80GB PCIe |
+| `NVIDIA_A100_SXM4_80GB` | NVIDIA A100-SXM4-80GB |
+| `NVIDIA_H100_PCIe` | NVIDIA H100 PCIe |
+| `NVIDIA_H100_80GB_HBM3` | NVIDIA H100 80GB HBM3 |
+| `NVIDIA_H100_NVL` | NVIDIA H100 NVL |
+| `NVIDIA_H200` | NVIDIA H200 |
+| `NVIDIA_B200` | NVIDIA B200 |
+
+## Choose a GPU
+
+- **For development**, use `GpuGroup.ANY` or a list of several pools so workers start quickly even when one GPU type is scarce.
+- **For production**, pin a specific pool or device so performance and cost are predictable.
+- **For multiple GPUs per worker**, combine `gpu` with `gpu_count`, for example `gpu="H100", gpu_count=4`.
+- **For a minimum driver version**, set `min_cuda_version`, for example `min_cuda_version="12.8"`.
+
+For pricing by GPU, see [Serverless pricing](/serverless/pricing).
+
+## Next steps
+
+- [Run on CPUs](/sdk/configuration/cpu-types) when you don't need a GPU.
+- [See every resource parameter](/sdk/configuration/parameters).

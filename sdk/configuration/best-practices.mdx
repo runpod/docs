@@ -1,0 +1,109 @@
+---
+title: "Configuration best practices"
+sidebarTitle: "Best practices"
+description: "Recommended Runpod SDK resource settings for production, development, and cost control, including worker counts, idle timeouts, and GPU selection."
+---
+
+These recommendations help you balance cost, cold-start latency, and reliability when you configure Runpod SDK resources. They apply to queue (`@app.queue`) and API (`@app.api`) resources. Tasks (`@app.task`) provision one Pod per call and don't scale.
+
+## Production
+
+- **Pin GPUs** to a specific pool or device instead of `GpuGroup.ANY`, so performance and cost are predictable.
+- **Keep workers warm** for latency-sensitive work by setting a minimum of 1 or more.
+- **Set `execution_timeout_ms`** so a stuck job can't run indefinitely.
+- **Store secrets with `runpod.Secret`**, not as plain values in `env`.
+- **Cache model weights** with `model` or a network volume, so workers don't download them on every cold start.
+
+### Queue resources
+
+Jobs can wait in the queue, so a small warm pool is usually enough:
+
+```python
+import runpod
+
+app = runpod.App("batch")
+weights = runpod.NetworkVolume("weights", size=100)
+
+@app.queue(
+    gpu=runpod.GpuType.NVIDIA_A100_80GB_PCIe,
+    workers=(1, 10),
+    idle_timeout=1200,            # 20 minutes
+    execution_timeout_ms=600000,  # 10 minutes per job
+    mounts={"/runpod-volume": weights},
+    env={"HF_TOKEN": runpod.Secret("hf-token")},
+)
+def process_batch(items: list):
+    ...
+```
+
+### API resources
+
+HTTP clients expect an immediate response, so keep more workers ready and add a health route:
+
+```python
+@app.api(gpu="4090", workers=(3, 20), idle_timeout=1800)
+class Inference:
+    @runpod.init
+    def setup(self):
+        self.model = load_model()  # Runs once per worker
+
+    @runpod.post("/generate")
+    async def generate(self, body: dict):
+        return {"output": self.model(body["prompt"])}
+
+    @runpod.get("/health")
+    async def health(self):
+        return {"status": "ok"}
+```
+
+Load the model in the `@runpod.init` method so it's ready before the worker takes traffic.
+
+## Development
+
+- **Use `GpuGroup.ANY` or a list of GPUs** so workers start quickly.
+- **Keep the maximum low**, for example `workers=(0, 2)`, to limit spend while testing.
+- **Use a short `idle_timeout`**, such as 300 seconds, so workers scale down between runs.
+- **Iterate with `rp flash dev`**, which deletes its temporary endpoints when you exit. See [Dev sessions](/sdk/apps/dev-sessions).
+
+```python
+@app.queue(gpu=runpod.GpuGroup.ANY, workers=(0, 2), idle_timeout=300)
+def experiment(data: dict):
+    ...
+```
+
+## Cost control
+
+- **Scale to zero** with a minimum of 0 workers. The default, `(0, 3)`, already does this.
+- **Use the smallest GPU that fits**, or a CPU instance when you don't need a GPU.
+- **Shorten `idle_timeout`** for infrequent traffic.
+- **Batch work** into fewer, larger jobs.
+- **Delete volumes you no longer need.** Volumes keep billing after you undeploy an app.
+
+## Trade-offs
+
+| Workers | Cost | Cold starts | Best for |
+| --- | --- | --- | --- |
+| `(0, n)` | Lowest | First request waits for a worker to start | Development, batch jobs, infrequent traffic |
+| `(1, n)` | Medium | First request is served immediately | Production queues, variable traffic |
+| `(3, n)` or more | Highest | Workers are always ready | Production APIs, high traffic |
+
+| GPU choice | Cost | Availability | Best for |
+| --- | --- | --- | --- |
+| `GpuGroup.ANY` or a list | Varies | Highest | Development |
+| One pool, such as `GpuGroup.AMPERE_80` | Predictable | Medium | Production |
+| One device, such as `GpuType.NVIDIA_H100_80GB_HBM3` | Predictable | Lower | Workloads that need specific hardware |
+
+## Checklist before deploying
+
+- GPUs are pinned for production resources.
+- Latency-sensitive resources have a minimum of at least 1 worker.
+- `execution_timeout_ms` is set.
+- Secrets use `runpod.Secret`, and every variable workers need is passed through `env`.
+- Large models are cached with `model` or a volume.
+- API resources have a health route.
+- The app runs cleanly with `rp flash dev main.py --once`.
+
+## Next steps
+
+- [See every resource parameter](/sdk/configuration/parameters).
+- [Deploy your app](/sdk/apps/deploy).
