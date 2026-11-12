@@ -147,7 +147,9 @@ def check_environment():
 
 Along with your custom checks, Runpod automatically runs a set of built-in system checks at startup, with no registration required. These verify that the worker has enough memory, disk space, and network connectivity to run reliably. GPU workers run three additional checks that validate the CUDA version, initialize the CUDA device, and benchmark GPU compute. GPU workers also run a native GPU memory allocation test that exercises actual memory allocation across all detected GPUs; this test is skipped automatically on CPU-only workers.
 
-The CUDA device initialization and GPU compute benchmark checks use PyTorch or CuPy, but they never import either one. They run only if your handler code already imports PyTorch or CuPy at module level. In that case, they reuse the loaded framework and add almost nothing to cold start time. Runpod skips both checks if your handler imports neither framework, or imports it only inside the handler function, as Flash handlers do. The native GPU memory allocation test still verifies every GPU either way.
+The CUDA device initialization and GPU compute benchmark checks use PyTorch or CuPy, but they never import either one. They run only if your handler code already imports PyTorch or CuPy at module level. In that case, they reuse the loaded framework and add almost nothing to cold start time. Runpod skips both checks if your handler imports neither framework, or imports it only inside the handler function, as Flash handlers do.
+
+With PyTorch, the checks also run only if your handler has already created a CUDA context, so they never initialize CUDA in your handler process. This matters for inference engines that start in the same process, such as vLLM's `LLM` or `AsyncLLM`. While CUDA is uninitialized, the engine can fork its engine processes instead of spawning them, which avoids re-importing the engine on every cold start. The native GPU memory allocation test still verifies every GPU either way.
 
 You can tune the thresholds for these checks using environment variables, or disable them for testing. Your own registered checks always run regardless of these threshold settings.
 
