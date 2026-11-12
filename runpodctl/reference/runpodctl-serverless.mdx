@@ -50,6 +50,8 @@ runpodctl serverless get <endpoint-id>
 
 The output doesn't include the ID of the template the endpoint uses. To see what the endpoint runs, add `--include-template`.
 
+The `idleTimeout` field is `null` when the setting doesn't apply to the endpoint, such as a queue-based endpoint that scales by request count. `serverless list` reports it the same way.
+
 #### Get flags
 
 <ResponseField name="--include-template" type="bool">
@@ -187,7 +189,15 @@ Update endpoint configuration:
 
 ```bash
 runpodctl serverless update <endpoint-id> --workers-max 5
+
+# Change the autoscaling threshold and keep the current strategy
+runpodctl serverless update <endpoint-id> --scale-threshold 4
+
+# Switch to request-count scaling
+runpodctl serverless update <endpoint-id> --scale-by requests --scale-threshold 2
 ```
+
+When you set only one of `--scale-by` or `--scale-threshold`, the command keeps the endpoint's current value for the other. A request count must be a whole number. If the endpoint uses a fractional queue delay, such as 0.5 seconds, set `--scale-threshold` when you switch it to `--scale-by requests`.
 
 #### Update flags
 
@@ -208,23 +218,15 @@ New maximum number of workers.
 </ResponseField>
 
 <ResponseField name="--idle-timeout" type="int">
-New idle timeout in seconds.
+New idle timeout in seconds. Valid range: 1-3600 seconds. Idle timeout doesn't apply to queue-based endpoints that scale by request count, and the API rejects the update with a validation error.
 </ResponseField>
 
-<ResponseField name="--scaler-type" type="string">
-Scaler type (`QUEUE_DELAY` or `REQUEST_COUNT`).
+<ResponseField name="--scale-by" type="string">
+New autoscaling strategy: `delay` (scales based on queue wait time in seconds) or `requests` (scales based on pending request count).
 </ResponseField>
 
-<ResponseField name="--scaler-value" type="int">
-Scaler value.
-</ResponseField>
-
-<ResponseField name="--flash-boot" type="bool">
-Enable or disable flash boot for faster worker startup.
-</ResponseField>
-
-<ResponseField name="--execution-timeout" type="int">
-Execution timeout in seconds. Jobs that exceed this duration are terminated.
+<ResponseField name="--scale-threshold" type="int">
+New trigger point for the autoscaler. For `delay`, this is the target queue wait time in seconds. For `requests`, this is the pending request count that triggers scaling. Must be at least 1.
 </ResponseField>
 
 ### Delete an endpoint
