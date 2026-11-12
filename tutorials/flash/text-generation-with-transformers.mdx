@@ -296,7 +296,7 @@ No app 'flash-text-generation' found. Creating app and 'production' environment.
 curl -X POST https://api.runpod.ai/v2/abc123xyz/runsync \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $RUNPOD_API_KEY" \
-  -d '{"input": {}}'
+  -d '{"input": {"prompt": "<prompt>"}}'
 ```
 
 Then run the script from the same directory:
@@ -326,9 +326,9 @@ Model load: 0.0s, generation: 0.51s
 
 Your completions will differ because `do_sample=True` picks tokens at random.
 
-<Warning>
-The first request on a new worker can take longer than the 90 seconds `runpod-flash` 1.21.0 waits for a result, especially if the worker has to wait for a free GPU. If the script fails with `timed out after 90s. the endpoint may not be deployed or the worker is still starting` or `KeyError: 'generated_text'`, the endpoint is deployed and the worker is still starting. Run the script again. See [First run fails after 90 seconds](#first-run-fails-after-90-seconds).
-</Warning>
+<Note>
+If no GPU of the types you selected is free, the first run can take several minutes while the worker waits for one. The script keeps waiting until the job finishes. If no worker picks up the job within 15 minutes, Flash cancels it and the script raises an error.
+</Note>
 
 ## Step 8: Try several prompts in parallel
 
@@ -417,9 +417,15 @@ RuntimeError: request to endpoint 'text-generation' timed out after 90s. the end
 KeyError: 'generated_text'
 ```
 
-**Cause**: `runpod-flash` 1.21.0 waits up to 90 seconds for a result. The first request on a new worker can take longer: the worker may wait for a free GPU, then it starts and loads the model. The endpoint is deployed, and the request keeps running after the error.
+**Cause**: `runpod-flash` 1.21.0 stops waiting for a result after 90 seconds. The first request on a new worker can take longer: the worker may wait for a free GPU, then it starts and loads the model. The endpoint is deployed, and the job keeps running after the error.
 
-**Solution**: Run the script again. The worker keeps starting after the error, so the next run is faster. Raising `FLASH_SENTINEL_TIMEOUT` above 90 doesn't help in 1.21.0: the request returns at 90 seconds with the job still running, and the script fails with the `KeyError` instead.
+**Solution**: Upgrade to `runpod-flash` 1.21.1 or later, then run the script again:
+
+```bash
+uv pip install --upgrade runpod-flash
+```
+
+From 1.21.1, Flash keeps checking a queued or running job until it finishes, so the first run waits for the worker however long it takes to start. `FLASH_SENTINEL_TIMEOUT` limits each HTTP request Flash sends, not the whole call, so you don't need to raise it. To limit how long a running job can take, set [`execution_timeout_ms`](/flash/configuration/parameters) on the endpoint.
 
 To see whether a worker is up, check the endpoint's health with its ID from `flash deploy`. `curl` reads your API key from the `RUNPOD_API_KEY` environment variable, which `flash login` doesn't set, so export it first:
 

@@ -143,10 +143,10 @@ No app 'quickstart' found. Creating app and 'production' environment...
 curl -X POST https://api.runpod.ai/v2/abc123xyz/runsync \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $RUNPOD_API_KEY" \
-  -d '{"input": {}}'
+  -d '{"input": {"size": "<size>"}}'
 ```
 
-The URL contains your endpoint ID (`abc123xyz` here). You'll use it in [Step 9](#step-9-call-the-endpoint-from-any-language) to call the endpoint over HTTP. Don't run the printed `curl` example as is in 1.21.0. Step 9 explains why.
+The URL contains your endpoint ID (`abc123xyz` here). The printed `curl` example fills `input` with a placeholder for each required argument of your function. To run it, export your API key as shown in [Step 9](#step-9-call-the-endpoint-from-any-language) and replace `"<size>"` with a number, such as `500`.
 
 <Note>
 Every `flash` command and script prints a deprecation notice (a `FutureWarning` in scripts) because `runpod-flash` is moving into the [Runpod SDK](/sdk/overview). The notice doesn't affect your deployment.
@@ -176,9 +176,9 @@ Running matrix multiplication on Runpod GPU...
 
 The first run takes about a minute while a worker starts. Later runs return in a few seconds while the worker is still warm.
 
-<Warning>
-The first request on a new worker can take longer than the 90 seconds `runpod-flash` 1.21.0 waits for a result, especially if the worker has to wait for a free GPU. If the script fails with `timed out after 90s. the endpoint may not be deployed or the worker is still starting` or `KeyError: 'matrix_size'`, the endpoint is deployed and the worker is still starting. Run the script again. See [First run fails after 90 seconds](#first-run-fails-after-90-seconds).
-</Warning>
+<Note>
+If no GPU of the types you selected is free, the first run can take several minutes while the worker waits for one. The script keeps waiting until the job finishes. If no worker picks up the job within 15 minutes, Flash cancels it and the script raises an error. See [Job stuck in queue](#job-stuck-in-queue).
+</Note>
 
 <Warning>
 If you see `endpoint 'flash-quickstart' not found in app '...' environment 'production'`, the endpoint isn't deployed for this directory. Run `flash deploy` from the directory that contains `gpu_demo.py`, then run the script again from that same directory.
@@ -393,7 +393,7 @@ curl https://api.runpod.ai/v2/ENDPOINT_ID/status/JOB_ID \
 Use `/run` and `/status` for long jobs and cold starts. `/runsync` returns the result in one request but waits at most 90 seconds by default, then returns `IN_QUEUE` or `IN_PROGRESS` and you poll `/status` anyway.
 
 <Warning>
-Always send at least one key in `input`. Runpod drops a job whose `input` is empty (`{"input": {}}`), and after about 40 seconds it fails with `job timed out after 1 retries`. The curl example that `flash deploy` prints in `runpod-flash` 1.21.0 and earlier uses an empty `input`, so replace it with your function's arguments.
+Always send at least one key in `input`. Runpod drops a job whose `input` is empty (`{"input": {}}`), and after about 40 seconds it fails with `job timed out after 1 retries`. If your function takes no arguments, send `{"input": {"__empty": true}}`. Flash removes the `__empty` key before it calls your function.
 </Warning>
 
 ## Clean up
@@ -457,9 +457,15 @@ RuntimeError: request to endpoint 'flash-quickstart' timed out after 90s. the en
 KeyError: 'matrix_size'
 ```
 
-**Cause**: `runpod-flash` 1.21.0 waits up to 90 seconds for a result. The first request on a new worker can take longer: the worker may wait for a free GPU, then it starts and runs your function. The endpoint is deployed, and the request keeps running after the error.
+**Cause**: `runpod-flash` 1.21.0 stops waiting for a result after 90 seconds. The first request on a new worker can take longer: the worker may wait for a free GPU, then it starts and runs your function. The endpoint is deployed, and the job keeps running after the error.
 
-**Solution**: Run the script again. The worker keeps starting after the error, so the next run is faster. Raising `FLASH_SENTINEL_TIMEOUT` above 90 doesn't help in 1.21.0: the request returns at 90 seconds with the job still running, and the script fails with the `KeyError` instead.
+**Solution**: Upgrade to `runpod-flash` 1.21.1 or later, then run the script again:
+
+```bash
+uv pip install --upgrade runpod-flash
+```
+
+From 1.21.1, Flash keeps checking a queued or running job until it finishes, so the first run waits for the worker however long it takes to start. `FLASH_SENTINEL_TIMEOUT` limits each HTTP request Flash sends, not the whole call, so you don't need to raise it. To limit how long a running job can take, set [`execution_timeout_ms`](/flash/configuration/parameters) on the endpoint.
 
 To see whether a worker is up, check the endpoint's health with its ID from `flash deploy`. `curl` reads your API key from the `RUNPOD_API_KEY` environment variable, which `flash login` doesn't set, so export it first:
 
@@ -523,7 +529,11 @@ Error: endpoint template names must be unique
 
 ### Job stuck in queue
 
-Requests wait for minutes, and the endpoint's [health check](#first-run-fails-after-90-seconds) shows `"throttled": 1` with no idle or running workers.
+Requests wait for minutes, and the endpoint's [health check](#first-run-fails-after-90-seconds) shows `"throttled": 1` with no idle or running workers. After 15 minutes in the queue, Flash cancels the job and the script fails with:
+
+```text
+RuntimeError: job JOB_ID on endpoint 'flash-quickstart' was still queued after 900s and it was cancelled. no worker picked it up; check that GPUs of the requested type are available.
+```
 
 **Solution**: No GPU of the types you selected is free. `GpuGroup.ANY` (used in this quickstart) accepts any available GPU. If you narrowed `gpu` to specific types, list several so Flash can fall back:
 
