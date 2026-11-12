@@ -144,6 +144,18 @@ Runpod Serverless has a **1.5GB deployment limit**. Flash automatically leaves t
 
 You don't need to exclude them manually. CPU worker images don't include them, so code on CPU workers can't import these packages.
 
+Flash also leaves out packages that only these packages depend on, such as the `nvidia-*` and `cuda-*` wheels that pip installs with `torch` on Linux x86_64. This keeps a dependency that needs `torch`, like `timm` or `sentence-transformers`, from adding about 2 GB of CUDA libraries to the archive. Flash keeps any package that you list as a dependency or that another bundled package needs.
+
+The build output names the packages Flash left out, for example `not bundling torchvision: provided by the Runpod GPU worker image`.
+
+Workers always use the versions of these packages that the GPU worker image provides. If you pin one of them, Flash ignores the pin and prints a warning. This applies to:
+
+- Exact or compatible version pins, such as `torchvision==0.29.1` or `torch~=2.9`.
+- Direct references, such as `torch @ https://...`.
+- Wheel files or URLs, such as a wheel from `download.pytorch.org`.
+
+Version ranges such as `torch>=2.0` don't trigger the warning.
+
 ### Manual exclusions
 
 Use `--exclude` to skip additional packages that are already in a custom base image or not needed:
@@ -182,7 +194,7 @@ def my_function(data):
 
 ### Archive is too large
 
-Some CUDA packages (`torch`, `torchvision`, `torchaudio`, `triton`) are auto-excluded. If the archive is still too large, use `--exclude` to skip additional packages or `--no-deps` to skip transitive dependencies:
+Flash auto-excludes `torch`, `torchvision`, `torchaudio`, `triton`, and the packages that only they depend on. If the archive is still too large, use `--exclude` to skip additional packages or `--no-deps` to skip transitive dependencies:
 
 ```bash
 flash build --exclude scipy,pandas
