@@ -1,0 +1,271 @@
+---
+title: "Manage endpoints"
+description: "Create, modify, and delete Serverless endpoints using the GraphQL API. Review operations and request patterns for this Runpod SDK."
+---
+
+Create, modify, and delete Serverless endpoints using the GraphQL API.
+
+For the complete schema, see the [GraphQL Spec](https://graphql-spec.runpod.io/).
+
+## Quick reference
+
+| Operation | Mutation/Query |
+|-----------|---------------|
+| Create endpoint | `saveEndpoint` |
+| Modify endpoint | `saveEndpoint` (with `id`) |
+| List endpoints | `myself { endpoints { ... } }` |
+| Delete endpoint | `deleteEndpoint` |
+
+## Required fields
+
+Endpoints require the following fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `gpuIds` | String | GPU tier identifier. Options: `AMPERE_16` (16GB), `AMPERE_24` (24GB), `ADA_24` (24GB Ada), `AMPERE_48` (48GB), `ADA_48_PRO` (48GB Ada Pro), `AMPERE_80` (80GB), `ADA_80_PRO` (80GB Ada Pro). |
+| `name` | String | Endpoint name. |
+| `templateId` | String | ID of the Serverless template to use. |
+| `type` | String | Endpoint type. `QB` for queue-based (default), `LB` for [load balancing](/serverless/load-balancing/overview). |
+
+## Create an endpoint
+
+<Tabs>
+<Tab title="cURL">
+```bash
+curl --request POST \
+  --header 'content-type: application/json' \
+  --url 'https://api.runpod.io/graphql?api_key=${YOUR_API_KEY}' \
+  --data '{"query": "mutation { saveEndpoint(input: { gpuIds: \"AMPERE_16\", idleTimeout: 5, locations: \"US\", name: \"My Endpoint\", flashBootType: FLASHBOOT, scalerType: \"QUEUE_DELAY\", scalerValue: 4, templateId: \"YOUR_TEMPLATE_ID\", workersMax: 3, workersMin: 0 }) { id name gpuIds idleTimeout locations flashBootType scalerType scalerValue templateId workersMax workersMin } }"}'
+```
+</Tab>
+
+<Tab title="GraphQL">
+```graphql
+mutation {
+  saveEndpoint(input: {
+    gpuIds: "AMPERE_16",
+    idleTimeout: 5,
+    # Leave locations empty or null for any region
+    # Options: CZ, FR, GB, NO, RO, US
+    locations: "US",
+    name: "My Endpoint",
+    # Set to FLASHBOOT for faster cold starts (enum value, no quotes)
+    flashBootType: FLASHBOOT,
+    scalerType: "QUEUE_DELAY",
+    scalerValue: 4,
+    templateId: "YOUR_TEMPLATE_ID",
+    workersMax: 3,
+    workersMin: 0
+    # Optional: attach a network volume
+    # networkVolumeId: "YOUR_VOLUME_ID"
+  }) {
+    id
+    name
+    gpuIds
+    idleTimeout
+    locations
+    flashBootType
+    scalerType
+    scalerValue
+    templateId
+    workersMax
+    workersMin
+  }
+}
+```
+</Tab>
+
+<Tab title="Output">
+```json
+{
+  "data": {
+    "saveEndpoint": {
+      "id": "i02xupws21hp6i",
+      "name": "My Endpoint",
+      "gpuIds": "AMPERE_16",
+      "idleTimeout": 5,
+      "locations": "US",
+      "flashBootType": "FLASHBOOT",
+      "scalerType": "QUEUE_DELAY",
+      "scalerValue": 4,
+      "templateId": "YOUR_TEMPLATE_ID",
+      "workersMax": 3,
+      "workersMin": 0
+    }
+  }
+}
+```
+</Tab>
+</Tabs>
+
+### Configuration options
+
+| Field | Description |
+|-------|-------------|
+| `idleTimeout` | Seconds before idle workers shut down. |
+| `locations` | Restrict to specific regions. Leave empty for any region. |
+| `flashBootType` | Enum value for boot optimization. Set to `FLASHBOOT` for faster cold starts (no quotes in GraphQL). |
+| `scalerType` | Autoscaling strategy. Options: `QUEUE_DELAY`, `REQUEST_COUNT`. |
+| `scalerValue` | Target value for the scaler (e.g., queue delay in seconds). |
+| `workersMin` | Minimum active workers. Set to `0` for scale-to-zero. |
+| `workersMax` | Maximum concurrent workers. |
+| `networkVolumeId` | Optional network volume to mount. |
+
+## Modify an endpoint
+
+Include the endpoint `id` to update an existing endpoint.
+
+<Tabs>
+<Tab title="cURL">
+```bash
+curl --request POST \
+  --header 'content-type: application/json' \
+  --url 'https://api.runpod.io/graphql?api_key=${YOUR_API_KEY}' \
+  --data '{"query": "mutation { saveEndpoint(input: { id: \"i02xupws21hp6i\", gpuIds: \"AMPERE_16\", name: \"My Endpoint\", templateId: \"YOUR_TEMPLATE_ID\", workersMax: 5 }) { id gpuIds name templateId workersMax } }"}'
+```
+</Tab>
+
+<Tab title="GraphQL">
+```graphql
+mutation {
+  saveEndpoint(input: {
+    id: "i02xupws21hp6i",
+    gpuIds: "AMPERE_16",
+    name: "My Endpoint",
+    templateId: "YOUR_TEMPLATE_ID",
+    workersMax: 5
+  }) {
+    id
+    gpuIds
+    name
+    templateId
+    workersMax
+  }
+}
+```
+</Tab>
+
+<Tab title="Output">
+```json
+{
+  "data": {
+    "saveEndpoint": {
+      "id": "i02xupws21hp6i",
+      "gpuIds": "AMPERE_16",
+      "name": "My Endpoint",
+      "templateId": "YOUR_TEMPLATE_ID",
+      "workersMax": 5
+    }
+  }
+}
+```
+</Tab>
+</Tabs>
+
+## List endpoints
+
+<Tabs>
+<Tab title="cURL">
+```bash
+curl --request POST \
+  --header 'content-type: application/json' \
+  --url 'https://api.runpod.io/graphql?api_key=${YOUR_API_KEY}' \
+  --data '{"query": "query { myself { endpoints { id name gpuIds idleTimeout locations networkVolumeId scalerType scalerValue templateId workersMax workersMin pods { desiredStatus } } serverlessDiscount { discountFactor type expirationDate } } }"}'
+```
+</Tab>
+
+<Tab title="GraphQL">
+```graphql
+query {
+  myself {
+    endpoints {
+      id
+      name
+      gpuIds
+      idleTimeout
+      locations
+      networkVolumeId
+      scalerType
+      scalerValue
+      templateId
+      workersMax
+      workersMin
+      pods {
+        desiredStatus
+      }
+    }
+    serverlessDiscount {
+      discountFactor
+      type
+      expirationDate
+    }
+  }
+}
+```
+</Tab>
+
+<Tab title="Output">
+```json
+{
+  "data": {
+    "myself": {
+      "endpoints": [
+        {
+          "id": "i02xupws21hp6i",
+          "name": "My Endpoint",
+          "gpuIds": "AMPERE_16",
+          "idleTimeout": 5,
+          "locations": "US",
+          "networkVolumeId": null,
+          "scalerType": "QUEUE_DELAY",
+          "scalerValue": 4,
+          "templateId": "YOUR_TEMPLATE_ID",
+          "workersMax": 5,
+          "workersMin": 0,
+          "pods": []
+        }
+      ],
+      "serverlessDiscount": null
+    }
+  }
+}
+```
+</Tab>
+</Tabs>
+
+## Delete an endpoint
+
+Before deleting, set both `workersMin` and `workersMax` to `0`.
+
+<Warning>
+The endpoint's min and max workers must both be zero before you can delete it.
+</Warning>
+
+<Tabs>
+<Tab title="cURL">
+```bash
+curl --request POST \
+  --header 'content-type: application/json' \
+  --url 'https://api.runpod.io/graphql?api_key=${YOUR_API_KEY}' \
+  --data '{"query": "mutation { deleteEndpoint(id: \"i02xupws21hp6i\") }"}'
+```
+</Tab>
+
+<Tab title="GraphQL">
+```graphql
+mutation {
+  deleteEndpoint(id: "i02xupws21hp6i")
+}
+```
+</Tab>
+
+<Tab title="Output">
+```json
+{
+  "data": {
+    "deleteEndpoint": null
+  }
+}
+```
+</Tab>
+</Tabs>
