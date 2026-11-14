@@ -71,7 +71,7 @@ Lambda sunset its hosted Inference API (the shutdown date was September 25, 2025
 
 **Storage has a provisioned size.** A Lambda filesystem has no size to set and bills for the GiB you use. A network volume has a size from 10 GB to 4,096 GB that you choose and can grow later (contact support for more than 4 TB). A [global volume](/storage/globalvolume/overview) (beta) is the usage-billed option on Runpod.
 
-**Billing is prepaid.** Lambda bills in one-minute increments and sends weekly invoices. Runpod bills per second against a credit balance. You need at least one hour of credit for a configuration to deploy it, and Pods stop when your balance reaches \$0. Set up [auto-pay or low balance notifications](/accounts-billing/billing) before you move production.
+**Billing is prepaid.** Lambda bills in one-minute increments and sends weekly invoices. Runpod bills per second against a credit balance. You need at least one hour of credit for a configuration to deploy it. When your balance reaches \$0, Pods with a network volume are stopped and Pods without one are terminated, and a terminated Pod's data can't be recovered. Set up [auto-pay or low balance notifications](/accounts-billing/billing) before you move production.
 
 **Clusters start on demand, at a different size range.** A 1-Click Cluster is reserved in weeks, covers 16 to 512 H100 or B200 GPUs, and includes three CPU head nodes. An Instant Cluster deploys on demand with 2 to 8 nodes (16 to 64 GPUs) of B200, H200, H100, or A100, and one of the GPU nodes is the primary node. Larger clusters go through Runpod sales. Availability depends on current stock in each data center.
 
@@ -83,7 +83,7 @@ Lambda sunset its hosted Inference API (the shutdown date was September 25, 2025
 - **UDP and ICMP.** Pods accept TCP and HTTP connections. Move UDP protocols to TCP, or keep that service elsewhere.
 - **Source IP allowlists.** Exposed ports are reachable by anyone who has the address. Require authentication in your service, keep internal services on global networking without exposing a port, or reach them through an SSH tunnel.
 - **ARM instances (GH200).** Runpod images must be `linux/amd64`. Rebuild ARM images for x86-64.
-- **Several filesystems on one instance.** `runpodctl pod create` and the console attach one network volume per Pod, plus one global volume if you need a second mount. REST API v2 accepts up to four network volumes in `mounts.network`, all in the Pod's data center. The simplest plan is to merge your filesystems into one network volume with subdirectories.
+- **Several filesystems on one instance.** `runpodctl pod create` attaches one network volume per Pod. The console attaches one network volume plus one global volume if you need a second mount. REST API v2 accepts up to four network volumes in `mounts.network`, all in the Pod's data center, plus one global volume in `mounts.global`. The simplest plan is to merge your filesystems into one network volume with subdirectories.
 - **Managed Kubernetes on a cluster.** Instant Clusters come as Slurm, Ray, PyTorch training, or general application clusters. Port Kubernetes workloads to one of those, or to Pods and Serverless endpoints.
 - **Fixed vCPU and RAM per instance type.** Pod CPU and memory depend on the host. Use the REST v2 placement floors if your job needs a minimum.
 
@@ -161,7 +161,7 @@ echo "== Environment";       env | cut -d= -f1 | sort
 EOF
 ```
 
-The snapshot is the input for your Dockerfile in Step 4. The environment section prints variable names only, so secrets stay out of the file. If you launched instances with cloud-init, find the `user_data` you passed at launch in your own scripts, because it's write-only in the API.
+The snapshot is the input for your Dockerfile in Step 4. The environment section prints variable names only, so secret values stay out of that section. It runs in a non-interactive session, so also check `~/.bashrc` for variables you export there, and review the container commands in the file before you share it. If you launched instances with cloud-init, find the `user_data` you passed at launch in your own scripts, because it's write-only in the API.
 
 Finally, find the code and configuration that reference Lambda.
 
@@ -382,6 +382,8 @@ Choose a transfer path based on where the data is.
     ```
 
     The trailing slash on the source copies the directory's contents into `/workspace`. If the transfer is interrupted, run the same command again and rsync continues where it stopped. Running inside `tmux` keeps the copy alive if your SSH session drops.
+
+    A filesystem isn't the only place data lives. Run the same command for anything you keep on the instance's root volume, for example directories under `/home/ubuntu`, because the root volume is destroyed when you terminate the instance.
   </Tab>
   <Tab title="Lambda Filesystem S3 Adapter">
     If your filesystem is in a region with the [Filesystem S3 Adapter](https://docs.lambda.com/public-cloud/s3-adapter-filesystems/) (Lambda lists `us-east-2`, `us-east-3`, and `us-midwest-2`) and was created in March 2025 or later, you can pull the data without a running Lambda instance. Generate an access key pair on the Filesystem S3 Adapter Keys page of the Lambda console and copy the filesystem's bucket name from the Filesystems page.
@@ -858,7 +860,7 @@ Lambda routes are relative to `https://cloud.lambda.com/api/v1`. Runpod routes a
 | `GET /filesystems` | `GET /v2/network-volumes` | `runpodctl network-volume list` |
 | `POST /filesystems` | `POST /v2/network-volumes` | `runpodctl network-volume create` |
 | `DELETE /filesystems/{id}` | `DELETE /v2/network-volumes/{id}` | `runpodctl network-volume delete VOLUME_ID` |
-| `GET` and `PUT /firewall-rules`, `/firewall-rulesets` | `ports` on `POST /v2/pods` and `PATCH /v2/pods/{id}` | `--ports` on `runpodctl pod create` and `pod update` |
+| `GET` and `PUT /firewall-rules`; `GET`, `POST`, `PATCH`, and `DELETE` on `/firewall-rulesets` | `ports` on `POST /v2/pods` and `PATCH /v2/pods/{id}` | `--ports` on `runpodctl pod create` and `pod update` |
 | `GET /audit-events` | Audit logs in REST v2 | |
 | No equivalent | `POST /v2/pods/{id}/exec` (run a command without SSH) | |
 

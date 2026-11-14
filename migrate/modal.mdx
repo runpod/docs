@@ -859,7 +859,7 @@ docker push YOUR_REGISTRY/textgen:v1
 
 runpodctl template create --name textgen-v1 --image YOUR_REGISTRY/textgen:v1 --serverless \
   --container-disk-in-gb 40 \
-  --env '{"HF_TOKEN":"{{ RUNPOD_SECRET_hf-token }}"}'
+  --env '{"HF_TOKEN":"{{ RUNPOD_SECRET_hf-token }}","HF_HUB_CACHE":"/runpod-volume/huggingface-cache/hub"}'
 
 runpodctl serverless create --name textgen --template-id TEMPLATE_ID \
   --gpu-id AMPERE_24 --workers-min 1 --workers-max 4 \
@@ -867,7 +867,7 @@ runpodctl serverless create --name textgen --template-id TEMPLATE_ID \
   --model-reference https://huggingface.co/Qwen/Qwen2.5-7B-Instruct:main
 ```
 
-`--gpu-id` accepts a pool ID or a device ID, and `--execution-timeout` is in seconds here. Add `--network-volume-id VOLUME_ID` to mount a network volume at `/runpod-volume`. For a private registry, save credentials with `runpodctl registry create` and pass `--registry-auth-id` when you create the template. In the console, the same flow is **Serverless**, then **New Endpoint**, then **Import from Docker Registry**.
+`--gpu-id` accepts a pool ID or a device ID, and `--execution-timeout` is in seconds here. `--model-reference` attaches a cached model under `/runpod-volume/huggingface-cache/hub/`. A custom handler doesn't look there on its own, so the template sets `HF_HUB_CACHE` to that path. Without it, the handler downloads the weights again on every cold start. Add `--network-volume-id VOLUME_ID` to mount a network volume at `/runpod-volume`. For a private registry, save credentials with `runpodctl registry create` and pass `--registry-auth-id` when you create the template. In the console, the same flow is **Serverless**, then **New Endpoint**, then **Import from Docker Registry**.
 
 ### Load-balancing endpoint from a custom image
 
@@ -951,8 +951,8 @@ A request to a Modal Web Function looks like this:
 
 ```bash
 curl -X POST https://WORKSPACE--classify-web.modal.run/classify \
-  -H "Modal-Key: YOUR_MODAL_TOKEN_ID" \
-  -H "Modal-Secret: YOUR_MODAL_TOKEN_SECRET" \
+  -H "Modal-Key: YOUR_PROXY_TOKEN_ID" \
+  -H "Modal-Secret: YOUR_PROXY_TOKEN_SECRET" \
   -H "Content-Type: application/json" \
   -d '{"text": "This works."}'
 ```

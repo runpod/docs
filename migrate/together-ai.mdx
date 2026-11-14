@@ -71,7 +71,7 @@ You can hand most of this migration to a coding agent. See [Migrate with a codin
 | Certified deployment profiles (model, quantization, hardware, and optimizations chosen for you) | No equivalent. Use the [vLLM GPU sizing guidance](/serverless/vllm/configuration#gpu-selection) and test. |
 | Traffic splitting, A/B tests, shadow experiments, and metric-gated rollouts on one endpoint | No built-in equivalent. Run two endpoints and split traffic in your own gateway or client. Changing an endpoint's image or environment rolls workers to a new release. |
 | `/v1/embeddings` and `/v1/rerank` on dedicated endpoints | The vLLM worker documents `/chat/completions`, `/completions`, and `/models`. For embeddings or reranking, run an embedding server on a [load balancing endpoint](/serverless/load-balancing/overview), or look for an embedding worker in the [Hub](/hub/overview). |
-| OpenAI Responses API and Anthropic Messages API | Not documented for the vLLM worker. Use chat completions. |
+| OpenAI Responses API and Anthropic Messages API | The Runpod docs cover chat completions, completions, and models. The [worker README](https://github.com/runpod-workers/worker-vllm#usage-openai-compatibility) also lists `/openai/v1/responses` and `/openai/v1/messages`, so test those routes with your client, or use chat completions. |
 | Managed fine-tuning jobs with a dataset upload and a job ID | No managed job API. Run training on a Pod. See [Fine-tunes](#fine-tunes). |
 | Automatic prompt caching with a discounted cached-token price | No token pricing on your own endpoint. vLLM prefix caching is a setting (`ENABLE_PREFIX_CACHING`) that affects speed, not billing. |
 | Geo-specific inference through `us-api.together.ai` | Set data centers on your own endpoint. |
@@ -212,7 +212,6 @@ These are the Together serverless model strings that have a Public Endpoint in t
 | --- | --- | --- |
 | `moonshotai/Kimi-K3` | [Moonshot Kimi](/public-endpoints/models/moonshot-kimi), `model` set to `kimi-k3` | OpenAI-compatible: `https://api.runpod.ai/v2/moonshot-kimi/openai/v1` |
 | `moonshotai/Kimi-K3.1-Pro` | [Moonshot Kimi](/public-endpoints/models/moonshot-kimi), `model` set to `kimi-k3.1-pro` | Same base URL as above |
-| `openai/gpt-oss-120b` | [GPT-OSS 120B](/public-endpoints/models/gpt-oss-120b). The model page sets `model` to `gpt-oss-120b`, and the [AI coding tools page](/public-endpoints/ai-coding-tools) uses `openai/gpt-oss-120b`, so call `/models` to confirm. | OpenAI-compatible: `https://api.runpod.ai/v2/gpt-oss-120b/openai/v1` |
 | Qwen chat models (`Qwen/Qwen3...`) | [Qwen3 32B AWQ](/public-endpoints/models/qwen3-32b), a different Qwen3 model | OpenAI-compatible: `https://api.runpod.ai/v2/qwen3-32b-awq/openai/v1`, `model` set to `Qwen/Qwen3-32B-AWQ` |
 | `ByteDance-Seed/Seedream-4.0` | [Seedream 4.0 T2I](/public-endpoints/models/seedream-4-t2i) and [Seedream 4.0 Edit](/public-endpoints/models/seedream-4-edit) | Native: `https://api.runpod.ai/v2/seedream-v4-t2i/runsync` |
 | `Qwen/Qwen-Image` | [Qwen Image](/public-endpoints/models/qwen-image) | Native: `https://api.runpod.ai/v2/qwen-image-t2i/runsync` |
@@ -295,10 +294,11 @@ def handler(job):
 runpod.serverless.start({"handler": handler})
 ```
 
-Anything you loaded in `setup()` moves to module level so it loads once per worker. The return value becomes the job's `output`. If `predict()` raises an exception, Sprocket marks the job failed, and an exception in a Runpod handler does the same. Three Sprocket behaviors need explicit code on Runpod:
+Anything you loaded in `setup()` moves to module level so it loads once per worker. The return value becomes the job's `output`. If `predict()` raises an exception, Sprocket marks the job failed, and an exception in a Runpod handler does the same. Four Sprocket behaviors need explicit code on Runpod:
 
 - **Progress updates.** Replace `emit_info(...)` with `runpod.serverless.progress_update(job, ...)`.
 - **Input files.** Sprocket downloads any HTTPS URL in the payload and hands your code a local path. A Runpod handler receives the URL as sent, so download it in the handler.
+- **Output files.** Sprocket uploads a returned `FileOutput(...)` to Together storage and puts its URL in the result. A Runpod handler uploads the file to your own storage and returns the URL.
 - **HTTP server mode.** A Sprocket worker that serves `predict_path` directly becomes a [load balancing endpoint](/serverless/load-balancing/build-a-worker): your own HTTP server with a `/ping` health check.
 
 ### Container image
@@ -446,7 +446,7 @@ This is the landing spot for most Together serverless models and all dedicated e
       --env TOOL_CALL_PARSER=hermes
     ```
 
-    `--hub-id` pulls the worker image, container disk size, and default environment from the Hub release, and `--env` overrides individual values. `--gpu-id` accepts a pool ID or a GPU type ID; set it explicitly so the endpoint runs on the hardware you sized for. `--model-reference` attaches the Hugging Face model as a cached model: the `:main` suffix is the branch, tag, or revision, and the flag requires a GPU endpoint. The command prints the endpoint ID. For a gated or private model, add `--env HF_TOKEN=YOUR_HF_TOKEN`, or store the token as a [secret](/pods/templates/secrets).
+    `--hub-id` pulls the worker image, container disk size, and default environment from the Hub release, and `--env` overrides individual values. `--gpu-id` accepts a pool ID or a GPU type ID; set it explicitly so the endpoint runs on the hardware you sized for. `--model-reference` attaches the Hugging Face model as a cached model: the `:main` suffix is the branch, tag, or revision, and the flag requires a GPU endpoint. The command prints the endpoint ID. For a gated or private model, store the token as a [secret](/pods/templates/secrets) named `hf_token` and add `--env HF_TOKEN='{{ RUNPOD_SECRET_hf_token }}'`, so the token itself never appears in the command or the endpoint configuration.
   </Tab>
   <Tab title="Console">
     Open the [vLLM worker](https://console.runpod.io/hub/runpod-workers/worker-vllm) in the Hub and click **Deploy**. Enter the Hugging Face model ID in the **Model** field, expand **Advanced** to set **Max Model Length** and other vLLM settings, click **Next**, then **Create Endpoint**. The full walkthrough is in the [vLLM quickstart](/serverless/vllm/get-started).
@@ -492,9 +492,11 @@ After, on Runpod:
 runpodctl serverless update ENDPOINT_ID \
   --workers-min 1 \
   --workers-max 3 \
-  --scaler-type REQUEST_COUNT \
-  --scaler-value 4
+  --scale-by requests \
+  --scale-threshold 4
 ```
+
+Older `runpodctl` builds name these flags `--scaler-type` and `--scaler-value` on `serverless update`. Run `runpodctl serverless update --help` to see which your build accepts.
 
 With `--workers-min 1`, one worker stays loaded and bills continuously, the same trade you made with `minReplicas`. Request count scaling adds workers based on queued plus in-progress requests divided by the scaler value, and it's the recommended scaler for LLM workloads. Runpod has no inactivity timeout because it isn't needed: with `--workers-min 0`, workers stop after the idle timeout and start again on the next request. To cut cold starts without paying for an always-on worker, keep the model cached, leave FlashBoot on, and raise the idle timeout (`--idle-timeout`, in seconds) so a worker stays warm between bursts. REST API v2 rejects an idle timeout on a queue-based endpoint that scales on request count, so pair a long idle timeout with queue delay scaling.
 
@@ -527,7 +529,7 @@ runpodctl serverless create \
   --env ENABLE_LORA=true \
   --env MAX_LORA_RANK=16 \
   --env 'LORA_MODULES=[{"name": "my-adapter", "path": "YOUR_HF_USER/my-adapter"}]' \
-  --env HF_TOKEN=YOUR_HF_TOKEN
+  --env HF_TOKEN='{{ RUNPOD_SECRET_hf_token }}'
 ```
 
 `MAX_LORA_RANK` must be at least the rank you trained with (the default is 16). After the endpoint is up, call `client.models.list()` to see the names it serves, and pass the adapter's name as `model` in requests.
@@ -800,12 +802,12 @@ If you use the Vercel AI SDK, replace the Together provider with [`@runpod/ai-sd
 
 | Feature | Together AI | Runpod vLLM endpoint | Runpod Public Endpoints |
 | --- | --- | --- | --- |
-| Chat completions | Supported | Supported (`/chat/completions`) | OpenAI-compatible route documented for Qwen3 32B AWQ, Moonshot Kimi, GPT-OSS 120B, and Cogito 671B. Granite 4.0 documents the native API only. |
-| Text completions | Supported (legacy) | Supported (`/completions`) | Native `prompt` input on Qwen3 32B AWQ, GPT-OSS 120B, and Cogito 671B. For the OpenAI route, see the model page. |
+| Chat completions | Supported | Supported (`/chat/completions`) | OpenAI-compatible route documented for Qwen3 32B AWQ and Moonshot Kimi. Granite 4.0 documents the native API only. |
+| Text completions | Supported (legacy) | Supported (`/completions`) | Native `prompt` input on Qwen3 32B AWQ. For the OpenAI route, see the model page. |
 | Model list | Supported | Supported (`/models`) | See the model page. |
-| Streaming | Supported | Supported (`stream=True`; keep `RAW_OPENAI_OUTPUT=1`) | Supported on the OpenAI-compatible route. |
-| Tool calling | Supported on models marked for function calling | Depends on the model. Set `ENABLE_AUTO_TOOL_CHOICE=true` and the matching `TOOL_CALL_PARSER`. | Documented for GPT-OSS 120B. For other models, check the model. |
-| Structured outputs (`response_format`) | Supported on models marked for structured outputs (`json_schema`) | Not listed in the worker docs. vLLM guided decoding is configurable with `GUIDED_DECODING_BACKEND`. Test it with your model. | See the model page. |
+| Streaming | Supported | Supported (`stream=True`) | Supported on the OpenAI-compatible route. |
+| Tool calling | Supported on models marked for function calling | Depends on the model. Set `ENABLE_AUTO_TOOL_CHOICE=true` and the matching `TOOL_CALL_PARSER`. | Not covered on the model pages. Check the model. |
+| Structured outputs (`response_format`) | Supported on models marked for structured outputs (`json_schema`) | Not listed in the worker docs. The request goes to vLLM, which supports structured outputs, and the backend is set with `STRUCTURED_OUTPUTS_CONFIG`. Test it with your model. | See the model page. |
 | Vision (image inputs) | Supported on vision models | Depends on the model | Check the model. Kimi K2.6 lists multimodal input. |
 | Reasoning output | `reasoning` or `reasoning_content`, depending on the model | Set `REASONING_PARSER` for the model. The field name depends on the vLLM version. | Kimi supports `reasoning_effort`. |
 | Log probabilities | Supported, in Together's own response shape | `MAX_LOGPROBS` sets the limit (default 20). Test the response shape against your parser. | See the model page. |
@@ -813,7 +815,7 @@ If you use the Vercel AI SDK, replace the Together provider with [`@runpod/ai-sd
 | Rerank | Dedicated endpoints only (`/v1/rerank`) | Not among the documented routes | None listed |
 | Batch | Together's batch API (JSONL file) | [Batch jobs](/serverless/batch-jobs) or `/run` with a webhook | Asynchronous `/run` |
 | Images, speech, transcription through OpenAI SDK methods | Supported | Not applicable (text models) | Native `/run` and `/runsync` API, not the OpenAI image or audio routes |
-| Responses API, Messages API | Supported | Not documented | Not documented |
+| Responses API, Messages API | Supported | The [worker README](https://github.com/runpod-workers/worker-vllm#usage-openai-compatibility) lists `/openai/v1/responses` and `/openai/v1/messages`. The Runpod docs don't cover them, so test before you rely on them. | Not documented |
 
 Tool calling and structured output requests use the same OpenAI request fields on both platforms (`tools`, `tool_choice`, `response_format`), so client code doesn't change once the endpoint is configured for the model. Together's `logprobs` shape differs from OpenAI's, so code that parses it needs a rewrite either way.
 
@@ -855,7 +857,7 @@ result = response.json()
 print(result["output"]["result"])
 ```
 
-Each Public Endpoint defines its own input and output fields, so check the model page. Qwen Image returns the image URL in `output.result`, and most other image models return it in `output.image_url`. Input names such as `size`, `width`, `height`, or `aspect_ratio` also vary by model. Output URLs expire after 7 days, so download anything you need to keep. Together's video API already uses submit and poll (`client.videos.create`, then `client.videos.retrieve` until `completed`). On Runpod, submit with `/run`, poll `/status/JOB_ID` until `COMPLETED`, and read the URL from `output`.
+Each Public Endpoint defines its own input and output fields, so check the model page. Qwen Image returns the image URL in `output.result`, as most image and video models do, and the Flux models return it in `output.image_url`. Input names such as `size`, `width`, `height`, or `aspect_ratio` also vary by model. Output URLs expire after 7 days, so download anything you need to keep. Together's video API already uses submit and poll (`client.videos.create`, then `client.videos.retrieve` until `completed`). On Runpod, submit with `/run`, poll `/status/JOB_ID` until `COMPLETED`, and read the URL from `output`.
 
 ### Batch jobs
 
@@ -1045,7 +1047,7 @@ Note the two Runpod hosts: `api.runpod.ai` serves requests to endpoints, and `ap
 | GPU count in the config (`gpu_count`) | `--gpu-count` (`gpu.count`) |
 | `--min-replicas` (`minReplicas`, `min_replicas`) | `--workers-min` (`workers.min`) |
 | `--max-replicas` (`maxReplicas`, `max_replicas`) | `--workers-max` (`workers.max`) |
-| `--scaling-metric`, `--scaling-target` | `--scale-by` and `--scale-threshold` on create, `--scaler-type` and `--scaler-value` on update (`scaling`) |
+| `--scaling-metric`, `--scaling-target` | `--scale-by` and `--scale-threshold` on create and update (`scaling`) |
 | `--scale-down-window` | `--idle-timeout` in seconds (`workers.idleTimeout`) |
 | `--inactive-timeout` in minutes | Not needed. Use `--workers-min 0`. |
 | `--max-concurrent-requests-per-replica` | `MAX_CONCURRENCY` environment variable on the vLLM worker |

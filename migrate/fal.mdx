@@ -79,7 +79,7 @@ This guide is for teams that run production workloads on [fal](https://fal.ai/do
 | `shared` auth (callers pay with their own key) | Each account calls its own endpoints | Publish the worker to the [Hub](/hub/overview) so others deploy it in their account. |
 | `concurrency_buffer`, `concurrency_buffer_perc` | Autoscaling by queue delay or request count | Keep active workers for headroom and tune the scaler threshold. |
 | 90-day request history and per-request payload APIs | Results expire in minutes | Persist inputs and outputs from your webhook receiver. |
-| Automatic retries of failed runner attempts (up to 10) | `/retry/JOB_ID` requeues a failed or timed-out job | Call `/retry` from your client or webhook receiver. |
+| Automatic retries of failed runner attempts (up to 10) | Queue-based endpoints retry on failure, but the docs don't state a count. `/retry/JOB_ID` requeues a failed or timed-out job | Call `/retry` from your client or webhook receiver for jobs that still end as `FAILED` or `TIMED_OUT`. |
 
 Going the other way, some things exist on Runpod that you may not have used on fal: text models with an OpenAI-compatible route on Public Endpoints, `@app.task` for run-to-completion jobs on a dedicated Pod, per-second Pod billing, and Community Cloud or Secure Cloud placement for Pods.
 
@@ -215,7 +215,7 @@ These fal model IDs have a counterpart in the Runpod [model reference](/public-e
   A matching name doesn't mean matching output. The two platforms can run different versions, tiers, default steps, and guidance values of the same model family, and fal lists both pro and standard tiers for some Kling endpoints. Run your own prompts through both before you switch traffic, and compare parameters on each Runpod model page.
 </Warning>
 
-Runpod also hosts text models (for example `qwen3-32b-awq` and `gpt-oss-120b`) with an OpenAI-compatible route at `https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1`. For fal models that aren't in the table, such as models from the FLUX Pro, Veo, Ideogram, and ElevenLabs families, or other Kling and Sora variants, check the model reference for a current listing, then plan to keep the call on a provider that hosts the model or self-host an open alternative on Serverless.
+Runpod also hosts text models (for example `qwen3-32b-awq`) with an OpenAI-compatible route at `https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1`. For fal models that aren't in the table, such as models from the FLUX Pro, Veo, Ideogram, and ElevenLabs families, or other Kling and Sora variants, check the model reference for a current listing, then plan to keep the call on a provider that hosts the model or self-host an open alternative on Serverless.
 
 ### GPU map
 
@@ -430,9 +430,13 @@ import torch
 from diffusers import StableDiffusionXLPipeline
 from runpod.serverless.utils import rp_upload
 
+# Where a cached model attached to the endpoint appears (see Step 6)
+HF_CACHE = "/runpod-volume/huggingface-cache/hub"
+
 # Module level: runs once when the worker starts, like fal's setup()
 pipe = StableDiffusionXLPipeline.from_pretrained(
     "stabilityai/stable-diffusion-xl-base-1.0",
+    cache_dir=HF_CACHE,
     torch_dtype=torch.float16,
     variant="fp16",
     use_safetensors=True,
@@ -465,7 +469,7 @@ def handler(job):
 runpod.serverless.start({"handler": handler})
 ```
 
-The return value keeps fal's `image.url` shape, so callers change `result["image"]["url"]` to `result["output"]["image"]["url"]`. Input validation that pydantic did on fal is now your code. Returning a dictionary with an `error` key marks the job as failed.
+The return value keeps fal's `image.url` shape, so callers change `result["image"]["url"]` to `result["output"]["image"]["url"]`. Input validation that pydantic did on fal is now your code. Returning a dictionary with an `error` key marks the job as failed. `rp_upload.upload_image` returns a presigned URL that's valid for 7 days, so generate your own URL or copy the file if callers need a longer-lived link.
 
 The Dockerfile installs the handler's dependencies on a CUDA base image and starts the handler.
 
@@ -491,7 +495,7 @@ docker push DOCKER_USERNAME/my-demo-app:v1
 For a private registry, save credentials with `runpodctl registry create --name "docker-hub" --username "DOCKER_USERNAME"` and pass the returned ID as `--registry-auth-id` when you create the template. This replaces the `registries` parameter on fal's `ContainerImage`.
 
 <Warning>
-  This handler downloads the SDXL weights to the container disk on every cold start. Add a cached model in [Step 6](#step-6-deploy-on-runpod), bake the weights into the image, or use a network volume. See [Step 5](#step-5-move-your-data-and-models).
+  Without a cached model, this handler downloads the SDXL weights on every cold start. Add a cached model in [Step 6](#step-6-deploy-on-runpod), which the handler reads through `cache_dir`, bake the weights into the image, or use a network volume. See [Step 5](#step-5-move-your-data-and-models).
 </Warning>
 
 ### Existing HTTP servers
@@ -654,7 +658,7 @@ runpodctl serverless create --name "my-demo-app" \
   --model-reference https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0:main
 ```
 
-`--gpu-id` takes a pool ID or a GPU type ID. `--model-reference` attaches a cached model so workers don't download the weights. To attach the network volume from Step 5, add `--network-volume-id NETWORK_VOLUME_ID`. Each Serverless template binds to one endpoint, so create a template per endpoint. Check `runpodctl serverless create --help` for the full flag list.
+`--gpu-id` takes a pool ID or a GPU type ID. `--model-reference` attaches a cached model at `/runpod-volume/huggingface-cache/hub/`. A custom handler has to load from that path, which is what `cache_dir` does in the Option B handler. To attach the network volume from Step 5, add `--network-volume-id NETWORK_VOLUME_ID`. Each Serverless template binds to one endpoint, so create a template per endpoint. Check `runpodctl serverless create --help` for the full flag list.
 
 The same endpoint through REST API v2, without a separate template:
 
@@ -706,7 +710,7 @@ With `workers.min` at 1, one worker bills continuously. Wait for `GET https://EN
 
 ### Pods and Instant Clusters (fal Compute)
 
-A fal Compute instance is an Ubuntu machine you SSH into. A Pod is a container with SSH, so install your stack in the image or on a volume rather than with a VM-level setup, and note that Pods don't run Docker Compose.
+A fal Compute instance is a dedicated machine you SSH into. A Pod is a container with SSH, so install your stack in the image or on a volume rather than with a VM-level setup, and note that Pods don't run Docker Compose.
 
 ```bash
 runpodctl pod create --name "train-h100" \
@@ -1058,7 +1062,7 @@ If you call fal through `@ai-sdk/fal`, switch to [`@runpod/ai-sdk-provider`](/pu
       prompt: "A serene mountain landscape at sunset",
       aspectRatio: "16:9",
       providerOptions: {
-        fal: { guidance_scale: 3.5, num_inference_steps: 28 },
+        fal: { guidanceScale: 3.5, numInferenceSteps: 28 },
       },
     });
     ```

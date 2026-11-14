@@ -73,8 +73,8 @@ Fireworks is a model platform: you pick a model ID and Fireworks runs the infere
 | --- | --- | --- |
 | Large shared serverless catalog, including Priority, Fast, and Spot variants | Public Endpoints host a smaller catalog. Service tiers aren't part of it. | Deploy the model on your own vLLM endpoint. Use active workers for consistent latency. |
 | Embeddings (`/v1/embeddings`) and reranking (`/v1/rerank`) | The vLLM worker docs list `/chat/completions`, `/completions`, and `/models`. | Run an embedding server on a [load balancing endpoint](/serverless/load-balancing/overview) or a custom [queue worker](/serverless/workers/handler-functions). Budget time for this. |
-| Responses API (`/v1/responses`) with stored state and server-run MCP tools | Not documented for the vLLM worker or Public Endpoints. | Use chat completions and keep conversation state in your application. |
-| Anthropic-compatible Messages API | Not documented on Runpod. | Use the OpenAI-compatible route, or put a translation gateway in front. |
+| Responses API (`/v1/responses`) with stored state and server-run MCP tools | Not covered in the Runpod docs. The [worker README](https://github.com/runpod-workers/worker-vllm#usage-openai-compatibility) lists a `/openai/v1/responses` route for the request shape. Stored responses and server-run MCP tools aren't documented. | Test the route with your requests, or use chat completions, and keep conversation state in your application. |
+| Anthropic-compatible Messages API | Not covered in the Runpod docs. The worker README lists a `/openai/v1/messages` route. | Test that route with your client, or use the OpenAI-compatible route. |
 | Deployment shapes (validated hardware and precision per model) | You size the GPU yourself. | Use the [VRAM estimates](/serverless/vllm/configuration#gpu-selection), then test. |
 | Managed Training API | Runpod doesn't run training jobs for you. | Train on a Pod with your own code. See [Step 5](#step-5-move-your-data-and-models). |
 | Serverless LoRA inference billed per token | LoRA adapters run on your own endpoint. | Serve adapters with `ENABLE_LORA`. |
@@ -168,19 +168,17 @@ Use this table to place each item from your inventory.
 
 ### Models that Runpod hosts
 
-Build your model map from the [Public Endpoints model reference](/public-endpoints/reference), which lists image, video, audio (text-to-speech), and text models with their prices. These are the text models with pages in the Runpod docs today.
+Build your model map from the [Public Endpoints model reference](/public-endpoints/reference), which lists image, video, audio (text-to-speech), and text models with their prices. These are the text models in the model reference today. Confirm that a model is live in the [Hub](https://console.runpod.io/hub?tabSelected=public_endpoints) before you map a call site to it.
 
 | Runpod model | Endpoint slug | `model` value on the OpenAI route | Notes |
 | --- | --- | --- | --- |
 | [Qwen3 32B AWQ](/public-endpoints/models/qwen3-32b) | `qwen3-32b-awq` | `Qwen/Qwen3-32B-AWQ` | Documented as OpenAI-compatible. |
 | [Moonshot Kimi](/public-endpoints/models/moonshot-kimi) | `moonshot-kimi` | `kimi-k2.6` (default), `kimi-k2.7-code`, `kimi-k3`, `kimi-k3.1-pro`, `kimi-k3.1-pro-highspeed` | Documented as OpenAI-compatible. One endpoint serves all five variants. |
-| [GPT-OSS 120B](/public-endpoints/models/gpt-oss-120b) | `gpt-oss-120b` | `gpt-oss-120b` on the model page, `openai/gpt-oss-120b` on the [AI coding tools page](/public-endpoints/ai-coding-tools) | Documented as OpenAI-compatible, with tool calling in the [AI SDK guide](/public-endpoints/ai-sdk). Call `/models` to confirm the ID. Not in the model reference table. |
-| [Cogito 671B v2.1](/public-endpoints/models/cogito-671b) | `cogito-671b-v2-1-fp8-dynamic` | `cogito-671b-v2-1-fp8-dynamic` | Documented as OpenAI-compatible. Not in the model reference table, so confirm it in the playground. |
 | [IBM Granite 4.0](/public-endpoints/models/granite-4) | `granite-4-0-h-small` | Check the model | The model page documents the native `/runsync` route with `input.messages`. |
 
 The OpenAI-compatible base URL for a Public Endpoint is `https://api.runpod.ai/v2/SLUG/openai/v1`. Every Public Endpoint also accepts the native routes: `https://api.runpod.ai/v2/SLUG/runsync` and `/run`.
 
-For Fireworks model IDs that match these, such as `accounts/fireworks/models/gpt-oss-120b` or `accounts/fireworks/models/kimi-k3`, compare the model card on each side before you assume they're the same checkpoint and precision. For everything else, the general answer is your own vLLM endpoint: Fireworks' serverless catalog is larger than Runpod's Public Endpoints catalog.
+For Fireworks model IDs that match these, such as `accounts/fireworks/models/kimi-k3`, compare the model card on each side before you assume they're the same checkpoint and precision. For everything else, the general answer is your own vLLM endpoint: Fireworks' serverless catalog is larger than Runpod's Public Endpoints catalog.
 
 ### GPU mapping
 
@@ -216,7 +214,7 @@ The vLLM worker turns any `vllm serve` flag into an environment variable in uppe
 | Reasoning | `REASONING_PARSER` (for example `deepseek_r1`, `qwen3`) |
 | Chat template | The model's own template, or `CUSTOM_CHAT_TEMPLATE` |
 | GPUs per replica (`--accelerator-count`) | GPUs per worker. The worker sets `TENSOR_PARALLEL_SIZE` to the number of visible GPUs. |
-| Speculative decoding (`--draft-model`) | `SPECULATIVE_MODEL`, `NUM_SPECULATIVE_TOKENS` |
+| Speculative decoding (`--draft-model`) | `SPECULATIVE_CONFIG`, a JSON object such as `{"model": "ORG/DRAFT", "num_speculative_tokens": 3}`. The current worker ignores the older `SPECULATIVE_MODEL` and `NUM_SPECULATIVE_TOKENS` variables. |
 | LoRA addons (`--enable-addons`) | `ENABLE_LORA=true`, `LORA_MODULES`, `MAX_LORAS`, `MAX_LORA_RANK` |
 | Gated or private weights | `HF_TOKEN`, from a Runpod secret |
 | Served model name | `OPENAI_SERVED_MODEL_NAME_OVERRIDE` |
@@ -411,7 +409,7 @@ curl -X POST "https://api.runpod.io/v2/serverless" \
     "workers": { "min": 0, "max": 3, "idleTimeout": 600 },
     "scaling": { "type": "REQUEST_COUNT", "requestCount": 4 },
     "flashboot": "FLASHBOOT",
-    "timeout": 600000
+    "timeout": 300000
   }'
 ```
 
@@ -662,17 +660,17 @@ Each cell reflects what the platform's docs state. "Check the model" means the d
 | `/chat/completions` | Yes | Yes | Yes, for the text models documented as OpenAI-compatible |
 | `/completions` | Yes | Yes | Check the model |
 | `/models` | Check the Fireworks API reference | Yes | Check the model |
-| Streaming (`stream: true`) | Yes | Yes | Yes (documented for Qwen3, Kimi, GPT-OSS, Cogito) |
+| Streaming (`stream: true`) | Yes | Yes | Yes (documented for Qwen3 and Kimi) |
 | `usage` in the final stream chunk | Yes, by default | Check the model | Check the model |
-| Tool calling | Yes, on supported models | Yes, with `ENABLE_AUTO_TOOL_CHOICE` and `TOOL_CALL_PARSER`. Depends on the model. | Documented for GPT-OSS 120B. Check other models. |
-| JSON mode and JSON schema (`response_format`) | Yes (`json_object`, `json_schema`) | Not covered in the Runpod docs. The worker exposes `GUIDED_DECODING_BACKEND`. Check the model. | Check the model |
+| Tool calling | Yes, on supported models | Yes, with `ENABLE_AUTO_TOOL_CHOICE` and `TOOL_CALL_PARSER`. Depends on the model. | Not covered on the model pages. Check the model. |
+| JSON mode and JSON schema (`response_format`) | Yes (`json_object`, `json_schema`) | Not covered in the Runpod docs. The request goes to vLLM, which supports structured outputs, and `STRUCTURED_OUTPUTS_CONFIG` sets the backend. Check the model. | Check the model |
 | Grammar mode (BNF) | Yes | Check the model | Check the model |
 | Reasoning | Yes (`reasoning_effort`, output in `reasoning_content`) | Yes, with `REASONING_PARSER`. Output in `reasoning` on vLLM v0.32.0. | Kimi documents `reasoning_effort`. Check other models. |
 | Vision input (`image_url`) | Yes, on vision models | Depends on the model you deploy | Kimi K2.6 is described as multimodal. Check the model. |
 | Embeddings | Yes (`/v1/embeddings`) | Not listed for the vLLM worker | Not listed |
 | Reranking | Yes (`/v1/rerank`) | Not listed | Not listed |
-| Responses API | Yes (`/v1/responses`) | Not listed | Not listed |
-| Anthropic Messages API | Yes | Not listed | Not listed |
+| Responses API | Yes (`/v1/responses`) | Not in the Runpod docs. The [worker README](https://github.com/runpod-workers/worker-vllm#usage-openai-compatibility) lists `/openai/v1/responses`. Test it. | Not listed |
+| Anthropic Messages API | Yes | Not in the Runpod docs. The worker README lists `/openai/v1/messages`. Test it. | Not listed |
 | LoRA adapters | Yes (deployments, and serverless for select bases) | Yes (`ENABLE_LORA`, `LORA_MODULES`) | Not applicable for text models |
 | Async jobs | The Responses API can run jobs in the background. Chat completions are synchronous. | Yes (`/run`, `/status`, webhooks) | Yes (`/run`, `/status`) |
 
@@ -808,7 +806,8 @@ On the Runpod side, guard cost with three settings: max workers caps concurrency
 | --- | --- |
 | `POST https://api.fireworks.ai/inference/v1/chat/completions` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1/chat/completions` |
 | `POST https://api.fireworks.ai/inference/v1/completions` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1/completions` |
-| `POST https://api.fireworks.ai/inference/v1/embeddings`, `/rerank`, `/responses` | No prebuilt route. See [What has no direct equivalent](#what-has-no-direct-equivalent). |
+| `POST https://api.fireworks.ai/inference/v1/embeddings`, `/rerank` | No prebuilt route. See [What has no direct equivalent](#what-has-no-direct-equivalent). |
+| `POST https://api.fireworks.ai/inference/v1/responses` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1/responses`, listed in the worker README. Test it. |
 | `POST https://api.fireworks.ai/v1/accounts/ACCOUNT_ID/deployments` | `POST https://api.runpod.io/v2/serverless` |
 | List, get, update, and delete deployment | `GET /v2/serverless`, `GET`, `PATCH`, and `DELETE /v2/serverless/ENDPOINT_ID` |
 | Scale deployment | `PATCH /v2/serverless/ENDPOINT_ID` (`workers.min`, `workers.max`) |
@@ -828,7 +827,7 @@ These are client-side variables, since Fireworks doesn't run your containers.
 | `FIREWORKS_API_KEY` | `RUNPOD_API_KEY` |
 | `OPENAI_BASE_URL` or `OPENAI_API_BASE` set to `https://api.fireworks.ai/inference/v1` | `https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1` |
 | `OPENAI_API_KEY` set to a Fireworks key | Set to a Runpod API key |
-| `ANTHROPIC_BASE_URL` set to `https://api.fireworks.ai/inference` | No equivalent route |
+| `ANTHROPIC_BASE_URL` set to `https://api.fireworks.ai/inference` | No documented equivalent in the Runpod docs. The worker README lists `/openai/v1/messages`, so test a base URL of `https://api.runpod.ai/v2/ENDPOINT_ID/openai` before you rely on it. |
 | `~/.fireworks/auth.ini` (`firectl` credentials) | `~/.runpod/config.toml` (written by `runpodctl doctor` or `rp login`) |
 
 ### Status map

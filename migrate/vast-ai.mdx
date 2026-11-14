@@ -84,7 +84,7 @@ On the Runpod side:
 - **Bidding for interruptible capacity.** Vast lets you set a bid and pauses the instance when you're outbid. Pod creation in `runpodctl` and REST API v2 has no bid or interruptible field. Run these jobs as on-demand Pods with checkpoints, as a Serverless queue endpoint that scales to zero between jobs, or as an `@app.task` function that provisions a Pod per call and terminates it when the function returns.
 - **Self-serve reserved discounts.** `vastai prepay instance` has no counterpart. Runpod's savings plans are deprecated and can't be purchased. For committed capacity or custom pricing, [contact sales](https://www.runpod.io/contact).
 - **Choosing a host.** Filters such as `reliability`, `inet_down`, `dlperf`, `static_ip`, and `machine_id` don't exist. You choose a GPU type, a cloud tier, a data center or country, a minimum CUDA version, and minimum vCPU and RAM per GPU.
-- **Virtual machines and Docker inside the instance.** Vast VM instances support systemd and nested containers. Pods are containers and don't run Docker Compose. Package each service as its own image and run one Pod per service (Pods in the same account can reach each other over [global networking](/pods/networking)), or run the services as processes in one image.
+- **Virtual machines and Docker inside the instance.** Vast VM instances support systemd and nested containers. Pods are containers and don't run Docker Compose. Package each service as its own image and run one Pod per service (NVIDIA GPU Pods in the same account can reach each other over [global networking](/pods/networking)), or run the services as processes in one image.
 - **ARM hosts.** Vast lists `cpu_arch=arm64` offers. Runpod images must be `linux/amd64`.
 - **Copying data off a stopped instance.** `vastai copy` and Cloud Sync work on stopped Vast instances. On Runpod, put data you need without a running Pod on a network volume and read it through the S3-compatible API.
 - **Scheduled Cloud Sync.** `vastai cloud copy --schedule` has no counterpart. Run `aws s3 sync` or `rclone` from cron inside the Pod, or from your own scheduler against the S3-compatible API.
@@ -320,7 +320,7 @@ The before and after below launch the same vLLM server: one image, one port, one
   </Tab>
 </Tabs>
 
-The server is then reachable at `https://POD_ID-8000.proxy.runpod.net/v1/models`. Three things changed: there's no offer ID, the port carries a type, and the Hugging Face token comes from a [secret](/pods/templates/secrets) instead of sitting in the command. Set the CUDA floor to the version your image was built for.
+Create the `hf_token` secret before you run the Runpod versions. The server is then reachable at `https://POD_ID-8000.proxy.runpod.net/v1/models`. That URL is public, so set an API key on the server (vLLM's `--api-key` argument) before you put real traffic on it. Three things changed: there's no offer ID, the port carries a type, and the Hugging Face token comes from a [secret](/pods/templates/secrets) instead of sitting in the command. Set the CUDA floor to the version your image was built for.
 
 Each launch mode translates as follows.
 
@@ -591,7 +591,7 @@ Pick the route that matches where the data is now.
     cd /workspace && runpodctl receive CODE
     ```
 
-    For large or resumable transfers, use `rsync` over the Pod's direct SSH port. The Pod needs `22/tcp` in its ports. Read the host and port from `runpodctl ssh info POD_ID`.
+    For large or resumable transfers, use `rsync` over the Pod's direct SSH port. The Pod needs `22/tcp` in its ports. Read the host and port from `runpodctl ssh info POD_ID`. The Vast instance must hold a private key that the Pod accepts: connect to the instance with SSH agent forwarding (`ssh -A`), or create a key pair on the instance and register its public key with `runpodctl ssh add-key` before you create the Pod.
 
     ```bash
     # On the Vast instance
@@ -749,6 +749,7 @@ curl -s -X POST "https://api.runpod.io/v2/serverless" \
     "type": "LOAD_BALANCER",
     "image": "my-org/my-server:1.0",
     "disk": 30,
+    "ports": ["8000/http"],
     "env": {"PORT": "8000", "PORT_HEALTH": "8000"},
     "gpu": {"pools": ["ADA_24"], "count": 1},
     "workers": {"min": 0, "max": 3},
@@ -996,7 +997,7 @@ def create_pod():
             return response.json()
         if response.status_code in (400, 403):
             continue  # couldn't be placed, or no access to this GPU type: try the next one
-        response.raise_for_status()  # 401, 402, 422, 429: fix the problem, don't loop
+        response.raise_for_status()  # 401, 422, 429: fix the problem, don't loop
     raise SystemExit("None of the candidate GPU types could be placed")
 
 
@@ -1153,11 +1154,16 @@ Compare outputs against Vast for the same inputs and seeds. Measure latency for 
 
 **Set a cost guard on Runpod.** Set `workers.max` and the idle timeout on each endpoint, enable low balance notifications and auto-pay on the [billing page](/accounts-billing/billing), and review `runpodctl pod list --all` and `runpodctl billing pods` after the first day. A stopped Pod still bills for its volume disk, and a network volume bills until you delete it.
 
-**Shut down Vast.** Stopped Vast instances and volumes keep billing for storage, so destroy them once the data is verified on Runpod. Delete endpoints and workergroups first, then destroy any worker instances they leave behind.
+**Shut down Vast.** Stopped Vast instances and volumes keep billing for storage, so destroy them once the data is verified on Runpod. Delete Deployments, endpoints, and workergroups first, then destroy any worker instances they leave behind.
 
 ```bash
+# Deployments (beta)
+vastai show deployments --raw
+vastai delete deployment DEPLOYMENT_ID
+
 # Serverless
 vastai show endpoints --raw | jq -r '.[].id'
+vastai show workergroups --raw
 vastai delete workergroup WORKERGROUP_ID
 vastai delete endpoint ENDPOINT_ID
 

@@ -14,7 +14,7 @@ You can hand this migration to a coding agent. See [Migrate with a coding agent]
 
 | CoreWeave concept | Runpod equivalent | Notes |
 | --- | --- | --- |
-| CKS cluster (managed control plane in its own VPC) | No cluster object | You create Pods, Serverless endpoints, and Instant Clusters directly with the API, CLI, or Terraform. There's no control plane to provision or upgrade. |
+| CKS cluster (managed control plane, attached to a VPC) | No cluster object | You create Pods, Serverless endpoints, and Instant Clusters directly with the API, CLI, or Terraform. There's no control plane to provision or upgrade. |
 | Node Pool (`NodePool`, whole bare-metal nodes by `instanceType`) | GPU type and GPU count on each Pod or worker | CoreWeave GPU instances are whole nodes, typically with 8 GPUs. On Runpod you request GPUs per container. |
 | Node Pool autoscaling (Cluster Autoscaler) | Serverless worker scaling | Serverless scales workers between `workers.min` and `workers.max`, including to zero. Pods don't autoscale. |
 | Deployment + Service + HPA, KEDA, or Knative | [Serverless endpoint](/serverless/overview), queue-based or load-balancing | One endpoint replaces the Deployment, the Service, and the autoscaler. |
@@ -33,7 +33,7 @@ You can hand this migration to a coding agent. See [Migrate with a coding agent]
 | Kubernetes Secret | [Runpod secret](/pods/templates/secrets) | Referenced from an environment variable as `{{ RUNPOD_SECRET_name }}`. |
 | ConfigMap | Environment variables, or files on a volume | Set `env` on the Pod, endpoint, or template. |
 | Region and Availability Zone (`US-EAST-04A`) | Data center ID (`US-KS-2`) | List data centers with `runpodctl datacenter list`. |
-| Reserved, On-Demand, and Spot capacity plans | On-demand, per-second billing | See [Pod pricing](/pods/pricing) and [Serverless pricing](/serverless/pricing). For committed or reserved capacity, [contact sales](https://ecykq.share.hsforms.com/2MZdZATC3Rb62Dgci7knjbA). |
+| Flex Reservations, Reserved Instances, Spot Instances, and On-Demand capacity plans | On-demand, per-second billing | See [Pod pricing](/pods/pricing) and [Serverless pricing](/serverless/pricing). For committed or reserved capacity, [contact sales](https://ecykq.share.hsforms.com/2MZdZATC3Rb62Dgci7knjbA). |
 | CoreWeave Terraform provider (`coreweave/coreweave`) | [Runpod Terraform provider](/integrations/terraform/overview) (`runpod/runpod`) | See [Migrate your Terraform](#migrate-your-terraform). |
 | `kubectl`, `cwic`, CoreWeave REST APIs | [`runpodctl`](/runpodctl/overview), [REST API v2](/api-reference-v2/overview), the Runpod SDK, the MCP server | The Terraform provider and the SDK are built on REST API v2. |
 | API access token (`CW-SECRET-...`), kubeconfig, Object Storage access key | One Runpod API key (`RUNPOD_API_KEY`), plus an S3 API key for the S3-compatible API | See [Credentials](/get-started/credentials). |
@@ -46,7 +46,7 @@ You can hand this migration to a coding agent. See [Migrate with a coding agent]
 
 **You request GPUs, not nodes.** A CoreWeave Node Pool gives you whole bare-metal nodes, and Kubernetes packs your containers onto them. On Runpod, each Pod or Serverless worker asks for a GPU type and a GPU count, and Runpod places it. There's no bin-packing, node affinity, taints, or tolerations to carry over. Replace `nodeSelector` on `node.coreweave.cloud/type` with a GPU type ID or pool.
 
-**Autoscaling is a property of the endpoint.** On CKS you combine an HPA or KEDA with Node Pool autoscaling, and CoreWeave documents node scale-up as taking 5 to 15 minutes. A Serverless endpoint has one scaler: workers between a minimum and maximum, driven by queue delay or request count, with scale to zero as the default.
+**Autoscaling is a property of the endpoint.** On CKS you combine an HPA or KEDA with Node Pool autoscaling, and CoreWeave documents node scale-up as taking 5 to 15 minutes, depending on the instance type. A Serverless endpoint has one scaler: workers between a minimum and maximum, driven by queue delay or request count, with scale to zero as the default.
 
 **Requests reach your container through Runpod's URLs.** A load-balancing endpoint serves your HTTP server at `https://ENDPOINT_ID.api.runpod.ai/PATH` and requires your Runpod API key as a bearer token. A queue-based endpoint wraps your code in a handler behind `/run` and `/runsync`. A Pod's HTTP port is served at `https://POD_ID-PORT.proxy.runpod.net`, which is public, unauthenticated, and has a 100-second timeout.
 
@@ -63,8 +63,8 @@ You can hand this migration to a coding agent. See [Migrate with a coding agent]
 On the Runpod side:
 
 - **The Kubernetes API.** Operators, CRDs, DaemonSets, admission webhooks, Helm charts, and anything that calls the Kubernetes API from inside a container don't carry over. Rebuild the behavior with the Runpod API, or keep that component on a Kubernetes cluster elsewhere.
-- **Multi-container Pods and sidecars.** A Runpod Pod or worker runs one container image, and Pods don't support Docker Compose. Combine the processes into one image with a process supervisor, or run the sidecar as its own Pod and connect over global networking.
-- **VPC-level networking.** CoreWeave gives each cluster a VPC with CIDRs you choose, and offers Direct Connect. Runpod's global networking gives Pods private DNS names inside your account at 100 Mbps, on NVIDIA GPU Pods in supported data centers. Pods don't support UDP.
+- **Multi-container Pods and sidecars.** A Runpod Pod or worker runs one container image, and Pods don't support Docker Compose. Combine the processes into one image with a process supervisor, or run the sidecar as its own Pod and connect over global networking, which requires both to be NVIDIA GPU Pods.
+- **VPC-level networking.** Every CKS cluster attaches to a VPC with CIDRs you can choose, and CoreWeave offers Direct Connect. Runpod's global networking gives Pods private DNS names inside your account at 100 Mbps, on NVIDIA GPU Pods in supported data centers. Pods don't support UDP.
 - **Object storage features.** AI Object Storage has bucket policies, versioning, lifecycle rules, and LOTA caching. A network volume is a file system with a fixed size and an S3-compatible API on top. If you depend on bucket features, keep an object store and mount or sync from it.
 - **Whole-node control.** Kernel settings, GPU driver versions per Node Pool, kubelet overrides, and node shell access have no counterpart. Set a CUDA floor with `minCudaVersion` instead of pinning a driver.
 - **CronJob schedules.** Keep the schedule in a scheduler you already run (CI, Airflow, cron) and have it submit a job to the endpoint.
@@ -72,7 +72,7 @@ On the Runpod side:
 
 On the CoreWeave side:
 
-- **Scale to zero for inference.** CoreWeave documents that Dedicated Inference doesn't support scale to zero, and on CKS, GPU capacity scales at node granularity through the Cluster Autoscaler. A Serverless endpoint with `workers.min` set to `0` runs no workers while idle.
+- **Scale to zero per endpoint.** CoreWeave documents that Dedicated Inference doesn't support scale to zero. On CKS, a Node Pool can scale to zero nodes through the Cluster Autoscaler, but GPU capacity scales at whole-node granularity. A Serverless endpoint with `workers.min` set to `0` runs no workers while idle.
 - **Per-container GPU requests without a cluster.** There's no cluster, VPC, or Node Pool to create before the first container starts.
 - **A managed request queue.** Queue-based endpoints give you async submission, status polling, streaming, retries, and webhooks without deploying a queue.
 
@@ -266,7 +266,7 @@ Reference it from any Pod, endpoint, or template by setting an environment varia
 
 ### Multi-container Pods
 
-If a Kubernetes Pod has more than one container, decide per container. Init containers that download models become a one-time copy onto a network volume (Step 5). Log and metrics sidecars usually go away, because Runpod collects container logs. A sidecar your app talks to over `localhost` either moves into the same image under a process supervisor, or becomes its own Pod that you reach at `POD_ID.runpod.internal` with [global networking](/pods/networking).
+If a Kubernetes Pod has more than one container, decide per container. Init containers that download models become a one-time copy onto a network volume (Step 5). Log and metrics sidecars usually go away, because Runpod collects container logs. A sidecar your app talks to over `localhost` either moves into the same image under a process supervisor, or becomes its own Pod that you reach at `POD_ID.runpod.internal` with [global networking](/pods/networking). Global networking works between NVIDIA GPU Pods only, so a CPU-only sidecar such as a cache belongs in the same image.
 
 ## Step 5: Move your data and models
 
@@ -396,7 +396,7 @@ Create the `runpod-s3` Secret from your Runpod S3 API key before you apply the J
 
 ### Global volumes
 
-A global volume isn't tied to a data center and is designed for data that many Pods or workers read, such as model weights. The S3-compatible API doesn't work with global volumes, so load one by attaching it to a Pod and copying onto the mount with the Pod method above. See [Global volumes](/storage/globalvolume/overview) for mount paths, request costs, and when to prefer a network volume.
+A global volume isn't tied to a data center and is designed for data that many Pods or workers read, such as model weights. The S3-compatible API doesn't work with global volumes, so load one by attaching it to a Pod and running the same sync commands inside it. Attach it to a GPU Pod in the console, or set `mounts.global` when you create the Pod with the REST API. See [Global volumes](/storage/globalvolume/overview) for mount paths, request costs, and when to prefer a network volume.
 
 ## Step 6: Deploy on Runpod
 
@@ -952,8 +952,9 @@ curl -s "https://api.runpod.io/v2/serverless/ENDPOINT_ID/metrics/requests?interv
 **Shut down CoreWeave.** Do this only after you've confirmed the data copy and kept the CoreWeave side idle for a period you're comfortable with. Delete in this order:
 
 ```bash
-# 1. Workloads, Services, and autoscalers
-kubectl delete -f llm.yaml
+# 1. Workloads, Services, and autoscalers. Don't run `kubectl delete -f llm.yaml` here:
+#    that file also declares the PVC, and this would delete it with the workloads.
+kubectl delete deployment,service,hpa llama-3-1-8b
 
 # 2. Volumes (after verifying the copy on Runpod)
 kubectl delete pvc model-cache
@@ -970,7 +971,7 @@ aws s3 rm s3://BUCKET_NAME --recursive --profile cw
 aws s3api delete-bucket --bucket BUCKET_NAME --profile cw
 ```
 
-Then delete each CKS cluster from the **Clusters** page of the CoreWeave Cloud Console (the cluster must be in the Running, Failed, or Preempted state), and delete API access tokens and Object Storage access keys you no longer need. If you manage CoreWeave with Terraform, run `terraform destroy` on that configuration instead.
+If you run SUNK, delete the SUNK cluster as well, because a `SunkCluster` manages its own Node Pools. Then delete each CKS cluster from the **Clusters** page of the CoreWeave Cloud Console (the cluster must be in the Running, Failed, or Preempted state), and delete API access tokens and Object Storage access keys you no longer need. If you manage CoreWeave with Terraform, run `terraform destroy` on that configuration instead.
 
 <Warning>
 Deleting resources doesn't end a commitment. CoreWeave bills Reserved Instances at a flat rate for the term whether or not instances are running, so talk to your CoreWeave account team about reserved capacity before you plan the cutover date. Versioned buckets also need their object versions and delete markers removed before the bucket can be deleted.

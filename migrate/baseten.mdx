@@ -81,7 +81,7 @@ You can hand this migration to a coding agent. See [Migrate with a coding agent]
 | Single-tenant, self-hosted, and hybrid hosting | Runpod runs in Runpod data centers | For compliance details see [Security and compliance](/references/security-and-compliance). |
 | Prometheus metrics export and OpenTelemetry tracing | Console metrics and REST v2 metrics routes | Export from your own code if you need traces. |
 
-Going the other way, these Runpod features don't have a counterpart in the Baseten docs this guide was checked against: Pods you can SSH into and keep running as long-lived GPU machines, writable shared [network volumes](/storage/network-volumes) (Baseten's BDN volumes are immutable and mounted read-only), and job results you can fetch from `/status` after the fact.
+Going the other way, these Runpod features don't have a counterpart in the Baseten docs this guide was checked against: Pods that keep running as long-lived, general-purpose GPU machines outside of a deployment or training job (Baseten's docs describe SSH into running deployments and training jobs), writable shared [network volumes](/storage/network-volumes) (Baseten's BDN volumes are immutable and mounted read-only), and job results you can fetch from `/status` after the fact.
 
 ## Requirements
 
@@ -434,7 +434,7 @@ runpod.serverless.start({
 ```
 </CodeGroup>
 
-Clients read the chunks from `/stream/JOB_ID`. With `return_aggregate_stream` set, the full output is also available from `/run` and `/runsync`. See [Streaming handlers](/serverless/workers/handler-functions#streaming-handlers).
+Clients read the chunks from `/stream/JOB_ID`. With `return_aggregate_stream` set, the full output is also available from `/run` (through `/status`) and `/runsync`, as a list of the yielded chunks instead of one string. See [Streaming handlers](/serverless/workers/handler-functions#streaming-handlers).
 
 ### Concurrency
 
@@ -617,11 +617,14 @@ runpod.serverless.start({"handler": handler})
 
 ```python hello_world/handler.py (Runpod)
 import os
+import time
 
 import requests
 import runpod
 
-RAND_INT_URL = f"https://api.runpod.ai/v2/{os.environ['RAND_INT_ENDPOINT_ID']}/runsync"
+RAND_INT_BASE = f"https://api.runpod.ai/v2/{os.environ['RAND_INT_ENDPOINT_ID']}"
+RAND_INT_URL = f"{RAND_INT_BASE}/runsync"
+STATUS_URL = f"{RAND_INT_BASE}/status"
 HEADERS = {"Authorization": f"Bearer {os.environ['ORCHESTRATOR_API_KEY']}"}
 
 
@@ -633,8 +636,18 @@ def call_rand_int(max_value, retries=3):
             json={"input": {"max_value": max_value}},
             timeout=120,
         )
-        if response.ok and response.json().get("status") == "COMPLETED":
-            return response.json()["output"]
+        response.raise_for_status()
+        job = response.json()
+        # /runsync returns before the job finishes if it runs long. The job is
+        # still running, so poll it instead of submitting a second one.
+        while job["status"] in ("IN_QUEUE", "IN_PROGRESS"):
+            time.sleep(1)
+            status = requests.get(f"{STATUS_URL}/{job['id']}", headers=HEADERS, timeout=30)
+            status.raise_for_status()
+            job = status.json()
+        if job["status"] == "COMPLETED":
+            return job["output"]
+        # FAILED, CANCELLED or TIMED_OUT: submit a new job on the next attempt.
     raise RuntimeError("rand_int did not complete")
 
 
@@ -653,7 +666,7 @@ What you give up compared with Chains: typed stubs between steps, a single `trus
 
 ## Step 5: Move your data and models
 
-**Hugging Face weights.** If your Truss uses `weights` with an `hf://` source, or `model_cache` with a Hugging Face `repo_id`, use a [cached model](/serverless/endpoints/model-caching). Runpod schedules workers on hosts that already hold the model and doesn't bill worker time for the download. Cached models are mounted at `/runpod-volume/huggingface-cache/hub/` in the Hugging Face cache layout, so the path changes from your Truss `mount_location` or `/app/model_cache/VOLUME_FOLDER`. [Use Hugging Face models](/serverless/development/huggingface-models#use-cached-models) has a helper that resolves the snapshot path. Each endpoint takes one cached model.
+**Hugging Face weights.** If your Truss uses `weights` with an `hf://` source, or `model_cache` with a Hugging Face `repo_id`, use a [cached model](/serverless/endpoints/model-caching). Runpod tries to start workers on hosts that already hold the model and doesn't bill worker time for the download. Cached models are mounted at `/runpod-volume/huggingface-cache/hub/` in the Hugging Face cache layout, so the path changes from your Truss `mount_location` or `/app/model_cache/VOLUME_FOLDER`. [Use Hugging Face models](/serverless/development/huggingface-models#use-cached-models) has a helper that resolves the snapshot path. Each endpoint takes one cached model.
 
 **Weights in S3, GCS, R2, or Azure, and BDN volumes.** Put them on a [network volume](/storage/network-volumes), which mounts at `/runpod-volume` on Serverless workers. A network volume lives in one data center, and an endpoint that attaches it runs only there, so choose a data center that stocks the GPU pool you need.
 
@@ -707,7 +720,7 @@ On Runpod, create a Serverless template for the image, then an endpoint that use
       --image docker.io/DOCKER_USERNAME/text-generator:v1.0.0 \
       --serverless \
       --container-disk-in-gb 20 \
-      --env '{"MODEL_ID":"HuggingFaceTB/SmolLM2-1.7B-Instruct","HF_TOKEN":"{{ RUNPOD_SECRET_hf_access_token }}"}'
+      --env '{"MODEL_ID":"HuggingFaceTB/SmolLM2-1.7B-Instruct","HF_TOKEN":"{{ RUNPOD_SECRET_hf_access_token }}","HF_HUB_CACHE":"/runpod-volume/huggingface-cache/hub"}'
 
     runpodctl serverless create \
       --name text-generator \
@@ -721,7 +734,7 @@ On Runpod, create a Serverless template for the image, then an endpoint that use
       --model-reference https://huggingface.co/HuggingFaceTB/SmolLM2-1.7B-Instruct:main
     ```
 
-    `TEMPLATE_ID` comes from the output of the first command. Each Serverless template binds to one endpoint, so create one template per endpoint. For a private image, run `runpodctl registry create` and add `--registry-auth-id` to the template.
+    `TEMPLATE_ID` comes from the output of the first command. `HF_HUB_CACHE` points `transformers` at the cached model that `--model-reference` attaches. Without it, the handler downloads the weights again on every cold start. Each Serverless template binds to one endpoint, so create one template per endpoint. For a private image, run `runpodctl registry create` and add `--registry-auth-id` to the template.
   </Tab>
   <Tab title="REST API v2">
     ```bash
@@ -759,7 +772,7 @@ The autoscaling flags map as follows:
 | `--min-replica` | `--workers-min` (active workers) | Active workers are billed continuously. |
 | `--max-replica` | `--workers-max` | Baseten defaults to 1, Runpod to 3. |
 | `--scale-down-delay` (default 900 s) | `--idle-timeout` | A worker is billed while it waits. The console default is 5 seconds. |
-| `--concurrency-target` | `--scale-by requests --scale-threshold N` | Or keep queue delay scaling and set per-worker concurrency in the handler. |
+| `--concurrency-target` | `--scale-by requests --scale-threshold N` | On a queue endpoint, request count scaling can't be combined with `--idle-timeout`. Or keep queue delay scaling and set per-worker concurrency in the handler. |
 | `--target-utilization-percentage` | No setting | Lower the request count threshold to leave headroom. |
 | `--autoscaling-window`, `--max-scale-down-rate` | No setting | |
 | `--instance-type` | `--gpu-id`, `--gpu-count`, or `--compute-type CPU --instance-id` | |
@@ -999,11 +1012,11 @@ import os
 from openai import OpenAI
 
 client = OpenAI(
-    base_url="https://api.runpod.ai/v2/gpt-oss-120b/openai/v1",
+    base_url="https://api.runpod.ai/v2/qwen3-32b-awq/openai/v1",
     api_key=os.environ["RUNPOD_API_KEY"],
 )
 response = client.chat.completions.create(
-    model="openai/gpt-oss-120b",
+    model="Qwen/Qwen3-32B-AWQ",
     messages=[{"role": "user", "content": "Reply with exactly: Paris."}],
 )
 print(response.choices[0].message.content)
@@ -1026,7 +1039,7 @@ print(response.choices[0].message.content)
 ```
 </CodeGroup>
 
-Each Public Endpoint has its own base URL that contains the model's endpoint ID, unlike Baseten's single base URL with a model slug per request. The OpenAI-compatible text models are [GPT-OSS 120B](/public-endpoints/models/gpt-oss-120b) (`gpt-oss-120b`, model `openai/gpt-oss-120b`; the model page's own examples use `gpt-oss-120b`, so try that name if a request is rejected) and [Qwen3 32B AWQ](/public-endpoints/models/qwen3-32b) (`qwen3-32b-awq`, model `Qwen/Qwen3-32B-AWQ`). For any other Model APIs slug, deploy that model on a vLLM endpoint. The vLLM worker serves `/chat/completions`, `/completions`, and `/models`. If you use Baseten's Responses or Anthropic Messages protocols, move those calls to chat completions or serve the protocol from your own server on a load balancing endpoint. For a load balancing endpoint that runs an OpenAI-compatible server, the base URL is `https://ENDPOINT_ID.api.runpod.ai/v1`.
+Each Public Endpoint has its own base URL that contains the model's endpoint ID, unlike Baseten's single base URL with a model slug per request. The example uses [Qwen3 32B AWQ](/public-endpoints/models/qwen3-32b) (`qwen3-32b-awq`, model `Qwen/Qwen3-32B-AWQ`), which documents an OpenAI-compatible route. The [model reference](/public-endpoints/reference) lists the text models Runpod hosts, and the catalog is smaller than Baseten's Model APIs, so check it for the model you call. For any other Model APIs slug, deploy that model on a vLLM endpoint. The vLLM worker serves `/chat/completions`, `/completions`, and `/models`. If you use Baseten's Responses or Anthropic Messages protocols, move those calls to chat completions or serve the protocol from your own server on a load balancing endpoint. For a load balancing endpoint that runs an OpenAI-compatible server, the base URL is `https://ENDPOINT_ID.api.runpod.ai/v1`.
 
 ### Control-plane automation
 
@@ -1278,7 +1291,7 @@ Both providers read the API key from the environment (`BASETEN_API_KEY` and `RUN
 | `IN_PROGRESS` | `IN_PROGRESS` |
 | `SUCCEEDED` | `COMPLETED` |
 | `FAILED` | `FAILED` |
-| `EXPIRED` | `TIMED_OUT` |
+| `EXPIRED` | `TIMED_OUT`. Once a job's `ttl` passes, its data is deleted and `/status` stops returning it. |
 | `CANCELED` | `CANCELLED` |
 | `WEBHOOK_FAILED` | `COMPLETED`. The result is still available from `/status`. |
 

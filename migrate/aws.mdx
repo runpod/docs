@@ -23,7 +23,7 @@ You can hand this migration to a coding agent. See [Migrate with a coding agent]
 | SageMaker asynchronous inference, batch transform | Serverless queue endpoint (`/run` with a webhook) | Jobs queue, and workers scale to zero when idle. |
 | SageMaker Serverless Inference | Serverless endpoint | SageMaker Serverless Inference doesn't support GPUs. Runpod Serverless runs on GPUs or CPUs. |
 | SageMaker training and processing jobs | Pod, or `@app.task` in the [Runpod SDK](/sdk/overview) | `@app.task` creates one Pod per call that runs to completion and terminates. |
-| SageMaker Studio, notebook instances | Pod with JupyterLab | Runpod official images start JupyterLab on port 8888. |
+| SageMaker Studio, notebook instances | Pod with JupyterLab | Runpod official PyTorch images start JupyterLab on port 8888 when `JUPYTER_PASSWORD` is set. The console sets it for you. |
 | SageMaker JumpStart, Amazon Bedrock | [Public Endpoints](/public-endpoints/overview) or a Serverless [vLLM endpoint](/serverless/vllm/overview) | Public Endpoints cover only the models in the [model reference](/public-endpoints/reference). For any other open-weight model, deploy vLLM. |
 | AWS Batch, ECS on GPU, EKS GPU node groups | Serverless queue endpoint, Pods, or [SkyPilot](/integrations/skypilot) and [dstack](/integrations/dstack) | Run each container as an endpoint or a Pod. SkyPilot and dstack schedule jobs onto Runpod from their own control planes. |
 | AWS ParallelCluster, SageMaker HyperPod | [Instant Clusters](/instant-clusters) with [Slurm](/instant-clusters/slurm-clusters) | Multi-node clusters with Slurm preinstalled. Capacity depends on current stock. HyperPod's EKS orchestration has no managed counterpart. |
@@ -33,7 +33,7 @@ You can hand this migration to a coding agent. See [Migrate with a coding agent]
 | Amazon EFS, FSx for Lustre | Network volume, [high-performance storage](/storage/high-performance-storage) | Pinned to one data center. |
 | Amazon S3 | Keep S3, or a network volume with the [S3-compatible API](/storage/s3-api) | The Runpod S3-compatible API is a file interface to a network volume. It isn't a general object store. |
 | Security groups, load balancers | [Exposed ports](/pods/configuration/expose-ports), Serverless endpoint URLs | HTTP ports get an HTTPS proxy URL. TCP ports get a public IP and mapped port. |
-| VPC private networking | [Global networking](/pods/networking) between Pods | A private network across your own Pods. It doesn't peer with a VPC. |
+| VPC private networking | [Global networking](/pods/networking) between Pods | A private network across your own Pods. You enable it when you deploy, on NVIDIA GPU Pods in supported data centers. It doesn't peer with a VPC. |
 | AWS Secrets Manager, SSM Parameter Store | [Secrets](/pods/templates/secrets) | Referenced from environment variables as `{{ RUNPOD_SECRET_name }}`. |
 | Regions and Availability Zones | Data centers | List them with `runpodctl datacenter list`. |
 | On-Demand, per-second billing | On-demand Pods and Serverless, per-second billing | No data ingress or egress fees on Runpod. |
@@ -42,8 +42,8 @@ You can hand this migration to a coding agent. See [Migrate with a coding agent]
 | Terraform AWS provider, CloudFormation | [Runpod Terraform provider](/integrations/terraform/overview) 2.x | Built on REST API v2. |
 | AWS CLI, boto3, AWS APIs | [runpodctl](/runpodctl/overview), the [Runpod SDK](/sdk/overview), [REST API v2](/api-reference-v2/overview) | One API at `https://api.runpod.io/v2`. |
 | IAM users, roles, SigV4 | [API keys](/get-started/credentials) sent as a Bearer token | Keys can be scoped as All, Restricted, or Read Only. |
-| AWS Organizations, IAM Identity Center | Teams and [organizations](/organizations/orgs-overview) | Organizations have built-in roles (admin, billing, developer, contributor) and custom roles. |
-| CloudWatch Logs and metrics | `runpodctl pod logs`, `runpodctl serverless logs`, endpoint metrics | Logs are read live from Pods and workers. To keep history, ship logs from your container to CloudWatch or another log service. |
+| AWS Organizations, IAM Identity Center | Teams and [organizations](/organizations/orgs-overview) | Organizations are in beta and provisioned by Runpod. They have built-in roles (admin, billing, developer, contributor) and custom roles. |
+| CloudWatch Logs and metrics | `runpodctl pod logs`, `runpodctl serverless logs`, endpoint metrics | Serverless endpoint logs are kept for 90 days. Worker logs are removed when the worker terminates. To keep longer history, ship logs from your container to CloudWatch or another log service. |
 
 ## What's different
 
@@ -65,15 +65,15 @@ You can hand this migration to a coding agent. See [Migrate with a coding agent]
 
 **Storage is tied to a data center.** A network volume lives in one data center, and anything that mounts it runs there. Choose the data center by GPU stock first, then create the volume.
 
-**Billing is prepaid by default.** Runpod accounts hold a credit balance. When the balance reaches \$0, running Pods are stopped, and Pods without a network volume are terminated. Organizations, the enterprise account model, are invoiced post-paid instead. See [Pod pricing](/pods/pricing).
+**Billing is prepaid by default.** Runpod accounts hold a credit balance. When the balance reaches \$0, Pods with a network volume are stopped and Pods without one are terminated. Organizations, the enterprise account model, are invoiced post-paid instead. See [Pod pricing](/pods/pricing).
 
 ### What has no direct equivalent
 
 On the Runpod side:
 
 - **VPC, security groups, PrivateLink.** Runpod has no VPC peering or private link into AWS. Exposed Pod ports are reachable from the internet, and the HTTP proxy URL is unauthenticated, so put your own auth in front of anything you expose. Workaround: call AWS over its public endpoints with scoped credentials, or call your own API gateway.
-- **IAM roles and instance profiles.** A Pod or worker has no AWS identity. Workaround: create a narrowly scoped IAM user or role, store its keys as Runpod secrets, and inject them as `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. For single objects, pass presigned S3 URLs in the request instead of credentials.
-- **KMS and customer-managed keys.** The Runpod S3-compatible API doesn't support bucket policies or ACLs, so there's nowhere to attach a KMS key policy. Workaround: keep regulated data in S3 under your KMS keys and read it at run time, or encrypt before writing to a volume.
+- **IAM roles and instance profiles.** A Pod or worker has no AWS identity. Workaround: create a narrowly scoped IAM user or role, store its keys as Runpod secrets, and inject them as `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. These are long-lived credentials that work from anywhere, so limit the policy to the buckets and actions the workload needs and rotate the keys. For single objects, pass presigned S3 URLs in the request instead of credentials.
+- **KMS and customer-managed keys.** The Runpod S3-compatible API doesn't support bucket policies or ACLs, so there's nowhere to attach a KMS key policy. Runpod can encrypt a Pod's volume disk with a key it manages, but bring-your-own-key isn't supported, and container disks and network volumes can't be encrypted this way. Workaround: keep regulated data in S3 under your KMS keys and read it at run time, or encrypt before writing to a volume.
 - **Multi-model endpoints, production variants, shadow variants, Model Monitor.** One Runpod endpoint runs one image. Workaround: one endpoint per model, a router in your own code inside a load balancing worker, and [rolling releases](/serverless/endpoints/rolling-releases) for updates.
 - **Bedrock features beyond inference** (Guardrails, Knowledge Bases, Agents) and models that are only offered through Bedrock. A vLLM endpoint serves open-weight models, and Public Endpoints serve the listed models. Keep the other calls on Bedrock.
 - **Capacity Blocks, Capacity Reservations, and Savings Plans.** Runpod has no self-serve future-dated reservation, and its savings plans can no longer be purchased. A running on-demand Pod isn't displaced by other users, but a stopped Pod releases its GPU, so starting it again depends on stock at that moment. For committed capacity, talk to Runpod sales.
@@ -102,7 +102,7 @@ List running GPU instances with their type, AMI, and Availability Zone:
 
 ```bash
 aws ec2 describe-instances \
-  --filters "Name=instance-type,Values=g4dn.*,g5.*,g5g.*,g6.*,g6e.*,g7.*,g7e.*,p3dn.*,p4d.*,p4de.*,p5.*,p5e.*,p5en.*,p6*" \
+  --filters "Name=instance-type,Values=g3.*,g3s.*,g4ad.*,g4dn.*,g5.*,g5g.*,g6.*,g6e.*,g6f.*,gr6.*,gr6f.*,g7.*,g7e.*,p2.*,p3.*,p3dn.*,p4d.*,p4de.*,p5.*,p5e.*,p5en.*,p6*" \
             "Name=instance-state-name,Values=pending,running,stopping,stopped" \
   --query "Reservations[].Instances[].[InstanceId,InstanceType,ImageId,State.Name,Placement.AvailabilityZone,Tags[?Key=='Name']|[0].Value]" \
   --output table
@@ -657,7 +657,7 @@ curl -s -X POST https://api.runpod.io/v2/serverless \
     "gpu": {"pools": ["AMPERE_24"], "count": 1, "minCudaVersion": "12.8"},
     "workers": {"min": 0, "max": 3, "idleTimeout": 30},
     "scaling": {"type": "REQUEST_COUNT", "requestCount": 4},
-    "timeout": 600000
+    "timeout": 300000
   }'
 ```
 
@@ -776,7 +776,7 @@ SageMaker asynchronous inference reads the request from S3, writes the result to
   </Tab>
 </Tabs>
 
-`/run` accepts payloads up to 10 MB, so keep large inputs in S3 and pass a presigned URL, which your handler downloads. Have the handler upload large outputs to S3 with a presigned PUT URL or scoped keys, and return the object location. The webhook receives the job result when it finishes and should return `200`. Without a webhook, poll `GET /v2/ENDPOINT_ID/status/JOB_ID`. Results are kept for 30 minutes after completion. For batch transform, submit one `/run` job per record or per shard and let the endpoint scale out to its max workers.
+`/run` accepts payloads up to 10 MB, so keep large inputs in S3 and pass a presigned URL, which your handler downloads. Anyone who holds a presigned URL can use it until it expires, so set an expiry that covers the time the job can wait in the queue and no longer. Have the handler upload large outputs to S3 with a presigned PUT URL or scoped keys, and return the object location. The webhook receives the job result when it finishes and should return `200`. Without a webhook, poll `GET /v2/ENDPOINT_ID/status/JOB_ID`. Results are kept for 30 minutes after completion. For batch transform, submit one `/run` job per record or per shard and let the endpoint scale out to its max workers.
 
 ### Replace Bedrock calls
 
@@ -876,6 +876,7 @@ aws sagemaker delete-endpoint --endpoint-name my-endpoint
 aws sagemaker delete-endpoint-config --endpoint-config-name my-endpoint-config
 aws sagemaker delete-model --model-name my-model
 aws sagemaker stop-notebook-instance --notebook-instance-name my-notebook
+aws sagemaker wait notebook-instance-stopped --notebook-instance-name my-notebook
 aws sagemaker delete-notebook-instance --notebook-instance-name my-notebook
 aws bedrock delete-provisioned-model-throughput --provisioned-model-id PROVISIONED_MODEL_ARN
 ```
@@ -1066,7 +1067,7 @@ The `depends_on` matters because Runpod validates the repository policy when the
   </Tab>
 </Tabs>
 
-The subnet, security group, and instance profile have no Runpod resource. Ports replace the security group, and secret-backed environment variables replace the instance profile. The key pair becomes account-level SSH keys (`runpod_account_ssh_keys`), which a Pod receives when you set `start_ssh = true`. Changing `gpu_type_id`, `gpu_count`, `data_center_ids`, or `min_cuda_version` replaces the Pod, so keep state you care about on the network volume. To stop a Pod without removing it from the configuration, set `desired_state = "EXITED"`.
+The subnet, security group, and instance profile have no Runpod resource. Ports replace the security group, and secret-backed environment variables replace the instance profile. The key pair becomes account-level SSH keys (`runpod_account_ssh_keys`), which a Pod receives when you set `start_ssh = true`. Changing `gpu_type_id`, `gpu_count`, `cloud`, `data_center_ids`, or `min_cuda_version` replaces the Pod, so keep state you care about on the network volume. To stop a Pod without removing it from the configuration, set `desired_state = "EXITED"`.
 
 ### SageMaker endpoint with autoscaling to a Serverless endpoint
 
@@ -1168,7 +1169,7 @@ The subnet, security group, and instance profile have no Runpod resource. Ports 
       workers_min   = 1
       workers_max   = 4
       idle_timeout  = 30
-      timeout       = 600000
+      timeout       = 300000
     }
 
     output "classifier_url" {

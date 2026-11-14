@@ -22,7 +22,7 @@ You can hand most of this migration to a coding agent. See [Migrate with a codin
 | Azure Machine Learning managed online endpoint (endpoint plus deployments) | [Serverless queue-based endpoint](/serverless/overview) or [load balancing endpoint](/serverless/load-balancing/overview) | A scoring script becomes a handler function. A custom container with its own routes becomes a load balancing endpoint. |
 | Azure Machine Learning batch endpoint | Queue-based endpoint with `/run` and webhooks | Jobs queue and run asynchronously. You pass data references in the request. |
 | Azure Machine Learning jobs, compute clusters, pipelines | Pods, or the Runpod SDK `@app.task` | `@app.task` runs one ephemeral Pod per call. Bring your own orchestrator for multi-step pipelines. |
-| Azure Machine Learning compute instance | Pod with JupyterLab | Official Runpod images start JupyterLab on port 8888. |
+| Azure Machine Learning compute instance | Pod with JupyterLab | Official Runpod PyTorch images start JupyterLab on port 8888 when `JUPYTER_PASSWORD` is set. The console sets it for you. |
 | Azure OpenAI in Microsoft Foundry Models, Foundry serverless API deployments | [Public Endpoints](/public-endpoints/overview), or a [Serverless vLLM endpoint](/serverless/vllm/get-started) | Applies to open-weight models. See [What has no direct equivalent](#what-has-no-direct-equivalent). |
 | Azure Container Apps with serverless GPUs | [Load balancing endpoint](/serverless/load-balancing/overview) | Both run your HTTP server and scale to zero. The health check and port contract differ. |
 | Azure Container Instances GPU | Pods or Serverless | Microsoft's documentation lists GPU container groups as retired as of July 14, 2025. |
@@ -74,7 +74,7 @@ You can hand most of this migration to a coding agent. See [Migrate with a codin
 **On Runpod:**
 
 - **OpenAI's proprietary GPT chat models.** Runpod doesn't host the GPT deployments you create in Azure OpenAI. The migration applies when you move to an open-weight model, either one listed in the [Public Endpoint model reference](/public-endpoints/reference) or one you serve yourself with vLLM. If you need to keep a proprietary model, keep that call on Azure.
-- **VNet, NSGs, and Private Link.** Runpod has no customer-defined private network or private connectivity to Azure. Pods in your account can reach each other over [global networking](/pods/networking) at `POD_ID.runpod.internal`. Traffic between Runpod and Azure goes over the public internet with TLS, so Azure resources behind private endpoints need a public endpoint with firewall rules, or a proxy you run.
+- **VNet, NSGs, and Private Link.** Runpod has no customer-defined private network or private connectivity to Azure. Pods in your account can reach each other over [global networking](/pods/networking) at `POD_ID.runpod.internal`, if you enable it when you deploy them. It's available on NVIDIA GPU Pods in supported data centers. Traffic between Runpod and Azure goes over the public internet with TLS, so Azure resources behind private endpoints need a public endpoint with firewall rules, or a proxy you run.
 - **Managed identities and Entra ID RBAC for workloads.** A Runpod worker can't assume an Azure identity. Store a least-privilege service principal secret or a SAS token as a Runpod secret and pass it as an environment variable.
 - **Key Vault.** Runpod secrets store values and inject them at boot. They don't provide key operations, certificates, or versioning. Keep Key Vault for those and copy only the values workloads need.
 - **Windows and VDI.** NV and NG family workloads, Windows GPU VMs, and Data Science VM Windows images stay on Azure.
@@ -428,13 +428,13 @@ Run it with `rp flash dev train.py`. The Pod is created for the call and termina
 
 ### Keep data in Blob Storage
 
-In a hybrid setup, the simplest option is to leave data in Blob Storage and read it over HTTPS from Runpod. Create a SAS token scoped to the container and the permissions the workload needs, or a service principal with a narrow role assignment, and store it as a Runpod secret:
+In a hybrid setup, the simplest option is to leave data in Blob Storage and read it over HTTPS from Runpod. Create a SAS token scoped to the container and the permissions the workload needs, with an expiry date, or a service principal with a narrow role assignment. Store the container SAS URL (`https://ACCOUNT.blob.core.windows.net/CONTAINER?SAS_TOKEN`) as a Runpod secret, reading it from an environment variable so it stays out of your shell history:
 
 ```bash
 curl -s -X POST https://api.runpod.io/v2/account/secrets \
   -H "Authorization: Bearer $RUNPOD_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"name": "azure_container_sas_url", "value": "https://ACCOUNT.blob.core.windows.net/CONTAINER?SAS_TOKEN"}'
+  -d "{\"name\": \"azure_container_sas_url\", \"value\": \"$AZURE_CONTAINER_SAS_URL\"}"
 ```
 
 Reference the secret from an environment variable on the Pod, template, or endpoint by setting the value to `{{ RUNPOD_SECRET_azure_container_sas_url }}`. Inside the workload, the Azure SDK reads it like any other URL:
@@ -960,6 +960,10 @@ provider "azurerm" {
 
 # Reads the key from the RUNPOD_API_KEY environment variable.
 provider "runpod" {}
+
+variable "subscription_id" {
+  type = string
+}
 ```
 
 Keep whatever `azurerm` version constraint you already use. Add the Runpod resources first and apply, verify the workload, move traffic, and only then remove the Azure resource blocks in a separate change, so `terraform destroy` behavior for the Azure side is reviewed on its own. Resources from the two providers can reference each other, for example an Azure storage account name in a Runpod endpoint's `env`.
@@ -1064,7 +1068,7 @@ output "pod_id" {
 }
 ```
 
-`start_ssh` injects the SSH keys registered on your Runpod account, which replaces `admin_ssh_key`, and needs an image that honors the convention (the official Runpod images do). `disk` is the ephemeral container disk, so anything that must survive goes on the network volume. Changing `gpu_type_id`, `gpu_count`, `cloud`, or `data_center_ids` replaces the Pod. To stop the Pod without removing it from the configuration, set `desired_state = "EXITED"`.
+`start_ssh` injects the SSH keys registered on your Runpod account, which replaces `admin_ssh_key`, and needs an image that honors the convention (the official Runpod images do). `disk` is the ephemeral container disk, so anything that must survive goes on the network volume. Changing `gpu_type_id`, `gpu_count`, `cloud`, `min_cuda_version`, or `data_center_ids` replaces the Pod. To stop the Pod without removing it from the configuration, set `desired_state = "EXITED"`.
 
 ### Example 2: Container Apps GPU app to a Serverless endpoint
 
@@ -1159,6 +1163,7 @@ resource "runpod_serverless_endpoint" "api" {
   name             = "gpu-api"
   template_id      = runpod_template.api.id
   endpoint_type    = "LOAD_BALANCER"
+  ports            = ["8000/http"]
   gpu_pools        = ["AMPERE_16"]
   gpu_count        = 1
   min_cuda_version = "12.8"

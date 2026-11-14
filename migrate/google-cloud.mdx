@@ -35,7 +35,7 @@ Google's documentation now calls Vertex AI "Gemini Enterprise Agent Platform". T
 | Artifact Registry | Any registry, pulled with [registry credentials](/runpodctl/reference/runpodctl-registry) | You can keep images in Artifact Registry. |
 | Persistent Disk, Hyperdisk boot and data disks | Container disk and volume disk | Container disk is ephemeral. Volume disk persists across stops and is deleted with the Pod. |
 | Filestore, Managed Lustre | [Network volume](/storage/network-volumes), including [high-performance storage](/storage/high-performance-storage) | A network volume lives in one data center. |
-| Cloud Storage, Cloud Storage FUSE mounts | Keep Cloud Storage, or use a network volume or [global volume](/storage/globalvolume/overview) | Cloud Storage stays reachable from Runpod with a service account key or HMAC key. |
+| Cloud Storage, Cloud Storage FUSE mounts | Keep Cloud Storage, or use a network volume or [global volume](/storage/globalvolume/overview) | Cloud Storage stays reachable from Runpod with a service account key or HMAC key. Global volumes are in beta. |
 | VPC, firewall rules, load balancers | [Exposed ports](/pods/configuration/expose-ports), [global networking](/pods/networking), Serverless endpoint URLs | See [What has no direct equivalent](#what-has-no-direct-equivalent). |
 | Secret Manager | [Runpod secrets](/pods/templates/secrets) | Reference a secret in an environment variable as `{{ RUNPOD_SECRET_name }}`. |
 | Regions and zones | [Data centers](/runpodctl/reference/runpodctl-datacenter) | IDs look like `US-GA-1` or `EU-RO-1`. GPU stock differs by data center. |
@@ -76,7 +76,7 @@ Google's documentation now calls Vertex AI "Gemini Enterprise Agent Platform". T
 
 **On Runpod:**
 
-- **VPC networks, firewall rules, and Private Service Connect.** Runpod has no customer-defined private network or firewall rules. Pods get [global networking](/pods/networking) (a private network between your own Pods, at `POD_ID.runpod.internal`) and explicitly [exposed ports](/pods/configuration/expose-ports). HTTP ports are served through a public HTTPS proxy URL that isn't authenticated by Runpod, so add authentication in your app. If you need a private path into your Google Cloud VPC, run a VPN or proxy that you control, or keep that workload on Google Cloud.
+- **VPC networks, firewall rules, and Private Service Connect.** Runpod has no customer-defined private network or firewall rules. Pods can use [global networking](/pods/networking) (a private network between your own Pods, at `POD_ID.runpod.internal`, which you enable at deploy time on NVIDIA GPU Pods in supported data centers) and explicitly [exposed ports](/pods/configuration/expose-ports). HTTP ports are served through a public HTTPS proxy URL that isn't authenticated by Runpod, so add authentication in your app. If you need a private path into your Google Cloud VPC, run a VPN or proxy that you control, or keep that workload on Google Cloud.
 - **IAM service accounts, Workload Identity, and the metadata server.** A Pod or worker has no Google identity and no `metadata.google.internal`. To call Google Cloud APIs from Runpod, create a least-privilege service account, store its key as a Runpod secret, and load it at startup. Where a caller only needs one object, hand it a signed URL instead of a key.
 - **Customer-managed encryption keys (CMEK).** You can encrypt a Pod's volume disk at creation, with a key Runpod manages. Bring-your-own-key isn't supported, and container disks and network volumes can't be encrypted this way.
 - **Spot pricing through the CLI or REST API v2.** `runpodctl` and REST API v2 create on-demand Pods. Checkpoint to a volume and plan capacity with `runpodctl gpu list` rather than relying on a spot fallback.
@@ -523,6 +523,9 @@ Then copy the data with one of these methods.
     gcloud auth activate-service-account --key-file=/tmp/key.json
 
     gcloud storage rsync gs://BUCKET/models /workspace/models --recursive
+
+    # Remove the key file and the credential gcloud cached from it.
+    gcloud auth revoke --all
     rm /tmp/key.json
     ```
 
@@ -868,7 +871,7 @@ response = client.chat.completions.create(
 )
 ```
 
-On Runpod, change the base URL, API key, and model name. This example uses the GPT OSS 120B Public Endpoint.
+On Runpod, change the base URL, API key, and model name. This example uses the Qwen3 32B AWQ Public Endpoint.
 
 ```python
 import os
@@ -876,11 +879,11 @@ import os
 import openai
 
 client = openai.OpenAI(
-    base_url="https://api.runpod.ai/v2/gpt-oss-120b/openai/v1",
+    base_url="https://api.runpod.ai/v2/qwen3-32b-awq/openai/v1",
     api_key=os.environ["RUNPOD_API_KEY"],
 )
 response = client.chat.completions.create(
-    model="openai/gpt-oss-120b",
+    model="Qwen/Qwen3-32B-AWQ",
     messages=[{"role": "user", "content": "Hello"}],
 )
 ```
@@ -1227,6 +1230,7 @@ resource "runpod_serverless_endpoint" "embedder" {
   name          = "embedder"
   template_id   = runpod_template.embedder.id
   endpoint_type = "LOAD_BALANCER"
+  ports         = ["8080/http"]
 
   gpu_pools        = ["AMPERE_24"]
   gpu_count        = 1
@@ -1255,7 +1259,7 @@ What changed: `node_selector.accelerator` became `gpu_pools`, `max_instance_requ
 3. Remove the Google resource blocks you replaced and apply again. If a resource has `deletion_protection` enabled, set it to `false` and apply before removing the block.
 4. Keep the Google resources Runpod depends on: the service account, its key, the Artifact Registry repository, and any buckets.
 
-To bring existing Runpod resources under Terraform, use `terraform import` with the Pod, endpoint, template, or volume ID. See the [provider reference](https://registry.terraform.io/providers/runpod/runpod/latest/docs) for every argument.
+To bring existing Runpod resources under Terraform, use `terraform import` with the Pod, endpoint, template, or volume ID. Be careful with Pods: the API doesn't return `template_id`, `start_ssh`, `start_jupyter`, `allowed_cuda_versions`, `min_cuda_version`, `min_ram_per_gpu`, `min_vcpu_count_per_gpu`, or `data_center_ids`, so each one your configuration sets forces a replacement on the first apply after an import, which deletes the Pod and everything that isn't on a network volume. List them under `lifecycle { ignore_changes = [...] }` before you apply. See the [provider reference](https://registry.terraform.io/providers/runpod/runpod/latest/docs) for every argument.
 
 ## Reference
 

@@ -36,7 +36,7 @@ You can hand most of this migration to a coding agent. See [Migrate with a codin
 | DigitalOcean Volumes (block storage) | [Network volume](/storage/network-volumes) | A file system mount, not a raw block device. |
 | Paperspace datasets (versioned), DigitalOcean Spaces | Network volume with the [S3-compatible API](/storage/s3-api), or a [global volume](/storage/globalvolume/overview) | Runpod has no dataset versioning or bucket service. You can also keep reading from Spaces. |
 | Public IP (static or dynamic), Droplet public IPv4 | HTTP proxy URL or a mapped TCP port | Runpod assigns the public IP and external port. See [Expose ports](/pods/configuration/expose-ports). |
-| Paperspace private network, DigitalOcean VPC | [Global networking](/pods/networking) | Private Pod-to-Pod DNS at `POD_ID.runpod.internal`. |
+| Paperspace private network, DigitalOcean VPC | [Global networking](/pods/networking) | Private Pod-to-Pod DNS at `POD_ID.runpod.internal`. NVIDIA GPU Pods in supported data centers only. |
 | Paperspace secrets (`secret:NAME`) | [Secrets](/pods/templates/secrets) | Referenced as `{{ RUNPOD_SECRET_name }}` in environment variables. |
 | Paperspace regions (NY2, CA1, AMS1), DigitalOcean regions | Data centers | List them with `runpodctl datacenter list`. |
 | Paperspace hourly billing | Per-second billing | Pods bill per second for compute and storage. Serverless bills per second while workers run. |
@@ -86,7 +86,7 @@ You can hand most of this migration to a coding agent. See [Migrate with a codin
 - **Raw block devices.** Network volumes mount as a file system. You can't partition or format them.
 - **Multiple probe types.** Fold readiness and startup logic into the single health path.
 
-**On Paperspace and DigitalOcean:**
+**On the Paperspace and DigitalOcean GPU products this guide covers:**
 
 - **Scale to zero for your own containers.** Paperspace `replicas` is the floor for a running Deployment, and you stop it by setting `enabled: false`.
 - **A managed request queue.** Queue-based endpoints give you async jobs, status polling, streaming, retries, and webhooks without running a queue yourself.
@@ -171,7 +171,7 @@ Search your repositories for CLI invocations, hostnames, credentials, and Terraf
 
 ```bash
 grep -rnE \
-  "pspace |gradient (deployments|workflows|notebooks|datasets)|api\.paperspace\.com|paperspacegradient\.com|PAPERSPACE_API_KEY|\.gradient/workflows|doctl |api\.digitalocean\.com|digitaloceanspaces\.com|inference\.do-ai\.run|dedicated-inference\.do-infra\.ai|DIGITALOCEAN_(ACCESS_)?TOKEN|MODEL_ACCESS_KEY|from pydo|digitalocean/godo|digitalocean_(droplet|volume|volume_attachment|spaces_bucket|kubernetes_cluster|kubernetes_node_pool)" \
+  "pspace |gradient (deployments|workflows|notebooks|datasets)|api\.paperspace\.com|paperspacegradient\.com|PAPERSPACE_API_KEY|\.gradient/workflows|doctl |api\.digitalocean\.com|digitaloceanspaces\.com|inference\.do-ai\.run|dedicated-inference\.do-infra\.ai|DIGITALOCEAN_(ACCESS_)?TOKEN|MODEL_ACCESS_KEY|from pydo|digitalocean/godo|digitalocean_(droplet|volume|volume_attachment|spaces_bucket|kubernetes_cluster|kubernetes_node_pool)|paperspace_(machine|script|network|autoscaling_group)" \
   --include="*.py" --include="*.ts" --include="*.js" --include="*.go" --include="*.sh" \
   --include="*.yaml" --include="*.yml" --include="*.json" --include="*.toml" --include="*.tf" \
   --include="Dockerfile*" --include="Makefile" .
@@ -296,7 +296,7 @@ Translate the rest of the VM setup as follows:
 
 - **GPU drivers and CUDA.** Don't install NVIDIA drivers in the image. The host provides them. Your image supplies the CUDA user-space libraries, and you set a CUDA floor when you create the Pod (`--min-cuda-version 12.8`) so it lands on a host whose driver supports your image.
 - **Startup scripts and user data.** A Paperspace startup script or Droplet `user_data` (cloud-init) becomes either Dockerfile steps (for installs) or the container start command (for launching your process).
-- **Docker and Docker Compose on the VM.** If the Droplet ran `docker run --gpus all your-image`, that image is your Pod image, and the `docker run` flags become template fields: `-p` becomes `ports`, `-e` becomes `env`, `-v` becomes a volume mount, and the trailing command becomes the start command. For a Compose stack, run one Pod per service and connect them with [global networking](/pods/networking), or combine the services into one image with a process supervisor.
+- **Docker and Docker Compose on the VM.** If the Droplet ran `docker run --gpus all your-image`, that image is your Pod image, and the `docker run` flags become template fields: `-p` becomes `ports`, `-e` becomes `env`, `-v` becomes a volume mount, and the trailing command becomes the start command. For a Compose stack, run one Pod per service and connect them with [global networking](/pods/networking) (NVIDIA GPU Pods only), or combine the services into one image with a process supervisor.
 - **`systemd` services.** A container has one main process. Run your service in the foreground as the start command.
 - **The `paperspace` user.** Paperspace Linux machines provision a `paperspace` user with a home directory at `/home/paperspace`. Runpod's SSH examples connect as `root`, and persistent data lives in `/workspace`. Update hardcoded paths.
 - **ML-in-a-Box and the AI/ML-ready image.** Both are VM images with a preinstalled stack. The closest starting point is a `runpod/pytorch` image plus your own `requirements.txt`.
@@ -610,7 +610,7 @@ Replace `nyc3` with your bucket's region. Running this inside a Pod writes strai
 
 ### Models
 
-For Hugging Face models on Serverless, attach the model to the endpoint instead of copying weights. Runpod stages it on the host before the worker starts, and it appears under `/runpod-volume/huggingface-cache/hub/`. This replaces a Paperspace Deployment `git-lfs` integration that clones a Hugging Face URL into `/models`.
+For Hugging Face models on Serverless, attach the model to the endpoint instead of copying weights: add `--model-reference` to the `runpodctl serverless create` command you run in [Step 6](#step-6-deploy-on-runpod), as in the example below. Runpod stages it on the host before the worker starts, and it appears under `/runpod-volume/huggingface-cache/hub/`. This replaces a Paperspace Deployment `git-lfs` integration that clones a Hugging Face URL into `/models`.
 
 ```bash
 runpodctl serverless create --template-id TEMPLATE_ID --gpu-id AMPERE_80 \
@@ -760,13 +760,13 @@ curl -s -X POST https://api.runpod.io/v2/serverless \
     },
     "workers": {"min": 0, "max": 3, "idleTimeout": 30},
     "scaling": {"type": "REQUEST_COUNT", "requestCount": 4},
-    "timeout": 600000
+    "timeout": 300000
   }'
 ```
 
 </CodeGroup>
 
-The response includes `requestUrls.base` (`https://ENDPOINT_ID.api.runpod.ai`) and `requestUrls.health`. Set both `PORT` and `PORT_HEALTH` to your server's port and list the same port in `ports`: each defaults to 80 on its own, and a mismatch leaves the worker unhealthy. `{{ RUNPOD_SECRET_hf_token }}` reads a Runpod secret named `hf_token`, which you create in the console or with `POST /v2/account/secrets`. Load-balancing endpoints scale on `REQUEST_COUNT` only. `workers.min` of 0 scales to zero. Set it to 1 or more to keep warm workers, which is the closest match to Paperspace `replicas`. In the console, the same flow is **Serverless**, then **New Endpoint**.
+The response includes `requestUrls.base` (`https://ENDPOINT_ID.api.runpod.ai`) and `requestUrls.health`. Set both `PORT` and `PORT_HEALTH` to your server's port and list the same port in `ports`: each defaults to 80 on its own, and a mismatch leaves the worker unhealthy. `{{ RUNPOD_SECRET_hf_token }}` reads a Runpod secret named `hf_token`, which you create in the console or with `POST /v2/account/secrets`. This request sets `HEALTH_CHECK_PATH` to `/ping`, so it needs the image rebuilt with the `/ping` route from [Step 4](#step-4-move-your-images-and-code). An unchanged Paperspace image has no `/ping` route, and its workers never become healthy. Load-balancing endpoints scale on `REQUEST_COUNT` only. `workers.min` of 0 scales to zero. Set it to 1 or more to keep warm workers, which is the closest match to Paperspace `replicas`. In the console, the same flow is **Serverless**, then **New Endpoint**.
 
 ### Deploy a queue-based endpoint (from a Deployment or a fan-out Workflow)
 
@@ -977,15 +977,15 @@ A Paperspace auto-shutdown timer has no setting to copy across. Pods come with `
 
     ```bash
     pspace deployment delete DEPLOYMENT_ID
+    pspace snapshot delete SNAPSHOT_ID
     pspace machine stop MACHINE_ID
     pspace machine delete MACHINE_ID
     pspace shared-drive delete SHARED_DRIVE_ID
-    pspace snapshot delete SNAPSHOT_ID
     pspace template delete TEMPLATE_ID
     pspace public-ip release PUBLIC_IP
     ```
 
-    Deleting a machine (Paperspace calls this deactivating) permanently removes the machine, its files, and its snapshots, and the machine must be off first. Delete Notebooks, Workflows, and datasets in the Paperspace console, and review your Gradient subscription plan there. Run `pspace public-ip release --help` and `pspace snapshot delete --help` for the exact arguments.
+    Deleting a machine (Paperspace calls this deactivating) permanently removes the machine, its files, and its snapshots, and the machine must be off first, so wait for `pspace machine get MACHINE_ID` to show it as off before you delete it. Delete Notebooks, Workflows, and datasets in the Paperspace console, and review your Gradient subscription plan there. Run `pspace public-ip release --help` and `pspace snapshot delete --help` for the exact arguments.
   </Step>
   <Step title="Shut down DigitalOcean">
     A powered-off GPU Droplet still bills. Destroy it, and remove the volumes and snapshots that the destroy leaves behind.
@@ -1003,13 +1003,13 @@ A Paperspace auto-shutdown timer has no setting to copy across. Pods come with `
     Droplet backups stay until their retention period ends. Delete Spaces buckets and model access keys in the Control Panel once nothing reads them. Revoke the Paperspace API keys and DigitalOcean tokens you created for the migration.
   </Step>
   <Step title="Guard costs on Runpod">
-    Delete transfer Pods and stop development Pods you aren't using (`runpodctl pod list --all`). Keep endpoint minimum workers at 0 unless you need warm capacity, and set an idle timeout that fits your traffic. Review spend with `runpodctl billing pods` and `runpodctl billing serverless`, and turn on [low balance notifications](/accounts-billing/billing#low-balance-notifications): Pods stop when your balance reaches zero.
+    Delete transfer Pods and stop development Pods you aren't using (`runpodctl pod list --all`). Network volumes bill until you delete them, including ones the SDK creates for you such as `pipeline-artifacts` (`runpodctl network-volume list`). Keep endpoint minimum workers at 0 unless you need warm capacity, and set an idle timeout that fits your traffic. Review spend with `runpodctl billing pods` and `runpodctl billing serverless`, and turn on [low balance notifications](/accounts-billing/billing#low-balance-notifications). When your balance reaches zero, Pods with a network volume are stopped, and Pods without one are terminated and their volume disk data can't be recovered.
   </Step>
 </Steps>
 
 ## Migrate your Terraform
 
-DigitalOcean resources are managed with the `digitalocean/digitalocean` provider. The Runpod provider (`runpod/runpod`, version 2.x) is built on REST API v2 and reads `RUNPOD_API_KEY` from the environment. Paperspace resources aren't covered by the `digitalocean` provider, so recreate them from the inventory in Step 1.
+DigitalOcean resources are managed with the `digitalocean/digitalocean` provider. The Runpod provider (`runpod/runpod`, version 2.x) is built on REST API v2 and reads `RUNPOD_API_KEY` from the environment. Paperspace resources aren't covered by the `digitalocean` provider, so recreate them from the inventory in Step 1. If your configuration uses the community `Paperspace/paperspace` provider, map `paperspace_machine` to `runpod_pod` the same way as `digitalocean_droplet`, and move `paperspace_script` contents into the image or the start command.
 
 | `digitalocean` resource | Runpod resource | Notes |
 | --- | --- | --- |
@@ -1232,7 +1232,7 @@ All three APIs authenticate with `Authorization: Bearer`. Requests to deployed e
 | Restarting | `STARTING` | |
 | Shutting Down, Off | `EXITED` (`runtimeStatus: stopped`) | Volume disk is kept and billed. |
 | Inaccessible | `ERROR` | Check `runpodctl pod logs POD_ID`. |
-| Deactivated | `TERMINATED` | |
+| Deactivated (machine deleted) | `TERMINATED` | Not a listed machine state. The machine no longer exists. |
 
 Queue-based jobs report `IN_QUEUE`, `IN_PROGRESS`, `COMPLETED`, `FAILED`, `CANCELLED`, or `TIMED_OUT`. See [Job states](/serverless/endpoints/job-states).
 
