@@ -1,0 +1,1446 @@
+---
+title: "Migrate from Google Cloud to Runpod"
+sidebarTitle: "Google Cloud"
+description: "Move GPU training, inference, and batch workloads from Compute Engine, Vertex AI, Cloud Run, and GKE to Runpod, and keep the rest on Google Cloud."
+---
+
+This guide is for teams that run GPU workloads on Google Cloud and want to move the GPU-heavy part (training, inference, batch) to Runpod. Most teams keep their data, identity, and the rest of the application on Google Cloud, so the guide covers that hybrid setup first and a full exit second. [Compute Engine](https://docs.cloud.google.com/compute/docs/gpus) GPU VMs map to [Pods](/pods/overview), [Vertex AI](https://docs.cloud.google.com/vertex-ai/docs/predictions/get-online-predictions) endpoints and [Cloud Run](https://docs.cloud.google.com/run/docs/configuring/services/gpu) GPU services map to [Serverless](/serverless/overview) endpoints, managed model APIs map to [Public Endpoints](/public-endpoints/overview), and Slurm clusters map to [Instant Clusters](/instant-clusters/slurm-clusters). When you finish, your workload runs on Runpod, your callers use a Runpod API key, and the Google Cloud resources you replaced are shut down.
+
+<Tip>
+You can hand this migration to a coding agent. See [Migrate with a coding agent](#migrate-with-a-coding-agent).
+</Tip>
+
+<Note>
+Google's documentation now calls Vertex AI "Gemini Enterprise Agent Platform". The `gcloud ai` commands, the Vertex AI SDK for Python, the `aiplatform.googleapis.com` API, and the Terraform `google_vertex_ai_*` resources keep their names, so this guide says Vertex AI throughout.
+</Note>
+
+## How Google Cloud maps to Runpod
+
+| Google Cloud concept | Runpod equivalent | Notes |
+| --- | --- | --- |
+| Compute Engine GPU VM (A2, A3, A4, G2, G4, or N1 with attached GPUs) | [Pod](/pods/overview) | A Pod is a container, not a VM. You bring a `linux/amd64` image and Runpod provides the GPU drivers. |
+| Deep Learning VM images, Deep Learning Containers | Runpod PyTorch images and [templates](/pods/templates/overview) | Official Runpod PyTorch images start SSH and JupyterLab for you. |
+| Spot VMs | On-demand Pods | The Runpod CLI and REST API v2 create on-demand Pods. Design for capacity checks instead of preemption. |
+| Reservations, committed use discounts, flex-start (Dynamic Workload Scheduler) | On-demand Pods, queued Pod creates, and sales-assisted pricing | REST API v2 can queue a Pod create until capacity appears (`queue` on `POST /v2/pods`). |
+| Managed instance groups with instance templates | Serverless endpoint (autoscaled workers) | For request-driven fleets. For fixed fleets, create Pods from one template. |
+| Vertex AI online inference (Model, Endpoint, DeployedModel) | Serverless [load-balancing endpoint](/serverless/load-balancing/overview) or [queue endpoint](/serverless/endpoints/overview) | Load balancing keeps your HTTP server. Queue endpoints give you a job queue with retries. |
+| Vertex AI batch inference | Queue endpoint with `/run` and webhooks | You submit one job per input (or per chunk) and collect results by webhook or `/status`. |
+| Vertex AI custom training jobs | Pod, or `@app.task` in the [Runpod SDK](/sdk/overview) | `@app.task` provisions one Pod per call and terminates it when the function returns. |
+| Vertex AI Workbench, Colab Enterprise | Pod with JupyterLab | See [Connect to a Pod](/pods/connect-to-a-pod). |
+| Model Garden model APIs, the OpenAI-compatible Chat Completions endpoint | [Public Endpoints](/public-endpoints/overview) or a Serverless [vLLM endpoint](/serverless/vllm/overview) | Public Endpoints cover only the models listed in the [model reference](/public-endpoints/reference). |
+| Cloud Run service with a GPU | Serverless load-balancing endpoint | Closest match. See [What works differently](#what-works-differently) for the contract differences. |
+| Cloud Run job, Batch job | Queue endpoint or `@app.task` | Use a queue endpoint for many short tasks, `@app.task` for run-to-completion jobs. |
+| GKE GPU node pools, Autopilot GPU Pods | Serverless endpoints or Pods, or [SkyPilot](/integrations/skypilot) and [dstack](/integrations/dstack) | Runpod runs containers directly. There's no Kubernetes API. |
+| Cluster Toolkit Slurm clusters | [Instant Clusters with Slurm](/instant-clusters/slurm-clusters) | Stock depends on GPU type and region. Check before you plan around it. |
+| Artifact Registry | Any registry, pulled with [registry credentials](/runpodctl/reference/runpodctl-registry) | You can keep images in Artifact Registry. |
+| Persistent Disk, Hyperdisk boot and data disks | Container disk and volume disk | Container disk is ephemeral. Volume disk persists across stops and is deleted with the Pod. |
+| Filestore, Managed Lustre | [Network volume](/storage/network-volumes), including [high-performance storage](/storage/high-performance-storage) | A network volume lives in one data center. |
+| Cloud Storage, Cloud Storage FUSE mounts | Keep Cloud Storage, or use a network volume or [global volume](/storage/globalvolume/overview) | Cloud Storage stays reachable from Runpod with a service account key or HMAC key. |
+| VPC, firewall rules, load balancers | [Exposed ports](/pods/configuration/expose-ports), [global networking](/pods/networking), Serverless endpoint URLs | See [What has no direct equivalent](#what-has-no-direct-equivalent). |
+| Secret Manager | [Runpod secrets](/pods/templates/secrets) | Reference a secret in an environment variable as `{{ RUNPOD_SECRET_name }}`. |
+| Regions and zones | [Data centers](/runpodctl/reference/runpodctl-datacenter) | IDs look like `US-GA-1` or `EU-RO-1`. GPU stock differs by data center. |
+| Per-second VM billing, node-hour billing for deployed models, network data transfer charges | Per-second billing for compute and storage | Runpod doesn't charge for data ingress or egress. See [Pod pricing](/pods/pricing) and [Serverless pricing](/serverless/pricing). |
+| Terraform `hashicorp/google` provider | Terraform [`runpod/runpod` provider](/integrations/terraform/overview) 2.x | Built on REST API v2. Both providers work in one configuration. |
+| `gcloud`, Cloud client libraries, REST APIs | [`runpodctl`](/runpodctl/reference/runpodctl-pod), the [Runpod SDK](/sdk/overview), [REST API v2](/api-reference-v2/overview), the [MCP server](/get-started/mcp-servers) | |
+| IAM principals, service accounts, access tokens | One [API key](/get-started/credentials) per user or integration | Keys can be restricted by permission. |
+| Organizations, folders, projects, IAM roles | [Organizations](/organizations/orgs-overview) with roles and groups | Organizations are in beta and provisioned by Runpod. |
+| Cloud Logging, Cloud Monitoring | Pod and worker logs, endpoint metrics | `runpodctl pod logs`, `runpodctl serverless logs`, and the metrics tab on each endpoint. |
+
+## What's different
+
+### What works differently
+
+**Pods are containers, not VMs.** A Compute Engine VM boots an OS image and runs a startup script as root on every boot. A Pod starts your container image and runs its start command. Move startup-script logic into the image or the Pod's start command. Pods don't run Docker Compose, Windows, or UDP services.
+
+**Health checks are required for load-balancing endpoints.** Vertex AI sends health checks to the route in `AIP_HEALTH_ROUTE` and Cloud Run only needs your server to listen on `PORT`. A Runpod load-balancing worker must answer `GET /ping` (or the path in `HEALTH_CHECK_PATH`) with `200` when ready and `204` while it's still loading. Any other code marks the worker unhealthy.
+
+**Ports default to 80, not 8080.** Vertex AI sets `AIP_HTTP_PORT` to `8080` by default and Cloud Run sets `PORT` to `8080` by default. Runpod load-balancing workers read `PORT` and `PORT_HEALTH`, which both default to `80`. Set both to your server's port and expose that port on the endpoint.
+
+**Request shape for queue endpoints.** Vertex AI sends `{"instances": [...], "parameters": {...}}` and expects `{"predictions": [...]}`. A Runpod queue endpoint takes `{"input": {...}}` and returns your handler's return value under `output`. On a load-balancing endpoint the request and response bodies are whatever your server defines, so you can keep the Vertex AI shape.
+
+**Limits on load-balancing endpoints.** Cloud Run requests time out after 5 minutes by default and can be extended to 60 minutes. Vertex AI shared public endpoints time out at 60 seconds and dedicated endpoints are configurable up to 1 hour. Runpod load-balancing endpoints allow 5.5 minutes of processing per request and 30 MB per request or response, and they don't queue: a request that finds no available worker within 2 minutes fails. For longer work, or work that must not be dropped, use a queue endpoint, where the execution timeout can be raised up to 7 days.
+
+**Scale to zero is the default.** A Runpod endpoint starts with zero active workers and scales up on demand. Vertex AI deployments default to a minimum of one replica, and setting the minimum to `0` opts in to scale to zero, which Google lists as a Preview feature. On Runpod, set active (minimum) workers above zero only when you need to remove cold starts, because active workers bill continuously.
+
+**Concurrency is expressed through the scaler.** Cloud Run has a per-instance concurrency setting (up to 1,000). On Runpod you set the `REQUEST_COUNT` scaler value, and Runpod sizes the worker count as in-flight requests divided by that value. Your server handles the concurrent requests it receives.
+
+**Authentication is an API key.** Google Cloud callers use OAuth access tokens (Vertex AI) or ID tokens (private Cloud Run services), usually through Application Default Credentials. Every Runpod Serverless request carries `Authorization: Bearer YOUR_API_KEY`, and Runpod checks the key before it routes the request. For traffic from browsers or anonymous users, put your own API or proxy in front so the key stays server-side.
+
+**GPU selection is by GPU type or pool, not machine type.** A Pod takes one GPU type ID and a GPU count. A Serverless endpoint takes one or more GPU pools, and workers land on whichever pool has capacity. vCPU and RAM come with the GPU instead of being a separate machine-type choice. On Pods you can set a floor with `min_ram_per_gpu` and `min_vcpu_count_per_gpu` placement filters.
+
+**Storage is tied to a data center.** A network volume lives in one data center, and anything that mounts it must run there. That narrows GPU choice the same way a zonal Persistent Disk does. A global volume removes the constraint for read-heavy data such as model weights.
+
+**Model artifacts.** Vertex AI copies `artifactUri` to a managed location and exposes it as `AIP_STORAGE_URI`. On Runpod, bake weights into the image, load them from a network or global volume, or use [cached models](/serverless/endpoints/model-caching) for Hugging Face models.
+
+### What has no direct equivalent
+
+**On Runpod:**
+
+- **VPC networks, firewall rules, and Private Service Connect.** Runpod has no customer-defined private network or firewall rules. Pods get [global networking](/pods/networking) (a private network between your own Pods, at `POD_ID.runpod.internal`) and explicitly [exposed ports](/pods/configuration/expose-ports). HTTP ports are served through a public HTTPS proxy URL that isn't authenticated by Runpod, so add authentication in your app. If you need a private path into your Google Cloud VPC, run a VPN or proxy that you control, or keep that workload on Google Cloud.
+- **IAM service accounts, Workload Identity, and the metadata server.** A Pod or worker has no Google identity and no `metadata.google.internal`. To call Google Cloud APIs from Runpod, create a least-privilege service account, store its key as a Runpod secret, and load it at startup. Where a caller only needs one object, hand it a signed URL instead of a key.
+- **Customer-managed encryption keys (CMEK).** You can encrypt a Pod's volume disk at creation, with a key Runpod manages. Bring-your-own-key isn't supported, and container disks and network volumes can't be encrypted this way.
+- **Spot pricing through the CLI or REST API v2.** `runpodctl` and REST API v2 create on-demand Pods. Checkpoint to a volume and plan capacity with `runpodctl gpu list` rather than relying on a spot fallback.
+- **Traffic splitting between model versions on one endpoint.** Vertex AI splits traffic across the DeployedModels on an endpoint. On Runpod, run two endpoints and split in your client or gateway. Rolling out a new image to one endpoint is covered in [rolling releases](/serverless/endpoints/rolling-releases).
+- **Managed batch input and output.** Vertex AI batch inference reads JSON Lines, CSV, or BigQuery and writes results to Cloud Storage or BigQuery. On Runpod you write the loop: read inputs, submit `/run` jobs, and write results where you want them.
+- **A Kubernetes API.** There's no control plane to `kubectl apply` against. Use Serverless endpoints, Pods, or an orchestrator such as SkyPilot or dstack.
+
+**On Google Cloud:**
+
+- **A built-in job queue for inference.** Runpod queue endpoints accept `/run`, hold jobs while workers scale, retry failures, and call a webhook on completion. Vertex AI online inference and Cloud Run services are request and response only.
+- **No data transfer fees.** Runpod doesn't charge for ingress or egress.
+- **GPU pools with fallback.** A Serverless endpoint can list several GPU pools and place workers wherever stock exists.
+
+Compliance posture also differs. Secure Cloud runs in T3/T4 data centers operated by vetted partners that meet standards including SOC 2, ISO 27001, and PCI DSS, and `runpodctl pod create --compliance` restricts placement to data centers holding the certifications you name. Review [Security and compliance](/references/security-and-compliance) against your own requirements before you move regulated data.
+
+## Requirements
+
+- A Google Cloud project with the [gcloud CLI](https://docs.cloud.google.com/sdk/docs/install) authenticated and permission to list and delete the resources you're migrating.
+- A [Runpod account](https://www.console.runpod.io) with a payment method or credits. Deploying an on-demand Pod requires at least one hour of credits for that configuration.
+- Docker, if you need to rebuild images.
+- Terraform 1.6 or later, if you manage infrastructure as code.
+
+## Step 1: Take inventory of what you run on Google Cloud
+
+List every GPU resource, export its configuration, and find the code that calls Google Cloud. Start with a project-wide search so nothing is missed, then drill into each product.
+
+```bash
+gcloud asset search-all-resources \
+    --scope=projects/PROJECT_ID \
+    --format="table(name, assetType, location)"
+```
+
+This lists every searchable resource in the project. Narrow it with `--asset-types`, for example `compute.googleapis.com/Instance`.
+
+Next, export the details for each product you use. Each command prints what you need to recreate the workload: machine and accelerator type, image, environment, ports, disks, region, and scaling limits.
+
+```bash
+# Compute Engine: VMs, disks, templates, managed instance groups
+gcloud compute instances list \
+    --format="table(name, zone.basename(), machineType.basename(), scheduling.provisioningModel, status)"
+gcloud compute instances describe VM_NAME --zone=ZONE --format=json > vm.json
+gcloud compute disks list
+gcloud compute instance-templates list
+gcloud compute instance-groups managed list
+
+# Vertex AI: endpoints, deployed models, models, training jobs (repeat per region)
+gcloud ai endpoints list --region=LOCATION_ID
+gcloud ai endpoints describe ENDPOINT_ID --region=LOCATION_ID --format=json > endpoint.json
+gcloud ai models list --region=LOCATION_ID
+gcloud ai custom-jobs list --region=LOCATION_ID
+
+# Cloud Run: services and jobs
+gcloud run services list
+gcloud run services describe SERVICE --region=REGION --format=export > service.yaml
+gcloud run jobs list
+
+# GKE, images, storage, secrets, notebooks
+gcloud container clusters list
+gcloud artifacts repositories list
+gcloud storage ls
+gcloud filestore instances list
+gcloud secrets list
+gcloud workbench instances list --location=ZONE
+```
+
+In `vm.json`, read `machineType`, `guestAccelerators`, `disks`, `scheduling`, `serviceAccounts`, and the `startup-script` key under `metadata`. In `endpoint.json`, each entry under `deployedModels` has `dedicatedResources` with the machine type, accelerator, and `minReplicaCount` and `maxReplicaCount`. In `service.yaml`, read the container image, `ports`, `env`, resource limits (including `nvidia.com/gpu`), the `run.googleapis.com/accelerator` node selector, concurrency, timeout, and scaling annotations.
+
+Then find the code and configuration that depends on Google Cloud.
+
+```bash
+grep -rnE \
+  "from google\.cloud import aiplatform|import vertexai|aiplatform\.googleapis\.com|\.run\.app|gcloud (ai|run|compute|storage|batch)|gs://|docker\.pkg\.dev|gcr\.io|AIP_[A-Z_]+|K_SERVICE|CLOUD_RUN_[A-Z_]+|metadata\.google\.internal|GOOGLE_APPLICATION_CREDENTIALS|/gcs/|google_(compute_instance|cloud_run_v2|vertex_ai)" \
+  --include="*.py" --include="*.ts" --include="*.js" --include="*.go" --include="*.sh" \
+  --include="*.yaml" --include="*.yml" --include="*.tf" --include="Dockerfile*" .
+```
+
+Each match is either a client call to update in [Step 7](#step-7-update-the-code-that-calls-google-cloud), a runtime assumption to change in [Step 4](#step-4-move-your-images-and-code), or infrastructure to translate in [Migrate your Terraform](#migrate-your-terraform).
+
+## Step 2: Set up Runpod
+
+Create an API key on the [Credentials page](/get-started/credentials), then install the tools.
+
+```bash
+# runpodctl (or: brew install runpod/runpodctl/runpodctl)
+curl -fsSL https://cli.runpod.net | sudo bash
+
+# Runpod SDK for Python 3.10 to 3.14, which includes the rp CLI
+pip install runpod
+
+# Store your API key in ~/.runpod/config.toml
+rp login
+```
+
+`rp login` opens a browser to approve access. Tools also read the `RUNPOD_API_KEY` environment variable, which is the simplest option in CI.
+
+If you'll connect to Pods over SSH, add your public key on the Credentials page first. If you manage infrastructure as code, set up the [Terraform provider](/integrations/terraform/overview). To let a coding agent manage Runpod resources, connect the [MCP server](/get-started/mcp-servers).
+
+## Step 3: Choose where each workload lands
+
+Pick a Runpod target for each workload from your inventory.
+
+| Google Cloud workload | Runpod target | Why |
+| --- | --- | --- |
+| Interactive GPU VM, Workbench instance, Colab Enterprise runtime | Pod | Long-lived, SSH and JupyterLab access, persistent `/workspace`. |
+| Training on a GPU VM or a Vertex AI custom job | Pod, or `@app.task` | `@app.task` gives you run-to-completion with automatic teardown. |
+| Vertex AI endpoint or Cloud Run GPU service with short, synchronous requests | Serverless load-balancing endpoint | Keeps your HTTP server and routes. |
+| Vertex AI endpoint whose requests run for minutes, or that must never drop a request | Serverless queue endpoint | Queueing, retries, async `/run`, webhooks. |
+| Vertex AI batch inference, Cloud Run jobs, Batch jobs | Serverless queue endpoint, or `@app.task` | Fan out with `/run`. Use `@app.task` for one large job. |
+| Self-hosted LLM on Vertex AI, Cloud Run, or GKE | Serverless [vLLM endpoint](/serverless/vllm/get-started) | OpenAI-compatible route with no server code to write. |
+| Calls to Model Garden open models | [Public Endpoint](/public-endpoints/overview), if the model is listed | No deployment. Otherwise deploy the model on a vLLM endpoint. |
+| GKE GPU Deployment behind a Service | Serverless load-balancing endpoint | One container per worker. Sidecars need to be merged into the image. |
+| GKE batch Jobs, multi-cloud schedulers | Queue endpoint, or SkyPilot or dstack on Pods | |
+| Slurm cluster from Cluster Toolkit, multi-node training | Instant Cluster | Check stock for your GPU type and region first. |
+
+Check the [Public Endpoints reference](/public-endpoints/reference) for the hosted models Runpod offers. Keep calls to models that aren't listed there on Google Cloud, or move them to an open model you deploy yourself.
+
+### Map your GPUs
+
+Use this table to translate Compute Engine accelerator types to Runpod GPU type IDs (used by Pods) and Serverless GPU pools. Choose by fit for the workload: VRAM first, then GPU generation.
+
+| Google Cloud accelerator type | Machine family | VRAM per GPU | Runpod GPU type ID | Serverless pool |
+| --- | --- | --- | --- | --- |
+| `nvidia-tesla-t4` | N1 (attached) | 16 GB | `NVIDIA RTX A4000` or `NVIDIA RTX 2000 Ada Generation` (16 GB class) | `AMPERE_16` |
+| `nvidia-tesla-v100` | N1 (attached) | 16 GB | `Tesla V100-PCIE-16GB`, `Tesla V100-SXM2-16GB` | Check the catalog |
+| `nvidia-l4` | G2 | 24 GB | `NVIDIA L4` | `AMPERE_24` |
+| `nvidia-tesla-a100` | A2 Standard | 40 GB | `NVIDIA A40` or `NVIDIA RTX A6000` (48 GB), or an 80 GB A100 | `AMPERE_48` or `AMPERE_80` |
+| `nvidia-a100-80gb` | A2 Ultra | 80 GB | `NVIDIA A100 80GB PCIe`, `NVIDIA A100-SXM4-80GB` | `AMPERE_80` |
+| `nvidia-h100-80gb`, `nvidia-h100-mega-80gb` | A3 High, A3 Edge, A3 Mega | 80 GB | `NVIDIA H100 80GB HBM3`, `NVIDIA H100 PCIe` | `ADA_80_PRO` |
+| `nvidia-h200-141gb` | A3 Ultra | 141 GB | `NVIDIA H200` | `HOPPER_141` |
+| `nvidia-b200` | A4 | 180 GB | `NVIDIA B200` | Check the catalog |
+| `nvidia-gb200` | A4X | 186 GB | `NVIDIA B200` | Check the catalog |
+| `nvidia-gb300` | A4X Max | 279 GB | `NVIDIA B300 SXM6 AC` | Check the catalog |
+| `nvidia-rtx-pro-6000` | G4 (`g4-standard-48` and larger) | 96 GB | `NVIDIA RTX PRO 6000 Blackwell Server Edition` | Check the catalog |
+| `nvidia-rtx-pro-6000` (fractional) | G4 (`g4-standard-12`, `g4-standard-24`) | 24 or 48 GB | `NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb` or `MIG 2g.48gb` | Check the catalog |
+
+Machine types that carry several GPUs, such as `a3-highgpu-8g` or `a2-ultragpu-4g`, become one Pod with a GPU count (`--gpu-count 8`) or an Instant Cluster when you need several nodes.
+
+GPU stock varies by data center and changes through the day. Before you commit to a type, check live stock with `runpodctl gpu list` and `runpodctl datacenter list`, or call `GET /v2/catalog/gpus`, where each GPU's `pool` field gives its Serverless pool ID. The full list of IDs is in the [GPU types reference](/references/gpu-types).
+
+## Step 4: Move your images and code
+
+### Check image portability
+
+Runpod runs `linux/amd64` images. Cloud Run and Compute Engine GPU VMs are also x86-64, so most images run unchanged. If you build on an Arm machine, build for the right platform.
+
+```bash
+docker build --platform linux/amd64 -t us-central1-docker.pkg.dev/PROJECT_ID/REPO/IMAGE:TAG .
+```
+
+Runpod provides the NVIDIA driver on the host. Your image supplies CUDA user-space libraries (for example through a PyTorch wheel or an `nvidia/cuda` base image). Set a CUDA floor that matches your image when you create Pods or endpoints (`--min-cuda-version 12.8`), so the host driver is new enough.
+
+If your VM used a Deep Learning VM image (for example the `pytorch-2-9-cu129-ubuntu-2204-nvidia-580` family in the `deeplearning-platform-release` project), the nearest starting point is an official Runpod PyTorch image such as `runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04`. Install anything else your startup script added.
+
+### Pull private images from Artifact Registry
+
+You can leave images in Artifact Registry and let Runpod pull them. Google documents two username and password methods for Docker: a service account key (username `_json_key`, or `_json_key_base64` for a base64-encoded key) and an access token (username `oauth2accesstoken`). Access tokens last 60 minutes, so they don't work for a stored credential. Use a service account key that can only read the repository.
+
+<Steps>
+  <Step title="Create a pull-only service account">
+    Create a service account and grant it the Artifact Registry Reader role on the repository.
+
+    ```bash
+    gcloud iam service-accounts create runpod-puller --display-name="Runpod image pull"
+
+    gcloud artifacts repositories add-iam-policy-binding REPO \
+        --location=us-central1 \
+        --member="serviceAccount:runpod-puller@PROJECT_ID.iam.gserviceaccount.com" \
+        --role="roles/artifactregistry.reader"
+    ```
+  </Step>
+  <Step title="Create a key">
+    Create a JSON key for the service account.
+
+    ```bash
+    gcloud iam service-accounts keys create runpod-puller.json \
+        --iam-account=runpod-puller@PROJECT_ID.iam.gserviceaccount.com
+    ```
+
+    Google describes service account keys as the least secure Docker authentication option because they're long-lived. Scope this account to image pulls only, and rotate the key on a schedule.
+  </Step>
+  <Step title="Store the key as a Runpod registry credential">
+    Pass the key file on standard input with the literal username `_json_key`.
+
+    ```bash
+    runpodctl registry create --name "artifact-registry" \
+        --username "_json_key" --password-stdin < runpod-puller.json
+    ```
+
+    The command prints the credential ID. The same credential can be created with `POST /v2/registries` or the `runpod_registry` Terraform resource.
+  </Step>
+  <Step title="Reference the credential">
+    Use the full image path and tag, and pass the credential ID when you create a Pod or template.
+
+    ```bash
+    runpodctl pod create \
+        --image "us-central1-docker.pkg.dev/PROJECT_ID/REPO/IMAGE:TAG" \
+        --registry-auth-id REGISTRY_AUTH_ID \
+        --gpu-id "NVIDIA L4"
+    ```
+  </Step>
+</Steps>
+
+Delete `runpod-puller.json` from your machine after you store it. If you'd rather not keep a Google key on Runpod, push the image to another registry or [deploy from GitHub](/serverless/workers/github-integration).
+
+### Translate a Vertex AI custom container
+
+A Vertex AI custom container is an HTTP server that reads its port and routes from `AIP_*` environment variables. This is a typical FastAPI server for Vertex AI.
+
+```python main.py
+import os
+
+from fastapi import FastAPI, Request
+from sentence_transformers import SentenceTransformer
+
+app = FastAPI()
+model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device="cuda")
+
+HEALTH_ROUTE = os.environ.get("AIP_HEALTH_ROUTE", "/health")
+PREDICT_ROUTE = os.environ.get("AIP_PREDICT_ROUTE", "/predict")
+
+
+@app.get(HEALTH_ROUTE)
+def health():
+    return {"status": "ok"}
+
+
+@app.post(PREDICT_ROUTE)
+async def predict(request: Request):
+    body = await request.json()
+    instances = body["instances"]
+    parameters = body.get("parameters", {})
+    embeddings = model.encode(
+        [instance["text"] for instance in instances],
+        normalize_embeddings=parameters.get("normalize", True),
+    )
+    return {"predictions": embeddings.tolist()}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("AIP_HTTP_PORT", "8080")))
+```
+
+The server binds to `AIP_HTTP_PORT`, answers health checks on `AIP_HEALTH_ROUTE`, and serves the `instances` and `parameters` request shape on `AIP_PREDICT_ROUTE`.
+
+You have two ways to run this on Runpod.
+
+<Tabs>
+  <Tab title="Load-balancing endpoint (keep the server)">
+    Keep the FastAPI server. Read the port from `PORT`, add a `/ping` route that reports readiness, and use fixed paths.
+
+    ```python main.py
+    import os
+    import threading
+
+    from fastapi import FastAPI, Request, Response
+    from sentence_transformers import SentenceTransformer
+
+    app = FastAPI()
+    model = None
+
+
+    def load_model():
+        global model
+        model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device="cuda")
+
+
+    threading.Thread(target=load_model, daemon=True).start()
+
+
+    @app.get("/ping")
+    def ping():
+        # 204 tells the load balancer the worker is still initializing.
+        if model is None:
+            return Response(status_code=204)
+        return {"status": "healthy"}
+
+
+    @app.post("/predict")
+    async def predict(request: Request):
+        body = await request.json()
+        instances = body["instances"]
+        parameters = body.get("parameters", {})
+        embeddings = model.encode(
+            [instance["text"] for instance in instances],
+            normalize_embeddings=parameters.get("normalize", True),
+        )
+        return {"predictions": embeddings.tolist()}
+
+
+    if __name__ == "__main__":
+        import uvicorn
+
+        uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", "80")))
+    ```
+
+    The request and response bodies are unchanged, so callers only change the URL and the auth header. Loading the model in a background thread lets `/ping` return `204` during startup, which is how Runpod measures the cold start of a load-balancing worker.
+
+    Package it with a Dockerfile.
+
+    ```dockerfile Dockerfile
+    FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
+
+    WORKDIR /app
+    RUN pip install --no-cache-dir fastapi uvicorn sentence-transformers
+    COPY main.py .
+
+    ENV PORT=8080
+    ENV PORT_HEALTH=8080
+    CMD ["python", "main.py"]
+    ```
+
+    The image sets `PORT` and `PORT_HEALTH` to the same value. Set both on the endpoint too and expose `8080/http`, as shown in [Step 6](#load-balancing-endpoint).
+
+    <Tip>
+    To run the original image with no code change, set `PORT` and `PORT_HEALTH` to the port the server listens on (`8080` when `AIP_HTTP_PORT` is unset) and set `HEALTH_CHECK_PATH` to your health route, for example `/health`. Requests to `https://ENDPOINT_ID.api.runpod.ai/predict` then reach the predict route unchanged.
+    </Tip>
+  </Tab>
+  <Tab title="Queue endpoint (handler)">
+    Replace the server with a handler function. Runpod delivers each job's `input` to the handler and returns what it returns.
+
+    ```python handler.py
+    import runpod
+    from sentence_transformers import SentenceTransformer
+
+    model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device="cuda")
+
+
+    def handler(job):
+        job_input = job["input"]
+        instances = job_input["instances"]
+        parameters = job_input.get("parameters", {})
+        embeddings = model.encode(
+            [instance["text"] for instance in instances],
+            normalize_embeddings=parameters.get("normalize", True),
+        )
+        return {"predictions": embeddings.tolist()}
+
+
+    runpod.serverless.start({"handler": handler})
+    ```
+
+    The model loads once at import, when the worker starts. Callers wrap the old request body in `input` and read the result from `output`.
+
+    ```dockerfile Dockerfile
+    FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
+
+    WORKDIR /app
+    RUN pip install --no-cache-dir runpod sentence-transformers
+    COPY handler.py .
+
+    CMD ["python", "-u", "handler.py"]
+    ```
+
+    A queue worker needs no port or health route. See [Handler functions](/serverless/workers/handler-functions) for streaming, progress updates, and error handling.
+  </Tab>
+</Tabs>
+
+If your model loads from `AIP_STORAGE_URI`, change it to read from a volume path (see [Step 5](#step-5-move-your-data-and-models)) or download from Cloud Storage at startup with a service account key.
+
+### Translate a Cloud Run GPU service
+
+A Cloud Run service already follows most of the load-balancing contract: it's an HTTP server that listens on `0.0.0.0` at the port in `PORT`. Make these changes:
+
+- **Add a health route.** Serve `GET /ping`, or set `HEALTH_CHECK_PATH` to a route you already have. Return `204` until the model is loaded.
+- **Set the port explicitly.** Set `PORT` and `PORT_HEALTH` to your server's port (Cloud Run's default is `8080`) and expose it.
+- **Replace Google identity.** `K_SERVICE`, `K_REVISION`, and the metadata server aren't present. Code that fetches tokens from `metadata.google.internal` or relies on the service's attached service account needs a key from a Runpod secret.
+- **Check request duration and size.** Requests are limited to 5.5 minutes of processing and 30 MB. Move longer requests to a queue endpoint.
+- **Replace Cloud Storage volume mounts.** A `cloud-storage` volume becomes a network or global volume at `/runpod-volume`, or explicit Cloud Storage client calls.
+
+A Cloud Run job doesn't listen on a port. It runs to completion and reads `CLOUD_RUN_TASK_INDEX` and `CLOUD_RUN_TASK_COUNT` to shard work. On Runpod, wrap the per-task work in a queue handler and submit one `/run` request per shard, passing the index in `input`.
+
+### Translate a Compute Engine startup script
+
+A startup script runs as root on every boot of the VM. On a Pod, the equivalent is the container start command. Put one-time setup (package installs, driver-independent configuration) in the image, and put per-boot work in the start command.
+
+Official Runpod PyTorch images start SSH and JupyterLab from `/start.sh`. If you override the start command, call `/start.sh` at the end so those services still start.
+
+```bash
+bash -c 'bash /workspace/startup.sh && /start.sh'
+```
+
+This runs your script from the persistent volume, then hands off to the image's own startup. Skip GPU driver installation steps from your old script: the driver is already on the host.
+
+### Train with the Runpod SDK instead of a custom job
+
+A Vertex AI custom job runs a container on a worker pool and exits. With the Runpod SDK, `@app.task` runs a Python function on an ephemeral Pod with the same lifecycle.
+
+```python train.py
+import runpod
+from runpod import App, NetworkVolume
+
+app = App("training")
+data = NetworkVolume("training-data", size=200)
+
+
+@app.task(gpu="H100", gpu_count=1, mounts={"/data": data}, dependencies=["torch", "transformers"])
+def finetune(epochs: int = 3):
+    import torch
+
+    # Read the dataset from /data and write checkpoints back to /data/checkpoints.
+    return {"device": torch.cuda.get_device_name(0), "epochs": epochs}
+
+
+@runpod.local_entrypoint
+def main():
+    print(finetune.remote(epochs=3))
+```
+
+Run it with `rp flash dev train.py`. Checkpoints written to `/data` replace `AIP_MODEL_DIR` and `AIP_CHECKPOINT_DIR`, and `/gcs/BUCKET` paths become paths on the mounted volume. To keep your existing training container instead, run it as a Pod with your training command as the start command.
+
+## Step 5: Move your data and models
+
+Decide first whether the data needs to move. In a hybrid setup, datasets and artifacts can stay in Cloud Storage and your Runpod workloads read them over the public API with a service account key or HMAC key stored as a [Runpod secret](/pods/templates/secrets). Move data when startup time matters (model weights) or when the workload reads it constantly (training data).
+
+<Warning>
+Google Cloud bills network usage for data that leaves Cloud Storage or Compute Engine for a destination outside Google Cloud, and colder storage classes can add retrieval charges. Estimate the one-time transfer from Google's pricing pages before you start. Runpod doesn't charge for ingress or egress.
+</Warning>
+
+| Google Cloud storage | Runpod target | Notes |
+| --- | --- | --- |
+| Boot disk, local SSD scratch | Container disk | Ephemeral. Cleared when the Pod stops. |
+| Persistent Disk or Hyperdisk data disk on one VM | Volume disk at `/workspace` | Persists across stops. Deleted with the Pod. |
+| Filestore, Managed Lustre | Network volume | Shared across Pods and workers in one data center. Choose the high-performance tier where it's offered. |
+| Cloud Storage bucket of model weights, Cloud Storage FUSE mount | Global volume, network volume, or cached models | Global volumes mount in any data center and suit read-heavy data. |
+| Model artifacts from Hugging Face | [Cached models](/serverless/endpoints/model-caching) | Runpod stages the model on the host before the worker starts. |
+
+Create the volume in the data center where you'll run compute. Check GPU stock there first, because everything that mounts a network volume runs in that data center.
+
+```bash
+runpodctl network-volume create --name "models" --size 200 --data-center-id "US-KS-2"
+```
+
+Then copy the data with one of these methods.
+
+<Tabs>
+  <Tab title="From inside a Pod">
+    Start a Pod with the volume attached, install the [gcloud CLI](https://docs.cloud.google.com/sdk/docs/install) in it, and pull straight from the bucket. This is the most direct path for large datasets because the data goes from Cloud Storage to the volume without passing through your machine.
+
+    ```bash
+    # On the Pod. The key comes from a Runpod secret mapped to GCP_SA_KEY.
+    echo "$GCP_SA_KEY" > /tmp/key.json
+    gcloud auth activate-service-account --key-file=/tmp/key.json
+
+    gcloud storage rsync gs://BUCKET/models /workspace/models --recursive
+    rm /tmp/key.json
+    ```
+
+    `gcloud storage rsync` copies only what's missing or changed, so you can rerun it after an interruption. Add `--dry-run` to preview. If you prefer rclone, `rclone copy :gcs:BUCKET/models /workspace/models --gcs-service-account-file /tmp/key.json` does the same job.
+  </Tab>
+  <Tab title="Cloud Sync">
+    [Cloud Sync](/pods/storage/cloud-sync) copies between a running Pod and a Cloud Storage bucket from the Runpod console. Open the Pod, click **Cloud Sync**, select **Google Cloud Storage**, paste the service account JSON key, and choose the bucket path and Pod folders.
+  </Tab>
+  <Tab title="From your machine">
+    If the data is already on a workstation or CI runner, upload it without a Pod. This uses the volume's [S3-compatible API](/storage/s3-api), so the volume must be in a [data center that supports it](/storage/s3-api#datacenter-availability). Create an S3 API key on the Credentials page and run `aws configure` with it, as described in [Setup and authentication](/storage/s3-api#setup-and-authentication).
+
+    ```bash
+    gcloud storage rsync gs://BUCKET/models ./models --recursive
+
+    aws s3 sync ./models s3://VOLUME_ID/models \
+        --region US-KS-2 \
+        --endpoint-url https://s3api-us-ks-2.runpod.io/
+    ```
+
+    Use the region and endpoint URL listed for your volume's data center. Rerun the `sync` command to resume an interrupted transfer. `aws s3 sync` can fail on directories with more than 10,000 files, so split very large trees into batches or copy from inside a Pod instead.
+  </Tab>
+</Tabs>
+
+The network volume S3-compatible API speaks the S3 protocol at `https://s3api-DATACENTER.runpod.io/` with the volume ID as the bucket. Drive it with S3 clients such as the AWS CLI or Boto3. It isn't a Cloud Storage API, so `gcloud storage` and the Cloud Storage client libraries can't target it.
+
+To fill a global volume, attach it to a Pod and copy into its mount path the same way. Global volumes have no S3-compatible API.
+
+### Keep reading from Cloud Storage
+
+For data that stays in Cloud Storage, give the workload a key that can only read what it needs.
+
+1. Create a service account with `roles/storage.objectViewer` on the specific bucket.
+2. Create a JSON key, or an HMAC key if your code uses an S3-style client against `https://storage.googleapis.com`.
+3. Store the key as a Runpod secret, for example `gcp_sa_key`.
+4. Map it to an environment variable on the Pod or endpoint: `GCP_SA_KEY={{ RUNPOD_SECRET_gcp_sa_key }}`.
+
+Load the key in code instead of relying on Application Default Credentials from a metadata server.
+
+```python
+import json
+import os
+
+from google.cloud import storage
+from google.oauth2 import service_account
+
+credentials = service_account.Credentials.from_service_account_info(
+    json.loads(os.environ["GCP_SA_KEY"])
+)
+client = storage.Client(credentials=credentials, project=credentials.project_id)
+client.bucket("BUCKET").blob("models/config.json").download_to_filename("/tmp/config.json")
+```
+
+The key never touches the image or the template in plain text. Runpod substitutes the secret when the Pod or worker boots.
+
+## Step 6: Deploy on Runpod
+
+### Pod
+
+This replaces a Compute Engine GPU VM. Here's a typical VM with one L4, a Deep Learning VM image, and a startup script.
+
+```bash
+gcloud compute instances create trainer \
+    --machine-type g2-standard-8 \
+    --zone us-central1-a \
+    --boot-disk-size 200GB \
+    --image-family pytorch-2-9-cu129-ubuntu-2204-nvidia-580 \
+    --image-project deeplearning-platform-release \
+    --maintenance-policy TERMINATE \
+    --metadata-from-file=startup-script=startup.sh
+```
+
+The Runpod equivalent creates a Pod with the same GPU, a network volume for data, and a start command in place of the startup script.
+
+```bash
+runpodctl pod create \
+    --name trainer \
+    --image "runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04" \
+    --gpu-id "NVIDIA L4" \
+    --gpu-count 1 \
+    --container-disk-in-gb 50 \
+    --network-volume-id VOLUME_ID \
+    --data-center-ids "US-KS-2" \
+    --min-cuda-version 12.8 \
+    --ports "8888/http,22/tcp" \
+    --env '{"GCS_BUCKET":"BUCKET","GCP_SA_KEY":"{{ RUNPOD_SECRET_gcp_sa_key }}"}' \
+    --docker-args "bash -c 'bash /workspace/startup.sh && /start.sh'"
+```
+
+The network volume mounts at `/workspace`, so `startup.sh` must already be on it (copy it there in Step 5) or be baked into the image. The data center must be the one that holds the volume. In the console, the same flow is **Pods > Deploy**.
+
+Wait for the Pod to be ready, then connect.
+
+```bash
+until [ "$(runpodctl pod get POD_ID --output json | jq -r '.runtimeStatus')" = "running" ]; do
+  sleep 5
+done
+runpodctl ssh info POD_ID
+```
+
+HTTP ports are served at `https://POD_ID-8888.proxy.runpod.net`. The official PyTorch images start JupyterLab on port 8888 only when `JUPYTER_PASSWORD` is set, so add it to `--env` if you want JupyterLab on a Pod created with `runpodctl`. To create the same Pod over REST, send `POST https://api.runpod.io/v2/pods` with `name`, `image`, `gpu` (`id`, `count`, `minCudaVersion`), `disk`, `ports`, `env`, `args`, `dataCenterIds`, and `mounts.network`. See [Create a Pod](/api-reference-v2/pods/create-a-pod).
+
+### Load-balancing endpoint
+
+This replaces a Cloud Run GPU service or a Vertex AI endpoint that serves short requests. Here's the Cloud Run deployment you're replacing.
+
+```bash
+gcloud run deploy embedder \
+    --image us-central1-docker.pkg.dev/PROJECT_ID/REPO/embedder:v1 \
+    --region us-central1 \
+    --gpu 1 --gpu-type nvidia-l4 \
+    --cpu 8 --memory 32Gi \
+    --no-cpu-throttling \
+    --port 8080 \
+    --concurrency 8 \
+    --min-instances 0 --max-instances 3 \
+    --timeout 300 \
+    --no-allow-unauthenticated
+```
+
+Load-balancing endpoints are created with REST API v2, Terraform, or the console, because the endpoint type is set at creation. This request creates the equivalent endpoint.
+
+```bash
+curl -s -X POST https://api.runpod.io/v2/serverless \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "embedder",
+    "type": "LOAD_BALANCER",
+    "image": "us-central1-docker.pkg.dev/PROJECT_ID/REPO/embedder:v1",
+    "registry": "REGISTRY_AUTH_ID",
+    "gpu": {"pools": ["AMPERE_24"], "count": 1, "minCudaVersion": "12.8"},
+    "disk": 20,
+    "ports": ["8080/http"],
+    "env": {"PORT": "8080", "PORT_HEALTH": "8080"},
+    "workers": {"min": 0, "max": 3, "idleTimeout": 10},
+    "scaling": {"type": "REQUEST_COUNT", "requestCount": 8},
+    "flashboot": "FLASHBOOT",
+    "timeout": 300000
+  }'
+```
+
+The field mapping from the `gcloud run deploy` flags is direct: `--gpu-type nvidia-l4` becomes the `AMPERE_24` pool, `--port` becomes `ports` plus `PORT` and `PORT_HEALTH`, `--concurrency` becomes `scaling.requestCount`, and `--min-instances` and `--max-instances` become `workers.min` and `workers.max`. `type` and `scaling` are required, and a load-balancing endpoint only accepts `REQUEST_COUNT` scaling. There's no `--cpu` or `--memory` equivalent because they come with the GPU.
+
+The response includes the endpoint ID and `requestUrls.base`, which is `https://ENDPOINT_ID.api.runpod.ai`. Send a request once a worker is ready.
+
+```bash
+curl -s https://api.runpod.ai/v2/ENDPOINT_ID/health -H "Authorization: Bearer $RUNPOD_API_KEY"
+
+curl -s -X POST https://ENDPOINT_ID.api.runpod.ai/predict \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"instances": [{"text": "hello"}], "parameters": {"normalize": true}}'
+```
+
+The first request after scale to zero waits for a cold start. If it returns `no workers available`, retry after a few seconds, or poll `/health` until a worker reports ready.
+
+### Queue endpoint
+
+This replaces Vertex AI endpoints with long-running requests, batch inference, Cloud Run jobs, and Batch jobs. Create a Serverless template for the handler image from Step 4, then an endpoint that uses it.
+
+```bash
+runpodctl template create --name "embedder-queue" --serverless \
+    --image "us-central1-docker.pkg.dev/PROJECT_ID/REPO/embedder-queue:v1" \
+    --registry-auth-id REGISTRY_AUTH_ID \
+    --container-disk-in-gb 20 \
+    --env '{"GCP_SA_KEY":"{{ RUNPOD_SECRET_gcp_sa_key }}"}'
+
+runpodctl serverless create --name "embedder-queue" \
+    --template-id TEMPLATE_ID \
+    --gpu-id AMPERE_24 \
+    --workers-min 0 --workers-max 3 \
+    --min-cuda-version 12.8 \
+    --execution-timeout 600
+```
+
+The endpoint scales between zero and three workers on 24 GB GPUs. Each Serverless template binds to one endpoint, so create a template per endpoint. To attach a network volume, add `--network-volume-id`. It mounts at `/runpod-volume` on each worker.
+
+Submit a job and read the result.
+
+```bash
+curl -s -X POST https://api.runpod.ai/v2/ENDPOINT_ID/runsync \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"instances": [{"text": "hello"}], "parameters": {"normalize": true}}}'
+```
+
+For batch work, post each input to `/run` with a `webhook` URL and let Runpod call you when each job completes. See [Send API requests](/serverless/endpoints/send-requests).
+
+### Public Endpoint or vLLM endpoint
+
+To replace calls to a Model Garden open model, check whether the model is in the [Public Endpoints reference](/public-endpoints/reference). If it is, there's nothing to deploy. If it isn't, deploy it on a vLLM endpoint from the Hub.
+
+```bash
+runpodctl hub search vllm
+runpodctl serverless create --hub-id HUB_ID --name "my-llm" \
+    --env MODEL_NAME=meta-llama/Llama-3.1-8B-Instruct
+```
+
+The endpoint exposes an OpenAI-compatible route at `https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1`. See [Get started with vLLM](/serverless/vllm/get-started) for gated models and tuning.
+
+### Instant Cluster
+
+To replace a Slurm cluster built with Cluster Toolkit, create a Slurm cluster from the [Instant Clusters page](https://console.runpod.io/cluster) with your GPU type, node count, region, and an optional network volume in the same region. Slurm and munge are preconfigured, and `sbatch`, `squeue`, and `sinfo` work on the controller node. Managed Slurm clusters use official Runpod PyTorch images. Availability depends on the GPU type and region, so confirm it in the console before you schedule a cutover. See [Slurm Clusters](/instant-clusters/slurm-clusters).
+
+## Step 7: Update the code that calls Google Cloud
+
+### Vertex AI online inference
+
+Calls through the Vertex AI SDK authenticate with Google credentials and send `instances`.
+
+```python
+from google.cloud import aiplatform
+
+aiplatform.init(project="PROJECT_ID", location="us-central1")
+endpoint = aiplatform.Endpoint("VERTEX_ENDPOINT_ID")
+
+prediction = endpoint.predict(
+    instances=[{"text": "hello"}],
+    parameters={"normalize": True},
+)
+print(prediction.predictions)
+```
+
+The same applies to `gcloud ai endpoints predict` and to REST calls against `https://LOCATION_ID-aiplatform.googleapis.com/v1/projects/PROJECT_ID/locations/LOCATION_ID/endpoints/ENDPOINT_ID:predict`.
+
+On Runpod, the call is an HTTPS request with a Bearer API key.
+
+<Tabs>
+  <Tab title="Load-balancing endpoint">
+    The body is unchanged because your server defines it.
+
+    ```python
+    import os
+
+    import requests
+
+    response = requests.post(
+        "https://ENDPOINT_ID.api.runpod.ai/predict",
+        headers={"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}"},
+        json={"instances": [{"text": "hello"}], "parameters": {"normalize": True}},
+        timeout=120,
+    )
+    response.raise_for_status()
+    print(response.json()["predictions"])
+    ```
+
+    Add a retry for the first request after scale to zero, when no worker is ready yet.
+  </Tab>
+  <Tab title="Queue endpoint">
+    Wrap the body in `input` and read the result from `output`.
+
+    ```python
+    import os
+
+    import requests
+
+    response = requests.post(
+        "https://api.runpod.ai/v2/ENDPOINT_ID/runsync",
+        headers={"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}"},
+        json={"input": {"instances": [{"text": "hello"}], "parameters": {"normalize": True}}},
+        timeout=120,
+    )
+    response.raise_for_status()
+    result = response.json()
+    print(result["status"], result["output"]["predictions"])
+    ```
+
+    With the Runpod SDK, the same call is `runpod.Endpoint("ENDPOINT_ID").run_sync({"instances": [...], "parameters": {...}})`.
+  </Tab>
+</Tabs>
+
+### Long-running and batch requests
+
+Vertex AI batch inference takes a `BatchPredictionJob` with a Cloud Storage or BigQuery source. On Runpod, submit jobs to `/run` and collect results by polling or webhook.
+
+```python
+import os
+
+import requests
+
+BASE_URL = "https://api.runpod.ai/v2/ENDPOINT_ID"
+HEADERS = {"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}"}
+
+job = requests.post(
+    f"{BASE_URL}/run",
+    headers=HEADERS,
+    json={
+        "input": {"instances": [{"text": "hello"}]},
+        "webhook": "https://example.com/runpod-webhook",
+    },
+    timeout=30,
+).json()
+
+status = requests.get(f"{BASE_URL}/status/{job['id']}", headers=HEADERS, timeout=30).json()
+print(status["status"])
+```
+
+Job statuses are `IN_QUEUE`, `IN_PROGRESS`, `COMPLETED`, `FAILED`, `CANCELLED`, and `TIMED_OUT`. Results from `/run` are kept for 30 minutes after completion, so write large outputs to Cloud Storage or a volume from inside the handler and return a reference.
+
+### Private Cloud Run services
+
+A caller of a private Cloud Run service fetches an ID token for the service URL.
+
+```python
+import google.auth.transport.requests
+import google.oauth2.id_token
+import requests
+
+SERVICE_URL = "https://embedder-abc123-uc.a.run.app"
+
+auth_request = google.auth.transport.requests.Request()
+token = google.oauth2.id_token.fetch_id_token(auth_request, SERVICE_URL)
+
+response = requests.post(
+    f"{SERVICE_URL}/predict",
+    headers={"Authorization": f"Bearer {token}"},
+    json={"instances": [{"text": "hello"}]},
+    timeout=120,
+)
+```
+
+On Runpod, drop the token exchange and send the API key. The request is the load-balancing example above with the base URL `https://ENDPOINT_ID.api.runpod.ai`. Callers that still run on Google Cloud should read the Runpod API key from Secret Manager.
+
+### OpenAI-compatible calls
+
+If you call open models through Google's OpenAI-compatible endpoint, the client authenticates with a short-lived Google access token.
+
+```python
+import google.auth.transport.requests
+import openai
+from google.auth import default
+
+credentials, _ = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+credentials.refresh(google.auth.transport.requests.Request())
+
+client = openai.OpenAI(
+    base_url="https://aiplatform.googleapis.com/v1/projects/PROJECT_ID/locations/global/endpoints/openapi",
+    api_key=credentials.token,
+)
+response = client.chat.completions.create(
+    model="openai/gpt-oss-120b-maas",
+    messages=[{"role": "user", "content": "Hello"}],
+)
+```
+
+On Runpod, change the base URL, API key, and model name. This example uses the GPT OSS 120B Public Endpoint.
+
+```python
+import os
+
+import openai
+
+client = openai.OpenAI(
+    base_url="https://api.runpod.ai/v2/gpt-oss-120b/openai/v1",
+    api_key=os.environ["RUNPOD_API_KEY"],
+)
+response = client.chat.completions.create(
+    model="openai/gpt-oss-120b",
+    messages=[{"role": "user", "content": "Hello"}],
+)
+```
+
+The API key doesn't expire hourly, so remove the token refresh logic. For a model you deployed on a vLLM endpoint, use `https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1` and the model name the endpoint serves.
+
+### Control-plane automation
+
+Replace `gcloud` calls and Google API client calls in scripts and CI with `runpodctl`, REST API v2, or the Runpod SDK. The [CLI command map](#cli-command-map) and [API map](#api-map) list the equivalents. In CI, set `RUNPOD_API_KEY` as a secret in place of a service account key or Workload Identity Federation configuration.
+
+## Step 8: Verify, cut over, and shut down
+
+<Steps>
+  <Step title="Send a real request from outside">
+    Call the Runpod endpoint from the same network location as your production callers, using production-shaped inputs. For Pods, connect over SSH and run the workload.
+  </Step>
+  <Step title="Compare outputs and latency">
+    Send the same inputs to both platforms and compare the outputs. Measure cold-start and warm latency separately. On Runpod, the endpoint's **Metrics** tab shows execution time, delay time, and cold-start percentiles. Tune the idle timeout, active workers, and FlashBoot before you shift traffic.
+  </Step>
+  <Step title="Run both in parallel">
+    Keep the Google Cloud deployment serving while you route a small share of traffic to Runpod from your client or gateway. Watch error rates and logs with `runpodctl serverless logs ENDPOINT_ID`.
+  </Step>
+  <Step title="Shift traffic and set a cost guard">
+    Move the rest of the traffic. Set `workers.max` to the highest concurrency you intend to pay for, keep active workers at zero unless you need them, and enable [low balance notifications](/accounts-billing/billing#low-balance-notifications). Runpod accounts also have a default hourly spend limit, described in [Account spend limits](/accounts-billing/manage-accounts#account-spend-limits).
+  </Step>
+  <Step title="Shut down what you replaced on Google Cloud">
+    Stopping a VM or scaling a service down doesn't stop every charge. Work through the checklist below.
+  </Step>
+</Steps>
+
+### Google Cloud shutdown checklist
+
+Delete only what you've replaced, and take a final backup of anything you might need.
+
+```bash
+# Vertex AI: deployed models bill while deployed. Undeploy, then delete the endpoint.
+gcloud ai endpoints describe ENDPOINT_ID --region=LOCATION_ID
+gcloud ai endpoints undeploy-model ENDPOINT_ID --region=LOCATION_ID --deployed-model-id=DEPLOYED_MODEL_ID
+gcloud ai endpoints delete ENDPOINT_ID --region=LOCATION_ID
+
+# Cloud Run services and jobs
+gcloud run services delete SERVICE --region=REGION
+gcloud run jobs delete JOB --region=REGION
+
+# Compute Engine VMs
+gcloud compute instances delete VM_NAME --zone=ZONE
+
+# Persistent disks and snapshots that outlive the VM
+gcloud compute disks list
+gcloud compute disks delete DISK_NAME --zone=ZONE
+gcloud compute snapshots list
+gcloud compute snapshots delete SNAPSHOT_NAME
+
+# Reserved static external IP addresses
+gcloud compute addresses list
+gcloud compute addresses delete ADDRESS_NAME --region=REGION
+
+# Cloud NAT gateways
+gcloud compute routers nats list --router=ROUTER_NAME --region=REGION
+gcloud compute routers nats delete NAT_NAME --router=ROUTER_NAME --region=REGION
+
+# Workbench instances
+gcloud workbench instances list --location=ZONE
+gcloud workbench instances delete INSTANCE_NAME --location=ZONE
+
+# Filestore instances
+gcloud filestore instances list
+gcloud filestore instances delete INSTANCE_NAME --zone=ZONE
+
+# Artifact Registry repositories (only if Runpod no longer pulls from them)
+gcloud artifacts repositories list
+gcloud artifacts repositories delete REPO --location=LOCATION
+```
+
+Points that are easy to miss:
+
+- **Stopped VMs still bill for disks and IP addresses.** Compute Engine bills attached disks and external IP addresses in every instance state, including `TERMINATED`. Suspended VMs also bill for memory.
+- **Disks can survive VM deletion.** A disk that isn't set to auto-delete stays after the VM is gone.
+- **A Vertex AI endpoint can't be deleted until every model is undeployed from it.** Uploaded models in Model Registry and their artifacts in Cloud Storage remain until you delete them.
+- **Cloud Run minimum instances bill while idle.** Deleting the service removes them.
+- **Managed instance groups recreate VMs.** Delete the group, not the instances.
+- **GKE node pools.** Delete GPU node pools or the cluster if nothing else uses them.
+- **Reservations and committed use discounts.** Reservations bill until deleted, and commitments run to the end of their term. Review them with your account team.
+- **Cloud Storage.** Keep buckets your Runpod workloads still read, and delete the rest.
+
+Confirm the result in the Cloud Billing reports a day or two later, filtered by SKU.
+
+## Migrate your Terraform
+
+The [Runpod Terraform provider](/integrations/terraform/overview) 2.x (`runpod/runpod`) is built on REST API v2. It runs alongside `hashicorp/google` in one configuration, which fits a hybrid setup: Google Cloud keeps buckets, service accounts, and Artifact Registry, and Runpod runs the GPU compute.
+
+### Resource map
+
+| Google Cloud resource | Runpod resource | Notes |
+| --- | --- | --- |
+| `google_compute_instance` (accelerator-optimized machine type or `guest_accelerator`) | `runpod_pod` | `gpu_type_id` and `gpu_count` replace `machine_type` and `guest_accelerator`. |
+| `metadata_startup_script` on `google_compute_instance` | `args` on `runpod_pod` | A container start command, not a boot script. |
+| `scheduling` (`provisioning_model`, `on_host_maintenance`) | No argument | Pods are on-demand. |
+| `google_compute_instance_template` with `google_compute_instance_group_manager` | `runpod_template` with `runpod_serverless_endpoint` | `workers_min` and `workers_max` replace the group size and autoscaler. |
+| `google_vertex_ai_endpoint` and its deployed models | `runpod_serverless_endpoint` | One resource covers the endpoint, the container, and scaling. |
+| `google_vertex_ai_endpoint_with_model_garden_deployment` | `runpod_serverless_endpoint` running vLLM | Or no resource, if a Public Endpoint serves the model. |
+| `google_vertex_ai_custom_job` | `runpod_pod`, or `@app.task` outside Terraform | Run-to-completion jobs fit the SDK better than Terraform state. |
+| `google_cloud_run_v2_service` with a GPU | `runpod_template` and `runpod_serverless_endpoint` (`endpoint_type = "LOAD_BALANCER"`) | See the example below. |
+| `google_cloud_run_v2_job` | `runpod_serverless_endpoint` (`endpoint_type = "QUEUE"`) | |
+| `google_compute_disk` | `disk` and `persistent_volume` on `runpod_pod`, or `runpod_network_volume` | Use a network volume for data that must outlive the Pod. |
+| `google_filestore_instance` | `runpod_network_volume` | `type = "HIGH_PERFORMANCE"` where the data center offers it. |
+| `google_storage_bucket` | Keep it, or `runpod_global_volume` for model weights | |
+| `google_artifact_registry_repository` | Keep it, and add `runpod_registry` | The credential holds a service account key. |
+| `google_secret_manager_secret` | Runpod secret, referenced in `env` | Create the secret in the console or with `POST /v2/account/secrets`. |
+| `google_container_node_pool` (GPU) | `runpod_serverless_endpoint`, `runpod_pod`, or `runpod_cluster` | |
+| `google_compute_network`, `google_compute_firewall`, `google_compute_router_nat` | No resource | Use `ports` and `global_networking` on `runpod_pod`. |
+| `google_service_account`, IAM bindings | No resource | Runpod access is by API key and organization role. |
+
+### Run both providers side by side
+
+Declare both providers. During the transition, the Google provider keeps managing the resources you haven't moved, and it can create the pull-only service account that Runpod uses for Artifact Registry.
+
+```hcl providers.tf
+terraform {
+  required_version = ">= 1.6"
+
+  required_providers {
+    google = {
+      source = "hashicorp/google"
+    }
+    runpod = {
+      source  = "runpod/runpod"
+      version = "~> 2.0"
+    }
+  }
+}
+
+provider "google" {
+  project = var.project_id
+  region  = "us-central1"
+}
+
+# Reads RUNPOD_API_KEY from the environment.
+provider "runpod" {}
+
+variable "project_id" {
+  type = string
+}
+```
+
+Keep your existing version constraint for the Google provider. With both declared, wire Artifact Registry to Runpod in the same configuration.
+
+```hcl registry.tf
+resource "google_service_account" "runpod_puller" {
+  account_id   = "runpod-puller"
+  display_name = "Runpod image pull"
+}
+
+resource "google_artifact_registry_repository_iam_member" "runpod_puller" {
+  project    = var.project_id
+  location   = "us-central1"
+  repository = "REPO"
+  role       = "roles/artifactregistry.reader"
+  member     = "serviceAccount:${google_service_account.runpod_puller.email}"
+}
+
+resource "google_service_account_key" "runpod_puller" {
+  service_account_id = google_service_account.runpod_puller.name
+}
+
+resource "runpod_registry" "artifact_registry" {
+  name     = "artifact-registry"
+  username = "_json_key_base64"
+  password = google_service_account_key.runpod_puller.private_key
+}
+```
+
+`google_service_account_key.private_key` is the JSON key, base64 encoded, which is the format Artifact Registry expects with the `_json_key_base64` username. The key is stored in Terraform state, so use an encrypted remote backend with restricted access. `runpod_registry` has no update operation, so rotating the key replaces the credential.
+
+### Compute Engine GPU instance to a Pod
+
+This is a GPU VM with a data disk and a startup script.
+
+```hcl before.tf
+resource "google_compute_disk" "data" {
+  name = "trainer-data"
+  type = "pd-ssd"
+  zone = "us-central1-a"
+  size = 200
+}
+
+resource "google_service_account" "trainer" {
+  account_id   = "trainer"
+  display_name = "Trainer VM"
+}
+
+resource "google_compute_instance" "trainer" {
+  name         = "trainer"
+  machine_type = "g2-standard-8"
+  zone         = "us-central1-a"
+
+  boot_disk {
+    initialize_params {
+      image = "deeplearning-platform-release/pytorch-2-9-cu129-ubuntu-2204-nvidia-580"
+      size  = 100
+    }
+  }
+
+  attached_disk {
+    source      = google_compute_disk.data.id
+    device_name = "data"
+  }
+
+  network_interface {
+    network = "default"
+    access_config {}
+  }
+
+  scheduling {
+    on_host_maintenance = "TERMINATE"
+  }
+
+  metadata_startup_script = file("${path.module}/startup.sh")
+
+  service_account {
+    email  = google_service_account.trainer.email
+    scopes = ["cloud-platform"]
+  }
+}
+```
+
+An N1 instance would add a `guest_accelerator` block with `type` and `count`. A G2 machine type carries its L4 GPU implicitly.
+
+The Runpod version replaces the VM and data disk with a Pod and a network volume.
+
+```hcl after.tf
+resource "runpod_network_volume" "data" {
+  name        = "trainer-data"
+  size        = 200
+  data_center = "US-KS-2"
+}
+
+resource "runpod_pod" "trainer" {
+  name        = "trainer"
+  image       = "runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04"
+  gpu_type_id = "NVIDIA L4"
+  gpu_count   = 1
+  cloud       = "SECURE"
+  disk        = 50
+
+  min_cuda_version = "12.8"
+  data_center_ids  = [runpod_network_volume.data.data_center]
+
+  network_volumes = [{
+    volume_id = runpod_network_volume.data.id
+    path      = "/workspace"
+  }]
+
+  ports         = ["8888/http", "22/tcp"]
+  start_ssh     = true
+  start_jupyter = true
+
+  env = {
+    GCS_BUCKET = "BUCKET"
+    GCP_SA_KEY = "{{ RUNPOD_SECRET_gcp_sa_key }}"
+  }
+
+  args = "bash -c 'bash /workspace/startup.sh && /start.sh'"
+}
+
+output "trainer_status" {
+  value = runpod_pod.trainer.status
+}
+```
+
+What changed: `machine_type` became `gpu_type_id` and `gpu_count`, the boot image became a container `image`, `google_compute_disk` became `runpod_network_volume`, the attached service account became a key read from a Runpod secret, and `metadata_startup_script` became `args`. There's no network interface or scheduling block. `start_ssh` needs an SSH key registered on your account. Changing `gpu_type_id`, `gpu_count`, `cloud`, `min_cuda_version`, or `data_center_ids` replaces the Pod, so keep anything you can't recreate on the network volume. To stop the Pod without removing it from the configuration, set `desired_state = "EXITED"`.
+
+### Cloud Run GPU service to a Serverless endpoint
+
+This is a Cloud Run service with one L4 GPU.
+
+```hcl before.tf
+resource "google_cloud_run_v2_service" "embedder" {
+  name                = "embedder"
+  location            = "us-central1"
+  deletion_protection = false
+  ingress             = "INGRESS_TRAFFIC_ALL"
+
+  scaling {
+    max_instance_count = 3
+  }
+
+  template {
+    timeout                          = "300s"
+    max_instance_request_concurrency = 8
+
+    containers {
+      image = "us-central1-docker.pkg.dev/${var.project_id}/REPO/embedder:v1"
+
+      ports {
+        container_port = 8080
+      }
+
+      env {
+        name  = "MODEL_ID"
+        value = "sentence-transformers/all-MiniLM-L6-v2"
+      }
+
+      resources {
+        limits = {
+          "cpu"            = "8"
+          "memory"         = "32Gi"
+          "nvidia.com/gpu" = "1"
+        }
+      }
+    }
+
+    node_selector {
+      accelerator = "nvidia-l4"
+    }
+
+    gpu_zonal_redundancy_disabled = true
+  }
+}
+```
+
+The Runpod version is a Serverless template for the container and a load-balancing endpoint for routing and scaling.
+
+```hcl after.tf
+resource "runpod_template" "embedder" {
+  name       = "embedder"
+  image      = "us-central1-docker.pkg.dev/${var.project_id}/REPO/embedder:v1"
+  serverless = true
+  disk       = 20
+  registry   = runpod_registry.artifact_registry.id
+  ports      = ["8080/http"]
+
+  env = {
+    PORT        = "8080"
+    PORT_HEALTH = "8080"
+    MODEL_ID    = "sentence-transformers/all-MiniLM-L6-v2"
+  }
+
+  start_ssh     = false
+  start_jupyter = false
+}
+
+resource "runpod_serverless_endpoint" "embedder" {
+  name          = "embedder"
+  template_id   = runpod_template.embedder.id
+  endpoint_type = "LOAD_BALANCER"
+
+  gpu_pools        = ["AMPERE_24"]
+  gpu_count        = 1
+  min_cuda_version = "12.8"
+
+  scaling_type  = "REQUEST_COUNT"
+  scaling_value = 8
+  workers_min   = 0
+  workers_max   = 3
+  idle_timeout  = 10
+  flashboot     = "FLASHBOOT"
+  timeout       = 300000
+}
+
+output "embedder_url" {
+  value = runpod_serverless_endpoint.embedder.request_urls.base
+}
+```
+
+What changed: `node_selector.accelerator` became `gpu_pools`, `max_instance_request_concurrency` became `scaling_value` with `scaling_type = "REQUEST_COUNT"`, `scaling.max_instance_count` became `workers_max`, `ports.container_port` became `ports` plus the `PORT` and `PORT_HEALTH` variables, and `timeout` is in milliseconds. `endpoint_type` can't change after creation. For a queue endpoint, set `endpoint_type = "QUEUE"` and `scaling_type = "QUEUE_DELAY"`, and drop `ports`.
+
+### Cut over in Terraform
+
+1. Add the Runpod resources and run `terraform apply`. The Google resources are untouched.
+2. Verify the Runpod endpoint or Pod, then update the outputs or variables your callers read (for example, switch a service URL output to `runpod_serverless_endpoint.embedder.request_urls.base`).
+3. Remove the Google resource blocks you replaced and apply again. If a resource has `deletion_protection` enabled, set it to `false` and apply before removing the block.
+4. Keep the Google resources Runpod depends on: the service account, its key, the Artifact Registry repository, and any buckets.
+
+To bring existing Runpod resources under Terraform, use `terraform import` with the Pod, endpoint, template, or volume ID. See the [provider reference](https://registry.terraform.io/providers/runpod/runpod/latest/docs) for every argument.
+
+## Reference
+
+### CLI command map
+
+| gcloud | Runpod |
+| --- | --- |
+| `gcloud auth login`, `gcloud auth activate-service-account` | `rp login`, or set `RUNPOD_API_KEY` |
+| `gcloud compute instances create` | `runpodctl pod create` |
+| `gcloud compute instances list` | `runpodctl pod list` (add `--all` to include stopped Pods) |
+| `gcloud compute instances describe` | `runpodctl pod get POD_ID` |
+| `gcloud compute instances stop` and `start` | `runpodctl pod stop POD_ID` and `runpodctl pod start POD_ID` |
+| `gcloud compute instances delete` | `runpodctl pod delete POD_ID` |
+| `gcloud compute ssh` | `runpodctl ssh info POD_ID`, then `ssh` |
+| `gcloud compute accelerator-types list`, `gcloud compute regions list` | `runpodctl gpu list`, `runpodctl datacenter list` |
+| `gcloud ai models upload` and `gcloud ai endpoints deploy-model` | `runpodctl template create --serverless` and `runpodctl serverless create` |
+| `gcloud ai endpoints list` and `describe` | `runpodctl serverless list` and `runpodctl serverless get ENDPOINT_ID` |
+| `gcloud ai endpoints predict` | `curl` to the endpoint URL (see Step 6) |
+| `gcloud ai endpoints undeploy-model` and `delete` | `runpodctl serverless delete ENDPOINT_ID` |
+| `gcloud run deploy` | `POST /v2/serverless` with `"type": "LOAD_BALANCER"` |
+| `gcloud run services update` | `runpodctl serverless update ENDPOINT_ID` |
+| `gcloud run services list` and `delete` | `runpodctl serverless list` and `runpodctl serverless delete ENDPOINT_ID` |
+| `gcloud storage rsync` | `aws s3 sync` against the network volume [S3-compatible API](/storage/s3-api), or `gcloud storage rsync` from inside a Pod |
+| `gcloud artifacts docker images list` | Your registry's own tooling. Credentials: `runpodctl registry list` |
+| `gcloud logging read` | `runpodctl pod logs POD_ID`, `runpodctl serverless logs ENDPOINT_ID` |
+| Cloud Billing reports | `runpodctl billing pods`, `runpodctl billing serverless` |
+
+### API map
+
+| Google Cloud API call | Runpod REST API v2 or runtime route |
+| --- | --- |
+| Compute Engine `instances.insert` | `POST https://api.runpod.io/v2/pods` |
+| Compute Engine `instances.list`, `instances.get` | `GET /v2/pods`, `GET /v2/pods/{id}` |
+| Compute Engine `instances.stop`, `instances.start` | `POST /v2/pods/{id}/action` with `{"action": "stop"}` or `{"action": "start"}` |
+| Compute Engine `instances.delete` | `DELETE /v2/pods/{id}` |
+| Vertex AI model upload plus `endpoints.deployModel`, Cloud Run service create | `POST /v2/serverless` |
+| Vertex AI `endpoints.mutateDeployedModel`, Cloud Run service update | `PATCH /v2/serverless/{id}` |
+| Vertex AI `endpoints.undeployModel` and delete, Cloud Run service delete | `DELETE /v2/serverless/{id}` |
+| Vertex AI `endpoints.predict`, `rawPredict` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/runsync`, or your own path on `https://ENDPOINT_ID.api.runpod.ai` |
+| Vertex AI `batchPredictionJobs.create` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/run` per input, then `GET /status/JOB_ID` |
+| Chat Completions at `.../endpoints/openapi` | `https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1` |
+| Artifact Registry pull credentials | `POST /v2/registries` |
+| Secret Manager secret create | `POST /v2/account/secrets` |
+| Filestore instance create | `POST /v2/network-volumes` |
+| Compute Engine accelerator and zone listings | `GET /v2/catalog/gpus`, `GET /v2/catalog/datacenters` |
+| Cloud Logging entries for a VM or revision | `GET /v2/pods/{id}/logs`, `GET /v2/serverless/{id}/workers/{workerId}/logs` |
+
+### Configuration field map
+
+| Google Cloud field | Runpod REST API v2 field | Terraform argument |
+| --- | --- | --- |
+| Machine type and accelerator type (VM) | `gpu.id`, `gpu.count` | `gpu_type_id`, `gpu_count` |
+| Accelerator type (Vertex AI `--accelerator`, Cloud Run `--gpu-type`) | `gpu.pools`, `gpu.count` | `gpu_pools`, `gpu_count` |
+| Container image URI | `image` | `image` |
+| Container command and args | `entrypoint`, `cmd`, or `args` | `args` |
+| Environment variables | `env` | `env` |
+| Container port (`--container-ports`, `--port`) | `ports`, plus `PORT` and `PORT_HEALTH` in `env` | `ports`, `env` |
+| Health route (`--container-health-route`) | `HEALTH_CHECK_PATH` in `env` | `env` |
+| Min and max replicas or instances | `workers.min`, `workers.max` | `workers_min`, `workers_max` |
+| Cloud Run concurrency, Vertex AI autoscaling targets | `scaling.type`, `scaling.requestCount` or `scaling.queueDelay` | `scaling_type`, `scaling_value` |
+| Request timeout | `timeout` (milliseconds) | `timeout` |
+| Boot disk size | `disk` (GB) | `disk` |
+| Data disk, Filestore share | `mounts.persistent`, `mounts.network` | `persistent_volume`, `network_volumes` |
+| Region or zone | `dataCenterIds` | `data_center_ids` |
+| Service account | A key in a Runpod secret, referenced from `env` | `env` |
+| Artifact Registry access | `registry` (credential ID) | `registry` |
+
+### Environment variable map
+
+| Google Cloud runtime variable | Runpod equivalent |
+| --- | --- |
+| `AIP_HTTP_PORT` (Vertex AI), `PORT` (Cloud Run) | `PORT` and `PORT_HEALTH` on load-balancing workers (default `80`) |
+| `AIP_HEALTH_ROUTE` | `HEALTH_CHECK_PATH` (default `/ping`) |
+| `AIP_PREDICT_ROUTE` | Your own route on a load-balancing endpoint. Queue endpoints have no route. |
+| `AIP_STORAGE_URI` | A path on a mounted volume, such as `/runpod-volume/models` |
+| `AIP_MODEL_DIR`, `AIP_CHECKPOINT_DIR` | A path on a mounted volume, such as `/workspace/checkpoints` |
+| `AIP_ENDPOINT_ID`, `K_SERVICE` | Set your own variable in `env` |
+| `CLOUD_ML_PROJECT_ID`, metadata server project lookups | Set your own variable in `env` |
+| `CLOUD_RUN_TASK_INDEX`, `CLOUD_RUN_TASK_COUNT` | Pass the shard index in the job `input` |
+| VM instance name and zone from the metadata server | `RUNPOD_POD_ID`, `RUNPOD_DC_ID` on Pods |
+| GPU count from machine type | `RUNPOD_GPU_COUNT` on Pods |
+| Application Default Credentials | A service account key from a Runpod secret |
+
+### Status map
+
+| Google Cloud state | Runpod state |
+| --- | --- |
+| Compute Engine `PENDING`, `PROVISIONING` | Pod `PROVISIONING` (or a queued Pod in `QUEUED`) |
+| Compute Engine `STAGING` | Pod `STARTING` |
+| Compute Engine `RUNNING` | Pod `RUNNING` |
+| Compute Engine `STOPPING`, `TERMINATED` (stopped) | Pod `EXITED` |
+| Compute Engine `SUSPENDED` | No equivalent. Stop the Pod and keep its volume. |
+| Compute Engine `REPAIRING` | Pod `ERROR` is the closest. Check logs, then recreate. |
+| Deleted VM | Pod `TERMINATED` |
+| Vertex AI `JOB_STATE_PENDING` | Job `IN_QUEUE` |
+| Other Vertex AI `JOB_STATE_*` values | Job `IN_PROGRESS`, `COMPLETED`, `FAILED`, `CANCELLED`, `TIMED_OUT` |
+
+## Migrate with a coding agent
+
+A coding agent can run this migration with the Runpod skills and MCP server.
+
+<Steps>
+  <Step title="Install the Runpod skills and MCP server">
+    <Tabs>
+      <Tab title="Claude Code">
+        ```bash
+        # The plugin also connects the hosted MCP server
+        claude plugin marketplace add runpod/runpod-plugins-official
+        claude plugin install runpod@runpod
+        ```
+      </Tab>
+      <Tab title="Other agents">
+        ```bash
+        # Codex, Cursor, and others: skills, then the hosted MCP server
+        npx skills add runpod/runpod-plugins-official --skill '*' --agent AGENT_ID --global
+        npx @runpod/mcp-server@latest add --client CLIENT_ID
+        ```
+      </Tab>
+    </Tabs>
+
+    The MCP server signs in with OAuth ("Sign in with Runpod"), so you don't need an API key to start. See [Agent skills](/get-started/agent-skills) and [MCP servers](/get-started/mcp-servers).
+  </Step>
+  <Step title="Give the agent this prompt">
+    Run the agent in the repository that holds your application code and Terraform, with `gcloud` authenticated.
+
+    ```text
+    Use the runpod-cloud-migrate skill to migrate our GPU workloads from Google Cloud to Runpod.
+    We're keeping Cloud Storage, IAM, and the rest of the app on Google Cloud.
+
+    1. Inventory first. Scan this repo for Vertex AI, Cloud Run, Compute Engine, GKE, and
+       Artifact Registry usage (SDK imports, gcloud calls, AIP_* and K_SERVICE variables, gs://
+       paths, google_* Terraform resources). Then list the live GPU resources with read-only
+       gcloud commands. Don't change anything on Google Cloud.
+    2. Show me a plan: each workload, its Runpod target (Pod, queue endpoint, load-balancing
+       endpoint, Public Endpoint, Instant Cluster, or @app.task), the GPU mapping, the storage
+       plan, what stays on Google Cloud, and how Runpod will authenticate back to it. Include a
+       cost estimate from the live Runpod catalog and flag anything with no direct equivalent
+       (VPC, IAM service accounts, CMEK, Spot).
+    3. Wait for my approval before creating anything billable on Runpod.
+    4. Migrate one workload end to end: image, registry credential, secrets, deploy, and the
+       client code change. If we use Terraform, add runpod provider resources next to the
+       google ones instead of replacing them.
+    5. Verify with a real request from outside Runpod and show me the output and latency next
+       to the Google Cloud result.
+    6. Never delete, stop, or undeploy Google Cloud resources without my explicit approval.
+       When I approve, list the exact gcloud commands first.
+    ```
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+**The image pull fails with an authentication error.** The registry credential is wrong or the service account can't read the repository. With `--username "_json_key"`, the password must be the raw JSON key file. With `_json_key_base64`, it must be the whole file base64 encoded on one line. An `oauth2accesstoken` credential stops working after 60 minutes. Confirm the service account has `roles/artifactregistry.reader` on the repository and that the image path includes a tag.
+
+**A load-balancing worker shows as running but never becomes ready.** The health check isn't reaching your server. Vertex AI and Cloud Run images usually listen on `8080`. Set `PORT` and `PORT_HEALTH` to that port, expose it in `ports`, and make sure `GET /ping` (or your `HEALTH_CHECK_PATH`) returns `200`. Misconfigured workers return `502` and are stopped after 8 minutes.
+
+**Requests return `{"error":"not allowed for QB API"}`.** You're calling a path on `https://ENDPOINT_ID.api.runpod.ai` for an endpoint that was created as queue-based. The endpoint type is fixed at creation. Recreate it with `"type": "LOAD_BALANCER"`.
+
+**Requests return `no workers available`.** The endpoint scaled to zero and no worker was ready in time. Retry with a delay, raise the idle timeout, or set one active worker for latency-sensitive paths.
+
+**Google client libraries fail with a default credentials error.** There's no metadata server on Runpod, so Application Default Credentials finds nothing. Load a service account key from a Runpod secret, as shown in Step 5, or write the key to a file and set `GOOGLE_APPLICATION_CREDENTIALS` to its path at startup.
+
+**The container exits with a CUDA or driver error.** The host's driver is older than your image's CUDA version. Set a CUDA floor (`--min-cuda-version`, `gpu.minCudaVersion`, or `min_cuda_version`) that matches the image. Cloud Run GPU instances use a recent driver, so images built against it may assume a newer CUDA than you had pinned elsewhere.
+
+**The handler receives `instances` as missing.** Queue endpoints deliver the request body's `input` object to the handler. Wrap the Vertex AI body: `{"input": {"instances": [...], "parameters": {...}}}`.
+
+**Long requests are cut off on a load-balancing endpoint.** Processing is limited to 5.5 minutes per request. Move the workload to a queue endpoint and call `/run`.
+
+**The Pod creates in the wrong data center or fails with a capacity error.** A network volume pins the Pod to its data center, and the GPU you asked for may not be in stock there. Check `runpodctl datacenter list`, pick a GPU type the data center has, or queue the Pod create through REST API v2.
+
+**Paths under `/gcs/` or a Cloud Storage FUSE mount don't exist.** Vertex AI training mounts buckets under `/gcs/`. On Runpod, copy the data to a volume and update the paths, or read from Cloud Storage with the client library.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Load-balancing endpoints" href="/serverless/load-balancing/overview" icon="scale-balanced" horizontal>
+    The full worker contract, limits, and health check behavior.
+  </Card>
+  <Card title="Terraform provider" href="/integrations/terraform/overview" icon="cubes" horizontal>
+    Install the provider and manage Runpod as code.
+  </Card>
+  <Card title="Network volumes" href="/storage/network-volumes" icon="hard-drive" horizontal>
+    Persistent storage for Pods and Serverless workers.
+  </Card>
+  <Card title="Runpod SDK" href="/sdk/overview" icon="python" horizontal>
+    Define queue endpoints, tasks, and APIs in Python.
+  </Card>
+</CardGroup>

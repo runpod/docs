@@ -1,0 +1,1381 @@
+---
+title: "Migrate from AWS to Runpod"
+sidebarTitle: "AWS"
+description: "Move GPU training, inference, and batch workloads from EC2, SageMaker AI, and Bedrock to Runpod while keeping data and auth on AWS."
+---
+
+This guide is for teams that run GPU workloads on Amazon Web Services and want to move the GPU-heavy part (training, inference, batch) to Runpod. Most teams keep S3, IAM, databases, and the rest of the application on AWS, so the guide treats that hybrid setup as the default and a full exit as the second case.
+
+[Amazon EC2](https://docs.aws.amazon.com/ec2/) GPU instances map to [Pods](/pods/overview). [Amazon SageMaker AI](https://docs.aws.amazon.com/sagemaker/) real-time, asynchronous, and batch inference map to [Serverless](/serverless/overview) endpoints. SageMaker training and processing jobs map to Pods or the Runpod SDK. [Amazon Bedrock](https://docs.aws.amazon.com/bedrock/) maps to [Public Endpoints](/public-endpoints/overview) or a Serverless vLLM endpoint. [AWS ParallelCluster](https://docs.aws.amazon.com/parallelcluster/) and SageMaker HyperPod map to [Instant Clusters](/instant-clusters). When you finish, the GPU workload runs on Runpod, your callers use a Runpod URL and API key, your Terraform manages both clouds, and the AWS resources you replaced are shut down.
+
+<Tip>
+You can hand this migration to a coding agent. See [Migrate with a coding agent](#migrate-with-a-coding-agent) for the setup commands and a prompt.
+</Tip>
+
+## How AWS maps to Runpod
+
+| AWS concept | Runpod equivalent | Notes |
+| --- | --- | --- |
+| EC2 GPU instance (G and P families) | [Pod](/pods/overview) | A Pod is a container, not a virtual machine. You pick a GPU type and count instead of an instance type. |
+| AMI, Deep Learning AMI, user data | Container image, [template](/pods/templates/overview), start command | Bake setup into the image. Runpod publishes PyTorch images such as `runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04`. |
+| Launch template with an Auto Scaling group | Serverless endpoint with min and max workers | Pods don't autoscale. Autoscaling is a Serverless feature. |
+| SageMaker AI real-time endpoint | Serverless [load balancing endpoint](/serverless/load-balancing/overview) or queue endpoint | Load balancing endpoints run your own HTTP server with a `/ping` health check, the closest match to a SageMaker inference container. |
+| SageMaker asynchronous inference, batch transform | Serverless queue endpoint (`/run` with a webhook) | Jobs queue, and workers scale to zero when idle. |
+| SageMaker Serverless Inference | Serverless endpoint | SageMaker Serverless Inference doesn't support GPUs. Runpod Serverless runs on GPUs or CPUs. |
+| SageMaker training and processing jobs | Pod, or `@app.task` in the [Runpod SDK](/sdk/overview) | `@app.task` creates one Pod per call that runs to completion and terminates. |
+| SageMaker Studio, notebook instances | Pod with JupyterLab | Runpod official images start JupyterLab on port 8888. |
+| SageMaker JumpStart, Amazon Bedrock | [Public Endpoints](/public-endpoints/overview) or a Serverless [vLLM endpoint](/serverless/vllm/overview) | Public Endpoints cover only the models in the [model reference](/public-endpoints/reference). For any other open-weight model, deploy vLLM. |
+| AWS Batch, ECS on GPU, EKS GPU node groups | Serverless queue endpoint, Pods, or [SkyPilot](/integrations/skypilot) and [dstack](/integrations/dstack) | Run each container as an endpoint or a Pod. SkyPilot and dstack schedule jobs onto Runpod from their own control planes. |
+| AWS ParallelCluster, SageMaker HyperPod | [Instant Clusters](/instant-clusters) with [Slurm](/instant-clusters/slurm-clusters) | Multi-node clusters with Slurm preinstalled. Capacity depends on current stock. HyperPod's EKS orchestration has no managed counterpart. |
+| Amazon ECR | Any registry, or ECR with a [delegation](/tutorials/pods/use-private-ecr-images) | Runpod pulls private ECR images through cross-account access you grant on the repository. |
+| EBS root volume | Container disk | Ephemeral. Erased when the Pod stops. |
+| EBS data volume | Volume disk, or a [network volume](/storage/network-volumes) | A volume disk is deleted with its Pod. A network volume exists independently of compute. |
+| Amazon EFS, FSx for Lustre | Network volume, [high-performance storage](/storage/high-performance-storage) | Pinned to one data center. |
+| Amazon S3 | Keep S3, or a network volume with the [S3-compatible API](/storage/s3-api) | The Runpod S3-compatible API is a file interface to a network volume. It isn't a general object store. |
+| Security groups, load balancers | [Exposed ports](/pods/configuration/expose-ports), Serverless endpoint URLs | HTTP ports get an HTTPS proxy URL. TCP ports get a public IP and mapped port. |
+| VPC private networking | [Global networking](/pods/networking) between Pods | A private network across your own Pods. It doesn't peer with a VPC. |
+| AWS Secrets Manager, SSM Parameter Store | [Secrets](/pods/templates/secrets) | Referenced from environment variables as `{{ RUNPOD_SECRET_name }}`. |
+| Regions and Availability Zones | Data centers | List them with `runpodctl datacenter list`. |
+| On-Demand, per-second billing | On-demand Pods and Serverless, per-second billing | No data ingress or egress fees on Runpod. |
+| Spot Instances | On-demand Pods, or Serverless with scale to zero | runpodctl, REST API v2, and the Terraform provider create on-demand Pods. For interruptible batch work, use a Serverless queue endpoint that scales to zero between jobs. |
+| Savings Plans, Capacity Reservations, Capacity Blocks for ML | Custom plans through Runpod sales | Runpod savings plans are deprecated and can't be purchased. See [Pod pricing](/pods/pricing). |
+| Terraform AWS provider, CloudFormation | [Runpod Terraform provider](/integrations/terraform/overview) 2.x | Built on REST API v2. |
+| AWS CLI, boto3, AWS APIs | [runpodctl](/runpodctl/overview), the [Runpod SDK](/sdk/overview), [REST API v2](/api-reference-v2/overview) | One API at `https://api.runpod.io/v2`. |
+| IAM users, roles, SigV4 | [API keys](/get-started/credentials) sent as a Bearer token | Keys can be scoped as All, Restricted, or Read Only. |
+| AWS Organizations, IAM Identity Center | Teams and [organizations](/organizations/orgs-overview) | Organizations have built-in roles (admin, billing, developer, contributor) and custom roles. |
+| CloudWatch Logs and metrics | `runpodctl pod logs`, `runpodctl serverless logs`, endpoint metrics | Logs are read live from Pods and workers. To keep history, ship logs from your container to CloudWatch or another log service. |
+
+## What's different
+
+### What works differently
+
+**Pods are containers.** An EC2 instance boots an AMI with its own kernel, systemd, and Docker daemon. A Pod runs one container image. Docker Compose isn't available, UDP ports aren't exposed, and Windows images aren't supported. Images must be `linux/amd64`, so images built for Graviton (`g5g`) or other arm64 instances need a rebuild.
+
+**Setup moves from boot time to build time.** A user data script runs as root at first boot. On Runpod, put the same commands in a Dockerfile, and keep only the final long-running command as the container's start command.
+
+**Authentication is a Bearer token.** Calls to `sagemaker-runtime` and `bedrock-runtime` are signed with SigV4 from IAM credentials. Runpod calls are HTTPS requests with `Authorization: Bearer YOUR_API_KEY`. There is no request signing and no instance role.
+
+**Health checks are similar, ports aren't.** SageMaker sends `GET /ping` to port 8080 and expects a `200`. Runpod load balancing endpoints also poll `GET /ping` by default and treat `200` as healthy, `204` as initializing, and anything else as unhealthy. The default port is 80, set through the `PORT` and `PORT_HEALTH` environment variables. See [Step 4](#step-4-move-your-images-and-code).
+
+**Model artifacts aren't unpacked for you.** SageMaker copies `model.tar.gz` from S3 into `/opt/ml/model` before your container starts. On Runpod you bake the model into the image, attach a network volume, use [cached models](/serverless/endpoints/model-caching) for Hugging Face models, or download from S3 at startup.
+
+**Autoscaling is built into the endpoint.** SageMaker registers a production variant with Application Auto Scaling and attaches a policy. A Runpod endpoint has min workers, max workers, an idle timeout, and one scaler (queue delay or request count). Scale to zero is the default (min workers is 0). On SageMaker, scale to zero needs asynchronous inference, Serverless Inference, or inference components with a step scaling policy.
+
+**Timeouts differ.** A SageMaker real-time container must answer `/invocations` within 60 seconds. A Runpod load balancing endpoint allows 5.5 minutes of processing per request and 30 MB payloads. A queue endpoint's execution timeout defaults to 10 minutes in the console (5 minutes when you create the endpoint through REST API v2) and can be raised up to 7 days.
+
+**Storage is tied to a data center.** A network volume lives in one data center, and anything that mounts it runs there. Choose the data center by GPU stock first, then create the volume.
+
+**Billing is prepaid by default.** Runpod accounts hold a credit balance. When the balance reaches \$0, running Pods are stopped, and Pods without a network volume are terminated. Organizations, the enterprise account model, are invoiced post-paid instead. See [Pod pricing](/pods/pricing).
+
+### What has no direct equivalent
+
+On the Runpod side:
+
+- **VPC, security groups, PrivateLink.** Runpod has no VPC peering or private link into AWS. Exposed Pod ports are reachable from the internet, and the HTTP proxy URL is unauthenticated, so put your own auth in front of anything you expose. Workaround: call AWS over its public endpoints with scoped credentials, or call your own API gateway.
+- **IAM roles and instance profiles.** A Pod or worker has no AWS identity. Workaround: create a narrowly scoped IAM user or role, store its keys as Runpod secrets, and inject them as `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. For single objects, pass presigned S3 URLs in the request instead of credentials.
+- **KMS and customer-managed keys.** The Runpod S3-compatible API doesn't support bucket policies or ACLs, so there's nowhere to attach a KMS key policy. Workaround: keep regulated data in S3 under your KMS keys and read it at run time, or encrypt before writing to a volume.
+- **Multi-model endpoints, production variants, shadow variants, Model Monitor.** One Runpod endpoint runs one image. Workaround: one endpoint per model, a router in your own code inside a load balancing worker, and [rolling releases](/serverless/endpoints/rolling-releases) for updates.
+- **Bedrock features beyond inference** (Guardrails, Knowledge Bases, Agents) and models that are only offered through Bedrock. A vLLM endpoint serves open-weight models, and Public Endpoints serve the listed models. Keep the other calls on Bedrock.
+- **Capacity Blocks, Capacity Reservations, and Savings Plans.** Runpod has no self-serve future-dated reservation, and its savings plans can no longer be purchased. A running on-demand Pod isn't displaced by other users, but a stopped Pod releases its GPU, so starting it again depends on stock at that moment. For committed capacity, talk to Runpod sales.
+- **Spot Instances.** runpodctl, REST API v2, and the Terraform provider create on-demand Pods. Workaround: run Spot-style batch work on on-demand Pods that you delete when the job ends, or on a Serverless queue endpoint that scales to zero. Keep checkpointing to a network volume so a job can resume on a new Pod.
+- **Compliance controls as IAM policy.** Runpod expresses placement as deploy-time filters instead: Secure Cloud runs in T3 and T4 data centers with partners that hold SOC 2, ISO 27001, and PCI DSS certifications, and `runpodctl pod create` accepts `--country-code` and `--compliance` to restrict where a Pod lands. See [Security and compliance](/references/security-and-compliance).
+
+On the AWS side:
+
+- **Per-second GPU Serverless with scale to zero as the default.** SageMaker Serverless Inference doesn't support GPUs.
+- **No data transfer fees.** Runpod doesn't charge for ingress or egress. AWS bills data transferred out of S3 and EC2 to the internet.
+- **Cached models.** Runpod can cache a Hugging Face model on the host so workers load it without baking it into the image. See [cached models](/serverless/endpoints/model-caching).
+
+## Requirements
+
+- An AWS identity that can list and describe EC2, SageMaker, ECR, S3, CloudWatch Logs, and Application Auto Scaling resources, plus permission to delete them at the end.
+- The [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) configured for each account and Region you use.
+- A [Runpod account](https://www.console.runpod.io) with credits and an [API key](/get-started/credentials).
+- Docker, to rebuild or retag images for `linux/amd64`.
+- Terraform 1.6 or later, if you manage infrastructure as code.
+
+## Step 1: Take inventory of what you run on AWS
+
+List every GPU resource before you change anything. Run the commands once per Region.
+
+List running GPU instances with their type, AMI, and Availability Zone:
+
+```bash
+aws ec2 describe-instances \
+  --filters "Name=instance-type,Values=g4dn.*,g5.*,g5g.*,g6.*,g6e.*,g7.*,g7e.*,p3dn.*,p4d.*,p4de.*,p5.*,p5e.*,p5en.*,p6*" \
+            "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+  --query "Reservations[].Instances[].[InstanceId,InstanceType,ImageId,State.Name,Placement.AvailabilityZone,Tags[?Key=='Name']|[0].Value]" \
+  --output table
+```
+
+Stopped instances appear too, because their EBS volumes still bill. For each instance, export the user data script, which is your setup recipe:
+
+```bash
+aws ec2 describe-instance-attribute --instance-id i-0123456789abcdef0 \
+  --attribute userData --query "UserData.Value" --output text | base64 --decode
+```
+
+List launch templates and Auto Scaling groups, which hold the same settings for fleets:
+
+```bash
+aws ec2 describe-launch-templates --query "LaunchTemplates[].[LaunchTemplateName,LaunchTemplateId]" --output table
+aws autoscaling describe-auto-scaling-groups \
+  --query "AutoScalingGroups[].[AutoScalingGroupName,MinSize,MaxSize,DesiredCapacity]" --output table
+```
+
+List SageMaker endpoints, then walk each one from endpoint to endpoint configuration to model. The model holds the image URI, the model artifact location, and the environment variables:
+
+```bash
+aws sagemaker list-endpoints --query "Endpoints[].[EndpointName,EndpointStatus]" --output table
+aws sagemaker describe-endpoint --endpoint-name my-endpoint --query "EndpointConfigName"
+aws sagemaker describe-endpoint-config --endpoint-config-name my-endpoint-config \
+  --query "{variants:ProductionVariants,async:AsyncInferenceConfig}"
+aws sagemaker describe-model --model-name my-model \
+  --query "PrimaryContainer.{image:Image,model:ModelDataUrl,env:Environment}"
+```
+
+An `AsyncInferenceConfig` in the output means the endpoint is asynchronous and maps to a queue endpoint. Export the autoscaling settings for each variant:
+
+```bash
+aws application-autoscaling describe-scalable-targets --service-namespace sagemaker
+aws application-autoscaling describe-scaling-policies --service-namespace sagemaker
+```
+
+List the remaining SageMaker and Bedrock resources that bill while idle:
+
+```bash
+aws sagemaker list-notebook-instances --query "NotebookInstances[].[NotebookInstanceName,InstanceType,NotebookInstanceStatus]" --output table
+aws sagemaker list-apps --query "Apps[].[DomainId,AppType,AppName,Status]" --output table
+aws sagemaker list-training-jobs --status-equals InProgress
+aws bedrock list-provisioned-model-throughputs
+aws bedrock list-imported-models
+```
+
+List images, storage, and cluster resources:
+
+```bash
+aws ecr describe-repositories --query "repositories[].repositoryUri" --output text
+aws ec2 describe-volumes --query "Volumes[].[VolumeId,Size,State,Attachments[0].InstanceId]" --output table
+aws efs describe-file-systems --query "FileSystems[].[FileSystemId,Name,SizeInBytes.Value]" --output table
+aws fsx describe-file-systems --query "FileSystems[].[FileSystemId,FileSystemType,StorageCapacity]" --output table
+aws batch describe-compute-environments --query "computeEnvironments[].computeEnvironmentName"
+aws ecs list-clusters
+aws eks list-clusters
+```
+
+Then find the code that calls AWS. This search covers boto3 clients, the SageMaker Python SDK, the SageMaker container contract, CLI calls, and Terraform:
+
+```bash
+grep -rnE "sagemaker-runtime|invoke_endpoint|bedrock-runtime|\.converse\(|invoke_model|from sagemaker|model_fn|/invocations|/opt/ml/|aws (ec2|sagemaker|ecr|s3) |dkr\.ecr\.|169\.254\.169\.254|aws_sagemaker_|aws_instance|aws_launch_template" \
+  --include="*.py" --include="*.ts" --include="*.js" --include="*.go" --include="*.sh" \
+  --include="*.tf" --include="*.yaml" --include="*.yml" --include="Dockerfile*" .
+```
+
+A match on `169.254.169.254` is a call to the EC2 instance metadata service, which doesn't exist on Runpod. Record, for each workload: image, start command, environment variables, ports, disk sizes, GPU model and count, Region, autoscaling limits, and where its data lives.
+
+## Step 2: Set up Runpod
+
+Create an account, add credits, and [create an API key](/get-started/credentials#create-an-api-key). Then install the tools.
+
+```bash
+# runpodctl
+curl -fsSL https://cli.runpod.net | sudo bash
+
+# Runpod SDK (Python 3.10 to 3.14), which includes the rp CLI
+pip install runpod
+
+# Authenticate both
+export RUNPOD_API_KEY="YOUR_API_KEY"
+rp login
+```
+
+`rp login` stores credentials in `~/.runpod/config.toml`. On macOS you can install runpodctl with `brew install runpod/runpodctl/runpodctl`. To let an AI tool manage resources, connect the [Runpod MCP server](/get-started/mcp-servers). For infrastructure as code, see [Migrate your Terraform](#migrate-your-terraform).
+
+Check which GPUs and data centers have stock before you plan placements:
+
+```bash
+runpodctl gpu list
+runpodctl datacenter list
+```
+
+## Step 3: Choose where each workload lands
+
+| AWS workload | Runpod target | Why |
+| --- | --- | --- |
+| EC2 GPU instance you SSH into, long training runs, notebooks | Pod | Persistent container with SSH, JupyterLab, and a volume. |
+| SageMaker real-time endpoint with a custom container (`/invocations` and `/ping`) | Serverless load balancing endpoint | Your HTTP server runs unchanged apart from ports. |
+| SageMaker real-time endpoint built on `inference.py` (`model_fn`, `predict_fn`) | Serverless queue endpoint | A handler wraps the same functions. You get queueing and retries. |
+| SageMaker asynchronous inference, batch transform, AWS Batch array jobs | Serverless queue endpoint | Submit with `/run`, receive results by webhook, scale to zero between batches. |
+| SageMaker training or processing job launched from code | `@app.task` in the Runpod SDK, or a Pod | One ephemeral Pod per call. |
+| Bedrock on-demand calls to an open-weight model | Public Endpoint, if the model is [listed](/public-endpoints/reference) | No deployment to manage. |
+| Bedrock Provisioned Throughput, Custom Model Import, JumpStart LLM endpoints | Serverless vLLM endpoint | OpenAI-compatible API on your own workers, with your own weights. |
+| ParallelCluster or HyperPod Slurm cluster | Instant Cluster with Slurm | Multi-node, high-speed networking between nodes. |
+| ECS or EKS GPU services | Serverless endpoint, or Pods through SkyPilot or dstack | Pick Serverless when the service is request driven. |
+| Lambda functions | Keep on AWS | Move a function only when it's glue next to a GPU workload and benefits from running beside it, as a CPU Serverless endpoint. |
+
+Choose queue endpoints when every request must be processed, jobs run long, or traffic arrives in bursts. Choose load balancing endpoints for low-latency request and response traffic with your own routes. Load balancing endpoints don't queue: requests are dropped when all workers are busy, and there's no built-in retry.
+
+### Map EC2 instance types to Runpod GPUs
+
+Runpod selects GPUs by type ID, and Serverless endpoints select by pool. The GPU details below come from the EC2 instance type specifications and the [Runpod GPU reference](/references/gpu-types).
+
+| EC2 instance family | GPU (per instance) | Runpod GPU type ID | Serverless pool |
+| --- | --- | --- | --- |
+| `g4dn` | NVIDIA T4 16 GB (1, 4, or 8) | `NVIDIA RTX A4000`, `NVIDIA RTX 2000 Ada Generation` (16 GB), or `NVIDIA L4` (24 GB) | `AMPERE_16`, `AMPERE_24` |
+| `g5` | NVIDIA A10G 24 GB (1, 4, or 8) | `NVIDIA RTX A5000`, `NVIDIA L4`, `NVIDIA GeForce RTX 4090` | `AMPERE_24`, `ADA_24` |
+| `g5g` | NVIDIA T4g 16 GB (1 or 2), Graviton | Same as `g4dn`, after an amd64 rebuild | `AMPERE_16` |
+| `g6`, `gr6` | NVIDIA L4 24 GB (`g6`: 1, 4, or 8; `gr6`: 1) | `NVIDIA L4` | `AMPERE_24` |
+| `g6e` | NVIDIA L40S 48 GB (1, 4, or 8) | `NVIDIA L40S` | `ADA_48_PRO` |
+| `g7` | NVIDIA RTX PRO 4500 32 GB (1, 2, 4, or 8) | `NVIDIA RTX PRO 4500 Blackwell` | Check `runpodctl gpu list` |
+| `g7e` | NVIDIA RTX PRO 6000 96 GB (1, 2, 4, or 8) | `NVIDIA RTX PRO 6000 Blackwell Server Edition` | Check `runpodctl gpu list` |
+| `p3dn` | NVIDIA V100 32 GB (8) | `Tesla V100-SXM2-32GB`, or a 48 GB type such as `NVIDIA RTX A6000` | `AMPERE_48` (for the 48 GB types) |
+| `p4d` | NVIDIA A100 40 GB (8) | `NVIDIA A100 80GB PCIe`, `NVIDIA A100-SXM4-80GB` | `AMPERE_80` |
+| `p4de` | NVIDIA A100 80 GB (8) | `NVIDIA A100 80GB PCIe`, `NVIDIA A100-SXM4-80GB` | `AMPERE_80` |
+| `p5` | NVIDIA H100 80 GB (1 or 8) | `NVIDIA H100 80GB HBM3`, `NVIDIA H100 PCIe` | `ADA_80_PRO` |
+| `p5e`, `p5en` | NVIDIA H200 141 GB (8) | `NVIDIA H200` | `HOPPER_141` |
+| `p6-b200` | NVIDIA B200 (8) | `NVIDIA B200` | Check `runpodctl gpu list` |
+| `p6-b300` | NVIDIA B300 (8) | `NVIDIA B300 SXM6 AC` | Check `runpodctl gpu list` |
+| `p6e-gb200` | NVIDIA B200 (4), Arm CPU | `NVIDIA B200`, after an amd64 rebuild | Check `runpodctl gpu list` |
+
+The EC2 specifications list the A10G and L4 at 22 GiB of accelerator memory and the L40S at 44 GiB. The fractional-GPU `g6f` sizes and the AMD Radeon `g4ad` family have no like-for-like type. Use a full 16 GB or 24 GB GPU. Choose by fit for the workload: the VRAM the model needs, then throughput.
+
+On EC2 the instance type fixes vCPUs, RAM, and GPU count together. On Runpod you set the GPU type and `--gpu-count`, and vCPU and RAM come with the GPU. Stock varies by data center and changes through the day, so run `runpodctl gpu list` before you commit to a type, and give Serverless endpoints more than one pool where your model allows it. For an 8-GPU node or several nodes working together, check stock for that GPU count or use an [Instant Cluster](/instant-clusters).
+
+## Step 4: Move your images and code
+
+### Make images portable
+
+Runpod runs `linux/amd64` images from any registry. Build with the platform flag, especially on Apple silicon or when the image was built for Graviton:
+
+```bash
+docker build --platform linux/amd64 -t YOUR_REGISTRY/my-worker:v1.0.0 .
+docker push YOUR_REGISTRY/my-worker:v1.0.0
+```
+
+Use a version tag or digest instead of `:latest`. If your image is built on an AWS Deep Learning Container, it runs on Runpod as long as it doesn't depend on SageMaker starting it with the `serve` or `train` argument. To drop the AWS base, start from a Runpod PyTorch image or an `nvidia/cuda` image. The host provides the NVIDIA driver, as it does on SageMaker, so don't install drivers in the image. Set a CUDA floor at deploy time with `--min-cuda-version` so workers land on hosts that match your framework build.
+
+### Keep images in ECR
+
+You can leave images in a private ECR repository. Runpod pulls them through an ECR delegation: you grant two fixed Runpod IAM roles pull access on the repository, then register the repository with Runpod. There are no tokens to rotate.
+
+<Steps>
+  <Step title="Grant pull access on the repository">
+    Apply this repository policy. The two role ARNs belong to Runpod and must be used exactly as shown.
+
+    ```bash
+    aws ecr set-repository-policy \
+      --repository-name my-worker \
+      --policy-text '{
+        "Version": "2012-10-17",
+        "Statement": [{
+          "Sid": "AllowRunpodPull",
+          "Effect": "Allow",
+          "Principal": "*",
+          "Action": [
+            "ecr:GetAuthorizationToken",
+            "ecr:BatchCheckLayerAvailability",
+            "ecr:GetDownloadUrlForLayer",
+            "ecr:BatchGetImage"
+          ],
+          "Condition": {
+            "StringEquals": {
+              "aws:PrincipalArn": [
+                "arn:aws:iam::550005742258:role/prod-us-east-1-deployment-role",
+                "arn:aws:iam::550005742258:role/prod-us-west-2-deployment-role"
+              ]
+            }
+          }
+        }]
+      }'
+    ```
+
+    If your AWS organization uses service control policies, confirm they don't block `ecr:GetAuthorizationToken`.
+  </Step>
+  <Step title="Register the delegation with Runpod">
+    Register the repository ARN with REST API v2. Runpod validates the policy at this point, so the call fails if step 1 is missing.
+
+    ```bash
+    curl -s -X POST https://api.runpod.io/v2/registries/delegations \
+      -H "Authorization: Bearer $RUNPOD_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"name": "my-worker-ecr", "resource": "arn:aws:ecr:us-east-1:123456789012:repository/my-worker"}'
+    ```
+
+    In the console, the same step is **Settings**, then **Container Registry Authentication**, **Add Credential**, and the **AWS ECR** tab, where you enter the full image URI including a tag. In Terraform, use `runpod_registry_delegation`.
+  </Step>
+  <Step title="Deploy with the ECR image URI">
+    Use `123456789012.dkr.ecr.us-east-1.amazonaws.com/my-worker:v1.0.0` as the image, and leave the registry credential unset. Runpod matches the image to the delegation. Any tag in a registered repository works.
+  </Step>
+</Steps>
+
+The [private ECR tutorial](/tutorials/pods/use-private-ecr-images) walks through this for Pods. The REST API v2 reference describes delegations as covering Pods and Serverless endpoints, so test a Serverless deploy from ECR before you depend on it. For other private registries, create a credential with `runpodctl registry create` and pass its ID as `--registry-auth-id`.
+
+<Warning>
+Don't store the output of `aws ecr get-login-password` as a Runpod registry credential. An ECR authorization token is valid for 12 hours, so image pulls for new workers start failing after it expires.
+</Warning>
+
+### Translate a SageMaker `inference.py` to a queue endpoint
+
+The SageMaker framework containers load a script that defines `model_fn`, `input_fn`, `predict_fn`, and `output_fn`. Here is a typical PyTorch script:
+
+```python inference.py
+import json
+import os
+
+import torch
+
+
+def model_fn(model_dir):
+    model = torch.jit.load(os.path.join(model_dir, "model.pt"), map_location="cuda")
+    model.eval()
+    return model
+
+
+def input_fn(request_body, request_content_type):
+    if request_content_type != "application/json":
+        raise ValueError(f"Unsupported content type: {request_content_type}")
+    return torch.tensor(json.loads(request_body)["inputs"], device="cuda")
+
+
+def predict_fn(input_data, model):
+    with torch.no_grad():
+        return model(input_data)
+
+
+def output_fn(prediction, content_type):
+    return json.dumps({"predictions": prediction.cpu().tolist()})
+```
+
+On Runpod, a handler calls the same four functions. Keep `inference.py` as it is and add this file:
+
+```python handler.py
+import json
+import os
+
+import runpod
+
+from inference import input_fn, model_fn, output_fn, predict_fn
+
+# Load once per worker, outside the handler, so warm requests skip it.
+model = model_fn(os.environ.get("MODEL_DIR", "/opt/ml/model"))
+
+
+def handler(job):
+    body = json.dumps(job["input"])
+    data = input_fn(body, "application/json")
+    prediction = predict_fn(data, model)
+    return json.loads(output_fn(prediction, "application/json"))
+
+
+runpod.serverless.start({"handler": handler})
+```
+
+The request body that SageMaker passed as raw bytes arrives as `job["input"]`, already parsed from JSON. The handler's return value becomes the `output` field of the response. Package it with the model files that SageMaker used to unpack from `model.tar.gz`:
+
+```bash
+aws s3 cp s3://my-bucket/models/model.tar.gz .
+mkdir -p model && tar -xzf model.tar.gz -C model
+```
+
+```dockerfile Dockerfile
+FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
+
+WORKDIR /app
+RUN pip install --no-cache-dir runpod
+
+# SageMaker unpacked model.tar.gz here at start. Bake it in instead.
+COPY model/ /opt/ml/model/
+COPY inference.py handler.py /app/
+
+CMD ["python", "-u", "/app/handler.py"]
+```
+
+Baking the model into the image keeps `/opt/ml/model` valid, so `inference.py` doesn't change. For large models, put the files on a network volume and set `MODEL_DIR=/runpod-volume/my-model` instead. If `model.tar.gz` contains `code/requirements.txt`, install it in the Dockerfile.
+
+### Run a SageMaker inference container on a load balancing endpoint
+
+A bring-your-own SageMaker container already serves `POST /invocations` and `GET /ping` on port 8080. That contract lines up with a Runpod load balancing endpoint:
+
+| | SageMaker real-time container | Runpod load balancing endpoint |
+| --- | --- | --- |
+| Health check | `GET /ping`, `200` means ready | `GET /ping` by default (`HEALTH_CHECK_PATH`), `200` healthy, `204` initializing, other unhealthy |
+| Port | 8080, fixed | `PORT` and `PORT_HEALTH`, each default 80 |
+| Inference route | `POST /invocations` | Any path your server defines, including `/invocations` |
+| Start command | `docker run IMAGE serve` | The image's own command, or one you set |
+| Model files | Copied to `/opt/ml/model` | Yours to provide |
+| Startup | Must pass health checks within 8 minutes | Misconfigured ports leave workers up for 8 minutes returning `502` |
+
+To run the container unchanged, set three things when you create the endpoint: `PORT=8080` and `PORT_HEALTH=8080` as environment variables, `8080/http` as the exposed port, and `serve` as the container command if your entrypoint dispatches on that argument. If `/ping` returns `200` before the model is loaded, change it to return `204` until the model is ready, so Runpod doesn't route requests to a worker that can't serve them. This minimal server shows the contract:
+
+```python serve.py
+import os
+import threading
+
+from fastapi import FastAPI, Request, Response
+
+app = FastAPI()
+model = None
+
+
+def load_model():
+    global model
+    import torch
+
+    loaded = torch.jit.load(os.path.join(os.environ.get("MODEL_DIR", "/opt/ml/model"), "model.pt"))
+    loaded.eval()
+    model = loaded
+
+
+@app.on_event("startup")
+def start_loading():
+    # Load in the background so the server can answer /ping while the model loads.
+    threading.Thread(target=load_model, daemon=True).start()
+
+
+@app.get("/ping")
+def ping():
+    # 204 while loading, 200 when ready.
+    return Response(status_code=200 if model is not None else 204)
+
+
+@app.post("/invocations")
+async def invocations(request: Request):
+    import torch
+
+    payload = await request.json()
+    with torch.no_grad():
+        prediction = model(torch.tensor(payload["inputs"]))
+    return {"predictions": prediction.tolist()}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", "8080")))
+```
+
+Callers reach it at `https://ENDPOINT_ID.api.runpod.ai/invocations` with a Bearer token. Runpod checks the API key before the request reaches your server.
+
+### Turn an EC2 user data script into a Pod image
+
+A GPU instance launched from a Deep Learning AMI often has a user data script like this one:
+
+```bash user-data.sh
+#!/bin/bash
+# Runs as root on first boot of a g6e.xlarge.
+aws s3 sync s3://my-bucket/checkpoints /opt/checkpoints
+pip install vllm
+MODEL=/opt/checkpoints/my-model
+vllm serve "$MODEL" --host 0.0.0.0 --port 8000
+```
+
+On Runpod, the install steps move into the image, and the commands that need run-time data stay in a start script:
+
+```dockerfile Dockerfile
+FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
+
+RUN pip install --no-cache-dir vllm awscli
+COPY start.sh /opt/app/start.sh
+CMD ["bash", "/opt/app/start.sh"]
+```
+
+```bash start.sh
+#!/bin/bash
+set -euo pipefail
+# AWS credentials arrive as environment variables from Runpod secrets.
+aws s3 sync s3://my-bucket/checkpoints /workspace/checkpoints
+exec vllm serve /workspace/checkpoints/my-model --host 0.0.0.0 --port 8000
+```
+
+The script ends with `exec` so the server is the container's main process. Checkpoints go to `/workspace`, the volume mount, so they survive a Pod stop and the next start skips the download. The instance profile that gave the EC2 instance S3 access is replaced by scoped IAM keys stored as Runpod secrets. Step 6 creates the Pod.
+
+### Move training jobs
+
+A SageMaker training container reads data from `/opt/ml/input/data/CHANNEL`, reads hyperparameters from `/opt/ml/input/config/hyperparameters.json`, and writes the model to `/opt/ml/model`, which SageMaker uploads to S3. On Runpod, pass hyperparameters as environment variables or function arguments, read data from a network volume or sync it from S3 at start, and upload results yourself. With the Runpod SDK, a training job is a decorated function that runs on its own Pod and terminates when it returns:
+
+```python train.py
+import runpod
+
+app = runpod.App("training")
+checkpoints = runpod.NetworkVolume("checkpoints", size=100)
+
+
+@app.task(gpu="H100", mounts={"/checkpoints": checkpoints}, dependencies=["torch"])
+def train(epochs: int = 3, learning_rate: float = 3e-4):
+    import torch
+
+    # Your training loop. Write checkpoints under checkpoints.path.
+    run_dir = checkpoints.path / "run-1"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    torch.save({"epochs": epochs, "lr": learning_rate}, run_dir / "model.pt")
+    return {"checkpoint": str(run_dir)}
+
+
+@runpod.local_entrypoint
+def main():
+    print(train.remote(epochs=5))
+```
+
+Run it with `rp flash dev train.py`. See [Build an app](/sdk/apps/build-app) for the full set of options.
+
+## Step 5: Move your data and models
+
+You don't have to move data. A Pod or worker can read and write S3 over the public internet with IAM keys you store as secrets. Move data to Runpod when load time or transfer cost matters, which is usually true for model weights and training sets.
+
+<Note>
+AWS charges for data transferred out of S3 to the internet. Copying a dataset to Runpod is a one-time transfer, so estimate it from your bucket size and the [Amazon S3 pricing page](https://aws.amazon.com/s3/pricing/) before you start. Runpod doesn't charge for ingress or egress. In a hybrid setup, every read from S3 at run time is also egress, which is a reason to keep hot data on a network volume.
+</Note>
+
+| AWS storage | Runpod target | How to move it |
+| --- | --- | --- |
+| EBS root volume | Container disk | Rebuild as an image. Don't copy the disk. |
+| EBS data volume, instance store | Volume disk or network volume | Copy the files from the instance to S3, then sync into a Pod. |
+| EFS, FSx for Lustre | Network volume, or a [high-performance](/storage/high-performance-storage) network volume | Sync through S3, or `rsync` over SSH from an instance that mounts the file system. |
+| S3 model artifacts and datasets | Network volume, or leave in S3 | `aws s3 sync` from inside a Pod. |
+| Hugging Face models you mirrored to S3 | [Cached models](/serverless/endpoints/model-caching) | Reference the Hugging Face repo with `--model-reference` instead of copying. |
+
+Create the network volume in the data center where you plan to run, since everything that mounts it must run there:
+
+```bash
+runpodctl network-volume create --name training-data --size 500 --data-center-id US-GA-2
+```
+
+The most direct transfer runs inside a Pod with the volume attached, because data flows from S3 straight to Runpod. Create the IAM keys as [secrets](/pods/templates/secrets) named `aws_access_key_id` and `aws_secret_access_key`, start a Pod that maps them to environment variables, then sync:
+
+```bash
+runpodctl pod create --name s3-transfer \
+  --image runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04 \
+  --gpu-id "NVIDIA RTX A4000" \
+  --network-volume-id VOLUME_ID \
+  --env '{"AWS_ACCESS_KEY_ID":"{{ RUNPOD_SECRET_aws_access_key_id }}","AWS_SECRET_ACCESS_KEY":"{{ RUNPOD_SECRET_aws_secret_access_key }}","AWS_DEFAULT_REGION":"us-east-1"}'
+
+# Then, in the Pod's terminal:
+pip install awscli
+aws s3 sync s3://my-bucket/datasets/imagenet /workspace/datasets/imagenet
+```
+
+Delete the transfer Pod when the sync finishes. The volume keeps the data. There are three other routes:
+
+- **Cloud Sync.** On a Pod's page in the console, **Cloud Sync** copies between the Pod and an S3 bucket using an access key, secret key, Region, and bucket path. See [Sync data with cloud storage](/pods/storage/cloud-sync).
+- **runpodctl.** `runpodctl send` on your machine and `runpodctl receive` on a Pod copy files with a one-time code. This suits small and medium transfers. See [Transfer files](/pods/storage/transfer-files), which also covers `scp` and `rsync` over SSH.
+- **The S3-compatible API.** Point the AWS CLI at the volume to upload from your machine without a Pod, as shown below. It needs Runpod S3 API keys and a data center that supports the API.
+
+```bash
+aws s3 cp --recursive ./models/ s3://VOLUME_ID/models/ \
+  --region US-GA-2 \
+  --endpoint-url https://s3api-us-ga-2.runpod.io/
+```
+
+<Warning>
+The Runpod S3-compatible API is not Amazon S3. It uses a per-data-center endpoint, separate S3 API keys from the Runpod console, the data center ID as the Region, and the volume ID as the bucket. Presigned URLs, versioning, bucket policies, ACLs, and object tagging aren't supported, and `aws s3 sync` can run into issues on directories with more than 10,000 files. Code that needs those features should keep using S3. See the [compatibility reference](/storage/s3-api#s3-api-compatibility-reference).
+</Warning>
+
+Network volumes mount at `/workspace` on Pods and `/runpod-volume` on Serverless workers, so paths in your code may need a prefix change between the two.
+
+## Step 6: Deploy on Runpod
+
+### Deploy a Pod
+
+Create the Pod from the image you built in Step 4. This replaces `aws ec2 run-instances` with a user data file:
+
+<Tabs>
+  <Tab title="Before: AWS CLI">
+    ```bash
+    aws ec2 run-instances \
+      --image-id ami-0123456789abcdef0 \
+      --instance-type g6e.xlarge \
+      --key-name my-key \
+      --security-group-ids sg-0123456789abcdef0 \
+      --iam-instance-profile Name=s3-read-profile \
+      --block-device-mappings '[{"DeviceName":"/dev/sda1","Ebs":{"VolumeSize":200}}]' \
+      --user-data file://user-data.sh
+    ```
+  </Tab>
+  <Tab title="After: runpodctl">
+    ```bash
+    runpodctl pod create --name vllm-server \
+      --image YOUR_REGISTRY/vllm-server:v1.0.0 \
+      --gpu-id "NVIDIA L40S" \
+      --container-disk-in-gb 50 \
+      --volume-in-gb 200 \
+      --ports "8000/http" \
+      --min-cuda-version 12.8 \
+      --env '{"AWS_ACCESS_KEY_ID":"{{ RUNPOD_SECRET_aws_access_key_id }}","AWS_SECRET_ACCESS_KEY":"{{ RUNPOD_SECRET_aws_secret_access_key }}","AWS_DEFAULT_REGION":"us-east-1"}'
+    ```
+  </Tab>
+</Tabs>
+
+The security group becomes the `--ports` list, the instance profile becomes two secret-backed environment variables, and the root volume size splits into a container disk and a persistent volume at `/workspace`. The server is reachable at `https://POD_ID-8000.proxy.runpod.net`. That URL is public and has a 100-second request timeout, so turn on your server's own API key check before you send it real traffic. Check status and logs with:
+
+```bash
+runpodctl pod get POD_ID
+runpodctl pod logs POD_ID --follow
+```
+
+To override the image's command at deploy time, use `--docker-args` in runpodctl or the `cmd` field in REST API v2. In the console, deploy from **Pods**, then **Deploy**.
+
+### Deploy a queue endpoint
+
+Push the handler image from Step 4, create a Serverless template for it, then create the endpoint:
+
+```bash
+runpodctl template create --name sm-migrated-worker \
+  --image YOUR_REGISTRY/sm-migrated-worker:v1.0.0 \
+  --container-disk-in-gb 20 \
+  --serverless
+
+runpodctl serverless create --name sm-migrated \
+  --template-id TEMPLATE_ID \
+  --gpu-id AMPERE_24 \
+  --workers-min 0 --workers-max 3 \
+  --idle-timeout 30 \
+  --min-cuda-version 12.8
+```
+
+`--workers-min` and `--workers-max` replace the `MinCapacity` and `MaxCapacity` of the Application Auto Scaling target. With `--workers-min 0` the endpoint bills nothing while idle. Set `--workers-min 1` to keep one worker warm, as an always-on SageMaker instance did. Send a test job:
+
+```bash
+runpodctl serverless run ENDPOINT_ID --input '{"inputs": [[1.0, 2.0, 3.0]]}'
+```
+
+### Deploy a load balancing endpoint
+
+`runpodctl serverless create` creates queue endpoints, so create load balancing endpoints with REST API v2, Terraform, or the console (**Serverless**, **New Endpoint**, then **Load Balancer** under **Endpoint Type**). This request deploys the SageMaker container from Step 4 on port 8080:
+
+```bash
+curl -s -X POST https://api.runpod.io/v2/serverless \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "sm-realtime",
+    "type": "LOAD_BALANCER",
+    "image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/my-worker:v1.0.0",
+    "cmd": ["serve"],
+    "ports": ["8080/http"],
+    "env": {"PORT": "8080", "PORT_HEALTH": "8080"},
+    "disk": 20,
+    "gpu": {"pools": ["AMPERE_24"], "count": 1, "minCudaVersion": "12.8"},
+    "workers": {"min": 0, "max": 3, "idleTimeout": 30},
+    "scaling": {"type": "REQUEST_COUNT", "requestCount": 4},
+    "timeout": 600000
+  }'
+```
+
+Load balancing endpoints accept only the `REQUEST_COUNT` scaler. The response includes `requestUrls.base`, which is the URL your callers use. Remove `"cmd": ["serve"]` if your image starts its server without that argument. The endpoint type can't be changed after creation.
+
+### Deploy an LLM endpoint
+
+For Bedrock and JumpStart replacements, check the [Public Endpoint model reference](/public-endpoints/reference) first. If your model is listed, there is nothing to deploy. Otherwise deploy the vLLM worker from the Hub with your model:
+
+```bash
+runpodctl hub search vllm
+runpodctl serverless create --hub-id HUB_ID --name my-llm \
+  --env MODEL_NAME=meta-llama/Llama-3.1-8B-Instruct
+```
+
+The endpoint serves an OpenAI-compatible API at `https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1`. For gated models, add a Hugging Face token. See [vLLM configuration](/serverless/vllm/configuration) for the environment variables.
+
+### Deploy a cluster
+
+Create Slurm clusters from the [Instant Clusters page](https://console.runpod.io/cluster) by choosing **Slurm Cluster** as the cluster type, or with the `runpod_cluster` Terraform resource. Slurm and munge are preinstalled and controller and agent roles are assigned for you. Review your `sbatch` scripts for paths, modules, and partition names that came from the ParallelCluster configuration. Cluster capacity depends on stock at the time you create it.
+
+## Step 7: Update the code that calls AWS
+
+### Replace SageMaker runtime calls
+
+A real-time endpoint call moves from a SigV4-signed boto3 call to an HTTPS request with a Bearer token.
+
+<Tabs>
+  <Tab title="Before: boto3">
+    ```python
+    import json
+
+    import boto3
+
+    runtime = boto3.client("sagemaker-runtime", region_name="us-east-1")
+
+    response = runtime.invoke_endpoint(
+        EndpointName="my-endpoint",
+        ContentType="application/json",
+        Body=json.dumps({"inputs": [[1.0, 2.0, 3.0]]}),
+    )
+    result = json.loads(response["Body"].read().decode("utf-8"))
+    print(result["predictions"])
+    ```
+  </Tab>
+  <Tab title="After: queue endpoint">
+    ```python
+    import os
+
+    import runpod
+
+    runpod.api_key = os.environ["RUNPOD_API_KEY"]
+    endpoint = runpod.Endpoint(os.environ["ENDPOINT_ID"])
+
+    result = endpoint.run_sync({"inputs": [[1.0, 2.0, 3.0]]}, timeout=60)
+    print(result["predictions"])
+    ```
+  </Tab>
+  <Tab title="After: load balancing endpoint">
+    ```python
+    import os
+
+    import requests
+
+    response = requests.post(
+        f"https://{os.environ['ENDPOINT_ID']}.api.runpod.ai/invocations",
+        headers={"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}"},
+        json={"inputs": [[1.0, 2.0, 3.0]]},
+        timeout=120,
+    )
+    response.raise_for_status()
+    print(response.json()["predictions"])
+    ```
+  </Tab>
+</Tabs>
+
+On a queue endpoint the raw HTTP form is `POST https://api.runpod.ai/v2/ENDPOINT_ID/runsync` with the body `{"input": {...}}`, and the result is under `output` in the response. `/runsync` accepts payloads up to 20 MB. A load balancing endpoint that has scaled to zero can return an error while the first worker starts, so retry with a delay, or keep one worker warm.
+
+### Replace asynchronous inference
+
+SageMaker asynchronous inference reads the request from S3, writes the result to S3, and notifies through SNS. A queue endpoint takes the request in the call, and posts the result to a webhook.
+
+<Tabs>
+  <Tab title="Before: boto3">
+    ```python
+    import boto3
+
+    runtime = boto3.client("sagemaker-runtime", region_name="us-east-1")
+
+    response = runtime.invoke_endpoint_async(
+        EndpointName="my-async-endpoint",
+        InputLocation="s3://my-bucket/requests/job-123.json",
+        ContentType="application/json",
+    )
+    print(response["OutputLocation"])
+    ```
+  </Tab>
+  <Tab title="After: requests">
+    ```python
+    import os
+
+    import requests
+
+    response = requests.post(
+        f"https://api.runpod.ai/v2/{os.environ['ENDPOINT_ID']}/run",
+        headers={"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}"},
+        json={
+            "input": {"input_url": "https://my-bucket.s3.amazonaws.com/requests/job-123.json?X-Amz-Signature=..."},
+            "webhook": "https://api.example.com/runpod/webhook",
+            "policy": {"executionTimeout": 3600000},
+        },
+        timeout=30,
+    )
+    print(response.json()["id"])
+    ```
+  </Tab>
+</Tabs>
+
+`/run` accepts payloads up to 10 MB, so keep large inputs in S3 and pass a presigned URL, which your handler downloads. Have the handler upload large outputs to S3 with a presigned PUT URL or scoped keys, and return the object location. The webhook receives the job result when it finishes and should return `200`. Without a webhook, poll `GET /v2/ENDPOINT_ID/status/JOB_ID`. Results are kept for 30 minutes after completion. For batch transform, submit one `/run` job per record or per shard and let the endpoint scale out to its max workers.
+
+### Replace Bedrock calls
+
+The Converse API has its own request shape. Runpod's vLLM workers and LLM Public Endpoints use the OpenAI Chat Completions shape, so the request needs translating.
+
+<Tabs>
+  <Tab title="Before: Bedrock Converse">
+    ```python
+    import boto3
+
+    client = boto3.client("bedrock-runtime", region_name="us-east-1")
+
+    response = client.converse(
+        modelId="BEDROCK_MODEL_ID",
+        system=[{"text": "You are a concise assistant."}],
+        messages=[{"role": "user", "content": [{"text": "Name three GPU vendors."}]}],
+        inferenceConfig={"maxTokens": 256, "temperature": 0.2, "topP": 0.9},
+    )
+    print(response["output"]["message"]["content"][0]["text"])
+    print(response["usage"]["inputTokens"], response["usage"]["outputTokens"])
+    ```
+  </Tab>
+  <Tab title="After: OpenAI SDK on Runpod">
+    ```python
+    import os
+
+    from openai import OpenAI
+
+    client = OpenAI(
+        base_url=f"https://api.runpod.ai/v2/{os.environ['ENDPOINT_ID']}/openai/v1",
+        api_key=os.environ["RUNPOD_API_KEY"],
+    )
+
+    response = client.chat.completions.create(
+        model="meta-llama/Llama-3.1-8B-Instruct",
+        messages=[
+            {"role": "system", "content": "You are a concise assistant."},
+            {"role": "user", "content": "Name three GPU vendors."},
+        ],
+        max_tokens=256,
+        temperature=0.2,
+        top_p=0.9,
+    )
+    print(response.choices[0].message.content)
+    print(response.usage.prompt_tokens, response.usage.completion_tokens)
+    ```
+  </Tab>
+</Tabs>
+
+| Converse field | Chat Completions field |
+| --- | --- |
+| `modelId` | `model` (the Hugging Face model name the endpoint serves) |
+| `system: [{"text": ...}]` | A message with `"role": "system"` |
+| `messages[].content: [{"text": ...}]` | `messages[].content` as a string |
+| `inferenceConfig.maxTokens`, `temperature`, `topP`, `stopSequences` | `max_tokens`, `temperature`, `top_p`, `stop` |
+| `output.message.content[0].text` | `choices[0].message.content` |
+| `stopReason` | `choices[0].finish_reason` |
+| `usage.inputTokens`, `usage.outputTokens` | `usage.prompt_tokens`, `usage.completion_tokens` |
+| `converse_stream` | `stream=True` |
+
+For a Public Endpoint, use the model's slug in place of `ENDPOINT_ID`, for example `https://api.runpod.ai/v2/qwen3-32b-awq/openai/v1`. If you already call Bedrock through its OpenAI-compatible Chat Completions endpoint, the change is the base URL, the API key, and the model name. Code that uses `invoke_model` with a model's native body needs the same translation as Converse, starting from that model's request format. Tool use and model-specific fields depend on the model and vLLM settings, so test them before cutover.
+
+### Replace control-plane automation
+
+Scripts and CI jobs that manage AWS resources move to runpodctl or REST API v2. The [CLI command map](#cli-command-map) and [API map](#api-map) list the equivalents. Two patterns change shape:
+
+- **Deploying a new model version.** `UpdateEndpoint` with a new endpoint configuration becomes an image change on the endpoint: send `PATCH /v2/serverless/{id}` with the new `image`. Runpod creates a new release and deploys it as a [rolling release](/serverless/endpoints/rolling-releases), replacing workers as they cycle. Track it with `GET /v2/serverless/{id}/releases`. If you change the image with `runpodctl template update TEMPLATE_ID --image ...` instead, confirm that the endpoint's workers picked up the new image before you rely on it.
+- **Waiting for readiness.** Polling for `InService` becomes waiting for a worker (`runpodctl serverless create ... --wait`) or polling `runpodctl pod get POD_ID` until `runtimeStatus` is `running`.
+
+## Step 8: Verify, cut over, and shut down
+
+<Steps>
+  <Step title="Send real requests from outside">
+    Call the Runpod endpoint from the same network your callers use, with production-shaped payloads. Compare outputs with the AWS endpoint on a fixed set of inputs. Measure latency for warm requests and for a cold start from zero workers, and decide whether you need a warm worker.
+  </Step>
+  <Step title="Run both in parallel">
+    Keep the AWS endpoint serving. Send a copy of traffic, or a small share, to Runpod and watch error rates, queue delay, and worker counts with `runpodctl serverless health ENDPOINT_ID` and the endpoint's **Metrics** tab.
+  </Step>
+  <Step title="Shift traffic">
+    Move traffic in steps behind a flag or a weighted route in your own gateway. Keep the AWS endpoint until Runpod has carried full load through a peak.
+  </Step>
+  <Step title="Set a cost guard on Runpod">
+    Cap `--workers-max`, set an idle timeout and an execution timeout on each endpoint, and stop or delete Pods you aren't using. A stopped Pod still bills for its volume disk. Runpod accounts have a default spend limit of \$80 per hour across all resources. Turn on low balance notifications in [billing](/accounts-billing/billing), and review spend with `runpodctl billing pods` and `runpodctl billing serverless`.
+  </Step>
+  <Step title="Shut down AWS resources">
+    Delete what you replaced, in this order. Deleting a SageMaker endpoint doesn't delete its endpoint configuration or model, and terminating an instance doesn't always delete its volumes.
+  </Step>
+</Steps>
+
+Remove SageMaker autoscaling, endpoints, and notebooks:
+
+```bash
+aws application-autoscaling deregister-scalable-target --service-namespace sagemaker \
+  --resource-id endpoint/my-endpoint/variant/AllTraffic \
+  --scalable-dimension sagemaker:variant:DesiredInstanceCount
+aws sagemaker delete-endpoint --endpoint-name my-endpoint
+aws sagemaker delete-endpoint-config --endpoint-config-name my-endpoint-config
+aws sagemaker delete-model --model-name my-model
+aws sagemaker stop-notebook-instance --notebook-instance-name my-notebook
+aws sagemaker delete-notebook-instance --notebook-instance-name my-notebook
+aws bedrock delete-provisioned-model-throughput --provisioned-model-id PROVISIONED_MODEL_ARN
+```
+
+Terminate instances, then find what they left behind:
+
+```bash
+aws ec2 terminate-instances --instance-ids i-0123456789abcdef0
+aws ec2 describe-volumes --filters Name=status,Values=available --query "Volumes[].[VolumeId,Size]" --output table
+aws ec2 describe-snapshots --owner-ids self --query "Snapshots[].[SnapshotId,VolumeSize,StartTime]" --output table
+aws ec2 describe-addresses --query "Addresses[?AssociationId==null].[AllocationId,PublicIp]" --output table
+aws ec2 describe-nat-gateways --query "NatGateways[?State=='available'].[NatGatewayId,VpcId]" --output table
+```
+
+Delete each leftover resource after you confirm nothing else uses it:
+
+```bash
+aws ec2 delete-volume --volume-id vol-0123456789abcdef0
+aws ec2 delete-snapshot --snapshot-id snap-0123456789abcdef0
+aws ec2 release-address --allocation-id eipalloc-0123456789abcdef0
+aws ec2 delete-nat-gateway --nat-gateway-id nat-0123456789abcdef0
+aws ecr delete-repository --repository-name my-worker --force
+aws logs describe-log-groups --log-group-name-prefix /aws/sagemaker/ --query "logGroups[].logGroupName"
+aws logs delete-log-group --log-group-name /aws/sagemaker/Endpoints/my-endpoint
+```
+
+The shutdown checklist:
+
+- SageMaker endpoints, endpoint configurations, models, notebook instances, and Studio apps.
+- Bedrock Provisioned Throughput and imported models.
+- EC2 instances, Auto Scaling groups (set desired capacity to 0 first, or they relaunch instances), and launch templates.
+- EBS volumes in the `available` state, and EBS snapshots and AMIs you no longer need.
+- Elastic IPs that aren't associated, and NAT gateways that only served the GPU subnets.
+- ECR repositories, unless Runpod still pulls from them.
+- EFS and FSx file systems, and S3 buckets you copied in full.
+- CloudWatch log groups, alarms, and dashboards for the deleted resources.
+- Capacity Reservations, which bill whether or not instances run in them. Savings Plans run to the end of their term, so plan the cutover date around them.
+
+## Migrate your Terraform
+
+The [Runpod Terraform provider](/integrations/terraform/overview) 2.x is built on REST API v2. It runs in the same configuration as the AWS provider, so you can add Runpod resources next to the AWS ones, shift traffic, then remove the AWS blocks.
+
+### Resource map
+
+| AWS resource | Runpod resource | Notes |
+| --- | --- | --- |
+| `aws_instance` (GPU types) | `runpod_pod` | `instance_type` becomes `gpu_type_id` and `gpu_count`. `ami` and `user_data` become `image`. |
+| `aws_launch_template` with `aws_autoscaling_group` | `runpod_template` with `runpod_serverless_endpoint` | Min and max size become `workers_min` and `workers_max`. |
+| `aws_sagemaker_model` | `runpod_template` with `serverless = true` | `primary_container.image` and `environment` become `image` and `env`. `model_data_url` has no equivalent field. |
+| `aws_sagemaker_endpoint_configuration`, `aws_sagemaker_endpoint` | `runpod_serverless_endpoint` | `instance_type` becomes `gpu_pools`. One resource replaces both. |
+| `aws_appautoscaling_target`, `aws_appautoscaling_policy` | `workers_min`, `workers_max`, `scaling_type`, `scaling_value`, `idle_timeout` on the endpoint | No separate resources. |
+| `aws_ebs_volume` | `persistent_volume` on `runpod_pod`, or `runpod_network_volume` | Use a network volume for data you can't recreate. |
+| `aws_efs_file_system` | `runpod_network_volume` | `type = "HIGH_PERFORMANCE"` selects the high-performance tier where available. |
+| `aws_ecr_repository` | Keep it, and add `runpod_registry_delegation` | Other registries use `runpod_registry`. |
+| `aws_secretsmanager_secret` | Runpod secret, referenced in `env` as `{{ RUNPOD_SECRET_name }}` | The provider's resource list doesn't include a secret resource. Create secrets in the console or with `POST /v2/account/secrets`. |
+| `aws_security_group` | `ports` on the Pod or endpoint | Ports are opened, not filtered by source. |
+| `aws_key_pair` | `runpod_account_ssh_keys` | Account-level keys. |
+
+### Run both providers side by side
+
+Declare both providers in one configuration. The Runpod provider reads `RUNPOD_API_KEY` from the environment.
+
+```hcl versions.tf
+terraform {
+  required_version = ">= 1.6"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0"
+    }
+    runpod = {
+      source  = "runpod/runpod"
+      version = "~> 2.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = "us-east-1"
+}
+
+provider "runpod" {}
+```
+
+Keep whatever AWS provider version constraint you already use. With both providers loaded, Runpod resources can reference AWS ones. This example keeps images in ECR and lets Runpod pull them:
+
+```hcl ecr.tf
+resource "aws_ecr_repository" "worker" {
+  name = "my-worker"
+}
+
+resource "aws_ecr_repository_policy" "runpod_pull" {
+  repository = aws_ecr_repository.worker.name
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "AllowRunpodPull"
+      Effect    = "Allow"
+      Principal = "*"
+      Action = [
+        "ecr:GetAuthorizationToken",
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:BatchGetImage",
+      ]
+      Condition = {
+        StringEquals = {
+          "aws:PrincipalArn" = [
+            "arn:aws:iam::550005742258:role/prod-us-east-1-deployment-role",
+            "arn:aws:iam::550005742258:role/prod-us-west-2-deployment-role",
+          ]
+        }
+      }
+    }]
+  })
+}
+
+resource "runpod_registry_delegation" "worker" {
+  name     = "my-worker-ecr"
+  resource = aws_ecr_repository.worker.arn
+
+  depends_on = [aws_ecr_repository_policy.runpod_pull]
+}
+```
+
+The `depends_on` matters because Runpod validates the repository policy when the delegation is created. A delegation can't be imported or updated in place, so any change replaces it.
+
+### GPU instance to Pod
+
+<Tabs>
+  <Tab title="Before: aws_instance">
+    ```hcl
+    resource "aws_instance" "vllm" {
+      ami                    = "ami-0123456789abcdef0" # Deep Learning AMI
+      instance_type          = "g6e.xlarge"
+      key_name               = "my-key"
+      subnet_id              = aws_subnet.gpu.id
+      vpc_security_group_ids = [aws_security_group.vllm.id]
+      iam_instance_profile   = aws_iam_instance_profile.s3_read.name
+      user_data              = file("${path.module}/user-data.sh")
+
+      root_block_device {
+        volume_size = 200
+      }
+
+      tags = {
+        Name = "vllm-server"
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="After: runpod_pod">
+    ```hcl
+    resource "runpod_network_volume" "checkpoints" {
+      name        = "checkpoints"
+      size        = 200
+      data_center = "US-GA-2"
+    }
+
+    resource "runpod_pod" "vllm" {
+      name             = "vllm-server"
+      image            = "YOUR_REGISTRY/vllm-server:v1.0.0"
+      gpu_type_id      = "NVIDIA L40S"
+      gpu_count        = 1
+      cloud            = "SECURE"
+      disk             = 50
+      min_cuda_version = "12.8"
+      data_center_ids  = [runpod_network_volume.checkpoints.data_center]
+      ports            = ["8000/http"]
+
+      network_volumes = [{
+        volume_id = runpod_network_volume.checkpoints.id
+        path      = "/workspace"
+      }]
+
+      env = {
+        AWS_ACCESS_KEY_ID     = "{{ RUNPOD_SECRET_aws_access_key_id }}"
+        AWS_SECRET_ACCESS_KEY = "{{ RUNPOD_SECRET_aws_secret_access_key }}"
+        AWS_DEFAULT_REGION    = "us-east-1"
+      }
+    }
+
+    output "vllm_url" {
+      value = "https://${runpod_pod.vllm.id}-8000.proxy.runpod.net"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+The subnet, security group, and instance profile have no Runpod resource. Ports replace the security group, and secret-backed environment variables replace the instance profile. The key pair becomes account-level SSH keys (`runpod_account_ssh_keys`), which a Pod receives when you set `start_ssh = true`. Changing `gpu_type_id`, `gpu_count`, `data_center_ids`, or `min_cuda_version` replaces the Pod, so keep state you care about on the network volume. To stop a Pod without removing it from the configuration, set `desired_state = "EXITED"`.
+
+### SageMaker endpoint with autoscaling to a Serverless endpoint
+
+<Tabs>
+  <Tab title="Before: SageMaker">
+    ```hcl
+    resource "aws_sagemaker_model" "classifier" {
+      name               = "classifier"
+      execution_role_arn = aws_iam_role.sagemaker.arn
+
+      primary_container {
+        image          = "${aws_ecr_repository.worker.repository_url}:v1.0.0"
+        model_data_url = "s3://my-bucket/models/model.tar.gz"
+        environment = {
+          LOG_LEVEL = "info"
+        }
+      }
+    }
+
+    resource "aws_sagemaker_endpoint_configuration" "classifier" {
+      name_prefix = "classifier-"
+
+      production_variants {
+        variant_name           = "AllTraffic"
+        model_name             = aws_sagemaker_model.classifier.name
+        initial_instance_count = 1
+        instance_type          = "ml.g5.xlarge"
+      }
+
+      lifecycle {
+        create_before_destroy = true
+      }
+    }
+
+    resource "aws_sagemaker_endpoint" "classifier" {
+      name                 = "classifier"
+      endpoint_config_name = aws_sagemaker_endpoint_configuration.classifier.name
+    }
+
+    resource "aws_appautoscaling_target" "classifier" {
+      service_namespace  = "sagemaker"
+      resource_id        = "endpoint/${aws_sagemaker_endpoint.classifier.name}/variant/AllTraffic"
+      scalable_dimension = "sagemaker:variant:DesiredInstanceCount"
+      min_capacity       = 1
+      max_capacity       = 4
+    }
+
+    resource "aws_appautoscaling_policy" "classifier" {
+      name               = "classifier-invocations"
+      policy_type        = "TargetTrackingScaling"
+      service_namespace  = aws_appautoscaling_target.classifier.service_namespace
+      resource_id        = aws_appautoscaling_target.classifier.resource_id
+      scalable_dimension = aws_appautoscaling_target.classifier.scalable_dimension
+
+      target_tracking_scaling_policy_configuration {
+        target_value = 70
+
+        predefined_metric_specification {
+          predefined_metric_type = "SageMakerVariantInvocationsPerInstance"
+        }
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="After: Runpod">
+    ```hcl
+    resource "runpod_template" "classifier" {
+      name       = "classifier"
+      image      = "${aws_ecr_repository.worker.repository_url}:v1.0.0"
+      serverless = true
+      disk       = 20
+      args       = "serve"
+      ports      = ["8080/http"]
+
+      start_ssh     = false
+      start_jupyter = false
+
+      env = {
+        LOG_LEVEL   = "info"
+        PORT        = "8080"
+        PORT_HEALTH = "8080"
+      }
+
+      depends_on = [runpod_registry_delegation.worker]
+    }
+
+    resource "runpod_serverless_endpoint" "classifier" {
+      name          = "classifier"
+      template_id   = runpod_template.classifier.id
+      endpoint_type = "LOAD_BALANCER"
+      ports         = ["8080/http"]
+
+      gpu_pools        = ["AMPERE_24", "ADA_24"]
+      gpu_count        = 1
+      min_cuda_version = "12.8"
+
+      scaling_type  = "REQUEST_COUNT"
+      scaling_value = 4
+      workers_min   = 1
+      workers_max   = 4
+      idle_timeout  = 30
+      timeout       = 600000
+    }
+
+    output "classifier_url" {
+      value = runpod_serverless_endpoint.classifier.request_urls.base
+    }
+    ```
+  </Tab>
+</Tabs>
+
+Five AWS resources become two. The IAM execution role has no counterpart, and `model_data_url` has no field: the model must be in the image or on a volume (`network_volumes` on the endpoint). `scaling_value = 4` adds a worker for every four in-flight requests, which is a concurrency target and not the per-minute invocation count that `SageMakerVariantInvocationsPerInstance` tracks, so derive it from how many concurrent requests one worker handles. `workers_min = 1` matches the always-on instance. Set it to `0` to scale to zero. For a queue endpoint, set `endpoint_type = "QUEUE"`, drop `ports`, and choose `QUEUE_DELAY` (seconds a request may wait) or `REQUEST_COUNT`. A queue endpoint that scales on `REQUEST_COUNT` doesn't take `idle_timeout`, so drop that too. The endpoint copies the template's settings when it's created, so pass later image changes through the endpoint.
+
+### Cut over in Terraform
+
+1. Add the Runpod resources and run `terraform apply`. The AWS resources are untouched.
+2. Expose the Runpod URL as an output or pass it to the resource that configures your callers, then shift traffic.
+3. Remove the AWS resource blocks in a separate change and apply it. Terraform destroys them.
+4. Check for leftovers that Terraform didn't manage, using the commands in [Step 8](#step-8-verify-cut-over-and-shut-down).
+
+For every argument, see the [provider reference](https://registry.terraform.io/providers/runpod/runpod/latest/docs) on the Terraform Registry.
+
+## Reference
+
+### CLI command map
+
+| AWS CLI | runpodctl |
+| --- | --- |
+| `aws configure` | `export RUNPOD_API_KEY=...`, or `rp login` for the SDK |
+| `aws ec2 run-instances` | `runpodctl pod create` |
+| `aws ec2 describe-instances` | `runpodctl pod list --all`, `runpodctl pod get POD_ID` |
+| `aws ec2 stop-instances` | `runpodctl pod stop POD_ID` |
+| `aws ec2 start-instances` | `runpodctl pod start POD_ID` |
+| `aws ec2 reboot-instances` | `runpodctl pod restart POD_ID` |
+| `aws ec2 terminate-instances` | `runpodctl pod delete POD_ID` |
+| `aws ec2 describe-instance-types` | `runpodctl gpu list` |
+| `aws ec2 describe-regions` | `runpodctl datacenter list` |
+| `aws ec2 create-volume` | `runpodctl network-volume create` |
+| `aws sagemaker create-model` | `runpodctl template create --serverless` |
+| `aws sagemaker create-endpoint-config`, `create-endpoint` | `runpodctl serverless create` |
+| `aws sagemaker describe-endpoint` | `runpodctl serverless get ENDPOINT_ID`, `runpodctl serverless health ENDPOINT_ID` |
+| `aws sagemaker list-endpoints` | `runpodctl serverless list` |
+| `aws sagemaker update-endpoint` | `runpodctl serverless update ENDPOINT_ID`, `runpodctl template update TEMPLATE_ID --image ...` |
+| AWS Cost Explorer | `runpodctl billing pods`, `runpodctl billing serverless`, `runpodctl billing network-volume` |
+| `aws sagemaker delete-endpoint` | `runpodctl serverless delete ENDPOINT_ID` |
+| `aws sagemaker-runtime invoke-endpoint` | `runpodctl serverless run ENDPOINT_ID --input '{...}'` |
+| `aws s3 sync` | `aws s3 sync` inside a Pod, `aws s3 sync` against the volume's S3-compatible endpoint, or `runpodctl send` and `receive` |
+| `aws ecr get-login-password` | Not needed with an ECR delegation. For other registries, `runpodctl registry create` |
+| `aws logs tail --follow` | `runpodctl pod logs POD_ID --follow`, `runpodctl serverless logs ENDPOINT_ID --follow` |
+| `aws ssm start-session`, `ssh` | `runpodctl ssh info POD_ID` prints the SSH command (see the [reference](/runpodctl/reference/runpodctl-ssh)) |
+
+Run `runpodctl COMMAND --help` for current flags.
+
+### API map
+
+| AWS API | Runpod REST API v2 |
+| --- | --- |
+| EC2 `RunInstances` | `POST /v2/pods` |
+| EC2 `DescribeInstances` | `GET /v2/pods`, `GET /v2/pods/{id}` |
+| EC2 `StopInstances`, `StartInstances`, `RebootInstances` | `POST /v2/pods/{id}/action` with `stop`, `start`, or `restart` |
+| EC2 `TerminateInstances` | `DELETE /v2/pods/{id}` |
+| EC2 `CreateVolume` | `POST /v2/network-volumes` |
+| SageMaker `CreateModel` | `POST /v2/templates` |
+| SageMaker `CreateEndpointConfig`, `CreateEndpoint` | `POST /v2/serverless` |
+| SageMaker `UpdateEndpoint`, `UpdateEndpointWeightsAndCapacities` | `PATCH /v2/serverless/{id}` |
+| SageMaker `DeleteEndpoint` | `DELETE /v2/serverless/{id}` |
+| SageMaker Runtime `InvokeEndpoint` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/runsync`, or your own path on `https://ENDPOINT_ID.api.runpod.ai` |
+| SageMaker Runtime `InvokeEndpointAsync` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/run` |
+| SageMaker Runtime `InvokeEndpointWithResponseStream` | `GET https://api.runpod.ai/v2/ENDPOINT_ID/stream/JOB_ID`, or a streaming response from a load balancing worker |
+| Bedrock Runtime `Converse`, `InvokeModel` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1/chat/completions` |
+| ECR `GetAuthorizationToken` | `POST /v2/registries/delegations` (once) |
+| Secrets Manager `CreateSecret` | `POST /v2/account/secrets` |
+| CloudWatch Logs `GetLogEvents` | `GET /v2/pods/{id}/logs`, `GET /v2/serverless/{id}/workers/{workerId}/logs` |
+
+Management routes use `https://api.runpod.io/v2`. Inference routes use `https://api.runpod.ai`.
+
+### Configuration field map
+
+| AWS field | REST API v2 field | runpodctl flag |
+| --- | --- | --- |
+| `InstanceType` | `gpu.id` and `gpu.count` (Pods), `gpu.pools` (Serverless) | `--gpu-id`, `--gpu-count` |
+| `ImageId` (AMI), `PrimaryContainer.Image` | `image` | `--image` |
+| `UserData` | `cmd`, `entrypoint`, or the image's own command | `--docker-args` |
+| `PrimaryContainer.Environment` | `env` | `--env` |
+| `SecurityGroupIds` (ingress ports) | `ports` | `--ports` |
+| `BlockDeviceMappings` root volume size | `disk` | `--container-disk-in-gb` |
+| EBS data volume | `mounts.persistent`, `mounts.network` | `--volume-in-gb`, `--network-volume-id` |
+| `Placement.AvailabilityZone`, Region | `dataCenterIds` | `--data-center-ids` |
+| `InitialInstanceCount`, `MinCapacity` | `workers.min` | `--workers-min` |
+| `MaxCapacity` | `workers.max` | `--workers-max` |
+| Target tracking `TargetValue` | `scaling.requestCount` or `scaling.queueDelay` | `--scale-by`, `--scale-threshold` |
+| Scale-in cooldown | `workers.idleTimeout` | `--idle-timeout` |
+| `ModelDataUrl` | No field. Image, network volume, or cached model | `--network-volume-id`, `--model-reference` |
+| `ExecutionRoleArn`, `IamInstanceProfile` | No field. Secrets in `env` | `--env` |
+| `KeyName` | `startSsh` with account SSH keys | `--ssh` |
+
+### Environment variable map
+
+| On AWS | On Runpod | Notes |
+| --- | --- | --- |
+| Instance ID from the metadata service | `RUNPOD_POD_ID` | Runpod has no metadata service at `169.254.169.254`. |
+| Region or Availability Zone from the metadata service, `AWS_REGION` | `RUNPOD_DC_ID` | Keep `AWS_DEFAULT_REGION` set for boto3 calls back to AWS. |
+| Public IPv4 from the metadata service | `RUNPOD_PUBLIC_IP`, `RUNPOD_TCP_PORT_22` | Present when the Pod has a public IP. |
+| Credentials from the instance profile or execution role | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` from secrets | Set them yourself. |
+| Port 8080 (SageMaker contract) | `PORT`, `PORT_HEALTH`, `HEALTH_CHECK_PATH` | Load balancing endpoints only. |
+| `/opt/ml/model` | Your own path, such as `/runpod-volume/my-model` | Or bake the same path into the image. |
+| `SAGEMAKER_BATCH`, `SAGEMAKER_MAX_CONCURRENT_TRANSFORMS` | None | Batch behavior is handled by your handler. |
+| GPU count from the instance type | `RUNPOD_GPU_COUNT` | Pods also set `RUNPOD_CPU_COUNT`. |
+
+### Status map
+
+| AWS status | Runpod status |
+| --- | --- |
+| EC2 `pending` | Pod `PROVISIONING`, `STARTING` |
+| EC2 `running` | Pod `RUNNING` |
+| EC2 `stopping`, `stopped` | Pod `EXITED` |
+| EC2 `shutting-down`, `terminated` | Pod `TERMINATED` |
+| SageMaker endpoint `Creating`, `Updating` | Workers `INITIALIZING` |
+| SageMaker endpoint `InService` | Workers `IDLE` or `RUNNING` |
+| SageMaker endpoint `Failed` | Workers `UNHEALTHY`, or `THROTTLED` when waiting on capacity |
+| Asynchronous request queued or processing | Job `IN_QUEUE`, `IN_PROGRESS` |
+| Asynchronous success or error notification | Job `COMPLETED`, `FAILED`, `TIMED_OUT`, `CANCELLED` |
+
+A Runpod endpoint has no single endpoint-level status like `InService`. Read worker states from `runpodctl serverless health ENDPOINT_ID`.
+
+## Migrate with a coding agent
+
+A coding agent with the Runpod skills and MCP server can run this migration with you: it reads your AWS inventory, proposes a plan, and creates Runpod resources after you approve them.
+
+<Tabs>
+  <Tab title="Claude Code">
+    ```bash
+    # The plugin also connects the hosted MCP server
+    claude plugin marketplace add runpod/runpod-plugins-official
+    claude plugin install runpod@runpod
+    ```
+  </Tab>
+  <Tab title="Other agents">
+    ```bash
+    # Skills, then the hosted MCP server (Codex, Cursor, and others)
+    npx skills add runpod/runpod-plugins-official --skill '*' --agent AGENT_ID --global
+    npx @runpod/mcp-server@latest add --client CLIENT_ID
+    ```
+  </Tab>
+</Tabs>
+
+The MCP server signs in with OAuth ("Sign in with Runpod"), so you don't need an API key to start. See [Agent skills](/get-started/agent-skills) and [MCP servers](/get-started/mcp-servers) for details. Then give the agent this prompt from the root of your repository:
+
+```text
+Use the runpod-cloud-migrate skill to migrate our AWS GPU workloads to Runpod.
+
+1. Inventory first, read-only. Use the AWS CLI with my current profile to list GPU EC2
+   instances (and their user data), SageMaker endpoints, endpoint configs, models,
+   autoscaling targets, notebook instances, Bedrock provisioned throughput, ECR
+   repositories, and the S3 buckets they read. Search this repo for boto3
+   sagemaker-runtime and bedrock-runtime calls, SageMaker inference scripts
+   (model_fn, /invocations, /opt/ml), and aws_instance or aws_sagemaker_* Terraform.
+2. Show me a plan: each workload, its Runpod target (Pod, queue endpoint, load
+   balancing endpoint, Public Endpoint, vLLM endpoint, or Instant Cluster), the GPU
+   type or pool, where its data will live, what stays on AWS, and a cost estimate
+   from current Runpod pricing. List every gap that needs my decision (VPC-only
+   resources, IAM roles, KMS, multi-model endpoints).
+3. Wait for my approval before creating anything billable on Runpod.
+4. Migrate one workload end to end. Keep S3 as the data store unless I say otherwise,
+   and use scoped IAM credentials stored as Runpod secrets, never my admin keys.
+   If we use Terraform, add the Runpod provider next to the AWS provider.
+5. Verify with a real request and compare the output with the AWS endpoint.
+6. Never stop, delete, or modify AWS resources without my explicit approval. When
+   I approve shutdown, list the leftovers first: EBS volumes and snapshots, Elastic
+   IPs, NAT gateways, endpoint configs, models, log groups.
+```
+
+## Troubleshooting
+
+**Workers start, then requests return `502` and workers recycle after about 8 minutes.** The load balancer can't reach your health check. SageMaker containers listen on 8080, and Runpod checks port 80 unless told otherwise. Set both `PORT` and `PORT_HEALTH` to `8080` and expose `8080/http`.
+
+**The container exits immediately on Runpod but ran on SageMaker.** SageMaker starts inference containers with the `serve` argument. Without it, an entrypoint that dispatches on `serve` or `train` exits. Set the container command to `serve`, or change the image's `CMD`.
+
+**`FileNotFoundError` under `/opt/ml/model`.** Nothing unpacks `model.tar.gz` on Runpod. Bake the files into the image, or mount a network volume and point your code at it.
+
+**`Unable to locate credentials` or `NoCredentialsError` from boto3.** There's no instance profile or execution role. Create a scoped IAM user, store its keys as Runpod secrets, and map them to `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in the template's environment variables. Set `AWS_DEFAULT_REGION` too.
+
+**Requests to `169.254.169.254` hang.** Code is calling the EC2 instance metadata service. Replace those lookups with the `RUNPOD_` environment variables and explicit configuration.
+
+**`exec format error` when the container starts.** The image was built for arm64 (Graviton or Apple silicon). Rebuild with `--platform linux/amd64`.
+
+**Image pull fails for an ECR image.** Confirm the repository policy lists both Runpod role ARNs exactly, that a delegation exists for that repository (`GET /v2/registries/delegations`), and that the tag exists. If you stored a `get-login-password` token as a registry credential, it expired after 12 hours. Use a delegation instead.
+
+**`{"error":"no workers available"}` from a load balancing endpoint.** The endpoint scaled to zero and the first worker hasn't passed its health check. Retry with a delay of 5 to 10 seconds, or set min workers to 1.
+
+**CUDA or driver errors on some workers only.** Hosts differ in driver version. Set `--min-cuda-version` (REST `gpu.minCudaVersion`) to the version your framework build needs.
+
+**A Pod can't see a network volume, or deploy fails for lack of capacity.** The volume pins the Pod to its data center, and the GPU you asked for isn't in stock there. Pick a GPU type that data center has, or create the volume in a data center with stock for your GPU.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Serverless overview" href="/serverless/overview" icon="bolt" horizontal>
+    Learn how endpoints, workers, and scaling fit together.
+  </Card>
+  <Card title="Load balancing endpoints" href="/serverless/load-balancing/overview" icon="scale-balanced" horizontal>
+    Review the health check, port, and timeout contract.
+  </Card>
+  <Card title="Terraform provider" href="/integrations/terraform/overview" icon="code" horizontal>
+    Manage Pods, endpoints, and volumes as code.
+  </Card>
+  <Card title="Private ECR images" href="/tutorials/pods/use-private-ecr-images" icon="lock" horizontal>
+    Set up cross-account pulls from Amazon ECR.
+  </Card>
+</CardGroup>
+
+Found a gap or an error in this guide? Open an issue in the [Runpod docs repository](https://github.com/runpod/docs/issues).

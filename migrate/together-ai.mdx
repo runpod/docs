@@ -1,0 +1,1183 @@
+---
+title: "Migrate from Together AI to Runpod"
+sidebarTitle: "Together AI"
+description: "Move Together AI serverless models, dedicated endpoints, fine-tunes, batch jobs, and GPU clusters to Runpod."
+---
+
+This guide is for teams that call [Together AI](https://docs.together.ai/intro) from production code and want to run the same workloads on Runpod. Together's [serverless models](https://docs.together.ai/docs/serverless/overview) map to Runpod [Public Endpoints](/public-endpoints/overview) where Runpod hosts the same model family, and to your own [vLLM endpoint](/serverless/vllm/overview) on Runpod Serverless for every other open model. [Dedicated model inference](https://docs.together.ai/docs/dedicated-endpoints/overview) and [dedicated container inference](https://docs.together.ai/docs/dedicated-container-inference) map to Serverless endpoints, [fine-tuning](https://docs.together.ai/docs/fine-tuning/overview) maps to a Pod, the [batch API](https://docs.together.ai/docs/inference/batch/overview) maps to Serverless batch jobs, and [GPU clusters](https://docs.together.ai/docs/gpu-clusters-overview) map to Instant Clusters. At the end, your application calls a Runpod base URL with a Runpod API key, and nothing is left billing on Together.
+
+Together is an API-first inference company and Runpod is a GPU cloud, so most of this migration is a change of operating model: you stop choosing a model string from a catalog and start running a model on workers you size and scale. The guide is explicit about where that costs you something.
+
+<Tip>
+You can hand most of this migration to a coding agent. See [Migrate with a coding agent](#migrate-with-a-coding-agent).
+</Tip>
+
+## How Together AI maps to Runpod
+
+| Together AI | Runpod equivalent | Notes |
+| --- | --- | --- |
+| [Serverless models](https://docs.together.ai/docs/serverless/models) (chat, image, video, audio), called by model string | [Public Endpoints](/public-endpoints/reference) for the model families Runpod hosts. A [vLLM endpoint](/serverless/vllm/overview) on Serverless for any other open LLM. | Together's serverless catalog is much larger than the Public Endpoints catalog. For most models, the answer is your own endpoint. |
+| [Dedicated model inference](https://docs.together.ai/docs/dedicated-endpoints/concepts) (endpoint, deployment, replica) | Serverless endpoint running the vLLM worker, with [active workers](/serverless/endpoints/endpoint-configurations#active-workers) set to keep it warm | A Together replica is a Runpod worker. `minReplicas` and `maxReplicas` become active workers and max workers. |
+| Deployment profile and config (`cr_...`), instance type (`1xnvidia-h100-80gb`) | GPU pool or GPU type on the endpoint, plus vLLM [environment variables](/serverless/vllm/environment-variables) | Together publishes certified model and hardware pairings. On Runpod you pick the GPU and the engine settings. |
+| Autoscaling on `inflight_requests`, latency, or utilization metrics | Autoscaling on [queue delay or request count](/serverless/endpoints/endpoint-configurations#auto-scaling-type) | Runpod has two scaling signals. |
+| Inactivity timeout (stop the deployment after idle minutes) | Scale to zero by default, with an [idle timeout](/serverless/endpoints/endpoint-configurations#idle-timeout) in seconds | A Runpod endpoint restarts on the next request. A stopped Together deployment waits for you to restart it. |
+| [Dedicated container inference](https://docs.together.ai/docs/dedicated-container-inference) (Jig CLI, Sprocket SDK, queue API) | Serverless [queue-based endpoint](/serverless/endpoints/send-requests) with a [handler function](/serverless/workers/handler-functions), or a [load balancing endpoint](/serverless/load-balancing/overview) for your own HTTP server | Sprocket's `setup()` and `predict()` become module-level loading and a `handler(job)` function. |
+| Model registry (`ml_...`), `tg models upload` | Hugging Face plus [cached models](/serverless/endpoints/model-caching), or a [network volume](/storage/network-volumes) | Runpod serves any model vLLM supports, not only fine-tunes of a supported base model. |
+| [Fine-tuning](https://docs.together.ai/docs/fine-tuning/overview) jobs (LoRA and full) | A training script on a [Pod](/pods/overview), the [fine-tuning Pod](/fine-tune) (Axolotl), or `@app.task` in the [Runpod SDK](/sdk/overview) | Runpod gives you the GPU and the environment. You own the training loop and its hyperparameters. |
+| [Batch API](https://docs.together.ai/docs/inference/batch/overview) (JSONL file, 24-hour window) | Serverless [batch jobs](/serverless/batch-jobs) on a queue-based endpoint, or `/run` with a [webhook](/serverless/endpoints/send-requests#webhook-notifications) | Runpod batches take a JSON array of requests, not an uploaded file. |
+| [GPU clusters](https://docs.together.ai/docs/gpu-clusters-overview) (Kubernetes or Slurm, reserved or on-demand) | [Instant Clusters](/instant-clusters) (Slurm, PyTorch, Ray) | Instant Clusters are on-demand multi-node clusters. Kubernetes is not one of the managed cluster types. |
+| Cluster shared volumes | [Network volumes](/storage/network-volumes) | A network volume is pinned to one data center and mounts into every node of a cluster in that data center. |
+| Jig volumes (versioned, uploaded files) | Network volume, or weights baked into the image | Mounts at `/runpod-volume` on Serverless workers. |
+| Jig secrets | [Secrets](/pods/templates/secrets) and endpoint environment variables | |
+| [Code sandbox](https://docs.together.ai/docs/together-code-sandbox) | A CPU or GPU [Pod](/pods/overview) | See [What has no direct equivalent](#what-has-no-direct-equivalent). |
+| Regions (placement profiles, `us-api.together.ai`) | [Data centers](/serverless/endpoints/endpoint-configurations#data-centers) on the endpoint | You choose data centers on each endpoint you create. |
+| Per-token, per-megapixel, per-second serverless billing | Public Endpoints bill per token or per output. Serverless bills [per second of worker time](/serverless/pricing). | The unit changes for anything you host yourself. See [What works differently](#what-works-differently). |
+| Per-minute billing per ready replica | Per-second billing from worker start to worker stop | Runpod bills model load time and the idle timeout window. Together doesn't bill provisioning or cold-start time. |
+| Reserved capacity, provisioned throughput | Active workers, and custom pricing through sales | |
+| Prepaid credits, cut-off at zero balance | Prepaid credits, plus a default [spend limit](/accounts-billing/billing#spending-limits) per hour | |
+| `tg` CLI (`together[cli]`) | [`runpodctl`](/runpodctl/overview), and the `rp` CLI for apps written with the Runpod SDK | |
+| `together` Python SDK, `together-ai` TypeScript SDK | The OpenAI SDKs against a Runpod base URL, the [Runpod SDK](/sdk/overview) (`pip install runpod`), and [`@runpod/ai-sdk-provider`](/public-endpoints/ai-sdk) for the Vercel AI SDK | |
+| Management API at `https://api.together.ai` | [REST API v2](/api-reference-v2/overview) at `https://api.runpod.io/v2` | |
+| Infrastructure as code | The Runpod [Terraform provider](/integrations/terraform/overview), built on REST API v2 | |
+| `TOGETHER_API_KEY`, scoped to a project | `RUNPOD_API_KEY`, with [per-endpoint restrictions](/get-started/credentials) available on a key | |
+| Organizations and projects | [Organizations](/organizations/orgs-overview) and teams | |
+| Endpoint events, dashboards, Grafana | Endpoint and worker [logs](/serverless/development/logs), and request, worker, and cold-start metrics in the console and REST API v2 | |
+
+## What's different
+
+### What works differently
+
+**You deploy the model before you call it.** On Together serverless, a model string is enough. On Runpod, unless the model is a Public Endpoint, you create a Serverless endpoint first and call its endpoint ID. Plan for one endpoint per model you use.
+
+**The base URL carries the endpoint.** Together uses one base URL (`https://api.together.ai/v1`, or `https://api-inference.together.ai/v1` for dedicated endpoints) and selects the model with the `model` field. A Runpod vLLM endpoint has its own base URL, `https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1`, and `model` must be the Hugging Face ID you deployed or the name you set with `OPENAI_SERVED_MODEL_NAME_OVERRIDE`. Code that switches models by changing one string needs a small routing table from model to base URL.
+
+**Billing moves from tokens to worker seconds.** A self-hosted endpoint bills for every second a worker runs: loading the model, processing requests, and waiting out the idle timeout. Token counts don't appear on the bill. Whether that works in your favor depends on utilization: a worker that batches many concurrent requests spreads its cost across all of them, and a worker that wakes up for one short request pays for the cold start too. Measure with your own traffic before you commit. Public Endpoints keep usage-based pricing.
+
+**Cold starts are yours to manage.** Together serverless models are always loaded. A Runpod endpoint with zero active workers scales to zero, and the first request after that waits for a worker to start and load the weights. A synchronous request that waits on a cold worker can exceed the gateway's time limit and fail with a 524. You control this with active workers (always warm, always billed), the idle timeout, [cached models](/serverless/endpoints/model-caching), and FlashBoot. See [Step 6](#step-6-deploy-on-runpod).
+
+**Model features are engine settings.** Together's catalog marks each model for function calling and structured outputs. On a vLLM endpoint you turn tool calling on with `ENABLE_AUTO_TOOL_CHOICE` and `TOOL_CALL_PARSER`, set a reasoning parser with `REASONING_PARSER`, and set context length with `MAX_MODEL_LEN`. The right values depend on the model. See [Configure vLLM to work with your model](/serverless/vllm/configuration).
+
+**You pick the quantization.** Together's catalog lists the quantization each serverless model runs at. On Runpod, you get whatever precision the Hugging Face repository you deploy contains, so outputs can differ slightly from Together's for the same model family. Compare outputs on your own evaluation set.
+
+**Rate limits are per endpoint.** Together applies dynamic limits and may return `429` or `503` under load. Runpod applies documented [per-endpoint limits](/serverless/endpoints/send-requests#rate-limits) to each operation, and real throughput is bounded by your max workers and each worker's concurrency (`MAX_CONCURRENCY` on the vLLM worker).
+
+**Async jobs replace long HTTP calls.** Runpod queue-based endpoints have a native job API (`/run`, `/status`, `/stream`, `/cancel`) with webhooks, alongside the OpenAI-compatible route. Together's video API and container queue API follow a similar submit-and-poll pattern, so those translate directly.
+
+### What has no direct equivalent
+
+| On Together AI | On Runpod |
+| --- | --- |
+| A serverless catalog of 100+ models callable with no deployment | Public Endpoints cover a smaller set. Deploy other open models yourself on Serverless. Proprietary models that Together resells (for example, image and video models from third-party providers) are only available on Runpod if they're listed as a [Public Endpoint](/public-endpoints/reference). |
+| Certified deployment profiles (model, quantization, hardware, and optimizations chosen for you) | No equivalent. Use the [vLLM GPU sizing guidance](/serverless/vllm/configuration#gpu-selection) and test. |
+| Traffic splitting, A/B tests, shadow experiments, and metric-gated rollouts on one endpoint | No built-in equivalent. Run two endpoints and split traffic in your own gateway or client. Changing an endpoint's image or environment rolls workers to a new release. |
+| `/v1/embeddings` and `/v1/rerank` on dedicated endpoints | The vLLM worker documents `/chat/completions`, `/completions`, and `/models`. For embeddings or reranking, run an embedding server on a [load balancing endpoint](/serverless/load-balancing/overview), or look for an embedding worker in the [Hub](/hub/overview). |
+| OpenAI Responses API and Anthropic Messages API | Not documented for the vLLM worker. Use chat completions. |
+| Managed fine-tuning jobs with a dataset upload and a job ID | No managed job API. Run training on a Pod. See [Fine-tunes](#fine-tunes). |
+| Automatic prompt caching with a discounted cached-token price | No token pricing on your own endpoint. vLLM prefix caching is a setting (`ENABLE_PREFIX_CACHING`) that affects speed, not billing. |
+| Geo-specific inference through `us-api.together.ai` | Set data centers on your own endpoint. |
+| Kubernetes GPU clusters with `kubectl` access | Instant Clusters offer Slurm, PyTorch, and Ray. To keep Kubernetes, run your own distribution on cluster nodes or Pods. |
+| Reserved clusters with a fixed term, and preemptible cluster nodes | Instant Clusters are on-demand. Stock varies by data center, and no capacity is guaranteed. Talk to sales about larger or longer commitments. |
+| Code sandbox snapshots and sandboxes | No managed equivalent. Use a Pod and remove it when you're done. |
+
+| On Runpod | On Together AI |
+| --- | --- |
+| Any Hugging Face model that vLLM supports, including architectures Together doesn't serve | Dedicated uploads must be fine-tuned variants of a supported base model. |
+| Any container as a worker without a sales-gated product | Dedicated container inference requires access through Together's sales team. |
+| A wide range of GPU sizes, from 16 GB cards upward, for small models | Dedicated model inference lists H100-class hardware and larger. |
+| Scale to zero and automatic restart on the next request | A stopped deployment must be restarted by raising its replica bounds. |
+
+## Requirements
+
+- A [Runpod account](/accounts-billing/manage-accounts) with credits and a [Runpod API key](/get-started/credentials).
+- Access to your Together AI projects, with the Together CLI 3.0 or later (`uv tool install "together[cli]" --upgrade`) and `TOGETHER_API_KEY` set for each project you're migrating.
+- A [Hugging Face](https://huggingface.co) account and access token if you use gated models or need a place to store fine-tuned weights.
+- Docker, if you run custom containers (dedicated container inference).
+- An evaluation set of real prompts and expected outputs. You'll use it in [Step 8](#step-8-verify-cut-over-and-shut-down) to compare the two platforms.
+
+## Step 1: Take inventory of what you run on Together AI
+
+Together API keys are scoped to a project, so repeat this step for each project. Start by confirming which project the CLI is pointed at.
+
+```bash
+tg whoami
+tg switch PROJECT_ID   # move to another project
+```
+
+### List billable resources
+
+Run the following commands and save the JSON. Each one covers a different Together product.
+
+```bash
+# Dedicated model inference (v2): endpoints, then the deployments under each one
+tg endpoints ls --json > together-endpoints.json
+tg endpoints get ENDPOINT_ID --json
+
+# Models and adapters you uploaded or fine-tuned
+tg models list --json > together-models.json
+
+# Fine-tuning jobs and their checkpoints
+tg fine-tuning list --json > together-finetunes.json
+tg fine-tuning list-checkpoints FT_ID
+
+# Batch jobs and uploaded files
+tg batches list --json
+tg files list --json
+
+# GPU clusters and shared volumes
+tg clusters list --json > together-clusters.json
+tg clusters storage list --json
+
+# Dedicated container inference deployments
+tg beta jig list
+```
+
+For each dedicated deployment, record the model, the config (hardware and GPU count), `minReplicas` and `maxReplicas`, the scaling metric and target, the inactivity timeout, the placement regions, and the endpoint string (`PROJECT_SLUG/ENDPOINT_NAME`) your code passes as `model`.
+
+Endpoints created on Together's older v1 API don't appear in CLI 3.0. List them with the v1 REST API.
+
+```bash
+curl -s "https://api.together.ai/v1/endpoints?type=dedicated&mine=true" \
+  -H "Authorization: Bearer $TOGETHER_API_KEY"
+```
+
+For each dedicated container deployment, keep the `pyproject.toml` that Jig deploys from. The `[tool.jig.image]` and `[tool.jig.deploy]` tables hold the start command, GPU type and count, CPU, memory, storage, port, replica bounds, environment variables, and volume mounts.
+
+For each cluster, record the GPU type, GPU count, cluster type (`KUBERNETES` or `SLURM`), region, billing type, driver and CUDA versions, and the shared volumes attached.
+
+### Find serverless usage
+
+Serverless models aren't resources you can list, so the inventory comes from your code and your bill. Together's cost analytics page in the console breaks spend down by project and API key. In your codebase, search for the SDKs, hostnames, and environment variables.
+
+```bash
+grep -rnE \
+  "from together import|import together|together-ai|TOGETHER_API_KEY|TOGETHER_PROJECT_ID|api(-inference)?\.together\.(ai|xyz)|us-api\.together\.ai|tg (endpoints|fine-tuning|ft|batches|files|clusters|models|beta jig)|sprocket|\[tool\.jig" \
+  --include="*.py" --include="*.ts" --include="*.tsx" --include="*.js" --include="*.mjs" \
+  --include="*.go" --include="*.sh" --include="*.toml" --include="*.yaml" --include="*.yml" \
+  --include="*.json" --include="*.env*" --include="Dockerfile*" .
+```
+
+The pattern also matches the `api.together.xyz` hostname in case older code still uses it. Also check frameworks that wrap Together behind their own provider name, such as LangChain, LiteLLM, and the Vercel AI SDK. For every call site, record the model string, the API (chat, completions, images, video, audio, rerank, batch), and the features in use: streaming, tools, `response_format`, image inputs, and `logprobs`.
+
+## Step 2: Set up Runpod
+
+Create an API key in the [Runpod console](https://console.runpod.io/user/settings) and export it. See [Manage API keys](/get-started/credentials) for restricted and read-only keys.
+
+```bash
+export RUNPOD_API_KEY="YOUR_API_KEY"
+```
+
+Install `runpodctl` to create and manage resources from your terminal, and the Runpod SDK if you'll call endpoints from Python or write your own workers.
+
+```bash
+# runpodctl (or: brew install runpod/runpodctl/runpodctl)
+curl -fsSL https://cli.runpod.net | sudo bash
+runpodctl doctor
+
+# Runpod SDK 2.x for Python 3.10 to 3.14, which includes the rp CLI
+pip install runpod
+```
+
+`runpodctl doctor` walks through first-time setup of your API key and SSH key. For agent-driven work, connect the [Runpod MCP server](/get-started/mcp-servers). If you manage infrastructure as code, the [Terraform provider](/integrations/terraform/overview) (`runpod/runpod`, `~> 2.0`) covers endpoints, templates, network volumes, Pods, and clusters.
+
+## Step 3: Choose where each workload lands
+
+Use this table for every item in your inventory.
+
+| What you run on Together AI | Where it lands on Runpod |
+| --- | --- |
+| A serverless chat model that Runpod hosts as a Public Endpoint | [Public Endpoint](/public-endpoints/reference), through its OpenAI-compatible route. No deployment. |
+| Any other open chat or completion model | Serverless queue-based endpoint running the [vLLM worker](/serverless/vllm/overview), scaled to zero when idle. |
+| A dedicated endpoint with `minReplicas` of 1 or more | The same vLLM endpoint with active workers set to the same number. |
+| A fine-tuned model or LoRA adapter served on a dedicated endpoint | vLLM endpoint that loads the weights from Hugging Face or a network volume. |
+| A model whose vLLM version is newer than the Hub worker's, or a custom server | Serverless [load balancing endpoint](/serverless/load-balancing/overview) running your own image. |
+| A serverless image or video model that Runpod hosts | Public Endpoint, through the native `/run` and `/runsync` API. |
+| Other image or video models | A ComfyUI worker from the [Hub](/hub/overview), or your own handler on a queue-based endpoint. |
+| Speech-to-text (Whisper) | A Whisper worker from the Hub on a queue-based endpoint. |
+| Text-to-speech | A Public Endpoint if one of the listed text-to-speech models fits, otherwise your own handler on a queue-based endpoint. |
+| Embeddings or rerank on a dedicated endpoint | Load balancing endpoint running an embedding server, or a Hub embedding worker. |
+| Batch API jobs | [Batch jobs](/serverless/batch-jobs) on your vLLM endpoint, or `/run` with webhooks. |
+| A Sprocket worker in queue mode | Queue-based endpoint with a handler function. |
+| A Sprocket worker in HTTP server mode | Load balancing endpoint. |
+| A fine-tuning job | A GPU Pod, the [fine-tuning Pod](/fine-tune), or `@app.task` in the Runpod SDK (one Pod per call that runs to completion). |
+| A Slurm GPU cluster | [Instant Cluster](/instant-clusters/slurm-clusters) with managed Slurm. |
+| A Kubernetes GPU cluster used for distributed training | Instant Cluster with [PyTorch](/instant-clusters/pytorch) or Slurm. |
+| A Kubernetes GPU cluster used for serving | Serverless endpoints, or an Instant Cluster with [Ray and vLLM](/instant-clusters/ray-vllm) for models that span nodes. |
+| A code sandbox | A Pod. |
+
+### Model map for Public Endpoints
+
+These are the Together serverless model strings that have a Public Endpoint in the same family, based on the Runpod [model reference](/public-endpoints/reference) and model pages. Versions and parameters differ between the two platforms, so read the linked page before you switch. Every Together model not in this table lands on your own endpoint.
+
+| Together model string | Runpod Public Endpoint | How you call it |
+| --- | --- | --- |
+| `moonshotai/Kimi-K3` | [Moonshot Kimi](/public-endpoints/models/moonshot-kimi), `model` set to `kimi-k3` | OpenAI-compatible: `https://api.runpod.ai/v2/moonshot-kimi/openai/v1` |
+| `moonshotai/Kimi-K3.1-Pro` | [Moonshot Kimi](/public-endpoints/models/moonshot-kimi), `model` set to `kimi-k3.1-pro` | Same base URL as above |
+| `openai/gpt-oss-120b` | [GPT-OSS 120B](/public-endpoints/models/gpt-oss-120b). The model page sets `model` to `gpt-oss-120b`, and the [AI coding tools page](/public-endpoints/ai-coding-tools) uses `openai/gpt-oss-120b`, so call `/models` to confirm. | OpenAI-compatible: `https://api.runpod.ai/v2/gpt-oss-120b/openai/v1` |
+| Qwen chat models (`Qwen/Qwen3...`) | [Qwen3 32B AWQ](/public-endpoints/models/qwen3-32b), a different Qwen3 model | OpenAI-compatible: `https://api.runpod.ai/v2/qwen3-32b-awq/openai/v1`, `model` set to `Qwen/Qwen3-32B-AWQ` |
+| `ByteDance-Seed/Seedream-4.0` | [Seedream 4.0 T2I](/public-endpoints/models/seedream-4-t2i) and [Seedream 4.0 Edit](/public-endpoints/models/seedream-4-edit) | Native: `https://api.runpod.ai/v2/seedream-v4-t2i/runsync` |
+| `Qwen/Qwen-Image` | [Qwen Image](/public-endpoints/models/qwen-image) | Native: `https://api.runpod.ai/v2/qwen-image-t2i/runsync` |
+| `Wan-AI/Wan2.6-image` | [WAN 2.6 T2I](/public-endpoints/models/wan-2-6-t2i) | Native: `https://api.runpod.ai/v2/wan-2-6-t2i/runsync` |
+| `google/flash-image-3.1` (Nano Banana 2) | [Nano Banana 2 Edit](/public-endpoints/models/nano-banana-2-edit), image editing | Native: `https://api.runpod.ai/v2/google-nano-banana-2-edit/runsync` |
+| `google/gemini-3-pro-image` (Nano Banana Pro) | [Nano Banana Pro Edit](/public-endpoints/models/nano-banana-pro-edit), image editing | Native: `https://api.runpod.ai/v2/nano-banana-pro-edit/runsync` |
+| FLUX models (`black-forest-labs/FLUX...`) | [Flux Dev](/public-endpoints/models/flux-dev), [Flux Schnell](/public-endpoints/models/flux-schnell), and [Flux Kontext Dev](/public-endpoints/models/flux-kontext-dev), which are different FLUX variants | Native: `https://api.runpod.ai/v2/black-forest-labs-flux-1-dev/runsync` |
+| `ByteDance/Seedance-2.5` | [Seedance 2.5 T2V](/public-endpoints/models/seedance-2-5-t2v) and [Seedance 2.5 I2V](/public-endpoints/models/seedance-2-5-i2v) | Native. Copy the endpoint URL from the model page. |
+| `vidu/vidu-q3` | [Vidu Q3 T2V](/public-endpoints/models/vidu-q3-t2v) and [Vidu Q3 I2V](/public-endpoints/models/vidu-q3-i2v) | Native: `https://api.runpod.ai/v2/vidu-q3-t2v/runsync` |
+| Wan video models (`Wan-AI/wan2.7-...`) | WAN 2.1 to 2.6 video endpoints, which are earlier versions | Native. See the [model reference](/public-endpoints/reference). |
+
+Runpod's text catalog also includes [IBM Granite 4.0](/public-endpoints/models/granite-4), and its audio catalog has [Chatterbox Turbo](/public-endpoints/models/chatterbox-turbo) and [Minimax Speech 02 HD](/public-endpoints/models/minimax-speech) for text-to-speech. None of Together's serverless text-to-speech or speech-to-text models has a Public Endpoint with the same model. The catalog changes, so check the [Hub](https://console.runpod.io/hub?tabSelected=public_endpoints) for the current list.
+
+### GPU map
+
+Together's dedicated hardware is listed below against the Runpod GPU type ID you pass to `--gpu-id` and the Serverless pool that contains it, from the [GPU types reference](/references/gpu-types).
+
+| Together hardware | Where you see it | Runpod GPU type ID | Serverless pool |
+| --- | --- | --- | --- |
+| H100 80 GB | `1xnvidia-h100-80gb` (dedicated), `h100-80gb` (Jig), `H100_SXM` (clusters) | `NVIDIA H100 80GB HBM3` | `ADA_80_PRO` |
+| H200 141 GB | `1xnvidia-h200-140gb` (dedicated), `H200_SXM` (clusters) | `NVIDIA H200` | `HOPPER_141` |
+| B200 180 GB | `1xnvidia-b200-180gb` (dedicated), `b200-192gb` (Jig), `B200_SXM` (clusters) | `NVIDIA B200` | Use the GPU type ID |
+| B300 | `1xnvidia-b300-280gb` (dedicated), `B300_SXM` (clusters) | `NVIDIA B300 SXM6 AC` | Use the GPU type ID |
+| L40 | `L40_PCIE` (clusters) | `NVIDIA L40` | `ADA_48_PRO` |
+| CPU only | `gpu_type = "none"` (Jig) | A CPU endpoint (`--compute-type CPU`) | Not applicable |
+
+You don't have to match Together's hardware. Together's dedicated hardware list starts at H100, and many models fit on smaller cards: the vLLM worker docs suggest 16 to 24 GB for models under 10B parameters and 32 to 48 GB for 10B to 30B. Choose the GPU that fits the model and context length you serve, using the [VRAM estimates](/serverless/vllm/configuration#gpu-selection). Stock varies by data center and changes through the day, so check what's available before you deploy and list more than one pool on production endpoints.
+
+```bash
+runpodctl gpu list
+```
+
+Instant Clusters support B200, H200, H100, and A100 nodes. See [Instant Clusters](/instant-clusters#supported-hardware).
+
+## Step 4: Move your images and code
+
+If you only call Together's model APIs, you have no images to move. Skip to [Step 5](#step-5-move-your-data-and-models).
+
+### Sprocket workers (dedicated container inference)
+
+A Sprocket worker implements `setup()`, which runs once at startup, and `predict(args)`, which runs once per job and receives the job's `payload`. A Runpod queue-based worker does the same two things with module-level code and a handler function that receives the request's `input`.
+
+Here's the worker from Together's container quickstart.
+
+```python hello_world.py
+import os
+
+import sprocket
+
+
+class HelloWorld(sprocket.Sprocket):
+    def setup(self) -> None:
+        self.greeting = "Hello"
+
+    def predict(self, args: dict) -> dict:
+        name = args.get("name", "world")
+        return {"message": f"{self.greeting}, {name}!"}
+
+
+if __name__ == "__main__":
+    queue_name = os.environ.get("TOGETHER_DEPLOYMENT_NAME", "hello-world")
+    sprocket.run(HelloWorld(), queue_name)
+```
+
+The same worker on Runpod looks like this.
+
+```python handler.py
+import runpod
+
+# Runs once when the worker starts. Load models here, not inside the handler.
+GREETING = "Hello"
+
+
+def handler(job):
+    args = job["input"]
+    name = args.get("name", "world")
+    return {"message": f"{GREETING}, {name}!"}
+
+
+runpod.serverless.start({"handler": handler})
+```
+
+Anything you loaded in `setup()` moves to module level so it loads once per worker. The return value becomes the job's `output`. If `predict()` raises an exception, Sprocket marks the job failed, and an exception in a Runpod handler does the same. Three Sprocket behaviors need explicit code on Runpod:
+
+- **Progress updates.** Replace `emit_info(...)` with `runpod.serverless.progress_update(job, ...)`.
+- **Input files.** Sprocket downloads any HTTPS URL in the payload and hands your code a local path. A Runpod handler receives the URL as sent, so download it in the handler.
+- **HTTP server mode.** A Sprocket worker that serves `predict_path` directly becomes a [load balancing endpoint](/serverless/load-balancing/build-a-worker): your own HTTP server with a `/ping` health check.
+
+### Container image
+
+Jig builds the image from `pyproject.toml` and pushes it to Together's registry. On Runpod you build and push it yourself, and the image must be `linux/amd64`. A minimal Dockerfile for the handler above:
+
+```dockerfile Dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+RUN pip install --no-cache-dir runpod
+COPY handler.py .
+
+CMD ["python", "-u", "handler.py"]
+```
+
+Build it for the right platform and push it to a registry Runpod can pull from.
+
+```bash
+docker build --platform linux/amd64 -t YOUR_REGISTRY/hello-worker:v1 .
+docker push YOUR_REGISTRY/hello-worker:v1
+```
+
+For GPU workers, start from a CUDA base image that matches your framework, as you would for Jig. If the registry is private, add its credentials to Runpod and reference them from the template. See [Deploy workers from Docker Hub](/serverless/workers/deploy). Jig's `tg beta jig dockerfile` prints the Dockerfile Jig generates, which is a useful starting point for the system packages your worker needs.
+
+### Jig configuration
+
+Translate the `[tool.jig.deploy]` table using the [configuration field map](#configuration-field-map). Environment variables in `[tool.jig.deploy.environment_variables]` become template environment variables, Jig secrets become Runpod [secrets](/pods/templates/secrets), and Jig volume mounts become a network volume (mounted at `/runpod-volume` on Serverless) or files baked into the image. Remove any code that reads `TOGETHER_DEPLOYMENT_NAME` or other Together runtime variables. Inside a Runpod worker, `RUNPOD_ENDPOINT_ID` identifies the endpoint.
+
+### Prebuilt vLLM images
+
+If you deploy stock vLLM through Jig, you don't need to port the image. Use the vLLM worker from the Hub in [Step 6](#step-6-deploy-on-runpod), and move your `vllm serve` flags to environment variables: each flag becomes an upper snake case variable (`--max-model-len 8192` becomes `MAX_MODEL_LEN=8192`), and `VLLM_EXTRA_ARGS` passes anything else through.
+
+## Step 5: Move your data and models
+
+### Base models
+
+If you serve a stock open model, there's nothing to copy. The vLLM worker pulls the model from Hugging Face, and [cached models](/serverless/endpoints/model-caching) keep a copy on Runpod hosts so workers don't download it on every cold start. Find the Hugging Face repository that corresponds to your Together model string. Together's IDs follow the same `organization/model` convention but aren't always the Hugging Face repository name, and Together may serve a quantized build. For gated models, accept the license on Hugging Face and create an access token.
+
+### Fine-tunes
+
+Together lets you download the weights of a completed fine-tuning job. Choose the checkpoint type that matches how you'll serve it: `merged` gives you self-contained weights, and `adapter` gives you only the LoRA adapter. Full fine-tunes download as the full model.
+
+```bash
+# Merged weights (the default for LoRA jobs)
+tg fine-tuning download FT_ID --output-dir ./my-finetune
+
+# LoRA adapter only
+tg fine-tuning download FT_ID --checkpoint-type adapter --output-dir ./my-adapter
+```
+
+The download is a `.tar.zst` archive. Decompress it to get a standard Hugging Face model directory.
+
+```bash
+cd my-finetune
+zstd -d model.tar.zst
+tar -xvf model.tar
+```
+
+For a model you uploaded to Together's registry instead of training there, use `tg models download MODEL_ID ./local-dir`, or go back to the original source.
+
+Then put the weights where a Runpod worker can load them. You have two documented options.
+
+<Tabs>
+  <Tab title="Hugging Face (recommended)">
+    Create a private Hugging Face repository, then push the directory to it. This works with cached models, so cold starts don't re-download the weights.
+
+    ```bash
+    hf auth login
+    hf repos create YOUR_HF_USER/my-finetune --private
+    hf upload YOUR_HF_USER/my-finetune ./my-finetune
+    ```
+
+    Create the repository first. `hf upload` creates a missing repository for you, and a repository created that way isn't private unless you ask for it.
+
+    In Step 6, set `MODEL_NAME` to `YOUR_HF_USER/my-finetune` and add `HF_TOKEN` to the endpoint so workers can read the private repository.
+  </Tab>
+  <Tab title="Network volume">
+    Create a network volume in a data center that has the GPU you need and supports the [S3-compatible API](/storage/s3-api), then sync the directory to it. The bucket name is the volume ID.
+
+    ```bash
+    runpodctl network-volume create --name "models" --size 100 --data-center-id "US-KS-2"
+
+    aws s3 sync --region US-KS-2 \
+      --endpoint-url https://s3api-us-ks-2.runpod.io/ \
+      ./my-finetune \
+      s3://NETWORK_VOLUME_ID/my-finetune
+    ```
+
+    The S3 API uses its own access key, which you create in the console. See [S3-compatible API](/storage/s3-api#setup-and-authentication). In Step 6, attach the volume to the endpoint and set `MODEL_NAME` to `/runpod-volume/my-finetune`. A network volume is pinned to one data center, so the endpoint's workers run only there.
+  </Tab>
+</Tabs>
+
+<Note>
+A LoRA adapter served through the vLLM worker's `LORA_MODULES` setting is loaded from Hugging Face. If you can't publish the adapter there, serve the merged weights instead.
+</Note>
+
+If you'd rather retrain than transfer, export your training data first. Together keeps uploaded files in its files API (`tg files retrieve-content FILE_ID --output ./data`), and fine-tuning expects JSONL or Parquet, which you can reuse as is. To train on Runpod, start a GPU Pod with a network volume, run your training script, and write the output to the volume so it outlives the Pod.
+
+```bash
+runpodctl network-volume create --name ft-train --size 30 --data-center-id EU-RO-1
+
+runpodctl pod create --name ft-train \
+  --template-id runpod-torch-v280 --gpu-id "NVIDIA GeForce RTX 4090" \
+  --data-center-ids EU-RO-1 \
+  --network-volume-id NETWORK_VOLUME_ID --volume-mount-path /workspace \
+  --ssh
+```
+
+The volume mounts at `/workspace` on the Pod and at `/runpod-volume` on Serverless workers, so an adapter written to `/workspace/outputs` during training is at `/runpod-volume/outputs` when you serve it. Delete the Pod when training finishes. For a guided setup with Axolotl, see [Fine-tune a model](/fine-tune). Hyperparameters don't carry over automatically: Together's job settings (epochs, learning rate, LoRA rank) are inputs to your own script now.
+
+### Batch files and cluster data
+
+Together keeps batch input, output, and error files for 7 days. Download any results you still need before you shut down (`tg batches download BATCH_ID --output ./out`).
+
+For GPU clusters, copy the contents of each shared volume to a Runpod network volume. From a node that mounts the shared volume (at `/data` on Slurm clusters), sync to the network volume through the S3-compatible API with the same `aws s3 sync` command shown above. Data on Together's local NVMe disks is ephemeral, so only the shared volume needs to move.
+
+## Step 6: Deploy on Runpod
+
+### Public Endpoints
+
+There's nothing to deploy. Confirm your account has credits, then go to [Step 7](#step-7-update-the-code-that-calls-together-ai).
+
+### A vLLM endpoint for an open model
+
+This is the landing spot for most Together serverless models and all dedicated endpoints. The example serves `Qwen/Qwen3-8B` with tool calling enabled. Replace the model, GPU pool, and vLLM settings with the ones for your model from [Configure vLLM to work with your model](/serverless/vllm/configuration).
+
+<Tabs>
+  <Tab title="runpodctl">
+    Look up the Hub listing ID for the vLLM worker, then create the endpoint from it.
+
+    ```bash
+    runpodctl hub get runpod-workers/worker-vllm
+
+    runpodctl serverless create \
+      --hub-id HUB_ID \
+      --name "qwen3-8b" \
+      --gpu-id AMPERE_24 \
+      --workers-min 0 \
+      --workers-max 3 \
+      --model-reference https://huggingface.co/Qwen/Qwen3-8B:main \
+      --env MODEL_NAME=Qwen/Qwen3-8B \
+      --env MAX_MODEL_LEN=8192 \
+      --env ENABLE_AUTO_TOOL_CHOICE=true \
+      --env TOOL_CALL_PARSER=hermes
+    ```
+
+    `--hub-id` pulls the worker image, container disk size, and default environment from the Hub release, and `--env` overrides individual values. `--gpu-id` accepts a pool ID or a GPU type ID; set it explicitly so the endpoint runs on the hardware you sized for. `--model-reference` attaches the Hugging Face model as a cached model: the `:main` suffix is the branch, tag, or revision, and the flag requires a GPU endpoint. The command prints the endpoint ID. For a gated or private model, add `--env HF_TOKEN=YOUR_HF_TOKEN`, or store the token as a [secret](/pods/templates/secrets).
+  </Tab>
+  <Tab title="Console">
+    Open the [vLLM worker](https://console.runpod.io/hub/runpod-workers/worker-vllm) in the Hub and click **Deploy**. Enter the Hugging Face model ID in the **Model** field, expand **Advanced** to set **Max Model Length** and other vLLM settings, click **Next**, then **Create Endpoint**. The full walkthrough is in the [vLLM quickstart](/serverless/vllm/get-started).
+  </Tab>
+</Tabs>
+
+Wait until a worker is ready before you send traffic. Creating an endpoint returns immediately, and the first worker still has to pull the image and load the model.
+
+```bash
+curl -s "https://api.runpod.ai/v2/ENDPOINT_ID/health" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY"
+```
+
+The response reports worker and job counts. Make the first request with the asynchronous `/run` route so a slow first load can't time out, then use the OpenAI-compatible route once a worker is warm.
+
+```bash
+curl -s -X POST "https://api.runpod.ai/v2/ENDPOINT_ID/run" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"messages": [{"role": "user", "content": "Say hello in one word."}], "sampling_params": {"max_tokens": 10}}}'
+
+curl -s "https://api.runpod.ai/v2/ENDPOINT_ID/status/JOB_ID" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY"
+```
+
+### Match a dedicated endpoint's scaling
+
+A Together deployment's replica bounds map onto worker counts. Set active workers to your old `minReplicas` and max workers to your old `maxReplicas`.
+
+Before, on Together:
+
+```bash
+tg endpoints deploy Qwen/Qwen3.5-9B \
+  --endpoint my-endpoint \
+  --min-replicas 1 \
+  --max-replicas 3 \
+  --inactive-timeout 60
+```
+
+After, on Runpod:
+
+```bash
+runpodctl serverless update ENDPOINT_ID \
+  --workers-min 1 \
+  --workers-max 3 \
+  --scaler-type REQUEST_COUNT \
+  --scaler-value 4
+```
+
+With `--workers-min 1`, one worker stays loaded and bills continuously, the same trade you made with `minReplicas`. Request count scaling adds workers based on queued plus in-progress requests divided by the scaler value, and it's the recommended scaler for LLM workloads. Runpod has no inactivity timeout because it isn't needed: with `--workers-min 0`, workers stop after the idle timeout and start again on the next request. To cut cold starts without paying for an always-on worker, keep the model cached, leave FlashBoot on, and raise the idle timeout (`--idle-timeout`, in seconds) so a worker stays warm between bursts. REST API v2 rejects an idle timeout on a queue-based endpoint that scales on request count, so pair a long idle timeout with queue delay scaling.
+
+The same change through REST API v2:
+
+```bash
+curl -s -X PATCH "https://api.runpod.io/v2/serverless/ENDPOINT_ID" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"workers": {"min": 1, "max": 3}}'
+```
+
+<Note>
+A deployment that needed several GPUs on Together (for example, a config with a GPU count above one) needs `--gpu-count` on Runpod. On multi-GPU workers, the vLLM worker sets tensor parallelism to the number of visible GPUs.
+</Note>
+
+### Fine-tuned models and LoRA adapters
+
+For merged weights, deploy exactly as above with `MODEL_NAME` pointing at your Hugging Face repository (and `--model-reference` set to the same repository), or at the path on an attached network volume (`--network-volume-id NETWORK_VOLUME_ID` with `MODEL_NAME=/runpod-volume/my-finetune`).
+
+For a LoRA adapter, deploy the base model and attach the adapter with the vLLM worker's LoRA settings.
+
+```bash
+runpodctl serverless create \
+  --hub-id HUB_ID \
+  --name "qwen3-8b-lora" \
+  --gpu-id AMPERE_24 \
+  --model-reference https://huggingface.co/Qwen/Qwen3-8B:main \
+  --env MODEL_NAME=Qwen/Qwen3-8B \
+  --env ENABLE_LORA=true \
+  --env MAX_LORA_RANK=16 \
+  --env 'LORA_MODULES=[{"name": "my-adapter", "path": "YOUR_HF_USER/my-adapter"}]' \
+  --env HF_TOKEN=YOUR_HF_TOKEN
+```
+
+`MAX_LORA_RANK` must be at least the rank you trained with (the default is 16). After the endpoint is up, call `client.models.list()` to see the names it serves, and pass the adapter's name as `model` in requests.
+
+### Custom workers
+
+For a ported Sprocket worker, create a Serverless template from your image, then an endpoint from the template.
+
+```bash
+runpodctl template create \
+  --name "hello-worker" \
+  --image "YOUR_REGISTRY/hello-worker:v1" \
+  --serverless
+
+runpodctl serverless create \
+  --template-id TEMPLATE_ID \
+  --name "hello-worker" \
+  --gpu-id "NVIDIA GeForce RTX 4090" \
+  --workers-min 0 \
+  --workers-max 3
+```
+
+For a CPU-only worker (Jig's `gpu_type = "none"`), replace `--gpu-id` with `--compute-type CPU`. Environment variables for a template-based endpoint come from the template (`runpodctl template create --env`), not from `serverless create --env`.
+
+### Image, video, and audio workers
+
+For models that aren't Public Endpoints, deploy a prebuilt worker from the Hub. Search for one, check its release and GPU pool, and deploy it the same way as the vLLM worker.
+
+```bash
+runpodctl hub search comfyui --type SERVERLESS
+runpodctl hub search whisper --type SERVERLESS
+runpodctl serverless create --hub-id HUB_ID --name "whisper" --workers-min 0 --workers-max 3
+```
+
+Each Hub worker defines its own input schema, so read the listing before you write client code. See [Deploy ComfyUI on Serverless](/tutorials/serverless/comfyui) for an image generation walkthrough.
+
+### Instant Clusters
+
+Deploy a cluster from the [Instant Clusters page](https://console.runpod.io/cluster) in the console: choose the cluster type (Slurm, PyTorch, or Ray), GPU type, node count, region, and network volume. See [Slurm Clusters](/instant-clusters/slurm-clusters) for the Slurm flow. `sbatch` and `srun` scripts from a Together Slurm cluster carry over, with paths changed from `/data` to wherever you mount the network volume. Kubernetes manifests don't carry over: convert each job to a Slurm script or a container start command. Clusters are also available through REST API v2 (`POST /v2/clusters`) and Terraform (`runpod_cluster`).
+
+## Step 7: Update the code that calls Together AI
+
+### Chat completions through the OpenAI SDK
+
+If you already call Together through an OpenAI client, change the API key, the base URL, and the model name.
+
+<Tabs>
+  <Tab title="Python">
+    Before:
+
+    ```python
+    import os
+
+    from openai import OpenAI
+
+    client = OpenAI(
+        api_key=os.environ["TOGETHER_API_KEY"],
+        base_url="https://api.together.ai/v1",
+    )
+
+    response = client.chat.completions.create(
+        model="Qwen/Qwen3.5-9B",
+        messages=[{"role": "user", "content": "What are the top 3 things to do in New York?"}],
+        max_tokens=512,
+    )
+    print(response.choices[0].message.content)
+    ```
+
+    After:
+
+    ```python
+    import os
+
+    from openai import OpenAI
+
+    client = OpenAI(
+        api_key=os.environ["RUNPOD_API_KEY"],
+        base_url="https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1",
+        timeout=300,
+    )
+
+    response = client.chat.completions.create(
+        model="Qwen/Qwen3-8B",
+        messages=[{"role": "user", "content": "What are the top 3 things to do in New York?"}],
+        max_tokens=512,
+    )
+    print(response.choices[0].message.content)
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    Before:
+
+    ```typescript
+    import OpenAI from "openai";
+
+    const client = new OpenAI({
+      apiKey: process.env.TOGETHER_API_KEY,
+      baseURL: "https://api.together.ai/v1",
+    });
+
+    const response = await client.chat.completions.create({
+      model: "Qwen/Qwen3.5-9B",
+      messages: [{ role: "user", content: "What are the top 3 things to do in New York?" }],
+      max_tokens: 512,
+    });
+    console.log(response.choices[0].message.content);
+    ```
+
+    After:
+
+    ```typescript
+    import OpenAI from "openai";
+
+    const client = new OpenAI({
+      apiKey: process.env.RUNPOD_API_KEY,
+      baseURL: "https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1",
+      timeout: 300_000,
+    });
+
+    const response = await client.chat.completions.create({
+      model: "Qwen/Qwen3-8B",
+      messages: [{ role: "user", content: "What are the top 3 things to do in New York?" }],
+      max_tokens: 512,
+    });
+    console.log(response.choices[0].message.content);
+    ```
+  </Tab>
+  <Tab title="cURL">
+    Before:
+
+    ```bash
+    curl https://api.together.ai/v1/chat/completions \
+      -H "Authorization: Bearer $TOGETHER_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "Qwen/Qwen3.5-9B",
+        "messages": [{"role": "user", "content": "Hello!"}]
+      }'
+    ```
+
+    After:
+
+    ```bash
+    curl https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1/chat/completions \
+      -H "Authorization: Bearer $RUNPOD_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "Qwen/Qwen3-8B",
+        "messages": [{"role": "user", "content": "Hello!"}],
+        "max_tokens": 512
+      }'
+    ```
+  </Tab>
+</Tabs>
+
+Set `max_tokens` on every request. The vLLM worker's documented default is 16 tokens, which truncates most answers. The longer client timeout covers a request that arrives while a worker is starting. To keep your existing model strings in client code, set `OPENAI_SERVED_MODEL_NAME_OVERRIDE` on the endpoint to the name your code already sends.
+
+For a model in the [Public Endpoints map](#model-map-for-public-endpoints), the change is the same, with the endpoint's slug in the base URL.
+
+```python
+import os
+
+from openai import OpenAI
+
+client = OpenAI(
+    api_key=os.environ["RUNPOD_API_KEY"],
+    base_url="https://api.runpod.ai/v2/moonshot-kimi/openai/v1",
+)
+
+response = client.chat.completions.create(
+    model="kimi-k3",
+    messages=[{"role": "user", "content": "What is Runpod?"}],
+    max_tokens=2048,
+)
+print(response.choices[0].message.content)
+```
+
+### The `together` SDKs
+
+Runpod doesn't document pointing the `together` or `together-ai` packages at a Runpod base URL, so replace them with the OpenAI SDK for chat and completions. The method names and response shapes are the same for these calls.
+
+<Tabs>
+  <Tab title="Python">
+    Before:
+
+    ```python
+    from together import Together
+
+    client = Together()  # reads TOGETHER_API_KEY
+
+    stream = client.chat.completions.create(
+        model="Qwen/Qwen3.5-9B",
+        messages=[{"role": "user", "content": "Write a haiku about GPUs."}],
+        stream=True,
+    )
+    for chunk in stream:
+        if chunk.choices and chunk.choices[0].delta.content:
+            print(chunk.choices[0].delta.content, end="", flush=True)
+    ```
+
+    After:
+
+    ```python
+    import os
+
+    from openai import OpenAI
+
+    client = OpenAI(
+        api_key=os.environ["RUNPOD_API_KEY"],
+        base_url="https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1",
+    )
+
+    stream = client.chat.completions.create(
+        model="Qwen/Qwen3-8B",
+        messages=[{"role": "user", "content": "Write a haiku about GPUs."}],
+        max_tokens=200,
+        stream=True,
+    )
+    for chunk in stream:
+        if chunk.choices and chunk.choices[0].delta.content:
+            print(chunk.choices[0].delta.content, end="", flush=True)
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    Before:
+
+    ```typescript
+    import Together from "together-ai";
+
+    const together = new Together(); // reads TOGETHER_API_KEY
+
+    const stream = await together.chat.completions.create({
+      model: "Qwen/Qwen3.5-9B",
+      messages: [{ role: "user", content: "Write a haiku about GPUs." }],
+      stream: true,
+    });
+    for await (const chunk of stream) {
+      process.stdout.write(chunk.choices[0]?.delta?.content ?? "");
+    }
+    ```
+
+    After:
+
+    ```typescript
+    import OpenAI from "openai";
+
+    const client = new OpenAI({
+      apiKey: process.env.RUNPOD_API_KEY,
+      baseURL: "https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1",
+    });
+
+    const stream = await client.chat.completions.create({
+      model: "Qwen/Qwen3-8B",
+      messages: [{ role: "user", content: "Write a haiku about GPUs." }],
+      max_tokens: 200,
+      stream: true,
+    });
+    for await (const chunk of stream) {
+      process.stdout.write(chunk.choices[0]?.delta?.content ?? "");
+    }
+    ```
+  </Tab>
+</Tabs>
+
+Dedicated endpoint code changes the same way. Replace `Together(base_url="https://api-inference.together.ai")` and the endpoint string (`PROJECT_SLUG/ENDPOINT_NAME`) with the Runpod base URL and the served model name. Calls to `client.images`, `client.videos`, `client.audio`, `client.rerank`, `client.batches`, `client.files`, `client.fine_tuning`, and `client.endpoints` have no drop-in replacement and are covered below.
+
+If you use the Vercel AI SDK, replace the Together provider with [`@runpod/ai-sdk-provider`](/public-endpoints/ai-sdk), which works with Public Endpoints and with your own endpoint IDs.
+
+### Feature parity for the OpenAI-compatible surface
+
+| Feature | Together AI | Runpod vLLM endpoint | Runpod Public Endpoints |
+| --- | --- | --- | --- |
+| Chat completions | Supported | Supported (`/chat/completions`) | OpenAI-compatible route documented for Qwen3 32B AWQ, Moonshot Kimi, GPT-OSS 120B, and Cogito 671B. Granite 4.0 documents the native API only. |
+| Text completions | Supported (legacy) | Supported (`/completions`) | Native `prompt` input on Qwen3 32B AWQ, GPT-OSS 120B, and Cogito 671B. For the OpenAI route, see the model page. |
+| Model list | Supported | Supported (`/models`) | See the model page. |
+| Streaming | Supported | Supported (`stream=True`; keep `RAW_OPENAI_OUTPUT=1`) | Supported on the OpenAI-compatible route. |
+| Tool calling | Supported on models marked for function calling | Depends on the model. Set `ENABLE_AUTO_TOOL_CHOICE=true` and the matching `TOOL_CALL_PARSER`. | Documented for GPT-OSS 120B. For other models, check the model. |
+| Structured outputs (`response_format`) | Supported on models marked for structured outputs (`json_schema`) | Not listed in the worker docs. vLLM guided decoding is configurable with `GUIDED_DECODING_BACKEND`. Test it with your model. | See the model page. |
+| Vision (image inputs) | Supported on vision models | Depends on the model | Check the model. Kimi K2.6 lists multimodal input. |
+| Reasoning output | `reasoning` or `reasoning_content`, depending on the model | Set `REASONING_PARSER` for the model. The field name depends on the vLLM version. | Kimi supports `reasoning_effort`. |
+| Log probabilities | Supported, in Together's own response shape | `MAX_LOGPROBS` sets the limit (default 20). Test the response shape against your parser. | See the model page. |
+| Embeddings | Dedicated endpoints only (`/v1/embeddings`) | Not among the documented routes | None listed |
+| Rerank | Dedicated endpoints only (`/v1/rerank`) | Not among the documented routes | None listed |
+| Batch | Together's batch API (JSONL file) | [Batch jobs](/serverless/batch-jobs) or `/run` with a webhook | Asynchronous `/run` |
+| Images, speech, transcription through OpenAI SDK methods | Supported | Not applicable (text models) | Native `/run` and `/runsync` API, not the OpenAI image or audio routes |
+| Responses API, Messages API | Supported | Not documented | Not documented |
+
+Tool calling and structured output requests use the same OpenAI request fields on both platforms (`tools`, `tool_choice`, `response_format`), so client code doesn't change once the endpoint is configured for the model. Together's `logprobs` shape differs from OpenAI's, so code that parses it needs a rewrite either way.
+
+### Images, video, and audio
+
+These calls move from Together's OpenAI-style media routes to Runpod's job API. The request body is wrapped in `input`, and the result is under `output`.
+
+Before, with the `together` SDK:
+
+```python
+from together import Together
+
+client = Together()
+
+response = client.images.generate(
+    model="Qwen/Qwen-Image",
+    prompt="A serene mountain landscape at sunset",
+)
+print(response.data[0].url)
+```
+
+After, against a Public Endpoint:
+
+```python
+import os
+
+import requests
+
+response = requests.post(
+    "https://api.runpod.ai/v2/qwen-image-t2i/runsync",
+    headers={
+        "Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}",
+        "Content-Type": "application/json",
+    },
+    json={"input": {"prompt": "A serene mountain landscape at sunset"}},
+    timeout=300,
+)
+result = response.json()
+print(result["output"]["result"])
+```
+
+Each Public Endpoint defines its own input and output fields, so check the model page. Qwen Image returns the image URL in `output.result`, and most other image models return it in `output.image_url`. Input names such as `size`, `width`, `height`, or `aspect_ratio` also vary by model. Output URLs expire after 7 days, so download anything you need to keep. Together's video API already uses submit and poll (`client.videos.create`, then `client.videos.retrieve` until `completed`). On Runpod, submit with `/run`, poll `/status/JOB_ID` until `COMPLETED`, and read the URL from `output`.
+
+### Batch jobs
+
+Together's batch API takes a JSONL file where each line has a `custom_id` and a `body`. Runpod batch jobs take a JSON array where each element is a normal request with an `input` field, and they run on your endpoint's dedicated batch workers.
+
+Before:
+
+```bash
+tg batches submit batch_input.jsonl --api chat.completions
+tg batches get BATCH_ID
+tg batches download BATCH_ID --output batch_output.jsonl
+```
+
+After:
+
+```bash
+# Create the batch with its requests
+curl -X POST https://api.runpod.ai/v2/ENDPOINT_ID/batch \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '[
+    {"input": {"messages": [{"role": "user", "content": "Hello, world!"}], "sampling_params": {"max_tokens": 200}}},
+    {"input": {"messages": [{"role": "user", "content": "Explain quantum computing."}], "sampling_params": {"max_tokens": 200}}}
+  ]'
+
+# Lock the batch so it starts running
+curl -X POST https://api.runpod.ai/v2/ENDPOINT_ID/batch/BATCH_ID/finalize \
+  -H "Authorization: Bearer $RUNPOD_API_KEY"
+
+# Check progress, then page through results
+curl https://api.runpod.ai/v2/ENDPOINT_ID/batch/BATCH_ID \
+  -H "Authorization: Bearer $RUNPOD_API_KEY"
+curl "https://api.runpod.ai/v2/ENDPOINT_ID/batch/BATCH_ID/requests?offset=0&limit=50" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY"
+```
+
+A batch doesn't run until you finalize it. The body of each request uses the vLLM worker's native input format (`messages` or `prompt`, with sampling parameters under `sampling_params`), not the OpenAI body. There's no `custom_id` field, so carry your own identifier inside `input` if your handler echoes it, or map results by the request IDs the API returns. Batch jobs are available on queue-based endpoints only. For smaller volumes, submit each request to `/run` with a `webhook` URL and let Runpod call you when each job finishes.
+
+### Container queue jobs
+
+Together's queue API and Runpod's job API line up closely.
+
+Before:
+
+```bash
+curl -X POST "https://api.together.ai/v1/queue/submit" \
+  -H "Authorization: Bearer $TOGETHER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "hello-world", "payload": {"name": "Together"}, "priority": 1}'
+
+curl "https://api.together.ai/v1/queue/status?model=hello-world&request_id=REQUEST_ID" \
+  -H "Authorization: Bearer $TOGETHER_API_KEY"
+```
+
+After:
+
+```bash
+curl -X POST "https://api.runpod.ai/v2/ENDPOINT_ID/run" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"name": "Runpod"}}'
+
+curl "https://api.runpod.ai/v2/ENDPOINT_ID/status/JOB_ID" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY"
+```
+
+`payload` becomes `input`, `request_id` becomes `id`, and `outputs` becomes `output`. Runpod has no numeric job priority. The documented `lowPriority` policy flag only keeps a job from triggering worker scaling, so if you rely on Together's `priority` ordering, run a separate endpoint for high-priority traffic. Use `/runsync` to wait for the result in one call, and add a top-level `webhook` field to be notified instead of polling. From Python, `runpod.Endpoint("ENDPOINT_ID").run_sync({...})` wraps the same calls.
+
+### Control-plane automation
+
+Replace `tg` commands in scripts and CI with `runpodctl` or REST API v2, using the [CLI command map](#cli-command-map) and [API map](#api-map). In CI, set `RUNPOD_API_KEY` as a secret, the same way you set `TOGETHER_API_KEY`.
+
+## Step 8: Verify, cut over, and shut down
+
+### Verify
+
+Send real requests from outside Runpod, with the same client library and network path your application uses.
+
+1. Run your evaluation set against both platforms and compare outputs. Expect differences where the model version or quantization differs.
+2. Test every feature from your inventory against the new endpoint: streaming, tool calls, `response_format`, image inputs, and long prompts near your context limit.
+3. Measure latency for a warm worker and for a cold start. If the cold start is too slow for your use, set active workers or raise the idle timeout.
+4. Run a load test at your peak concurrency and watch for `429` responses and queue delay. Raise max workers or `MAX_CONCURRENCY` if requests queue.
+5. Check the job counts and worker state.
+
+```bash
+curl -s "https://api.runpod.ai/v2/ENDPOINT_ID/health" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY"
+runpodctl serverless get ENDPOINT_ID --include-workers
+```
+
+### Cut over
+
+Run both platforms in parallel behind a configuration flag that selects the base URL, API key, and model name. Shift a small share of traffic to Runpod, compare error rates and latency, and increase the share in steps. Keep the Together path deployable until you've run at full traffic through at least one peak period. While both run, you pay for both.
+
+### Set a cost guard on Runpod
+
+Max workers is the ceiling on what an endpoint can spend per hour, so set it deliberately. Keep active workers at zero on anything that doesn't need to be warm, keep the execution timeout enabled so a stuck job can't run indefinitely, and delete test endpoints. Runpod also applies an account-wide [spend limit](/accounts-billing/billing#spending-limits) per hour, and scales down endpoints that receive no requests for several days.
+
+### Shut down Together AI
+
+Serverless models stop costing money when you stop calling them. Everything else needs an explicit action. Deleting is permanent, so confirm each resource against your inventory first.
+
+```bash
+# Dedicated model inference: stop the deployment, then delete the endpoint and its deployments
+tg endpoints update DEPLOYMENT_ID --min-replicas 0 --max-replicas 0
+tg endpoints rm ENDPOINT_ID --force
+
+# Dedicated container inference: run from the directory that holds the pyproject.toml
+tg beta jig destroy
+
+# GPU clusters, then their shared volumes (volumes keep billing after the cluster is gone)
+tg clusters delete CLUSTER_ID
+tg clusters storage delete VOLUME_ID
+
+# Fine-tuning jobs still running
+tg fine-tuning cancel FT_ID
+```
+
+Stop any remaining v1 dedicated endpoints through the v1 REST API. A stopped v1 endpoint can't be restarted.
+
+```bash
+curl -s -X PATCH "https://api.together.ai/v1/endpoints/ENDPOINT_ID" \
+  -H "Authorization: Bearer $TOGETHER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"state": "STOPPED"}'
+```
+
+Then confirm that `tg endpoints ls`, `tg clusters list`, and `tg clusters storage list` show nothing running. Reserved clusters are charged for the full reservation, so deleting one early doesn't change what you've already paid. Finally, revoke the Together API keys your application no longer uses, in each project's API key settings, and remove `TOGETHER_API_KEY` from your secret stores. If you have auto-recharge on, turn it off.
+
+## Reference
+
+### CLI command map
+
+| Together CLI | Runpod |
+| --- | --- |
+| `tg login`, `tg whoami` | `runpodctl doctor`, or `rp login` for the Runpod SDK |
+| `tg models public` | `runpodctl hub search`, and the [Public Endpoints reference](/public-endpoints/reference) |
+| `tg models configs MODEL_ID` | `runpodctl gpu list` |
+| `tg endpoints deploy MODEL --endpoint NAME` | `runpodctl serverless create --hub-id HUB_ID --name NAME` |
+| `tg endpoints ls` | `runpodctl serverless list` |
+| `tg endpoints get ID` | `runpodctl serverless get ENDPOINT_ID --include-workers` |
+| `tg endpoints update DEPLOYMENT_ID --min-replicas N --max-replicas M` | `runpodctl serverless update ENDPOINT_ID --workers-min N --workers-max M` |
+| `tg endpoints update DEPLOYMENT_ID --min-replicas 0 --max-replicas 0` (stop) | `runpodctl serverless update ENDPOINT_ID --workers-min 0` (scales to zero when idle) |
+| `tg endpoints rm ID` | `runpodctl serverless delete ENDPOINT_ID` |
+| `tg models upload`, `tg models remote-uploads create` | `hf upload`, or `aws s3 sync` to a network volume |
+| `tg fine-tuning create` | `runpodctl pod create` and your training script |
+| `tg fine-tuning download FT_ID` | No equivalent needed. Weights are already on your volume. |
+| `tg batches submit FILE --api chat.completions` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/batch`, then `/finalize` |
+| `tg beta jig deploy` | `docker build`, `docker push`, `runpodctl template create --serverless`, `runpodctl serverless create --template-id` |
+| `tg beta jig logs` | Endpoint logs in the console. See [Logs](/serverless/development/logs). |
+| `tg beta jig secrets set` | [Secrets](/pods/templates/secrets) in the console |
+| `tg beta jig volumes create` | `runpodctl network-volume create` |
+| `tg clusters create` | Instant Clusters in the console, or `POST /v2/clusters` |
+| `tg clusters storage create` | `runpodctl network-volume create` |
+| `tg clusters list-regions` | `runpodctl datacenter list` |
+
+### API map
+
+| Together AI | Runpod |
+| --- | --- |
+| `POST https://api.together.ai/v1/chat/completions` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1/chat/completions` |
+| `POST /v1/completions` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1/completions` |
+| `GET /v1/models` | `GET https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1/models` |
+| `POST /v1/images/generations`, `POST /v1/audio/speech` | `POST https://api.runpod.ai/v2/PUBLIC_ENDPOINT_SLUG/runsync` |
+| Video create and retrieve | `POST https://api.runpod.ai/v2/PUBLIC_ENDPOINT_SLUG/run`, then `GET .../status/JOB_ID` |
+| `POST /v1/queue/submit`, `GET /v1/queue/status` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/run`, `GET .../status/JOB_ID` |
+| Cancel a queued job | `POST https://api.runpod.ai/v2/ENDPOINT_ID/cancel/JOB_ID` |
+| Clear a model's pending jobs | `POST https://api.runpod.ai/v2/ENDPOINT_ID/purge-queue` |
+| Deployment health (`/v1/deployment-request/NAME/health`) | `GET https://api.runpod.ai/v2/ENDPOINT_ID/health` |
+| Batch create, get, cancel | `POST /v2/ENDPOINT_ID/batch`, `GET /v2/ENDPOINT_ID/batch/BATCH_ID`, `POST /v2/ENDPOINT_ID/batch/BATCH_ID/cancel` on `api.runpod.ai` |
+| Create, get, update, delete an endpoint or deployment | `POST`, `GET`, `PATCH`, `DELETE` on `https://api.runpod.io/v2/serverless` and `/v2/serverless/ENDPOINT_ID` |
+| Endpoint analytics | `GET https://api.runpod.io/v2/serverless/ENDPOINT_ID/metrics/requests`, `/metrics/workers`, `/metrics/cold-starts` |
+| Create, list, delete a GPU cluster | `POST`, `GET`, `DELETE` on `https://api.runpod.io/v2/clusters` |
+| Create a shared volume | `POST https://api.runpod.io/v2/network-volumes` |
+| List inference instance types | `GET https://api.runpod.io/v2/catalog/gpus` |
+| `GET /v1/billing/usage` | `GET https://api.runpod.io/v2/billing` and `/v2/billing/serverless` |
+
+Note the two Runpod hosts: `api.runpod.ai` serves requests to endpoints, and `api.runpod.io` is the management API.
+
+### Configuration field map
+
+| Together AI | Runpod (`runpodctl` flag or REST API v2 field) |
+| --- | --- |
+| Model (`MODEL` argument, `ml_...`) | `MODEL_NAME` environment variable and `--model-reference` |
+| Endpoint name (`--endpoint`) | `--name` (`name`). Requests use the endpoint ID, not the name. |
+| Config or hardware (`--config cr_...`, `gpu_type`) | `--gpu-id` (`gpu.pools`) |
+| GPU count in the config (`gpu_count`) | `--gpu-count` (`gpu.count`) |
+| `--min-replicas` (`minReplicas`, `min_replicas`) | `--workers-min` (`workers.min`) |
+| `--max-replicas` (`maxReplicas`, `max_replicas`) | `--workers-max` (`workers.max`) |
+| `--scaling-metric`, `--scaling-target` | `--scale-by` and `--scale-threshold` on create, `--scaler-type` and `--scaler-value` on update (`scaling`) |
+| `--scale-down-window` | `--idle-timeout` in seconds (`workers.idleTimeout`) |
+| `--inactive-timeout` in minutes | Not needed. Use `--workers-min 0`. |
+| `--max-concurrent-requests-per-replica` | `MAX_CONCURRENCY` environment variable on the vLLM worker |
+| `--placement.regions` | `--data-center-ids` (`dataCenterIds`) |
+| Jig `cmd` | The image's `CMD`, or `--docker-start-cmd` on the template |
+| Jig `storage` | `--container-disk-in-gb` on the template |
+| Jig `port` | Not used by queue-based endpoints. On load balancing endpoints, the `PORT` environment variable. |
+| Jig `environment_variables` | `--env` on the template (`env`) |
+| Jig `volume_mounts` | `--network-volume-id` (`mounts.network`) |
+| Jig `cpu`, `memory` for CPU workers | `--compute-type CPU` with `--instance-id` |
+
+### Environment variable map
+
+| Together AI | Runpod |
+| --- | --- |
+| `TOGETHER_API_KEY` (client and CLI) | `RUNPOD_API_KEY` |
+| `TOGETHER_PROJECT_ID` (client and CLI) | No equivalent. The API key determines the account. |
+| `TOGETHER_DEPLOYMENT_NAME` (inside a Sprocket worker) | `RUNPOD_ENDPOINT_ID` (inside a worker) |
+| `vllm serve` flags in a Jig `cmd` | Upper snake case environment variables on the vLLM worker, or `VLLM_EXTRA_ARGS` |
+| Hugging Face token passed as a Jig secret | `HF_TOKEN` |
+
+### Status map
+
+| Together AI | Runpod |
+| --- | --- |
+| Deployment `PROVISIONING`, `SCALING` | Workers initializing. Check `/health`. |
+| Deployment `READY` | At least one worker ready |
+| Deployment `STOPPED` | Endpoint with no running workers. It starts one on the next request. |
+| Deployment `DEGRADED` | Fewer workers than requested, often shown as throttled workers when a pool is out of stock |
+| Queue job `pending` | Job `IN_QUEUE` |
+| Queue job `running` | Job `IN_PROGRESS` |
+| Queue job `done` | Job `COMPLETED` |
+| Queue job `failed` | Job `FAILED` (or `TIMED_OUT` when it exceeds the execution timeout) |
+| Queue job `canceled` | Job `CANCELLED` |
+| Batch `VALIDATING` | Batch `DRAFT` (not started until you finalize it) |
+| Batch `IN_PROGRESS` | Batch `FINALIZED` |
+| Batch `COMPLETED`, `FAILED`, `CANCELLED` | Batch `COMPLETED`, `FAILED`, `CANCELLED` |
+| Batch `EXPIRED` | No equivalent |
+
+See [Job states](/serverless/endpoints/job-states) for the full list on Runpod.
+
+## Migrate with a coding agent
+
+A coding agent can run the inventory, propose the mapping, and make the code changes. Install the Runpod skills and the MCP server first.
+
+<Tabs>
+  <Tab title="Claude Code">
+    The plugin installs the skills and connects the hosted MCP server.
+
+    ```bash
+    claude plugin marketplace add runpod/runpod-plugins-official
+    claude plugin install runpod@runpod
+    ```
+  </Tab>
+  <Tab title="Other agents">
+    Install the skills, then add the hosted MCP server. Replace `AGENT_ID` and `CLIENT_ID` with your agent's identifiers (for example, Codex or Cursor).
+
+    ```bash
+    npx skills add runpod/runpod-plugins-official --skill '*' --agent AGENT_ID --global
+    npx @runpod/mcp-server@latest add --client CLIENT_ID
+    ```
+  </Tab>
+</Tabs>
+
+The MCP server signs in with OAuth (**Sign in with Runpod**), so you don't need an API key to start. See [Agent skills](/get-started/agent-skills) and [MCP servers](/get-started/mcp-servers) for details.
+
+Then give the agent a prompt like this one, from the root of the repository that calls Together AI.
+
+```text
+Migrate this project from Together AI to Runpod using the runpod-cloud-migrate skill.
+
+1. Inventory first, and change nothing yet. Search the codebase for the together and
+   together-ai SDKs, TOGETHER_API_KEY, api.together.ai, api-inference.together.ai,
+   tg CLI calls, Sprocket workers, and Jig pyproject.toml files. If the tg CLI is
+   logged in, also list dedicated endpoints, uploaded models, fine-tuning jobs,
+   batch jobs, GPU clusters, and cluster storage with read-only commands. For every
+   call site, record the model string, the API (chat, completions, images, video,
+   audio, rerank, batch), and the features used (streaming, tools, response_format,
+   vision, logprobs).
+2. Show me a plan as a table: each workload, where it lands on Runpod (Public
+   Endpoint, vLLM Serverless endpoint, custom Serverless endpoint, Pod, or Instant
+   Cluster), the GPU you'd use and why it fits the model, the worker counts, and an
+   estimated cost at my current traffic. Call out anything with no direct equivalent
+   (embeddings, rerank, traffic splitting, Kubernetes clusters, code sandbox) and
+   ask me how to handle it.
+3. Wait for my approval before you create anything billable on Runpod.
+4. Migrate one workload first. Deploy it, wait until a worker is ready, and verify
+   it with a real request from outside Runpod. Compare the output to Together's for
+   the same prompt, then show me both.
+5. Update the client code behind a configuration switch so I can route traffic to
+   either platform. Don't remove the Together path.
+6. Never stop, delete, or modify any Together AI resource, and never revoke a
+   Together API key, without my explicit approval for that specific resource.
+7. When you finish, list every Runpod resource you created, with its ID and what it
+   costs while idle.
+```
+
+## Troubleshooting
+
+**The first request returns a 524 or times out.** The request waited on a worker that was still starting and loading the model, and the synchronous route gave up. Send the first request with `/run` and poll `/status`, raise your client timeout, and for latency-sensitive traffic set active workers to 1 or more. Check worker state with the `/health` route.
+
+**Responses stop after a few words.** The vLLM worker's documented default for `max_tokens` is 16, so code that never set `max_tokens` gets truncated output. Set it on every request.
+
+**The API returns an invalid model error.** `model` must match the Hugging Face ID you deployed, or the value of `OPENAI_SERVED_MODEL_NAME_OVERRIDE`. Together model strings and endpoint strings (`PROJECT_SLUG/ENDPOINT_NAME`) don't resolve on Runpod. Call `client.models.list()` to see what the endpoint serves.
+
+**Requests return 401.** The client is still sending the Together key. Use your Runpod API key as the bearer token. If the key is restricted, confirm it has access to this endpoint.
+
+**Tool calls come back as plain text.** Tool calling isn't enabled for the model, or the parser doesn't match the model's format. Set `ENABLE_AUTO_TOOL_CHOICE=true` and the `TOOL_CALL_PARSER` for your model family from [Configure vLLM to work with your model](/serverless/vllm/configuration#model-specific-configurations).
+
+**Workers fail to start or run out of memory.** The model plus its KV cache doesn't fit on the GPU you chose. Together selected hardware for you, and on Runpod this is your decision. Lower `MAX_MODEL_LEN`, lower `GPU_MEMORY_UTILIZATION`, use a quantized repository, or move to a larger GPU pool. For models that take longer than the default 420 seconds to load, raise `RUNPOD_INIT_TIMEOUT`.
+
+**The endpoint stays at zero workers.** The GPU pool may be out of stock in the endpoint's data centers, or the endpoint's CUDA version constraint may exclude the machines that have stock. Add more pools, remove data center restrictions, and check the endpoint's CUDA settings. A cached model that isn't on any host yet also delays the first worker while it downloads, which shows up as a job sitting in the queue.
+
+**A gated model fails to download.** Add `HF_TOKEN` to the endpoint with a token that has accepted the model's license. Together handled model access for you. On Runpod the worker pulls from Hugging Face with your credentials.
+
+**Reasoning text is missing from streamed responses.** The field name differs between serving stacks: Together documents `reasoning` or `reasoning_content` depending on the model, and vLLM's field depends on its version. Read both fields in your client, and set `REASONING_PARSER` on the endpoint.
+
+**The bill is higher than expected at low traffic.** You're paying for worker seconds, including model load on each cold start and the idle window after each request. Check whether active workers is set above zero, how long the idle timeout is, and how often workers cold start. For a model that Runpod hosts, a Public Endpoint may fit low, bursty traffic better than your own endpoint.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="vLLM on Serverless" href="/serverless/vllm/overview" icon="bolt" horizontal>
+    Configure, deploy, and call OpenAI-compatible LLM endpoints.
+  </Card>
+  <Card title="Endpoint configurations" href="/serverless/endpoints/endpoint-configurations" icon="gear" horizontal>
+    Tune active workers, scaling, timeouts, and FlashBoot.
+  </Card>
+  <Card title="Public Endpoints model reference" href="/public-endpoints/reference" icon="book" horizontal>
+    Browse the hosted models and their parameters.
+  </Card>
+  <Card title="Cached models" href="/serverless/endpoints/model-caching" icon="database" horizontal>
+    Cut cold starts by caching Hugging Face models on Runpod hosts.
+  </Card>
+</CardGroup>

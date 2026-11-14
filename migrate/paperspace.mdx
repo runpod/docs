@@ -1,0 +1,1333 @@
+---
+title: "Migrate from Paperspace and DigitalOcean GPU to Runpod"
+sidebarTitle: "Paperspace and DigitalOcean"
+description: "Move Paperspace Machines, Notebooks, Deployments, and Workflows, and DigitalOcean GPU Droplets and Inference, to Runpod."
+---
+
+This guide is for teams that run GPU workloads on [Paperspace](https://docs.digitalocean.com/products/paperspace/) or on DigitalOcean's own GPU products and want to run them on Runpod. Paperspace [Machines](https://docs.digitalocean.com/products/paperspace/machines/) and DigitalOcean [GPU Droplets](https://docs.digitalocean.com/products/gpu-droplets/) map to [Pods](/pods/overview), [Notebooks](https://docs.digitalocean.com/products/paperspace/notebooks/) map to Pods with JupyterLab, [Deployments](https://docs.digitalocean.com/products/paperspace/deployments/) map to [Serverless](/serverless/overview) endpoints, [Workflows](https://docs.digitalocean.com/products/paperspace/workflows/) map to the Runpod SDK or Serverless queue endpoints, and DigitalOcean [Inference](https://docs.digitalocean.com/products/inference/) maps to [Public Endpoints](/public-endpoints/overview) or a Serverless vLLM endpoint. By the end you'll have each workload running on Runpod, your data on Runpod storage, your clients and automation pointed at Runpod, and the old resources shut down.
+
+<Tip>
+You can hand most of this migration to a coding agent. See [Migrate with a coding agent](#migrate-with-a-coding-agent).
+</Tip>
+
+<Note>
+**Product names, checked against DigitalOcean's docs on 2026-11-14.** Paperspace is part of DigitalOcean and still offers Notebooks, Deployments, Workflows, and Machines through the Paperspace console. "Gradient" still names those Paperspace products and their subscription plans. DigitalOcean's own AI products are GPU Droplets, Bare Metal GPUs, and Inference (serverless inference, dedicated inference, and Agent Platform). DigitalOcean's docs list no retirement date for the four Paperspace products. They do state that the legacy Gradient and Core API endpoints are no longer available (so the `gradient` CLI no longer works), that Windows templates are unavailable to users who joined after July 1, 2024, and that NVIDIA GRID machines are retired.
+</Note>
+
+## How Paperspace and DigitalOcean map to Runpod
+
+| Paperspace or DigitalOcean concept | Runpod equivalent | Notes |
+| --- | --- | --- |
+| Paperspace Machine (Linux VM) | [Pod](/pods/overview) | A Pod is a container, not a VM. You bring a Docker image instead of an OS template. |
+| DigitalOcean GPU Droplet (VM) | [Pod](/pods/overview) | Same shift from VM to container. 8-GPU plans map to a Pod with a GPU count of 8, subject to stock. |
+| Paperspace Machine (Windows), desktop streaming | None | Pods run Linux containers. See [What has no direct equivalent](#what-has-no-direct-equivalent). |
+| Paperspace Notebook | Pod from the official PyTorch template | JupyterLab on port 8888. Persistent files live in `/workspace`. |
+| Paperspace Deployment (container, replicas, endpoint URL) | [Load-balancing endpoint](/serverless/load-balancing/overview) or [queue-based endpoint](/serverless/overview) | Load balancing keeps your HTTP server as is. Queue-based needs a handler function. |
+| Paperspace Workflow (YAML jobs on Argo) | Runpod SDK [`@app.task`](/sdk/overview) or a queue-based endpoint | Runpod has no YAML pipeline engine. You express job order in Python or in your CI system. |
+| DigitalOcean serverless inference | [Public Endpoints](/public-endpoints/overview) or [Serverless vLLM](/serverless/vllm/overview) | Both expose an OpenAI-compatible route. The model catalog differs. |
+| DigitalOcean dedicated inference, 1-Click Models | [Serverless vLLM](/serverless/vllm/overview) or a Pod | You pick the Hugging Face model and the GPU. |
+| DigitalOcean Bare Metal GPUs, multi-node contract GPU Droplets | [Instant Clusters](/instant-clusters) | Multi-node clusters for Slurm, PyTorch, and Ray. |
+| DOKS GPU node pools | Serverless, Pods, or Instant Clusters | Runpod exposes no Kubernetes API. See [What has no direct equivalent](#what-has-no-direct-equivalent). |
+| OS templates, custom templates, snapshots, Droplet images | Docker image plus a [template](/pods/templates/overview) | A template stores the image, ports, env, and disk sizes. |
+| Notebook container, Deployment `image` | Docker image | Images must be `linux/amd64`. |
+| Machine block storage, Droplet boot disk | Volume disk at `/workspace` or a [network volume](/storage/network-volumes) | Only the mounted path persists. The rest of the container filesystem resets when the Pod stops. |
+| Droplet scratch disk | Container disk | Both are temporary. |
+| Paperspace shared drive, Notebook `/storage`, DigitalOcean Network File Storage | [Network volume](/storage/network-volumes) | Shared by Pods and Serverless workers in one data center. |
+| DigitalOcean Volumes (block storage) | [Network volume](/storage/network-volumes) | A file system mount, not a raw block device. |
+| Paperspace datasets (versioned), DigitalOcean Spaces | Network volume with the [S3-compatible API](/storage/s3-api), or a [global volume](/storage/globalvolume/overview) | Runpod has no dataset versioning or bucket service. You can also keep reading from Spaces. |
+| Public IP (static or dynamic), Droplet public IPv4 | HTTP proxy URL or a mapped TCP port | Runpod assigns the public IP and external port. See [Expose ports](/pods/configuration/expose-ports). |
+| Paperspace private network, DigitalOcean VPC | [Global networking](/pods/networking) | Private Pod-to-Pod DNS at `POD_ID.runpod.internal`. |
+| Paperspace secrets (`secret:NAME`) | [Secrets](/pods/templates/secrets) | Referenced as `{{ RUNPOD_SECRET_name }}` in environment variables. |
+| Paperspace regions (NY2, CA1, AMS1), DigitalOcean regions | Data centers | List them with `runpodctl datacenter list`. |
+| Paperspace hourly billing | Per-second billing | Pods bill per second for compute and storage. Serverless bills per second while workers run. |
+| DigitalOcean GPU Droplet per-second billing | Per-second billing | A stopped Pod stops compute billing and keeps billing its volume disk. |
+| Spot GPU Droplets, contract GPU Droplets | On-demand Pods | `runpodctl`, REST API v2, and the Terraform provider create on-demand Pods. |
+| `digitalocean` Terraform provider | [Runpod Terraform provider](/integrations/terraform/overview) | See [Migrate your Terraform](#migrate-your-terraform). |
+| `pspace` CLI, `doctl` | [`runpodctl`](/runpodctl/overview) | See the [CLI command map](#cli-command-map). |
+| Paperspace API (`api.paperspace.com/v1`), DigitalOcean API (`api.digitalocean.com/v2`) | [REST API v2](/api-reference-v2/overview) (`api.runpod.io/v2`) | See the [API map](#api-map). |
+| PyDo, Godo, DoTs | Runpod SDK (`pip install runpod`) | Includes the `rp` CLI and `runpod.Endpoint`. |
+| Paperspace API key, DigitalOcean personal access token, model access key | One [Runpod API key](/get-started/credentials) | Sent as `Authorization: Bearer`. |
+| Paperspace teams and projects, DigitalOcean teams and projects | [Organizations](/organizations/orgs-overview), [cost centers](/accounts-billing/cost-centers) | Roles and groups live on the organization. |
+| Deployment logs and metrics, DigitalOcean Monitoring | [Serverless logs](/serverless/development/logs), `runpodctl pod logs`, REST v2 metrics routes | Endpoint metrics are at `/v2/serverless/ENDPOINT_ID/metrics/requests`. |
+
+## What's different
+
+### What works differently
+
+**VMs become containers.** A Paperspace Machine or a GPU Droplet is a virtual machine: you pick an OS image, get a boot disk that persists everything, and can install drivers, run `systemd` services, or run Docker yourself. A Pod is a single container that Runpod starts from your Docker image, with the GPU drivers provided by the host. Anything you installed by hand on the VM has to move into a Dockerfile. Runpod runs Docker for you, so you can't start your own Docker daemon or use Docker Compose inside a Pod.
+
+**Only `/workspace` persists.** On a VM the whole boot disk survives a shutdown. On a Pod, the container disk resets when the Pod stops, the volume disk at `/workspace` survives a stop and is deleted with the Pod, and a network volume outlives the Pod. Keep code, data, and checkpoints under the mounted path, and install system packages in the image.
+
+**Stopping and billing.** Paperspace bills machine compute only while the machine is powered on, and keeps billing storage and public IPs. DigitalOcean keeps billing a powered-off GPU Droplet until you destroy it. A stopped Pod stops billing compute and keeps billing its volume disk. A Serverless endpoint with zero active workers bills only while workers run. See [Pod pricing](/pods/pricing) and [Serverless pricing](/serverless/pricing).
+
+**Public access.** A Machine or Droplet gets a public IP address where every port you open is reachable. A Pod exposes only the ports you list. HTTP ports get a URL of the form `https://POD_ID-PORT.proxy.runpod.net`, which is public, has no built-in authentication, and closes connections after 100 seconds. TCP ports (such as SSH) get a public IP and a mapped external port that Runpod assigns. Pods support TCP and HTTP, not UDP.
+
+**Deployment endpoints.** A Paperspace Deployment serves your container at a `paperspacegradient.com` URL, optionally protected with basic authentication (username `paperspace`). A Runpod load-balancing endpoint serves your container at `https://ENDPOINT_ID.api.runpod.ai` and always requires `Authorization: Bearer YOUR_API_KEY`. A queue-based endpoint uses a different contract: you write a handler function and clients call `/run` or `/runsync` with an `{"input": {...}}` body.
+
+**Autoscaling signals.** Paperspace Deployments scale between `replicas` and `maxReplicas` on CPU, memory, or request duration, using the Kubernetes horizontal pod autoscaler. Runpod endpoints scale between a minimum and maximum worker count on request count (load balancing and queue-based) or queue delay (queue-based only). The minimum is 0 by default, so an endpoint scales to zero and the first request after idle pays a cold start.
+
+**Health checks.** Paperspace supports `liveness`, `readiness`, and `startup` probes with any 2xx or 3xx code as success. A load-balancing worker has one health path (`/ping` by default, configurable with `HEALTH_CHECK_PATH`) where `200` means healthy, `204` means initializing, and anything else means unhealthy.
+
+**Model APIs.** DigitalOcean serverless inference authenticates with a model access key against `https://inference.do-ai.run/v1` and includes commercial third-party models. Runpod Public Endpoints and vLLM endpoints authenticate with your Runpod API key and include the endpoint or model slug in the base URL.
+
+**One credential.** Paperspace and DigitalOcean use separate credentials (a Paperspace API key, a DigitalOcean personal access token, model access keys, and Spaces keys). Runpod uses one API key for the CLI, REST API, SDK, and endpoint requests, plus a separate S3 API key for the S3-compatible API.
+
+### What has no direct equivalent
+
+**On Runpod:**
+
+- **Windows machines and desktop streaming.** Pods run Linux containers. Keep Windows workloads where they are, or port them to Linux. For interactive work, use JupyterLab, SSH, or [an IDE connection](/pods/configuration/connect-to-ide).
+- **A Kubernetes API.** DOKS GPU node pools have no Runpod counterpart you can point `kubectl` at. Move each workload to the product that fits its shape: a Deployment with a Service to a Serverless endpoint, a Job to `@app.task` or a queue-based endpoint, a StatefulSet or long-lived process to a Pod, and tightly coupled multi-node training to an [Instant Cluster](/instant-clusters). To keep a cluster-style scheduler, use the [SkyPilot](/integrations/skypilot) or [dstack](/integrations/dstack) integration.
+- **VM snapshots and custom OS templates.** Rebuild the environment as a Docker image and store its settings in a template.
+- **A workflow engine.** Gradient Workflows runs YAML job graphs with typed inputs and outputs. On Runpod, job order lives in Python (the SDK) or in your CI system.
+- **Versioned datasets.** Paperspace datasets have immutable versions and tags. On a network volume, use versioned directory names, or keep datasets in an object store that supports versioning.
+- **Object storage buckets with a CDN.** The S3-compatible API reads and writes files on a network volume. It isn't a bucket service with public URLs or a CDN. Keep Spaces for public assets.
+- **Managed agents, knowledge bases, and commercial model routing.** Agent Platform, Knowledge Bases, the Inference Router, and third-party commercial models stay on DigitalOcean or move to another provider.
+- **Raw block devices.** Network volumes mount as a file system. You can't partition or format them.
+- **Multiple probe types.** Fold readiness and startup logic into the single health path.
+
+**On Paperspace and DigitalOcean:**
+
+- **Scale to zero for your own containers.** Paperspace `replicas` is the floor for a running Deployment, and you stop it by setting `enabled: false`.
+- **A managed request queue.** Queue-based endpoints give you async jobs, status polling, streaming, retries, and webhooks without running a queue yourself.
+- **Storage that isn't tied to a region.** A [global volume](/storage/globalvolume/overview) (beta) mounts in any data center.
+- **Ephemeral compute per function call.** `@app.task` provisions a Pod per call and terminates it when the function returns.
+
+## Requirements
+
+- A [Runpod account](/accounts-billing/manage-accounts) with credits, and a [Runpod API key](/get-started/credentials).
+- Access to your Paperspace team (a Paperspace API key for `pspace`) or your DigitalOcean team (a personal access token for `doctl`), or both.
+- Docker on your machine, and a container registry you can push to (Docker Hub, GHCR, or DigitalOcean Container Registry).
+- An SSH key pair for Pod access and file transfer.
+- For Terraform users: Terraform 1.6 or later.
+
+## Step 1: Take inventory of what you run on Paperspace and DigitalOcean
+
+List every resource, record its configuration, and find the code that calls either platform. Use the names from each product's API, because you'll map them field by field in later steps.
+
+### Paperspace
+
+Install `pspace` and log in with a Paperspace API key, then list the resources it manages. The `--json` flag is available on every command.
+
+```bash
+curl -fsSL https://paperspace.com/install.sh | sh
+pspace login
+
+pspace machine list --json > paperspace-machines.json
+pspace deployment list --json > paperspace-deployments.json
+pspace project list --json > paperspace-projects.json
+pspace shared-drive list --json > paperspace-shared-drives.json
+pspace snapshot list --json > paperspace-snapshots.json
+pspace template list --json > paperspace-templates.json
+pspace startup-script list --json > paperspace-startup-scripts.json
+pspace public-ip list --json > paperspace-public-ips.json
+pspace secret list --global --json > paperspace-team-secrets.json
+```
+
+For each machine, record `machineType`, `region`, `diskSize`, `templateId`, `publicIpType`, `networkId`, `startupScriptId`, and the auto-shutdown settings. Secret values aren't needed yet, only the names.
+
+Export the full configuration of each Deployment. The response includes the spec (image, port, env, command, instance type, replicas, autoscaling, health checks, and integrations) and the endpoint URL.
+
+```bash
+pspace deployment get DEPLOYMENT_ID --json > deployment-DEPLOYMENT_ID.json
+```
+
+The same data is available from the Paperspace API at `https://api.paperspace.com/v1`, for example `GET /deployments`, `GET /machines`, `GET /shared-drives`, and `GET /datasets`, with an `Authorization: Bearer` header.
+
+`pspace` has no commands for Notebooks, Workflows, or datasets. For those, use the Paperspace console:
+
+- **Notebooks:** For each Notebook, record the container image, the workspace repository URL, the machine type, and what you keep in `/notebooks`, `/storage`, and `/datasets`.
+- **Workflows:** Workflow specs live in your repository under `.gradient/workflows`. Record each job's `instance-type`, image, `inputs`, `outputs`, `env`, and `needs`.
+- **Datasets and models:** Record each dataset ID and its storage provider (Gradient-managed or your own S3-compatible bucket).
+
+### DigitalOcean
+
+Install `doctl`, authenticate with a personal access token, and list GPU resources. `doctl compute droplet list` returns only non-GPU Droplets unless you pass `--gpus`.
+
+```bash
+doctl auth init
+
+doctl compute droplet list --gpus --output json > do-gpu-droplets.json
+doctl compute volume list --output json > do-volumes.json
+doctl compute snapshot list --output json > do-snapshots.json
+doctl kubernetes cluster list --output json > do-doks-clusters.json
+doctl kubernetes cluster node-pool list CLUSTER_ID --output json > do-node-pools.json
+```
+
+For each GPU Droplet, record the size slug (for example `gpu-h100x1-80gb`), the image slug (`gpu-h100x1-base`, `gpu-h100x8-base`, `gpu-amd-base`, a 1-Click Model, or your own snapshot), region, attached volume IDs, VPC, tags, and the user data script. For DOKS, record which node pools use `gpu-` size slugs and which workloads schedule onto them.
+
+List dedicated inference deployments with the DigitalOcean API:
+
+```bash
+curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
+  "https://api.digitalocean.com/v2/dedicated-inferences"
+```
+
+For serverless inference, list your model access keys in the DigitalOcean Control Panel and note which model IDs your applications request. For Spaces, list buckets with any S3 client pointed at your region's endpoint, for example `aws s3 ls --endpoint-url https://nyc3.digitaloceanspaces.com`.
+
+### Find code that calls either platform
+
+Search your repositories for CLI invocations, hostnames, credentials, and Terraform resources:
+
+```bash
+grep -rnE \
+  "pspace |gradient (deployments|workflows|notebooks|datasets)|api\.paperspace\.com|paperspacegradient\.com|PAPERSPACE_API_KEY|\.gradient/workflows|doctl |api\.digitalocean\.com|digitaloceanspaces\.com|inference\.do-ai\.run|dedicated-inference\.do-infra\.ai|DIGITALOCEAN_(ACCESS_)?TOKEN|MODEL_ACCESS_KEY|from pydo|digitalocean/godo|digitalocean_(droplet|volume|volume_attachment|spaces_bucket|kubernetes_cluster|kubernetes_node_pool)" \
+  --include="*.py" --include="*.ts" --include="*.js" --include="*.go" --include="*.sh" \
+  --include="*.yaml" --include="*.yml" --include="*.json" --include="*.toml" --include="*.tf" \
+  --include="Dockerfile*" --include="Makefile" .
+```
+
+Also check for hardcoded paths that only exist on the old platform: `/notebooks`, `/storage`, `/datasets`, `/inputs`, `/outputs`, `/home/paperspace`, and Droplet volume mount points under `/mnt`.
+
+## Step 2: Set up Runpod
+
+Create a [Runpod account](https://www.console.runpod.io), add credits, and create an [API key](/get-started/credentials). Then install the tools you'll use.
+
+Install `runpodctl` and configure it. `runpodctl doctor` sets your API key and an SSH key in one pass.
+
+```bash
+curl -fsSL https://cli.runpod.net | sudo bash
+runpodctl doctor
+```
+
+On macOS you can use `brew install runpod/runpodctl/runpodctl` instead.
+
+Install the Runpod SDK if you'll migrate Workflows, write Serverless handlers, or call endpoints from Python. It requires Python 3.10 to 3.14 and includes the `rp` CLI.
+
+```bash
+pip install runpod
+rp login
+export RUNPOD_API_KEY="YOUR_API_KEY"
+```
+
+`rp login` stores your key in `~/.runpod/config.toml`. The `RUNPOD_API_KEY` variable is what the REST examples and the Terraform provider in this guide read.
+
+To let a coding agent manage Runpod for you, connect the [Runpod MCP server](/get-started/mcp-servers). For infrastructure as code, install the [Terraform provider](/integrations/terraform/overview).
+
+## Step 3: Choose where each workload lands
+
+Pick a target for each item in your inventory by its shape, not by the product it runs on today.
+
+| Workload on Paperspace or DigitalOcean | Runpod target | Why |
+| --- | --- | --- |
+| Machine or GPU Droplet you SSH into for development or training | [Pod](/pods/overview) | Long-lived, interactive, SSH and ports. |
+| Notebook | Pod from the official PyTorch template | JupyterLab with `/workspace` persistence. |
+| Machine or Droplet that hosts a web UI or API all day | Pod, or a [load-balancing endpoint](/serverless/load-balancing/overview) if traffic is bursty | A Pod is always on. An endpoint scales with traffic. |
+| Deployment serving HTTP (FastAPI, Flask, TGI, vLLM) | [Load-balancing endpoint](/serverless/load-balancing/overview) | Keeps your HTTP paths. Requests are limited to 5.5 minutes and 30 MB. |
+| Deployment with long or bursty requests, or batch inference | [Queue-based endpoint](/serverless/overview) | Queues requests, retries, and supports async jobs and webhooks. |
+| Workflow job (train, evaluate, export) | [`@app.task`](/sdk/overview) | One Pod per call, terminated on return. |
+| Workflow that fans out many short jobs | Queue-based endpoint (`@app.queue`) | Autoscaling workers pull from a queue. |
+| Serverless inference with an open model that Runpod hosts | [Public Endpoint](/public-endpoints/overview) | Nothing to deploy. |
+| Serverless or dedicated inference with another open model, 1-Click Model | [Serverless vLLM](/serverless/vllm/get-started) | OpenAI-compatible, your choice of Hugging Face model. |
+| DOKS GPU workload | Serverless endpoint, Pod, or `@app.task` by shape | See [What has no direct equivalent](#what-has-no-direct-equivalent). |
+| Bare Metal GPUs, multi-node training | [Instant Cluster](/instant-clusters) | Multi-node with Slurm, PyTorch, or Ray. |
+| Windows machine | Stays where it is | Pods are Linux containers. |
+
+### Map your GPUs
+
+Choose a GPU by what the workload needs (VRAM first, then generation), then confirm stock. The Runpod IDs below come from the [GPU types reference](/references/gpu-types). Pods take a GPU type ID. Serverless endpoints take a GPU pool ID.
+
+| Paperspace machine type | VRAM | Closest Runpod GPU type ID | Serverless pool |
+| --- | --- | --- | --- |
+| GPU+ (M4000), P4000, RTX4000 | 8 GB | `NVIDIA RTX A4000` (16 GB) | `AMPERE_16` |
+| P5000, RTX5000, A4000 | 16 GB | `NVIDIA RTX A4000` | `AMPERE_16` |
+| V100 | 16 GB | `Tesla V100-PCIE-16GB` or `NVIDIA RTX A4000` | `AMPERE_16` |
+| P6000, A5000 | 24 GB | `NVIDIA RTX A5000` | `AMPERE_24` |
+| V100-32G | 32 GB | `Tesla V100-SXM2-32GB` or `NVIDIA RTX 5000 Ada Generation` | `AMPERE_48` |
+| A100 | 40 GB | `NVIDIA A40` (48 GB) or `NVIDIA RTX A6000` (48 GB) | `AMPERE_48` |
+| A6000 | 48 GB | `NVIDIA RTX A6000` | `AMPERE_48` |
+| A100-80G | 80 GB | `NVIDIA A100 80GB PCIe` or `NVIDIA A100-SXM4-80GB` | `AMPERE_80` |
+| H100 | 80 GB | `NVIDIA H100 80GB HBM3` or `NVIDIA H100 PCIe` | `ADA_80_PRO` |
+
+| DigitalOcean GPU Droplet size slug | VRAM | Closest Runpod GPU type ID | Serverless pool |
+| --- | --- | --- | --- |
+| `gpu-4000adax1-20gb` | 20 GB | `NVIDIA RTX 4000 Ada Generation` | `AMPERE_16` |
+| `gpu-6000adax1-48gb` | 48 GB | `NVIDIA RTX 6000 Ada Generation` | `ADA_48_PRO` |
+| `gpu-l40sx1-48gb` | 48 GB | `NVIDIA L40S` | `ADA_48_PRO` |
+| `gpu-h100x1-80gb`, `gpu-h100x8-640gb` | 80 GB each | `NVIDIA H100 80GB HBM3` | `ADA_80_PRO` |
+| `gpu-h200x1-141gb`, `gpu-h200x8-1128gb` | 141 GB each | `NVIDIA H200` | `HOPPER_141` |
+| `gpu-mi300x1-192gb`, `gpu-mi300x8-1536gb` | 192 GB each | `AMD Instinct MI300X OAM` | Check the catalog |
+| B300 plans | 288 GB each | `NVIDIA B300 SXM6 AC` | Check the catalog |
+| MI325X, MI350X, MI355X plans | 256 to 288 GB each | Check the catalog | Check the catalog |
+
+GPU stock varies by data center and changes through the day, so check what's available before you commit to a type:
+
+```bash
+runpodctl gpu list
+runpodctl datacenter list
+```
+
+For AMD GPU Droplets, check both that an AMD GPU type has stock and that your software stack (ROCm) has a matching image. The official PyTorch templates include one ROCm variant. If you move from AMD to NVIDIA GPUs, rebuild on a CUDA base image.
+
+## Step 4: Move your images and code
+
+Every Runpod target runs a `linux/amd64` Docker image. What you do here depends on whether the source is already a container.
+
+### Machines and GPU Droplets: turn the VM into an image
+
+Write a Dockerfile that reproduces what you installed on the VM. Start from a Runpod PyTorch image so you get CUDA, SSH, and JupyterLab conventions that the platform already understands.
+
+```dockerfile Dockerfile
+FROM runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404
+
+# System packages you installed with apt on the Machine or Droplet
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg git-lfs rsync \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python packages from the VM environment (pip freeze > requirements.txt)
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir --break-system-packages -r /tmp/requirements.txt
+
+# Application code. Data and checkpoints go on /workspace at runtime, not in the image.
+WORKDIR /app
+COPY . /app
+```
+
+The Ubuntu 24.04 base image marks the system Python as externally managed, which is why the install uses `--break-system-packages`. Build for `linux/amd64` and push to a registry Runpod can pull from:
+
+```bash
+docker buildx build --platform linux/amd64 -t YOUR_REGISTRY/trainer:v1 --push .
+```
+
+If you build on an Apple silicon Mac, the `--platform` flag is required. Without it the image is `arm64` and the Pod fails to start.
+
+Translate the rest of the VM setup as follows:
+
+- **GPU drivers and CUDA.** Don't install NVIDIA drivers in the image. The host provides them. Your image supplies the CUDA user-space libraries, and you set a CUDA floor when you create the Pod (`--min-cuda-version 12.8`) so it lands on a host whose driver supports your image.
+- **Startup scripts and user data.** A Paperspace startup script or Droplet `user_data` (cloud-init) becomes either Dockerfile steps (for installs) or the container start command (for launching your process).
+- **Docker and Docker Compose on the VM.** If the Droplet ran `docker run --gpus all your-image`, that image is your Pod image, and the `docker run` flags become template fields: `-p` becomes `ports`, `-e` becomes `env`, `-v` becomes a volume mount, and the trailing command becomes the start command. For a Compose stack, run one Pod per service and connect them with [global networking](/pods/networking), or combine the services into one image with a process supervisor.
+- **`systemd` services.** A container has one main process. Run your service in the foreground as the start command.
+- **The `paperspace` user.** Paperspace Linux machines provision a `paperspace` user with a home directory at `/home/paperspace`. Runpod's SSH examples connect as `root`, and persistent data lives in `/workspace`. Update hardcoded paths.
+- **ML-in-a-Box and the AI/ML-ready image.** Both are VM images with a preinstalled stack. The closest starting point is a `runpod/pytorch` image plus your own `requirements.txt`.
+
+For a private registry, save credentials once and reference them when you create Pods, templates, or endpoints:
+
+```bash
+printenv REGISTRY_TOKEN | runpodctl registry create --name "my-registry" --username "my-user" --password-stdin
+runpodctl registry list
+```
+
+### Notebooks: reuse the container or switch to the PyTorch template
+
+A Paperspace Notebook already runs in a container (for example `paperspace/gradient-base`), with your files in `/notebooks`. You have two options:
+
+- **Use the official PyTorch template** (`runpod-torch-v280`), which starts JupyterLab on port 8888 and mounts `/workspace`. Reinstall your Python packages from a `requirements.txt` kept in `/workspace`. This is the shortest path.
+- **Build your own image** from `runpod/pytorch` with your packages baked in, as in the Dockerfile above, if you want the environment to survive Pod deletion.
+
+Either way, change notebook code that reads `/notebooks`, `/storage`, or `/datasets` to read from `/workspace`.
+
+### Deployments: keep the image, adjust the health check and port
+
+A Deployment image already serves HTTP, so it can run as a load-balancing worker with configuration changes only. The worker must do two things: listen on the port named by the `PORT` environment variable, and answer a health check.
+
+If your app already has a readiness route, point Runpod at it with `HEALTH_CHECK_PATH` instead of changing code. If it has none, add a `/ping` route. This FastAPI app is the Paperspace health check example adapted for Runpod: it returns `204` while the model loads and `200` when it's ready.
+
+<CodeGroup>
+
+```python Before: Paperspace Deployment
+from fastapi import FastAPI, Response, status
+
+app = FastAPI()
+model_loaded = False
+
+
+@app.on_event("startup")
+async def model_load():
+    global model_loaded
+    # Download and load the model here
+    model_loaded = True
+
+
+@app.get("/liveness/", status_code=200)
+def liveness_check():
+    return "Liveness check succeeded."
+
+
+@app.get("/readiness/", status_code=200)
+def readiness_check(response: Response):
+    if not model_loaded:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return "Readiness check failed."
+    return "Readiness check succeeded."
+
+
+@app.post("/predict/")
+def predict(body: dict):
+    return {"prediction": f"result for {body['prompt']}"}
+```
+
+```python After: Runpod load-balancing worker
+import os
+
+import uvicorn
+from fastapi import FastAPI, Response
+
+app = FastAPI()
+model_loaded = False
+
+
+@app.on_event("startup")
+async def model_load():
+    global model_loaded
+    # Download and load the model here
+    model_loaded = True
+
+
+@app.get("/ping")
+def ping():
+    # 200 = healthy, 204 = still initializing, anything else = unhealthy
+    if not model_loaded:
+        return Response(status_code=204)
+    return {"status": "healthy"}
+
+
+@app.post("/predict/")
+def predict(body: dict):
+    return {"prediction": f"result for {body['prompt']}"}
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "80")))
+```
+
+</CodeGroup>
+
+The request and response bodies don't change. What changes is the health route, the port source, and (in [Step 7](#step-7-update-the-code-that-calls-paperspace-and-digitalocean)) the URL and auth header your clients send.
+
+To use a queue-based endpoint instead, replace the HTTP server with a handler. Clients then send `{"input": {...}}` to `/run` or `/runsync` instead of calling your paths.
+
+```python handler.py
+import runpod
+
+# Load the model once, outside the handler, so warm workers reuse it
+MODEL = None
+
+
+def load_model():
+    global MODEL
+    if MODEL is None:
+        MODEL = lambda prompt: f"result for {prompt}"  # Replace with your model load
+    return MODEL
+
+
+def handler(job):
+    prompt = job["input"]["prompt"]
+    model = load_model()
+    return {"prediction": model(prompt)}
+
+
+runpod.serverless.start({"handler": handler})
+```
+
+The image for a queue-based worker needs `pip install runpod` and a start command of `python -u handler.py`. See [Handler functions](/serverless/workers/handler-functions) for streaming and async handlers.
+
+### Workflows: rewrite the job graph in Python
+
+A Workflow spec declares jobs, their order (`needs`), and data passed through `/inputs` and `/outputs`. With the Runpod SDK, each job becomes a function decorated with `@app.task`, the order becomes ordinary Python, and shared data moves through a network volume mounted on each task.
+
+<CodeGroup>
+
+```yaml Before: .gradient/workflows/train.yaml
+defaults:
+  env:
+    HF_TOKEN: secret:hf_token
+  resources:
+    instance-type: A100-80G
+
+jobs:
+  train:
+    outputs:
+      model:
+        type: dataset
+        with:
+          ref: my-model
+    uses: container@v1
+    with:
+      image: my-org/trainer:v1
+      args:
+        - bash
+        - -c
+        - python train.py --steps 1000 --out /outputs/model
+
+  evaluate:
+    needs:
+      - train
+    inputs:
+      model: train.outputs.model
+    uses: container@v1
+    with:
+      image: my-org/trainer:v1
+      args:
+        - bash
+        - -c
+        - python evaluate.py --model /inputs/model
+```
+
+```python After: main.py
+import subprocess
+
+import runpod
+from runpod import App, NetworkVolume, Secret
+
+app = App("train-pipeline")
+artifacts = NetworkVolume("pipeline-artifacts", size=100)
+
+
+@app.task(
+    gpu="A100",
+    image="my-org/trainer:v1",
+    mounts={"/artifacts": artifacts},
+    env={"HF_TOKEN": Secret("hf_token")},
+)
+def train(steps: int = 1000):
+    out_dir = artifacts.path / "model"
+    subprocess.run(
+        ["python", "train.py", "--steps", str(steps), "--out", str(out_dir)],
+        check=True,
+    )
+    return {"model_dir": "model"}
+
+
+@app.task(
+    gpu="A100",
+    image="my-org/trainer:v1",
+    mounts={"/artifacts": artifacts},
+    env={"HF_TOKEN": Secret("hf_token")},
+)
+def evaluate(model_dir: str):
+    subprocess.run(
+        ["python", "evaluate.py", "--model", str(artifacts.path / model_dir)],
+        check=True,
+    )
+    return {"evaluated": model_dir}
+
+
+@runpod.local_entrypoint
+def main():
+    trained = train.remote(steps=1000)
+    print(evaluate.remote(trained["model_dir"]))
+```
+
+</CodeGroup>
+
+Each task call provisions a Pod, runs the function, and terminates the Pod when it returns. The `needs` relationship is now the order of the two `.remote()` calls, and `/outputs/model` and `/inputs/model` are one directory on a shared network volume. Create the secret with `rp secret add hf_token` before the first run, and check the short GPU names the SDK accepts in [SDK GPU types](/sdk/configuration/gpu-types).
+
+Workflows that a GitHub push triggers through the Gradient GitHub App need a new trigger. Run the pipeline from your CI system with `rp flash dev main.py --once`, which runs the entrypoint once and exits.
+
+### Runtime environment variables
+
+Review code that reads platform-injected variables or fixed paths. See the [Environment variable map](#environment-variable-map).
+
+## Step 5: Move your data and models
+
+First decide where each data set lives on Runpod:
+
+| Source | Runpod destination |
+| --- | --- |
+| Machine disk, Droplet boot disk, files in `/notebooks` | Volume disk at `/workspace` for one Pod, or a network volume if more than one Pod or endpoint needs it |
+| Shared drive, Notebook `/storage`, DigitalOcean Volumes, Network File Storage | Network volume |
+| Paperspace datasets, Spaces buckets | Network volume, or leave in place and read over the S3 API |
+| Model weights from Hugging Face | [Cached models](/serverless/endpoints/model-caching) on Serverless, or download into a network volume |
+| Model weights you trained | Network volume, or a [global volume](/storage/globalvolume/overview) if workers in several data centers read them |
+| Droplet scratch disk | Container disk (don't migrate, it's temporary on both sides) |
+
+<Warning>
+A network volume lives in one data center, and every Pod or worker that mounts it runs there. Choose a data center that has stock for the GPU you picked in Step 3, and prefer one that supports the [S3-compatible API](/storage/s3-api#datacenter-availability) so you can transfer files without a running Pod.
+</Warning>
+
+Create the network volume:
+
+```bash
+runpodctl network-volume create --name "migrated-data" --size 500 --data-center-id "US-KS-2"
+runpodctl network-volume list
+```
+
+Size is in GB (10 to 4096) and can grow later but not shrink.
+
+### From a Machine, Droplet, or DigitalOcean Volume: push with the S3-compatible API
+
+The source VM can push straight to the network volume, with no Pod running. Create an S3 API key on the [Credentials page](https://console.runpod.io/user/credentials) (it's separate from your Runpod API key), then run the AWS CLI on the Machine or Droplet:
+
+```bash
+aws configure   # enter the S3 API key's access key and secret
+
+aws s3 sync /mnt/volume_nyc2_01/datasets/ s3://NETWORK_VOLUME_ID/datasets/ \
+  --region US-KS-2 \
+  --endpoint-url https://s3api-us-ks-2.runpod.io/
+```
+
+The bucket name is the network volume ID, and object keys are file paths: `s3://NETWORK_VOLUME_ID/datasets/a.bin` appears at `/workspace/datasets/a.bin` on a Pod and `/runpod-volume/datasets/a.bin` on a Serverless worker. `aws s3 sync` can struggle with more than about 10,000 files, so for directories with many small files, create a tar archive first and copy that with `aws s3 cp`.
+
+### From a Machine or Droplet: push over SSH with rsync
+
+If the data center you chose doesn't support the S3-compatible API, or you want `rsync` semantics, start a Pod with the network volume attached and push over SSH. Register the source VM's public key with Runpod before you create the Pod, because keys are injected at creation.
+
+```bash
+# On your workstation: register the VM's public key, then create the transfer Pod
+runpodctl ssh add-key --key-file ./source-vm-id_ed25519.pub
+runpodctl pod create --name "transfer" --compute-type cpu \
+  --image "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404" \
+  --network-volume-id NETWORK_VOLUME_ID --data-center-ids "US-KS-2" --ports "22/tcp"
+runpodctl ssh info POD_ID
+
+# On the Machine or Droplet: push the data
+rsync -avz --progress -e "ssh -p POD_SSH_PORT" /home/paperspace/data/ root@POD_IP:/workspace/data/
+```
+
+`runpodctl ssh info` prints the host, port, and key to use. `rsync` needs the direct SSH connection, which is why the Pod exposes `22/tcp` and uses an official Runpod image that starts an SSH server. Install `rsync` on the Pod first (`apt update && apt install -y rsync`). If `runpodctl ssh info` reports no public IP, recreate the transfer Pod as a GPU Pod on Secure Cloud. Delete the transfer Pod when the copy finishes.
+
+### From a Notebook or a dataset
+
+Open a terminal in the Notebook, where `/notebooks`, `/storage`, and mounted datasets under `/datasets` are all visible, and push to the network volume with the S3-compatible API:
+
+```bash
+pip install awscli
+aws configure   # enter the S3 API key's access key and secret
+
+tar -cf /tmp/notebooks.tar -C /notebooks .
+aws s3 cp /tmp/notebooks.tar s3://NETWORK_VOLUME_ID/notebooks.tar \
+  --region US-KS-2 --endpoint-url https://s3api-us-ks-2.runpod.io/
+
+aws s3 sync /storage/ s3://NETWORK_VOLUME_ID/storage/ \
+  --region US-KS-2 --endpoint-url https://s3api-us-ks-2.runpod.io/
+```
+
+For notebooks tracked in Git, cloning the repository into `/workspace` on the Pod is simpler than copying files.
+
+### From Spaces
+
+Spaces is S3-compatible, so you can copy from it with the AWS CLI from inside a Pod that has the network volume mounted. Use a named profile for the Spaces keys so they don't collide with other credentials.
+
+```bash
+aws configure --profile spaces   # enter your Spaces access key and secret
+
+aws s3 sync s3://my-space/models/ /workspace/models/ \
+  --profile spaces --endpoint-url https://nyc3.digitaloceanspaces.com
+```
+
+Replace `nyc3` with your bucket's region. Running this inside a Pod writes straight to the volume's file system. You can also leave data in Spaces and keep reading it from Runpod with the same S3 client code, since only the compute moved.
+
+### Models
+
+For Hugging Face models on Serverless, attach the model to the endpoint instead of copying weights. Runpod stages it on the host before the worker starts, and it appears under `/runpod-volume/huggingface-cache/hub/`. This replaces a Paperspace Deployment `git-lfs` integration that clones a Hugging Face URL into `/models`.
+
+```bash
+runpodctl serverless create --template-id TEMPLATE_ID --gpu-id AMPERE_80 \
+  --model-reference https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct:main
+```
+
+Point your model loading code at the cache path, or load by model ID and let the Hugging Face libraries resolve it. See [Cached models](/serverless/endpoints/model-caching).
+
+## Step 6: Deploy on Runpod
+
+### Deploy a Pod (from a Machine or GPU Droplet)
+
+Create the Pod from your image with the GPU, storage, and ports from your inventory. This is the equivalent of `pspace machine create` or `doctl compute droplet create`.
+
+<CodeGroup>
+
+```bash Before: Paperspace
+pspace machine create \
+  --name trainer \
+  --machine-type A100-80G \
+  --template-id TEMPLATE_ID \
+  --region ny2 \
+  --disk-size 500 \
+  --public-ip-type dynamic
+```
+
+```bash Before: DigitalOcean
+doctl compute droplet create trainer \
+  --size gpu-h100x1-80gb \
+  --image gpu-h100x1-base \
+  --region nyc2 \
+  --ssh-keys SSH_KEY_ID \
+  --volumes VOLUME_ID \
+  --user-data-file ./setup.sh
+```
+
+```bash After: runpodctl
+runpodctl pod create \
+  --name trainer \
+  --image YOUR_REGISTRY/trainer:v1 \
+  --gpu-id "NVIDIA H100 80GB HBM3" \
+  --gpu-count 1 \
+  --container-disk-in-gb 50 \
+  --network-volume-id NETWORK_VOLUME_ID \
+  --data-center-ids "US-KS-2" \
+  --ports "8888/http,22/tcp" \
+  --min-cuda-version 12.8 \
+  --env '{"WANDB_PROJECT":"trainer"}'
+```
+
+```bash After: REST API v2
+curl -s -X POST https://api.runpod.io/v2/pods \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "trainer",
+    "image": "YOUR_REGISTRY/trainer:v1",
+    "gpu": {"id": "NVIDIA H100 80GB HBM3", "count": 1, "minCudaVersion": "12.8"},
+    "disk": 50,
+    "ports": ["8888/http", "22/tcp"],
+    "env": {"WANDB_PROJECT": "trainer"},
+    "dataCenterIds": ["US-KS-2"],
+    "mounts": {"network": [{"volumeId": "NETWORK_VOLUME_ID", "path": "/workspace"}]},
+    "startSsh": true
+  }'
+```
+
+</CodeGroup>
+
+The Pod's data center must match the network volume's. To use a volume disk instead of a network volume, replace `--network-volume-id` with `--volume-in-gb 500` (REST: `"mounts": {"persistent": {"size": 500, "path": "/workspace"}}`). A volume disk is tied to the Pod's host and is deleted with the Pod, so use a network volume for data you can't recreate. In the console, the same flow is **Pods**, then **Deploy**.
+
+Wait for the Pod and connect:
+
+```bash
+runpodctl pod get POD_ID
+runpodctl ssh info POD_ID
+```
+
+`runpodctl pod get` reports `runtimeStatus: running` when the container is up. HTTP ports are at `https://POD_ID-8888.proxy.runpod.net`.
+
+### Deploy a notebook Pod (from a Notebook)
+
+Create a Pod from the official PyTorch template and set `JUPYTER_PASSWORD`, which the template uses as the JupyterLab token. JupyterLab starts only when that variable is set.
+
+```bash
+runpodctl pod create \
+  --name notebook \
+  --template-id runpod-torch-v280 \
+  --gpu-id "NVIDIA RTX A5000" \
+  --volume-in-gb 100 \
+  --env '{"JUPYTER_PASSWORD":"CHOOSE_A_TOKEN"}'
+```
+
+Open `https://POD_ID-8888.proxy.runpod.net` and enter the token. Deploying the same template from the console sets the token for you. Stop the Pod when you finish a session (`runpodctl pod stop POD_ID`) and start it again later (`runpodctl pod start POD_ID`): `/workspace` is kept, and packages installed outside `/workspace` are not.
+
+### Deploy a load-balancing endpoint (from a Deployment)
+
+Create the endpoint with REST API v2. The endpoint type is set at creation and can't change later. `runpodctl serverless create` creates queue-based endpoints, so use REST, Terraform, or the console for load balancing.
+
+<CodeGroup>
+
+```yaml Before: Paperspace deployment spec
+apiVersion: v1
+name: sentiment-api
+image: my-org/sentiment-api:v3
+enabled: true
+env:
+  - name: MODEL_ID
+    value: distilbert-base-uncased-finetuned-sst-2-english
+  - name: HF_TOKEN
+    value: secret:hf_token
+resources:
+  ports:
+    - 8000
+  replicas: 1
+  machineType: A4000
+  autoscaling:
+    enabled: true
+    maxReplicas: 3
+    metrics:
+      - metric: requestDuration
+        summary: average
+        value: 0.5
+healthChecks:
+  readiness:
+    path: /readiness/
+    port: 8000
+```
+
+```bash After: REST API v2
+curl -s -X POST https://api.runpod.io/v2/serverless \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "sentiment-api",
+    "image": "my-org/sentiment-api:v3",
+    "type": "LOAD_BALANCER",
+    "gpu": {"pools": ["AMPERE_16"], "count": 1},
+    "disk": 20,
+    "ports": ["8000/http"],
+    "env": {
+      "PORT": "8000",
+      "PORT_HEALTH": "8000",
+      "HEALTH_CHECK_PATH": "/ping",
+      "MODEL_ID": "distilbert-base-uncased-finetuned-sst-2-english",
+      "HF_TOKEN": "{{ RUNPOD_SECRET_hf_token }}"
+    },
+    "workers": {"min": 0, "max": 3, "idleTimeout": 30},
+    "scaling": {"type": "REQUEST_COUNT", "requestCount": 4},
+    "timeout": 600000
+  }'
+```
+
+</CodeGroup>
+
+The response includes `requestUrls.base` (`https://ENDPOINT_ID.api.runpod.ai`) and `requestUrls.health`. Set both `PORT` and `PORT_HEALTH` to your server's port and list the same port in `ports`: each defaults to 80 on its own, and a mismatch leaves the worker unhealthy. `{{ RUNPOD_SECRET_hf_token }}` reads a Runpod secret named `hf_token`, which you create in the console or with `POST /v2/account/secrets`. Load-balancing endpoints scale on `REQUEST_COUNT` only. `workers.min` of 0 scales to zero. Set it to 1 or more to keep warm workers, which is the closest match to Paperspace `replicas`. In the console, the same flow is **Serverless**, then **New Endpoint**.
+
+### Deploy a queue-based endpoint (from a Deployment or a fan-out Workflow)
+
+Create a Serverless template for the handler image, then an endpoint from it. A Serverless template binds to one endpoint.
+
+```bash
+runpodctl template create --name "sentiment-queue" --image "my-org/sentiment-handler:v1" \
+  --serverless --container-disk-in-gb 20 \
+  --env '{"MODEL_ID":"distilbert-base-uncased-finetuned-sst-2-english"}'
+
+runpodctl serverless create --name "sentiment-queue" --template-id TEMPLATE_ID \
+  --gpu-id AMPERE_16 --workers-min 0 --workers-max 3 \
+  --scale-by delay --scale-threshold 4 --idle-timeout 30
+```
+
+`--scale-by delay` adds workers when requests wait longer than the threshold in seconds. `--scale-by requests` scales on pending request count. You can also deploy a handler straight from a repository with the [GitHub integration](/serverless/workers/github-integration), which builds the image for you.
+
+### Deploy a vLLM endpoint (from serverless inference, dedicated inference, or a 1-Click Model)
+
+Deploy the vLLM worker from the Hub with the Hugging Face model you served on DigitalOcean:
+
+```bash
+runpodctl hub search vllm
+runpodctl serverless create --hub-id HUB_ID --name "my-llm" \
+  --env MODEL_NAME=mistralai/Mistral-7B-Instruct-v0.3
+```
+
+The Hub release supplies the GPU and disk defaults, and you can override the GPU with `--gpu-id`. For gated models, set a Hugging Face token as described in [Get started with vLLM](/serverless/vllm/get-started). If Runpod already hosts the model as a Public Endpoint, there's nothing to deploy: go to [Step 7](#step-7-update-the-code-that-calls-paperspace-and-digitalocean).
+
+### Deploy an SDK app (from a Workflow)
+
+Run the pipeline from Step 4 in a dev session, then deploy any `@app.queue` or `@app.api` resources in the app as production endpoints:
+
+```bash
+rp flash dev main.py --once
+rp flash deploy
+```
+
+Tasks don't need a deploy step. Each call provisions its own Pod. A task started with `.spawn()` keeps running and billing until it finishes if your script exits without waiting on it.
+
+## Step 7: Update the code that calls Paperspace and DigitalOcean
+
+### Deployment clients
+
+For a load-balancing endpoint, change the base URL and the auth header. Paths and bodies stay the same.
+
+<CodeGroup>
+
+```python Before: Paperspace Deployment
+import requests
+
+response = requests.post(
+    "https://DEPLOYMENT_HOST.paperspacegradient.com/predict/",
+    auth=("paperspace", "ENDPOINT_PASSWORD"),  # Basic auth for a protected endpoint
+    json={"prompt": "I love this"},
+    timeout=60,
+)
+print(response.json())
+```
+
+```python After: Runpod load-balancing endpoint
+import os
+
+import requests
+
+response = requests.post(
+    "https://ENDPOINT_ID.api.runpod.ai/predict/",
+    headers={"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}"},
+    json={"prompt": "I love this"},
+    timeout=120,
+)
+print(response.json())
+```
+
+</CodeGroup>
+
+Raise client timeouts and add retries for the first request after idle, because a cold start has to pull the image and load the model. If no worker is available within 2 minutes the request fails, and Runpod's docs recommend at least 3 retries with 5 to 10 second delays.
+
+For a queue-based endpoint, wrap the body in `input` and choose sync or async:
+
+```python client.py
+import runpod
+
+endpoint = runpod.Endpoint("ENDPOINT_ID")
+
+# Synchronous: wait for the result
+print(endpoint.run_sync({"prompt": "I love this"}))
+
+# Asynchronous: submit, then poll
+job = endpoint.run({"prompt": "I love this"})
+print(job.status())
+print(job.output())
+```
+
+The equivalent HTTP calls are `POST https://api.runpod.ai/v2/ENDPOINT_ID/runsync` and `POST https://api.runpod.ai/v2/ENDPOINT_ID/run` with `Authorization: Bearer YOUR_API_KEY`, then `GET /status/JOB_ID`. Results come back under `output`. To get a callback instead of polling, add `"webhook": "https://your-app.example.com/hook"` next to `input`. See [Send requests](/serverless/endpoints/send-requests).
+
+### OpenAI-compatible clients
+
+If you call DigitalOcean serverless inference with the OpenAI SDK, swap the base URL, the key, and the model name.
+
+<CodeGroup>
+
+```python Before: DigitalOcean serverless inference
+import os
+
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://inference.do-ai.run/v1",
+    api_key=os.getenv("MODEL_ACCESS_KEY"),
+)
+
+resp = client.chat.completions.create(
+    model="llama3.3-70b-instruct",
+    messages=[{"role": "user", "content": "What is the capital of Portugal?"}],
+)
+print(resp.choices[0].message.content)
+```
+
+```python After: Runpod Serverless vLLM
+import os
+
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1",
+    api_key=os.getenv("RUNPOD_API_KEY"),
+)
+
+resp = client.chat.completions.create(
+    model="mistralai/Mistral-7B-Instruct-v0.3",  # The model your endpoint serves
+    messages=[{"role": "user", "content": "What is the capital of Portugal?"}],
+)
+print(resp.choices[0].message.content)
+```
+
+```python After: Runpod Public Endpoint
+import os
+
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://api.runpod.ai/v2/qwen3-32b-awq/openai/v1",
+    api_key=os.getenv("RUNPOD_API_KEY"),
+)
+
+resp = client.chat.completions.create(
+    model="Qwen/Qwen3-32B-AWQ",
+    messages=[{"role": "user", "content": "What is the capital of Portugal?"}],
+)
+print(resp.choices[0].message.content)
+```
+
+</CodeGroup>
+
+On Runpod the endpoint ID or Public Endpoint slug is part of the base URL, so each model has its own base URL. vLLM endpoints support `/chat/completions`, `/completions`, and `/models`. If your code uses DigitalOcean's `/v1/responses`, `/v1/messages`, `/v1/embeddings`, image, audio, or video routes, check [OpenAI compatibility](/serverless/vllm/openai-compatibility) and the [Public Endpoints reference](/public-endpoints/reference) for what's available before you cut over. Calls made through PyDo (`client.chat.completions.create` on a `pydo.Client`) need to move to the OpenAI SDK or `runpod.Endpoint`.
+
+Dedicated inference clients change the same way: replace the `do-infra.ai` endpoint URL and its access token with the vLLM base URL and your Runpod API key. A private dedicated inference endpoint that you reach over a VPC with a CA certificate becomes a public HTTPS URL authenticated by API key. 1-Click Models serve the Hugging Face TGI API, so clients that call TGI-specific routes need to switch to the OpenAI-compatible routes.
+
+### Control-plane automation
+
+Replace scripts that call `pspace`, `doctl`, the Paperspace API, or the DigitalOcean API with `runpodctl` or REST API v2. The full maps are in the [Reference](#reference) section. The pattern is the same throughout:
+
+<CodeGroup>
+
+```bash Before: Paperspace API
+curl -X PATCH -H "Authorization: Bearer $PAPERSPACE_API_KEY" \
+  "https://api.paperspace.com/v1/machines/MACHINE_ID/stop"
+```
+
+```bash After: REST API v2
+curl -X POST -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action": "stop"}' \
+  "https://api.runpod.io/v2/pods/POD_ID/action"
+```
+
+</CodeGroup>
+
+A Paperspace auto-shutdown timer has no setting to copy across. Pods come with `runpodctl` and a Pod-scoped API key preinstalled, so a job can stop its own Pod when it finishes: end your script with `runpodctl pod stop $RUNPOD_POD_ID`.
+
+## Step 8: Verify, cut over, and shut down
+
+<Steps>
+  <Step title="Send a real request from outside">
+    Call each new endpoint from the same network your production clients use, with production-shaped inputs. For a load-balancing endpoint:
+
+    ```bash
+    curl -s https://ENDPOINT_ID.api.runpod.ai/ping -H "Authorization: Bearer $RUNPOD_API_KEY"
+    curl -s -X POST https://ENDPOINT_ID.api.runpod.ai/predict/ \
+      -H "Authorization: Bearer $RUNPOD_API_KEY" -H "Content-Type: application/json" \
+      -d '{"prompt": "I love this"}'
+    ```
+
+    For a queue-based endpoint, check `https://api.runpod.ai/v2/ENDPOINT_ID/health` and send a `/runsync` request. For a Pod, open the proxy URL and run `nvidia-smi` over SSH.
+  </Step>
+  <Step title="Compare outputs and latency">
+    Send the same inputs to the old and new deployments and compare results. Measure a cold request (after the endpoint has scaled to zero) and a warm one separately. If cold starts are too slow for your traffic, set a minimum worker count above 0, use [cached models](/serverless/endpoints/model-caching), or move weights from download-at-start to a network volume.
+  </Step>
+  <Step title="Run both in parallel and shift traffic">
+    Keep the Paperspace or DigitalOcean deployment live. Route a small share of traffic to Runpod, watch error rates and [logs](/serverless/development/logs), then increase the share. Keep the old deployment until you've run a full traffic cycle on Runpod.
+  </Step>
+  <Step title="Confirm your data">
+    Verify file counts and checksums on the network volume before you delete any source disk, shared drive, dataset, or bucket. Paperspace snapshots are deleted when their machine is deactivated, so copy anything you need first.
+  </Step>
+  <Step title="Shut down Paperspace">
+    Powering off a machine stops compute billing but storage, public IPs, snapshots, and templates keep billing until you delete them.
+
+    ```bash
+    pspace deployment delete DEPLOYMENT_ID
+    pspace machine stop MACHINE_ID
+    pspace machine delete MACHINE_ID
+    pspace shared-drive delete SHARED_DRIVE_ID
+    pspace snapshot delete SNAPSHOT_ID
+    pspace template delete TEMPLATE_ID
+    pspace public-ip release PUBLIC_IP
+    ```
+
+    Deleting a machine (Paperspace calls this deactivating) permanently removes the machine, its files, and its snapshots, and the machine must be off first. Delete Notebooks, Workflows, and datasets in the Paperspace console, and review your Gradient subscription plan there. Run `pspace public-ip release --help` and `pspace snapshot delete --help` for the exact arguments.
+  </Step>
+  <Step title="Shut down DigitalOcean">
+    A powered-off GPU Droplet still bills. Destroy it, and remove the volumes and snapshots that the destroy leaves behind.
+
+    ```bash
+    doctl compute droplet delete DROPLET_ID
+    doctl compute volume delete VOLUME_ID
+    doctl compute snapshot list
+    doctl kubernetes cluster node-pool delete CLUSTER_ID POOL_ID
+
+    curl -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
+      "https://api.digitalocean.com/v2/dedicated-inferences/DEDICATED_INFERENCE_ID"
+    ```
+
+    Droplet backups stay until their retention period ends. Delete Spaces buckets and model access keys in the Control Panel once nothing reads them. Revoke the Paperspace API keys and DigitalOcean tokens you created for the migration.
+  </Step>
+  <Step title="Guard costs on Runpod">
+    Delete transfer Pods and stop development Pods you aren't using (`runpodctl pod list --all`). Keep endpoint minimum workers at 0 unless you need warm capacity, and set an idle timeout that fits your traffic. Review spend with `runpodctl billing pods` and `runpodctl billing serverless`, and turn on [low balance notifications](/accounts-billing/billing#low-balance-notifications): Pods stop when your balance reaches zero.
+  </Step>
+</Steps>
+
+## Migrate your Terraform
+
+DigitalOcean resources are managed with the `digitalocean/digitalocean` provider. The Runpod provider (`runpod/runpod`, version 2.x) is built on REST API v2 and reads `RUNPOD_API_KEY` from the environment. Paperspace resources aren't covered by the `digitalocean` provider, so recreate them from the inventory in Step 1.
+
+| `digitalocean` resource | Runpod resource | Notes |
+| --- | --- | --- |
+| `digitalocean_droplet` (GPU size) | `runpod_pod` | `size` becomes `gpu_type_id` and `gpu_count`. `image` becomes a Docker image. `region` becomes `data_center_ids`. |
+| `digitalocean_droplet` `user_data` | `runpod_pod` `args`, or steps in your Dockerfile | Installs belong in the image. |
+| `digitalocean_droplet` `ssh_keys` | `runpod_account_ssh_keys`, `start_ssh = true` | Keys are registered on the account. |
+| `digitalocean_volume` | `runpod_network_volume` | `region` becomes `data_center`. `size` is in GB on both. |
+| `digitalocean_volume_attachment` | `network_volumes` on `runpod_pod` | The mount is declared on the Pod. |
+| `digitalocean_spaces_bucket` | `runpod_network_volume` (with the S3-compatible API) or `runpod_global_volume` | Or keep the bucket and the `digitalocean` provider for it. |
+| `digitalocean_container_registry` | `runpod_registry` | Stores pull credentials. It doesn't host images. |
+| `digitalocean_kubernetes_node_pool` (GPU size) | `runpod_serverless_endpoint`, `runpod_pod`, or `runpod_cluster` | Depends on the workload. |
+| `digitalocean_vpc`, `digitalocean_firewall` | `global_networking = true` on `runpod_pod`, and the `ports` list | Only listed ports are exposed. |
+
+The following example replaces a GPU Droplet with an attached volume.
+
+<CodeGroup>
+
+```hcl Before: DigitalOcean
+terraform {
+  required_providers {
+    digitalocean = {
+      source  = "digitalocean/digitalocean"
+      version = "~> 2.0"
+    }
+  }
+}
+
+provider "digitalocean" {}
+
+resource "digitalocean_volume" "data" {
+  region                  = "nyc2"
+  name                    = "training-data"
+  size                    = 500
+  initial_filesystem_type = "ext4"
+}
+
+resource "digitalocean_droplet" "trainer" {
+  name      = "trainer"
+  image     = "gpu-h100x1-base"
+  size      = "gpu-h100x1-80gb"
+  region    = "nyc2"
+  ssh_keys  = [var.ssh_key_fingerprint]
+  user_data = file("${path.module}/setup.sh")
+}
+
+resource "digitalocean_volume_attachment" "data" {
+  droplet_id = digitalocean_droplet.trainer.id
+  volume_id  = digitalocean_volume.data.id
+}
+
+variable "ssh_key_fingerprint" {
+  type = string
+}
+```
+
+```hcl After: Runpod
+terraform {
+  required_version = ">= 1.6"
+
+  required_providers {
+    runpod = {
+      source  = "runpod/runpod"
+      version = "~> 2.0"
+    }
+  }
+}
+
+provider "runpod" {}
+
+resource "runpod_network_volume" "data" {
+  name        = "training-data"
+  size        = 500
+  data_center = "US-KS-2"
+}
+
+resource "runpod_pod" "trainer" {
+  name             = "trainer"
+  image            = "YOUR_REGISTRY/trainer:v1"
+  gpu_type_id      = "NVIDIA H100 80GB HBM3"
+  gpu_count        = 1
+  cloud            = "SECURE"
+  disk             = 50
+  min_cuda_version = "12.8"
+  data_center_ids  = [runpod_network_volume.data.data_center]
+  ports            = ["8888/http", "22/tcp"]
+  start_ssh        = true
+
+  network_volumes = [{
+    volume_id = runpod_network_volume.data.id
+    path      = "/workspace"
+  }]
+
+  env = {
+    WANDB_PROJECT = "trainer"
+  }
+}
+
+output "pod_id" {
+  value = runpod_pod.trainer.id
+}
+```
+
+</CodeGroup>
+
+The `setup.sh` user data script has no direct counterpart: its install steps move into the Docker image. Changing `gpu_type_id`, `gpu_count`, `cloud`, or `data_center_ids` replaces the Pod, so keep data on the network volume. For a Deployment or DOKS inference service, use `runpod_serverless_endpoint` with `endpoint_type = "LOAD_BALANCER"` or `"QUEUE"`, `gpu_pools`, `scaling_type`, `scaling_value`, `workers_min`, and `workers_max`. For every argument, see the [provider reference](https://registry.terraform.io/providers/runpod/runpod/latest/docs).
+
+Migrate in two applies: create the Runpod resources alongside the DigitalOcean ones, cut over, then remove the `digitalocean_` resources and run `terraform apply` again to destroy them.
+
+## Reference
+
+### CLI command map
+
+| `pspace` | `doctl` | `runpodctl` |
+| --- | --- | --- |
+| `pspace login` | `doctl auth init` | `runpodctl doctor` or `runpodctl config --apiKey YOUR_API_KEY` |
+| `pspace machine list` | `doctl compute droplet list --gpus` | `runpodctl pod list --all` |
+| `pspace machine get MACHINE_ID` | `doctl compute droplet get DROPLET_ID` | `runpodctl pod get POD_ID` |
+| `pspace machine create` | `doctl compute droplet create` | `runpodctl pod create` |
+| `pspace machine start`, `stop`, `restart` | `doctl compute droplet-action` commands | `runpodctl pod start`, `stop`, `restart` |
+| `pspace machine update` | | `runpodctl pod update` |
+| `pspace machine delete` | `doctl compute droplet delete` | `runpodctl pod delete` |
+| | `doctl compute ssh DROPLET_ID` | `runpodctl ssh info POD_ID` (prints the command to run) |
+| | `doctl compute size list` | `runpodctl gpu list` |
+| | `doctl compute region list` | `runpodctl datacenter list` |
+| `pspace template list` | `doctl compute image list` | `runpodctl template list` |
+| `pspace template create` | | `runpodctl template create` |
+| `pspace shared-drive create`, `list`, `delete` | `doctl compute volume create`, `list`, `delete` | `runpodctl network-volume create`, `list`, `delete` |
+| `pspace deployment up`, `pspace up` | | `runpodctl serverless create` (queue-based), REST API v2 (load balancing) |
+| `pspace deployment list`, `get` | | `runpodctl serverless list`, `get` |
+| `pspace deployment delete` | | `runpodctl serverless delete` |
+| `pspace secret create`, `list`, `delete` | | `rp secret add`, `list`, `delete` |
+| `pspace init` | | `rp flash init` |
+| `pspace startup-script create` | `--user-data-file` | `--docker-args` on `runpodctl pod create`, or the image |
+| `pspace public-ip`, `pspace snapshot`, `pspace autoscaling-group` | `doctl compute snapshot` | No counterpart (see [What's different](#whats-different)) |
+
+Run `runpodctl COMMAND --help` for current flags.
+
+### API map
+
+| Paperspace API (`https://api.paperspace.com/v1`) | DigitalOcean API (`https://api.digitalocean.com/v2`) | Runpod REST API v2 (`https://api.runpod.io/v2`) |
+| --- | --- | --- |
+| `GET /machines` | `GET /droplets` | `GET /pods` |
+| `POST /machines` | `POST /droplets` | `POST /pods` |
+| `GET /machines/MACHINE_ID` | `GET /droplets/DROPLET_ID` | `GET /pods/POD_ID` |
+| `PATCH /machines/MACHINE_ID/start`, `/stop`, `/restart` | `POST /droplets/DROPLET_ID/actions` | `POST /pods/POD_ID/action` with `{"action": "start"}`, `"stop"`, or `"restart"` |
+| `PUT /machines/MACHINE_ID` | | `PATCH /pods/POD_ID` |
+| `DELETE /machines/MACHINE_ID` | `DELETE /droplets/DROPLET_ID` | `DELETE /pods/POD_ID` |
+| `POST /deployments` (upsert) | `POST /dedicated-inferences` | `POST /serverless` |
+| `GET /deployments`, `GET /deployments/DEPLOYMENT_ID` | `GET /dedicated-inferences` | `GET /serverless`, `GET /serverless/ENDPOINT_ID` |
+| `DELETE /deployments/DEPLOYMENT_ID` | `DELETE /dedicated-inferences/ID` | `DELETE /serverless/ENDPOINT_ID` |
+| `GET /deployments/DEPLOYMENT_ID/logs` | | `GET /serverless/ENDPOINT_ID/workers/WORKER_ID/logs` |
+| `GET /deployments/DEPLOYMENT_ID/metrics` | | `GET /serverless/ENDPOINT_ID/metrics/requests` |
+| `POST /shared-drives`, `GET /shared-drives` | `POST /volumes`, `GET /volumes` | `POST /network-volumes`, `GET /network-volumes` |
+| `GET /machine-availability` | `GET /sizes` | `GET /catalog/gpus` |
+| | `GET /regions` | `GET /catalog/datacenters` |
+| `GET /auth/session` | `GET /account` | `GET /account` |
+
+All three APIs authenticate with `Authorization: Bearer`. Requests to deployed endpoints go to a different host than the management API: `https://api.runpod.ai/v2/ENDPOINT_ID` for queue-based endpoints and `https://ENDPOINT_ID.api.runpod.ai` for load balancing.
+
+### Configuration field map
+
+| Paperspace Deployment spec | Runpod endpoint (REST API v2 `POST /v2/serverless`) | Notes |
+| --- | --- | --- |
+| `name` | `name` | |
+| `image` | `image` | |
+| `containerRegistry` | `registry` | A registry credential ID from `runpodctl registry list`. |
+| `command` | `entrypoint`, `cmd` | Exec-form arrays. |
+| `resources.ports` (`port` in `v0alpha0` specs) | `ports` plus `PORT` and `PORT_HEALTH` in `env` | Load balancing only. |
+| `env` (list of `name` and `value`) | `env` (object) | |
+| `secret:NAME` values | `{{ RUNPOD_SECRET_name }}` | |
+| `resources.machineType` (`resources.instanceType` in `v0alpha0` specs) | `gpu.pools`, `gpu.count` | A pool ID, not a machine name. |
+| `resources.replicas` | `workers.min` | Runpod's default is 0. |
+| `resources.autoscaling.maxReplicas` | `workers.max` | |
+| `resources.autoscaling.metrics` | `scaling.type`, `scaling.requestCount` or `scaling.queueDelay` | No CPU or memory metric. |
+| `enabled: false` | `workers.max` of 0, or delete the endpoint | |
+| `healthChecks.readiness.path` | `HEALTH_CHECK_PATH` in `env` | One path. `200` healthy, `204` initializing. |
+| `healthChecks.liveness`, `startup` | None | Fold into the health path. |
+| `basicAuthKey` | None | Bearer API key is always required. |
+| `region` | `dataCenterIds` | |
+| `integrations` (`git-lfs` Hugging Face URL), `models` in `v0alpha0` specs | Cached model (`--model-reference`) | Path becomes `/runpod-volume/huggingface-cache/hub/`. |
+| `integrations` (`s3`) | Network volume in `mounts.network`, or S3 client code | No bucket mount. |
+
+| Machine or Droplet field | `runpodctl pod create` flag | REST API v2 `POST /v2/pods` field |
+| --- | --- | --- |
+| `name` | `--name` | `name` |
+| `machineType`, Droplet `size` | `--gpu-id`, `--gpu-count` | `gpu.id`, `gpu.count` |
+| `templateId`, Droplet `image` | `--image` or `--template-id` | `image` or `templateId` |
+| `region` | `--data-center-ids` | `dataCenterIds` |
+| `diskSize`, boot disk | `--volume-in-gb` or `--network-volume-id`, plus `--container-disk-in-gb` | `mounts.persistent` or `mounts.network`, plus `disk` |
+| Droplet `volumes` | `--network-volume-id` | `mounts.network` |
+| `publicIpType`, open ports | `--ports` | `ports` |
+| `networkId`, `vpc_uuid` | `--global-networking` | `globalNetworking` |
+| `startupScriptId`, `user_data` | `--docker-args` | `cmd`, `entrypoint` |
+| Droplet `ssh_keys` | `--ssh` (on by default), keys from `runpodctl ssh add-key` | `startSsh` |
+| Droplet `tags` | None | None |
+| `autoShutdownTimeout` | None | None |
+
+### Environment variable map
+
+| On Paperspace or DigitalOcean | On Runpod | Notes |
+| --- | --- | --- |
+| Deployment port from the spec | `PORT`, `PORT_HEALTH` | Load-balancing workers. Both default to 80. |
+| Readiness probe path from the spec | `HEALTH_CHECK_PATH` | Defaults to `/ping`. |
+| `/notebooks`, `/storage`, `/home/paperspace` | `/workspace` | Pod volume mount. |
+| `/inputs/NAME`, `/outputs/NAME`, `/datasets` | A path on a mounted network volume | You choose the layout. |
+| Droplet volume mount under `/mnt` | `/workspace` (Pods), `/runpod-volume` (Serverless) | |
+| Machine ID from the Paperspace API | `RUNPOD_POD_ID` | |
+| Droplet region | `RUNPOD_DC_ID` | |
+| Droplet public IPv4 | `RUNPOD_PUBLIC_IP`, `RUNPOD_TCP_PORT_22` | The external SSH port is mapped. |
+| `nvidia-smi` GPU count | `RUNPOD_GPU_COUNT` | |
+| `PAPERSPACE_API_KEY`, `DIGITALOCEAN_TOKEN`, `MODEL_ACCESS_KEY` in your own env | `RUNPOD_API_KEY` | Pods also receive a Pod-scoped `RUNPOD_API_KEY`. |
+
+### Status map
+
+| Paperspace machine state | Runpod Pod status | Notes |
+| --- | --- | --- |
+| Provisioning | `PROVISIONING` | |
+| Starting up | `STARTING` (`runtimeStatus: initializing`) | Includes the image pull. |
+| On/Ready | `RUNNING` (`runtimeStatus: running`) | Running doesn't mean your port is listening yet. |
+| Restarting | `STARTING` | |
+| Shutting Down, Off | `EXITED` (`runtimeStatus: stopped`) | Volume disk is kept and billed. |
+| Inaccessible | `ERROR` | Check `runpodctl pod logs POD_ID`. |
+| Deactivated | `TERMINATED` | |
+
+Queue-based jobs report `IN_QUEUE`, `IN_PROGRESS`, `COMPLETED`, `FAILED`, `CANCELLED`, or `TIMED_OUT`. See [Job states](/serverless/endpoints/job-states).
+
+## Migrate with a coding agent
+
+A coding agent can run the inventory, propose a plan, and perform the migration with the Runpod skills and MCP server.
+
+<Steps>
+  <Step title="Install the Runpod skills and MCP server">
+    <Tabs>
+      <Tab title="Claude Code">
+        The plugin also connects the hosted MCP server.
+
+        ```bash
+        claude plugin marketplace add runpod/runpod-plugins-official
+        claude plugin install runpod@runpod
+        ```
+      </Tab>
+      <Tab title="Other agents">
+        Install the skills, then add the hosted MCP server. This works for Codex, Cursor, and other agents.
+
+        ```bash
+        npx skills add runpod/runpod-plugins-official --skill '*' --agent AGENT_ID --global
+        npx @runpod/mcp-server@latest add --client CLIENT_ID
+        ```
+      </Tab>
+    </Tabs>
+
+    The MCP server signs in with OAuth ("Sign in with Runpod"), so you don't need an API key to start. See [Agent skills](/get-started/agent-skills) and [MCP servers](/get-started/mcp-servers).
+  </Step>
+  <Step title="Give the agent the migration prompt">
+    Run your agent in the repository that contains your application code and infrastructure files, and paste this prompt:
+
+    ```text
+    Migrate this project from Paperspace and DigitalOcean GPU to Runpod. Use the
+    runpod-cloud-migrate skill and its Paperspace and DigitalOcean reference.
+
+    1. Inventory first, read-only. Scan this repo for pspace, gradient, and doctl
+       commands, api.paperspace.com, paperspacegradient.com, .gradient/workflows,
+       api.digitalocean.com, inference.do-ai.run, digitaloceanspaces.com, pydo, and
+       digitalocean_* Terraform resources. If pspace or doctl is authenticated, list
+       Machines, Deployments, shared drives, GPU Droplets (doctl compute droplet list
+       --gpus), volumes, and DOKS GPU node pools. Ask me about Notebooks, Workflows,
+       and datasets, which only the Paperspace console lists.
+    2. Show me a plan: for each workload, the Runpod target (Pod, load-balancing
+       endpoint, queue-based endpoint, Public Endpoint, vLLM endpoint, @app.task, or
+       Instant Cluster), the GPU type or pool, the storage, and what has no
+       equivalent (Windows machines, desktop streaming, the Kubernetes API, VM
+       snapshots, versioned datasets). Include a cost estimate from live Runpod
+       pricing and check live GPU stock.
+    3. Wait for my approval before you create anything billable on Runpod.
+    4. Migrate one workload end to end: build a linux/amd64 image, move the data it
+       needs to a network volume, deploy, and update the client code.
+    5. Verify with a real request from outside Runpod and show me the response.
+    6. Never stop or delete Paperspace or DigitalOcean resources, and never delete
+       source data, without my explicit approval. Don't print secret values.
+    ```
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+**The Pod starts but files I saved are gone after a stop.** On a VM the whole disk persists. On a Pod only the volume mount does. Move the files to `/workspace`, and install system packages in the image instead of at runtime.
+
+**JupyterLab returns a 502 on port 8888.** The official PyTorch template starts JupyterLab only when `JUPYTER_PASSWORD` is set. Pods created from the console get it automatically. With `runpodctl pod create`, pass `--env '{"JUPYTER_PASSWORD":"CHOOSE_A_TOKEN"}'`. See [Troubleshooting 502 errors](/pods/troubleshooting/troubleshooting-502-errors).
+
+**The container fails with a CUDA or driver error.** A VM image carries its own driver. A Pod uses the host's, and hosts differ. Set a CUDA floor that matches your image (`--min-cuda-version` on `runpodctl`, `gpu.minCudaVersion` in REST, `min_cuda_version` in Terraform), and remove any driver installation from your Dockerfile.
+
+**`exec format error` when the Pod or worker starts.** The image was built for `arm64`. Rebuild with `docker buildx build --platform linux/amd64`.
+
+**The load-balancing endpoint returns 502 and workers never become healthy.** The server isn't listening where Runpod is checking. Set `PORT` and `PORT_HEALTH` to the port your server binds, list that port in `ports`, bind to `0.0.0.0`, and make sure the health path returns `200`. A readiness route that returns `503` while loading keeps the worker unhealthy: return `204` instead.
+
+**Requests that worked on a Deployment now time out.** Load-balancing endpoints cap each request at 5.5 minutes and 30 MB, and the Pod HTTP proxy closes connections after 100 seconds. Move long requests to a queue-based endpoint and poll or use a webhook, or expose a TCP port on a Pod.
+
+**Clients get `401` after the cutover.** Paperspace protected endpoints use basic authentication with the username `paperspace`. Runpod endpoints require `Authorization: Bearer YOUR_API_KEY`. For OpenAI-compatible clients, replace the model access key with your Runpod API key.
+
+**The first request after idle is slow or fails.** The endpoint scaled to zero and is cold starting. Retry with a delay on the client, raise `workers.min`, enable FlashBoot, or use cached models so weights don't download on every cold start.
+
+**`runpodctl pod create` fails for lack of capacity.** The GPU type has no stock in the data center your network volume pins you to. Check `runpodctl gpu list`, try another GPU type with the same VRAM, or create the volume in a data center that has stock for that GPU.
+
+**`aws s3 sync` to the network volume stalls or errors.** The S3-compatible API handles `cp`, `ls`, `mv`, and `rm` well, and `sync` can have trouble past about 10,000 files. Archive small files into a tar first. Also check that `--region` is the data center ID, that the endpoint URL matches it, and that no old `AWS_ACCESS_KEY_ID` environment variable is overriding the Runpod S3 API key.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Choose a Pod" href="/pods/choose-a-pod" icon="server" horizontal>
+    Size GPU, memory, and storage for a workload.
+  </Card>
+  <Card title="Load-balancing endpoints" href="/serverless/load-balancing/overview" icon="scale-balanced" horizontal>
+    Serve your own HTTP server with autoscaling workers.
+  </Card>
+  <Card title="Network volumes" href="/storage/network-volumes" icon="hard-drive" horizontal>
+    Share persistent storage across Pods and endpoints.
+  </Card>
+  <Card title="Terraform provider" href="/integrations/terraform/overview" icon="code" horizontal>
+    Manage Runpod infrastructure as code.
+  </Card>
+</CardGroup>

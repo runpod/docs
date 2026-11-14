@@ -1,0 +1,1400 @@
+---
+title: "Migrate from Azure to Runpod"
+sidebarTitle: "Azure"
+description: "Move GPU VMs, Azure Machine Learning endpoints, Container Apps GPU apps, and open-model inference from Azure to Runpod, with Terraform and code examples."
+---
+
+This guide is for teams that run GPU workloads on Microsoft Azure and want to run some or all of them on Runpod. Most teams move the GPU-heavy part (training, inference, batch) and keep data, identity, and the rest of the application on Azure, so the guide covers that hybrid setup first and a full exit second.
+
+[GPU virtual machines](https://learn.microsoft.com/azure/virtual-machines/sizes/overview) map to [Pods](/pods/overview). [Azure Machine Learning](https://learn.microsoft.com/azure/machine-learning/) online and batch endpoints and [Azure Container Apps serverless GPUs](https://learn.microsoft.com/azure/container-apps/gpu-serverless-overview) map to [Serverless](/serverless/overview) endpoints. Open-weight models you call through [Microsoft Foundry](https://learn.microsoft.com/azure/foundry/what-is-foundry) map to [Public Endpoints](/public-endpoints/overview) or a Serverless vLLM endpoint. By the end, you'll have one workload running on Runpod, verified with a real request, and a checklist for stopping the matching Azure charges.
+
+<Tip>
+You can hand most of this migration to a coding agent. See [Migrate with a coding agent](#migrate-with-a-coding-agent).
+</Tip>
+
+## How Azure maps to Runpod
+
+| Azure concept | Runpod equivalent | Notes |
+| --- | --- | --- |
+| GPU virtual machines (NC, ND families) | [Pods](/pods/overview) | A Pod is a Linux container with dedicated GPUs, not a VM. You pick a GPU type and count instead of a VM size. |
+| NV and NG families (virtual desktop, visualization, cloud gaming), Windows GPU VMs | No equivalent | Pods run Linux containers only. Keep VDI and Windows workloads on Azure. |
+| Virtual Machine Scale Sets | Serverless endpoints, or Pods you create through the API | Serverless scales workers for request-driven work. Pods don't autoscale, so you create and delete them through the API or Terraform. |
+| Azure Machine Learning managed online endpoint (endpoint plus deployments) | [Serverless queue-based endpoint](/serverless/overview) or [load balancing endpoint](/serverless/load-balancing/overview) | A scoring script becomes a handler function. A custom container with its own routes becomes a load balancing endpoint. |
+| Azure Machine Learning batch endpoint | Queue-based endpoint with `/run` and webhooks | Jobs queue and run asynchronously. You pass data references in the request. |
+| Azure Machine Learning jobs, compute clusters, pipelines | Pods, or the Runpod SDK `@app.task` | `@app.task` runs one ephemeral Pod per call. Bring your own orchestrator for multi-step pipelines. |
+| Azure Machine Learning compute instance | Pod with JupyterLab | Official Runpod images start JupyterLab on port 8888. |
+| Azure OpenAI in Microsoft Foundry Models, Foundry serverless API deployments | [Public Endpoints](/public-endpoints/overview), or a [Serverless vLLM endpoint](/serverless/vllm/get-started) | Applies to open-weight models. See [What has no direct equivalent](#what-has-no-direct-equivalent). |
+| Azure Container Apps with serverless GPUs | [Load balancing endpoint](/serverless/load-balancing/overview) | Both run your HTTP server and scale to zero. The health check and port contract differ. |
+| Azure Container Instances GPU | Pods or Serverless | Microsoft's documentation lists GPU container groups as retired as of July 14, 2025. |
+| AKS GPU node pools | Serverless or Pods, or [SkyPilot](/integrations/skypilot) and [dstack](/integrations/dstack) | Runpod runs your containers directly, so there's no cluster to manage. SkyPilot and dstack keep a scheduler in front. |
+| Azure Batch | Queue-based endpoint or `@app.task` | |
+| Azure CycleCloud with Slurm | [Instant Clusters with Slurm](/instant-clusters/slurm-clusters) | Multi-node clusters with a shared network. Stock varies by data center. |
+| Azure Container Registry | Any registry, with [registry credentials](/runpodctl/reference/runpodctl-registry) for private images | Runpod pulls from ACR using a token or service principal as username and password. |
+| Azure Machine Learning environments and curated environments | Container images and [templates](/pods/templates/overview) | Runpod PyTorch images cover the common training stack. |
+| OS disk, temporary disk | Container disk | Erased when the Pod stops. |
+| Managed Disks (data disks) | Volume disk or [network volume](/storage/network-volumes) | A network volume exists independently of any Pod. |
+| Azure Files, Azure NetApp Files, Azure Managed Lustre | Network volume, including [high-performance storage](/storage/high-performance-storage) | A network volume lives in one data center. |
+| Blob Storage, BlobFuse mounts | Keep using Blob Storage over HTTPS, or copy to a network volume or [global volume](/storage/globalvolume/overview) | Global volumes mount in any data center and are in beta. |
+| VNet, NSGs, public IPs, Private Link | Exposed ports, HTTP proxy, [global networking](/pods/networking) | Runpod has no VNet, NSG, or Private Link equivalent. |
+| Key Vault secrets | [Secrets](/pods/templates/secrets) | Referenced from environment variables as `{{ RUNPOD_SECRET_name }}`. |
+| Regions and availability zones | Data centers | List them with `runpodctl datacenter list`. |
+| Pay-as-you-go, Spot VMs, reservations, savings plan | Per-second on-demand billing | `runpodctl` and REST API v2 create on-demand Pods. See [pricing](/pods/pricing). |
+| Bicep, ARM templates, Terraform (`azurerm`, `azapi`) | [Runpod Terraform provider](/integrations/terraform/overview) | Bicep and ARM have no Runpod equivalent. Use Terraform or REST API v2. |
+| Azure CLI, `azure-ai-ml` SDK, Azure Resource Manager | `runpodctl`, the [Runpod SDK](/sdk/overview), [REST API v2](/api-reference-v2/overview), [MCP server](/get-started/mcp-servers) | |
+| Microsoft Entra ID, managed identities, Azure RBAC | [API keys](/get-started/credentials), [organizations and roles](/organizations/orgs-overview) | Runpod has no workload identity. Workloads authenticate to other services with secrets. |
+| Subscriptions, resource groups, management groups | Accounts and organizations | Organizations are in beta. |
+| Azure Monitor, Log Analytics, Application Insights | Console logs and metrics, `runpodctl pod logs`, `runpodctl serverless logs`, REST API v2 metrics routes | Ship logs to your own system if you need long retention or alerting. |
+
+## What's different
+
+### What works differently
+
+**You choose a GPU, not a VM size.** An Azure size such as `Standard_NC24ads_A100_v4` fixes the GPU, vCPUs, memory, and disk together. On Runpod you pick a GPU type and count, and the Pod reports the vCPUs and memory it was allocated. Use the `min_vcpu_count_per_gpu` and `min_ram_per_gpu` placement filters when your workload needs a floor.
+
+**Pods are containers.** There's no cloud-init, no kernel modules, no systemd, and no NVIDIA driver extension to install: the host provides the driver and your image provides CUDA libraries. Anything your cloud-init script did moves into the image or a start command. Docker Compose and UDP ports aren't supported.
+
+**Stopping means something different.** A stopped Azure VM that isn't deallocated still bills for compute. A stopped Pod doesn't bill for compute, and its container disk is erased. Its volume disk is kept and still bills. See [Pod pricing](/pods/pricing).
+
+**Serverless scales on the queue, not on Azure Monitor rules.** A managed online deployment runs a fixed `instance_count` unless you attach Azure Monitor autoscale rules. A Runpod endpoint has a minimum and maximum worker count and scales on queue delay or request count. The minimum defaults to zero, so an idle endpoint has no running workers.
+
+**Requests are wrapped.** A queue-based endpoint takes `{"input": {...}}` and returns `{"id", "status", "output"}`. Your scoring script's `run(raw_data)` receives the raw body, so both the handler and every client change shape. A load balancing endpoint keeps your own request and response shapes.
+
+**Limits differ.** A managed online endpoint caps a request at 180 seconds. A queue-based endpoint's execution timeout defaults to 10 minutes in the console and can be raised, with a 10 MB payload limit on `/run` and 20 MB on `/runsync`. A load balancing endpoint has a 5.5 minute processing timeout and a 30 MB payload limit.
+
+**Rollouts replace workers instead of splitting traffic.** Azure Machine Learning splits traffic by percentage across deployments and can mirror traffic. A Runpod endpoint update is a [rolling release](/serverless/endpoints/rolling-releases): idle workers are replaced immediately and busy workers after their current job. For a percentage split, run two endpoints and split in your client or gateway.
+
+**Auth is one API key.** Runpod endpoints accept `Authorization: Bearer YOUR_API_KEY`. There's no equivalent of `aad_token` auth or per-endpoint keys. A Pod's HTTP proxy URL is public and unauthenticated, so put your own auth in front of anything you expose on a Pod.
+
+**Images must be `linux/amd64`.** Build with `docker build --platform linux/amd64`, especially on Apple silicon or ARM build agents.
+
+**Data transfer.** Azure charges for outbound data transfer to the internet beyond a monthly free allowance, so budget for the one-time copy of datasets and model weights out of Azure. Runpod doesn't charge for data ingress or egress.
+
+### What has no direct equivalent
+
+**On Runpod:**
+
+- **OpenAI's proprietary GPT chat models.** Runpod doesn't host the GPT deployments you create in Azure OpenAI. The migration applies when you move to an open-weight model, either one listed in the [Public Endpoint model reference](/public-endpoints/reference) or one you serve yourself with vLLM. If you need to keep a proprietary model, keep that call on Azure.
+- **VNet, NSGs, and Private Link.** Runpod has no customer-defined private network or private connectivity to Azure. Pods in your account can reach each other over [global networking](/pods/networking) at `POD_ID.runpod.internal`. Traffic between Runpod and Azure goes over the public internet with TLS, so Azure resources behind private endpoints need a public endpoint with firewall rules, or a proxy you run.
+- **Managed identities and Entra ID RBAC for workloads.** A Runpod worker can't assume an Azure identity. Store a least-privilege service principal secret or a SAS token as a Runpod secret and pass it as an environment variable.
+- **Key Vault.** Runpod secrets store values and inject them at boot. They don't provide key operations, certificates, or versioning. Keep Key Vault for those and copy only the values workloads need.
+- **Windows and VDI.** NV and NG family workloads, Windows GPU VMs, and Data Science VM Windows images stay on Azure.
+- **Managed Kubernetes.** Runpod runs containers directly instead of offering a Kubernetes control plane. Run a scheduler on top of Runpod with [SkyPilot](/integrations/skypilot) or [dstack](/integrations/dstack), or move each workload to Pods or Serverless.
+- **Model registry, pipelines, and experiment tracking.** These Azure Machine Learning workspace features stay on Azure, or move to a tool you host. Runpod runs the compute.
+- **Traffic mirroring and percentage splits** across deployments of one endpoint.
+- **Bicep and ARM templates.** Use Terraform or REST API v2.
+- **Spot capacity through the current API.** REST API v2, `runpodctl`, and the Terraform provider create on-demand Pods. Plan Spot VM workloads as on-demand Pods or Serverless.
+
+**On Azure:**
+
+- **A job queue built into the inference endpoint.** A queue-based Runpod endpoint includes the queue, status polling, streaming, retries, and webhooks. On Azure you'd typically pair an online endpoint with a separate queue service, or use a batch endpoint.
+- **GPU access without per-family quota requests.** Azure gates GPU capacity with per-region, per-VM-family quota. Runpod uses an account-level spend limit and per-data-center stock instead, so check availability before you plan around a GPU type.
+- **One volume shared across data centers.** A global volume mounts on Pods and workers in any data center.
+
+## Requirements
+
+- An Azure account with permission to read the resources you plan to move, and the [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) with the `ml` and `containerapp` extensions if you use those services.
+- A [Runpod account](https://console.runpod.io) with credits and an [API key](/get-started/credentials).
+- Docker, to rebuild or retag images for `linux/amd64`.
+- Python 3.10 or later if you use the Runpod SDK.
+- [Terraform](https://developer.hashicorp.com/terraform/install) 1.6 or later if you manage infrastructure as code.
+
+## Step 1: Take inventory of what you run on Azure
+
+List every GPU resource, then export its configuration. Start with virtual machines. This command lists N-series VMs across the subscription with their size, power state, and location:
+
+```bash
+az vm list -d \
+  --query "[?starts_with(hardwareProfile.vmSize, 'Standard_N')].{name:name, rg:resourceGroup, size:hardwareProfile.vmSize, state:powerState, location:location}" \
+  --output table
+```
+
+For each VM, record the size, image, OS and data disk sizes, open ports, and the cloud-init or custom script it boots with. `az vm show -g RESOURCE_GROUP -n VM_NAME` returns the full definition. VMs in the Stopped state without being deallocated are still billing, so note those too.
+
+Next, list Azure Machine Learning resources in each workspace:
+
+```bash
+az ml online-endpoint list -g RESOURCE_GROUP -w WORKSPACE --output table
+az ml online-deployment list --endpoint-name ENDPOINT_NAME -g RESOURCE_GROUP -w WORKSPACE
+az ml batch-endpoint list -g RESOURCE_GROUP -w WORKSPACE --output table
+az ml compute list -g RESOURCE_GROUP -w WORKSPACE --output table
+az ml job list -g RESOURCE_GROUP -w WORKSPACE --query "[].{name:name, status:status}" --output table
+```
+
+For each online deployment, record `instance_type`, `instance_count`, the model and environment references, `environment_variables`, `request_settings`, and whether it uses a scoring script or a custom container with `inference_config` routes. Check the endpoint's `auth_mode` and `traffic` with `az ml online-endpoint show`, and any Azure Monitor autoscale settings attached to the deployment.
+
+List Container Apps, then read each GPU app's definition:
+
+```bash
+az containerapp list -g RESOURCE_GROUP --output table
+az containerapp show -n APP_NAME -g RESOURCE_GROUP
+```
+
+From the `show` output, record the workload profile name, image, CPU and memory, environment variables and secrets, ingress target port, minimum and maximum replicas, and scale rules.
+
+Then list the storage and images those workloads depend on:
+
+```bash
+az disk list --output table
+az storage account list --output table
+az acr repository list --name REGISTRY_NAME --output table
+```
+
+Finally, find the code and configuration that calls Azure. Run this from the root of each repository:
+
+```bash
+grep -rnE \
+  "azure\.ai\.ml|azureml|AzureOpenAI|azure_endpoint|openai\.azure\.com|services\.ai\.azure\.com|inference\.ml\.azure\.com|azurecontainerapps\.io|azurecr\.io|blob\.core\.windows\.net|AZUREML_MODEL_DIR|DefaultAzureCredential|az ml |az vm |az containerapp |azcopy|azurerm_|azapi_" \
+  --include="*.py" --include="*.ts" --include="*.js" --include="*.go" --include="*.sh" \
+  --include="*.yml" --include="*.yaml" --include="*.tf" --include="*.bicep" --include="*.json" --include="Dockerfile*" .
+```
+
+Sort the matches into three groups: code that runs inside the workload (scoring scripts, training scripts), code that calls the workload (clients), and automation that manages it (CI, Terraform, scripts).
+
+## Step 2: Set up Runpod
+
+Create an account at [console.runpod.io](https://console.runpod.io), add credits, and [create an API key](/get-started/credentials). Then install the tools you'll use.
+
+<Tabs>
+  <Tab title="runpodctl">
+    Install the CLI and check that it can reach your account:
+
+    ```bash
+    curl -fsSL https://cli.runpod.net | sudo bash
+    export RUNPOD_API_KEY="YOUR_API_KEY"
+    runpodctl doctor
+    ```
+
+    On macOS you can also run `brew install runpod/runpodctl/runpodctl`.
+  </Tab>
+  <Tab title="Runpod SDK">
+    Install the Python SDK, which includes the `rp` CLI, and log in:
+
+    ```bash
+    pip install runpod
+    rp login
+    ```
+
+    `rp login` stores your key in `~/.runpod/config.toml`. The SDK also reads `RUNPOD_API_KEY`.
+  </Tab>
+  <Tab title="Terraform">
+    Add the Runpod provider next to your existing Azure providers. See [Migrate your Terraform](#migrate-your-terraform).
+  </Tab>
+</Tabs>
+
+To let a coding agent manage Runpod for you, connect the [Runpod MCP server](/get-started/mcp-servers).
+
+## Step 3: Choose where each workload lands
+
+Pick a target for each workload based on how it's invoked, not on which Azure service it runs on today.
+
+| Azure workload | Runpod target | Why |
+| --- | --- | --- |
+| GPU VM you SSH into for development or training | [Pod](/pods/overview) | Long-lived, interactive, persistent storage. |
+| Compute instance with notebooks | Pod with JupyterLab | Same workflow, port 8888 over the HTTP proxy. |
+| Azure Machine Learning command job or Azure Batch task | Pod, or `@app.task` in the [Runpod SDK](/sdk/overview) | Runs to completion, then releases the GPU. |
+| Managed online endpoint with a scoring script | [Queue-based endpoint](/serverless/workers/handler-functions) | `init()` and `run()` translate directly to a handler. |
+| Managed online endpoint with a custom container and `scoring_route` | [Load balancing endpoint](/serverless/load-balancing/overview) | Keeps your HTTP server and routes. |
+| Batch endpoint | Queue-based endpoint with `/run` and a webhook | Asynchronous, queued, retried. |
+| Container Apps GPU app | Load balancing endpoint | Closest match: your HTTP server, scale to zero. |
+| LLM served on a VM, AKS, or a managed compute deployment | [Serverless vLLM endpoint](/serverless/vllm/get-started) | OpenAI-compatible route with no server to manage. |
+| Open-weight model called through a Foundry serverless API | [Public Endpoint](/public-endpoints/reference), if the model is listed | No deployment. |
+| CycleCloud Slurm cluster or multi-node training on ND VMs | [Instant Cluster](/instant-clusters/slurm-clusters) | Multi-node with Slurm, PyTorch, or Ray. |
+| AKS GPU node pool | Serverless or Pods per workload, or [SkyPilot](/integrations/skypilot) or [dstack](/integrations/dstack) | Depends on whether you want to keep an orchestrator. |
+
+Use this table to translate current Azure GPU sizes to Runpod GPU type IDs. GPU counts and memory come from Microsoft's size documentation, and the Runpod IDs come from the [GPU types reference](/references/gpu-types).
+
+| Azure size | GPUs | Runpod GPU type ID | Serverless pool |
+| --- | --- | --- | --- |
+| `Standard_NC4as_T4_v3`, `NC8as_T4_v3`, `NC16as_T4_v3` | 1 x T4 (16 GB) | `NVIDIA RTX A4000` or `NVIDIA RTX 2000 Ada Generation` (16 GB), or `NVIDIA L4` (24 GB) | `AMPERE_16` or `AMPERE_24` |
+| `Standard_NC64as_T4_v3` | 4 x T4 (16 GB) | Four 16 GB GPUs, or fewer larger GPUs | `AMPERE_16` |
+| `Standard_NC24ads_A100_v4`, `NC48ads_A100_v4`, `NC96ads_A100_v4` | 1, 2, or 4 x A100 (80 GB) | `NVIDIA A100 80GB PCIe` or `NVIDIA A100-SXM4-80GB` | `AMPERE_80` |
+| `Standard_NC40ads_H100_v5`, `NC80adis_H100_v5` | 1 or 2 x H100 (94 GB) | `NVIDIA H100 NVL` | `ADA_80_PRO` (80 GB H100 pool) |
+| `Standard_ND96amsr_A100_v4` | 8 x A100 (80 GB) | `NVIDIA A100-SXM4-80GB` | `AMPERE_80` |
+| `Standard_ND96isr_H100_v5` | 8 x H100 (80 GB) | `NVIDIA H100 80GB HBM3` | `ADA_80_PRO` |
+| `Standard_ND96isr_H200_v5` | 8 x H200 (141 GB) | `NVIDIA H200` | `HOPPER_141` |
+| `Standard_ND96isr_MI300X_v5` | 8 x MI300X | `AMD Instinct MI300X OAM` | Not in a listed pool. Use Pods. |
+| NC RTX PRO 6000 Blackwell Server Edition v6 sizes | Fractional, 1, or 2 x RTX PRO 6000 (24, 48, or 96 GB per GPU) | `NVIDIA RTX PRO 6000 Blackwell Server Edition`, or its `MIG 1g.24gb` and `MIG 2g.48gb` types | Not in a listed pool. Use Pods. |
+| NVadsA10 v5 sizes (`Standard_NV6ads_A10_v5` to `Standard_NV72ads_A10_v5`) | Fractional, 1, or 2 x A10 (24 GB) | For Linux compute only: `NVIDIA L4`, `NVIDIA RTX A5000`, or `NVIDIA GeForce RTX 4090` (24 GB) | `AMPERE_24` or `ADA_24` |
+
+Runpod's list doesn't include the T4 or A10, so those rows give the closest memory match. Choose by what the workload needs (GPU memory, then throughput), and check live stock before you commit to a type: run `runpodctl gpu list`, or call `GET /v2/catalog/gpus`. Multi-GPU counts and specific types aren't available in every data center.
+
+## Step 4: Move your images and code
+
+### Use your Azure Container Registry images
+
+You can keep images in ACR. Runpod pulls private images with a saved username and password, so create a credential that works without an interactive login. Microsoft documents two options for unattended pulls: a repository-scoped token and a service principal. The registry admin user also works, but Microsoft doesn't recommend sharing it because it has full push and pull access.
+
+<Tabs>
+  <Tab title="Repository-scoped token">
+    Create a token that can only read the repository Runpod needs:
+
+    ```bash
+    az acr token create --name runpod-pull --registry myregistry \
+      --repository inference/worker content/read \
+      --output json
+    ```
+
+    The output includes two generated passwords, shown once. The username is the token name. Save it on Runpod, reading the password from an environment variable so it stays out of your shell history:
+
+    ```bash
+    printenv ACR_TOKEN_PASSWORD | runpodctl registry create \
+      --name acr-myregistry --username runpod-pull --password-stdin
+    ```
+  </Tab>
+  <Tab title="Service principal">
+    Create a service principal with the `acrpull` role on the registry:
+
+    ```bash
+    ACR_REGISTRY_ID=$(az acr show --name myregistry --query id --output tsv)
+    SP_PASSWORD=$(az ad sp create-for-rbac --name runpod-acr-pull \
+      --scopes "$ACR_REGISTRY_ID" --role acrpull --query password --output tsv)
+    SP_APP_ID=$(az ad sp list --display-name runpod-acr-pull --query "[].appId" --output tsv)
+    ```
+
+    The username is the application ID and the password is the client secret:
+
+    ```bash
+    printf '%s' "$SP_PASSWORD" | runpodctl registry create \
+      --name acr-myregistry --username "$SP_APP_ID" --password-stdin
+    ```
+
+    Service principal secrets expire (one year by default), so add a rotation reminder.
+  </Tab>
+</Tabs>
+
+`runpodctl registry create` returns a registry credential ID. Pass it as `--registry-auth-id` when you create a template or Pod, or as `registry` in REST API v2 and Terraform. Reference the image by its full name, such as `myregistry.azurecr.io/inference/worker:v1`.
+
+<Note>
+Runpod pulls images over the public internet. If your registry only allows private endpoint access, enable public access with authentication, or push a copy of the image to a registry that's reachable from outside your VNet.
+</Note>
+
+### Check the image
+
+- **Architecture:** Runpod runs `linux/amd64` images only.
+- **CUDA:** Your image ships the CUDA runtime, and the host ships the driver. Set a CUDA floor when you create the Pod or endpoint (`--min-cuda-version 12.8`, or `gpu.minCudaVersion` in REST API v2) so the host driver supports your image.
+- **Azure base images:** Images built from Azure Machine Learning inference or curated environments include the Azure inference server, which expects the Azure Machine Learning runtime around it. Rebuild from a Runpod PyTorch image such as `runpod/pytorch:1.0.3-cu1281-torch291-ubuntu2404`, or from an `nvidia/cuda` base, and install your dependencies from the environment's conda or pip file.
+- **Start command:** A Pod runs the image's `CMD`. Override it with `--docker-args` in `runpodctl`, `args` in Terraform, or `cmd` in REST API v2.
+
+### Translate a scoring script to a handler
+
+An Azure Machine Learning scoring script has two functions. `init()` runs once when the container starts and loads the model from `AZUREML_MODEL_DIR`. `run(raw_data)` runs for every request. Here's a typical GPU scoring script:
+
+```python score.py
+import json
+import os
+
+import torch
+
+
+def init():
+    global model
+    model_path = os.path.join(os.getenv("AZUREML_MODEL_DIR"), "model.pt")
+    model = torch.jit.load(model_path, map_location="cuda").eval()
+
+
+def run(raw_data):
+    data = json.loads(raw_data)["data"]
+    with torch.no_grad():
+        result = model(torch.tensor(data, device="cuda"))
+    return result.tolist()
+```
+
+On Runpod, module-level code replaces `init()` and a handler function replaces `run()`. The handler receives a job whose `input` field is already parsed JSON:
+
+```python handler.py
+import os
+
+import runpod
+import torch
+
+MODEL_DIR = os.getenv("MODEL_DIR", "/models")
+
+# Runs once per worker, like init().
+model = torch.jit.load(os.path.join(MODEL_DIR, "model.pt"), map_location="cuda").eval()
+
+
+def handler(job):
+    data = job["input"]["data"]
+    with torch.no_grad():
+        result = model(torch.tensor(data, device="cuda"))
+    return result.tolist()
+
+
+runpod.serverless.start({"handler": handler})
+```
+
+Three things changed. `AZUREML_MODEL_DIR` doesn't exist on Runpod, so the model path is a variable you control. The request body is no longer a raw string, so `json.loads` goes away. And the return value is placed in the `output` field of the job result. To return an error, raise an exception (the job is marked `FAILED`) or return a dictionary with an `error` key.
+
+Azure Machine Learning mounts the registered model for you. On Runpod, download the model files first and bake them into the image:
+
+```bash
+az ml model download --name my-model --version 1 --download-path ./model \
+  -g RESOURCE_GROUP -w WORKSPACE
+```
+
+Check the layout of the downloaded folder and make sure `model.pt` ends up directly under `./model`. Then build the worker image:
+
+```dockerfile Dockerfile
+FROM runpod/pytorch:1.0.3-cu1281-torch291-ubuntu2404
+
+RUN pip install --no-cache-dir --break-system-packages --ignore-installed cryptography runpod
+
+COPY model/ /models/
+COPY handler.py /handler.py
+
+CMD ["python3", "-u", "/handler.py"]
+```
+
+The two extra `pip` flags are needed on this base image: Ubuntu 24.04 marks the system Python as externally managed, and the image's `cryptography` package is installed by the OS, so `pip` can't upgrade it in place.
+
+Build and push it for the right platform:
+
+```bash
+docker build --platform linux/amd64 -t myregistry.azurecr.io/inference/worker:v1 .
+docker push myregistry.azurecr.io/inference/worker:v1
+```
+
+Baking works well for models up to a few gigabytes. For larger models, keep the image small and load weights from a [network volume](/storage/network-volumes) at `/runpod-volume`, or use [cached models](/serverless/endpoints/model-caching) for models hosted on Hugging Face.
+
+### Translate a custom container or Container Apps app
+
+If your deployment is a custom container with `liveness_route`, `readiness_route`, and `scoring_route`, or a Container Apps app with ingress, your image already runs an HTTP server. A load balancing endpoint runs it with three changes:
+
+1. **Health check.** Runpod polls `GET /ping` on the worker. `200` means healthy, `204` means still initializing, and anything else means unhealthy. If your server already has a readiness path, set the `HEALTH_CHECK_PATH` environment variable to it instead of adding a route.
+2. **Port.** Runpod routes to the port in the `PORT` environment variable (default `80`) and health checks the port in `PORT_HEALTH` (default `80`). Set both to your server's port, and list that port in the endpoint's `ports`.
+3. **Auth and URL.** Callers send `Authorization: Bearer YOUR_API_KEY` to `https://ENDPOINT_ID.api.runpod.ai/YOUR_PATH`. Your routes and payloads stay the same.
+
+A FastAPI app that ran on Container Apps needs only the health route and the port:
+
+```python app.py
+import os
+
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+app = FastAPI()
+
+
+class GenerateRequest(BaseModel):
+    prompt: str
+
+
+@app.get("/ping")
+async def ping():
+    return {"status": "healthy"}
+
+
+@app.post("/generate")
+async def generate(request: GenerateRequest):
+    return {"text": f"Generated for: {request.prompt}"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "8000")))
+```
+
+Return `204` from the health route while the model is still loading so the load balancer waits instead of marking the worker unhealthy.
+
+### Translate a training job or cloud-init script
+
+For an Azure Machine Learning command job, the job YAML's `command`, `environment`, and `compute` become a start command, an image, and a GPU type. For a VM, move what cloud-init installed into a Dockerfile and what it ran into the image's `CMD`. To keep the job as Python and skip the image entirely, use `@app.task` from the Runpod SDK, which runs each call on an ephemeral Pod:
+
+```python train.py
+import runpod
+
+app = runpod.App("training")
+checkpoints = runpod.NetworkVolume("checkpoints", size=100)
+
+
+@app.task(gpu="H100", mounts={"/checkpoints": checkpoints}, dependencies=["torch"])
+def train(epochs: int = 10):
+    import torch
+
+    model = torch.nn.Linear(16, 1).to("cuda")
+    torch.save(model.state_dict(), checkpoints.path / "model.pt")
+    return {"epochs": epochs}
+
+
+@runpod.local_entrypoint
+def main():
+    print(train.remote(epochs=10))
+```
+
+Run it with `rp flash dev train.py`. The Pod is created for the call and terminated when the function returns. The network volume keeps the checkpoint, and keeps billing for storage until you delete it.
+
+## Step 5: Move your data and models
+
+### Keep data in Blob Storage
+
+In a hybrid setup, the simplest option is to leave data in Blob Storage and read it over HTTPS from Runpod. Create a SAS token scoped to the container and the permissions the workload needs, or a service principal with a narrow role assignment, and store it as a Runpod secret:
+
+```bash
+curl -s -X POST https://api.runpod.io/v2/account/secrets \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "azure_container_sas_url", "value": "https://ACCOUNT.blob.core.windows.net/CONTAINER?SAS_TOKEN"}'
+```
+
+Reference the secret from an environment variable on the Pod, template, or endpoint by setting the value to `{{ RUNPOD_SECRET_azure_container_sas_url }}`. Inside the workload, the Azure SDK reads it like any other URL:
+
+```python
+import os
+
+from azure.storage.blob import ContainerClient
+
+container = ContainerClient.from_container_url(os.environ["AZURE_CONTAINER_SAS_URL"])
+with open("/workspace/data/train.parquet", "wb") as f:
+    f.write(container.download_blob("datasets/train.parquet").readall())
+```
+
+Code that uses `DefaultAzureCredential` keeps working if you set `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, and `AZURE_CLIENT_SECRET` from secrets, because the credential chain reads a service principal from those variables. Managed identity only works on Azure-hosted compute. If the storage account's firewall restricts access to selected networks, requests from Runpod arrive from the public internet, so plan for public network access protected by the SAS token or service principal.
+
+<Warning>
+Secret names can't start with `runpod`. A running Pod or worker keeps the value it booted with, so restart it after you rotate a SAS token or client secret.
+</Warning>
+
+### Copy data to a network volume
+
+For training data and model weights that workers read often, copy the data to a network volume. Create the volume in the data center where you plan to run, because a network volume and the Pods or workers that mount it must be in the same data center:
+
+```bash
+runpodctl network-volume create --name training-data --size 500 --data-center-id US-KS-2
+```
+
+Pick the data center after you check GPU stock there. Then choose a transfer method:
+
+<Tabs>
+  <Tab title="AzCopy from a Pod">
+    Start a Pod with the volume attached, install [AzCopy](https://learn.microsoft.com/azure/storage/common/storage-use-azcopy-v10) from Microsoft's Linux download, and sync straight from Blob Storage to the volume:
+
+    ```bash
+    azcopy sync \
+      "https://ACCOUNT.blob.core.windows.net/CONTAINER/datasets?SAS_TOKEN" \
+      "/workspace/datasets"
+    ```
+
+    The data goes directly from Azure to Runpod. `azcopy sync` is incremental, so you can rerun it before cutover to pick up changes. A CPU Pod is enough for the copy.
+  </Tab>
+  <Tab title="Cloud Sync">
+    In the console, open a Pod with the volume attached, click **Cloud Sync**, and select **Azure Blob Storage**. Enter the storage account name, an account key, and the container path. See [Cloud Sync](/pods/storage/cloud-sync#microsoft-azure-blob-storage). Cloud Sync uses the account key, which grants full access to the storage account, so rotate the key afterward or use AzCopy with a SAS token.
+  </Tab>
+  <Tab title="S3-compatible API">
+    From any machine that has the files, such as an Azure VM with the disk or file share mounted, upload through the volume's [S3-compatible API](/storage/s3-api) with no Pod running:
+
+    ```bash
+    aws s3 sync ./datasets s3://VOLUME_ID/datasets \
+      --region US-KS-2 \
+      --endpoint-url https://s3api-us-ks-2.runpod.io/
+    ```
+
+    This needs the AWS CLI configured with an S3 API key from the Credentials page, and a volume in a [data center that supports the S3-compatible API](/storage/s3-api#datacenter-availability). Use the region and endpoint URL listed for your volume's data center. Rerun the command to resume an interrupted upload. `aws s3 sync` can fail on directories with more than 10,000 files, so split very large trees into batches.
+  </Tab>
+</Tabs>
+
+rclone's Azure Blob backend also works from inside a Pod if you already use rclone.
+
+### Map each storage type
+
+| Azure storage | Move it to | How |
+| --- | --- | --- |
+| OS disk contents | The container image | Rebuild as a Dockerfile. A VM disk image can't be imported. |
+| Managed data disk | Network volume | Mount the disk on a VM, then use `aws s3 sync` against the volume's S3-compatible API, or rsync over SSH to a Pod. |
+| Azure Files, Azure NetApp Files, Managed Lustre | Network volume, or [high-performance storage](/storage/high-performance-storage) | Copy from a VM that mounts the share. |
+| Blob container mounted with BlobFuse | Network volume, or a [global volume](/storage/globalvolume/overview) for read-mostly data shared across data centers | Copy with AzCopy from a Pod. Global volumes are in beta and aren't fully POSIX compliant. |
+| Azure Machine Learning registered model | Image, network volume, or [cached model](/serverless/endpoints/model-caching) | `az ml model download`, then copy. |
+| Models pulled from Hugging Face | Cached models | Set a model reference on the endpoint. |
+
+Network volumes mount at `/workspace` on Pods by default and at `/runpod-volume` on Serverless workers, so use an environment variable for model and data paths if the same code runs on both.
+
+## Step 6: Deploy on Runpod
+
+### Pod (from a GPU VM)
+
+On Azure, a GPU VM that boots a training container looks like this:
+
+```bash
+az vm create -g my-rg -n trainer \
+  --image Ubuntu2204 --size Standard_NC24ads_A100_v4 \
+  --admin-username azureuser --generate-ssh-keys \
+  --data-disk-sizes-gb 500 \
+  --custom-data cloud-init.txt
+```
+
+The cloud-init file prepares the host and runs the container. This one is trimmed to the last step, after the GPU driver install, Docker install, and data disk mount:
+
+```yaml cloud-init.txt
+#cloud-config
+runcmd:
+  - docker run --gpus all -v /mnt/data:/workspace -e EPOCHS=10 myregistry.azurecr.io/train:v1 python /app/train.py
+```
+
+On Runpod, the Pod is the container. The image, environment, volume, and command go straight on the create call:
+
+```bash
+runpodctl pod create \
+  --name trainer \
+  --image myregistry.azurecr.io/train:v1 \
+  --registry-auth-id REGISTRY_AUTH_ID \
+  --gpu-id "NVIDIA A100 80GB PCIe" \
+  --min-cuda-version 12.8 \
+  --container-disk-in-gb 50 \
+  --network-volume-id VOLUME_ID \
+  --data-center-ids US-KS-2 \
+  --ports "22/tcp,8888/http" \
+  --env '{"EPOCHS":"10"}' \
+  --docker-args "python /app/train.py"
+```
+
+The network volume mounts at `/workspace`. If the create fails for lack of stock, try another GPU type that fits, or another data center before you've put data on a volume there. Follow the Pod with `runpodctl pod logs POD_ID --follow` and wait for `runtimeStatus` to read `running` in `runpodctl pod get POD_ID`. The same create is available as `POST https://api.runpod.io/v2/pods`, and in the console under **Pods > Deploy**.
+
+<Warning>
+A Pod bills until you stop or delete it, even after its command exits. End a batch job by deleting the Pod (`runpodctl pod delete POD_ID`) from your pipeline, or use `@app.task`, which terminates the Pod for you.
+</Warning>
+
+### Queue-based endpoint (from a managed online endpoint)
+
+On Azure, the endpoint and deployment are two YAML files:
+
+```yaml endpoint.yml
+$schema: https://azuremlschemas.azureedge.net/latest/managedOnlineEndpoint.schema.json
+name: my-endpoint
+auth_mode: key
+```
+
+```yaml blue-deployment.yml
+$schema: https://azuremlschemas.azureedge.net/latest/managedOnlineDeployment.schema.json
+name: blue
+endpoint_name: my-endpoint
+model: azureml:my-model:1
+code_configuration:
+  code: ./src
+  scoring_script: score.py
+environment: azureml:my-pytorch-env:1
+instance_type: Standard_NC4as_T4_v3
+instance_count: 1
+request_settings:
+  request_timeout_ms: 60000
+```
+
+You create them with `az ml online-endpoint create -f endpoint.yml` and `az ml online-deployment create -f blue-deployment.yml --all-traffic`.
+
+On Runpod, the image from [Step 4](#translate-a-scoring-script-to-a-handler) holds the code, model, and environment. Create a Serverless template for it, then an endpoint:
+
+```bash
+runpodctl template create \
+  --name my-endpoint-worker \
+  --image myregistry.azurecr.io/inference/worker:v1 \
+  --registry-auth-id REGISTRY_AUTH_ID \
+  --container-disk-in-gb 20 \
+  --serverless
+
+runpodctl serverless create \
+  --name my-endpoint \
+  --template-id TEMPLATE_ID \
+  --gpu-id AMPERE_16 \
+  --min-cuda-version 12.8 \
+  --workers-min 0 \
+  --workers-max 3 \
+  --execution-timeout 60
+```
+
+`--gpu-id` takes a pool ID here, so workers can land on any 16 GB GPU in the pool. `--workers-min 0` scales to zero. Set it to 1 or more to keep a worker running, which is the closest match to `instance_count: 1`. `--workers-max` is the ceiling the autoscaler can reach. Send a first request to check it:
+
+```bash
+curl -s -X POST https://api.runpod.ai/v2/ENDPOINT_ID/runsync \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"data": [[1.0, 2.0, 3.0, 4.0]]}}'
+```
+
+The first request includes a cold start while the worker pulls the image and loads the model. If workers don't start, read `runpodctl serverless logs ENDPOINT_ID`.
+
+### Load balancing endpoint (from Container Apps or a custom container)
+
+On Azure, a Container Apps GPU app is created against a GPU workload profile:
+
+```bash
+az containerapp create \
+  --name gpu-api --resource-group my-rg --environment my-env \
+  --image myregistry.azurecr.io/gpu-api:v1 \
+  --registry-server myregistry.azurecr.io \
+  --registry-username "$SP_APP_ID" --registry-password "$SP_PASSWORD" \
+  --workload-profile-name gpu-t4 \
+  --cpu 8.0 --memory 56.0Gi \
+  --target-port 8000 --ingress external \
+  --min-replicas 0 --max-replicas 3 \
+  --scale-rule-name http-rule --scale-rule-type http --scale-rule-http-concurrency 4
+```
+
+On Runpod, create the endpoint through REST API v2. The endpoint type is set at creation and can't be changed later, and `runpodctl serverless create` creates queue-based endpoints:
+
+```bash
+curl -s -X POST https://api.runpod.io/v2/serverless \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "gpu-api",
+    "type": "LOAD_BALANCER",
+    "image": "myregistry.azurecr.io/gpu-api:v1",
+    "registry": "REGISTRY_AUTH_ID",
+    "gpu": {"pools": ["AMPERE_16"], "count": 1, "minCudaVersion": "12.8"},
+    "disk": 20,
+    "ports": ["8000/http"],
+    "env": {"PORT": "8000", "PORT_HEALTH": "8000"},
+    "workers": {"min": 0, "max": 3, "idleTimeout": 30},
+    "scaling": {"type": "REQUEST_COUNT", "requestCount": 4},
+    "timeout": 300000
+  }'
+```
+
+The field mapping is direct: `--target-port` becomes `ports` plus `PORT` and `PORT_HEALTH`, `--min-replicas` and `--max-replicas` become `workers.min` and `workers.max`, and the HTTP concurrency scale rule becomes `REQUEST_COUNT` scaling, which is the only scaler a load balancing endpoint accepts. `timeout` is the per-request execution timeout in milliseconds. The response includes `requestUrls.base`, the URL your clients call. In the console, choose **Load Balancer** as the endpoint type when you create the endpoint.
+
+Load balancing endpoints don't queue. If no worker is ready within 2 minutes the request fails, so clients need a retry with backoff for cold starts, and long-running or must-not-drop work belongs on a queue-based endpoint.
+
+### Public Endpoint or vLLM endpoint (from Azure OpenAI or Foundry models)
+
+If the open-weight model you need is in the [Public Endpoint model reference](/public-endpoints/reference), there's nothing to deploy: go to [Step 7](#openai-compatible-clients). To serve a different open-weight model, deploy the vLLM worker from the Hub with `runpodctl`:
+
+```bash
+runpodctl hub search vllm
+runpodctl serverless create --hub-id HUB_ID --name my-llm \
+  --env MODEL_NAME=Qwen/Qwen2.5-0.5B-Instruct
+```
+
+The endpoint serves an OpenAI-compatible API at `https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1`. See [Get started with vLLM](/serverless/vllm/get-started) for GPU sizing and gated models.
+
+### Instant Cluster (from CycleCloud or multi-node ND VMs)
+
+Create a Slurm cluster from the console under **Instant Clusters > Create Cluster**, selecting **Slurm Cluster**, the GPU type, the Pod count, and an optional network volume in the same region. Slurm and munge are preconfigured, and managed Slurm Clusters require an official Runpod PyTorch image. See [Slurm Clusters](/instant-clusters/slurm-clusters). Multi-node stock for a given GPU type varies, so confirm it in the console before you schedule a run.
+
+## Step 7: Update the code that calls Azure
+
+### Scoring requests
+
+Azure clients call the scoring URI with an endpoint key, or go through the SDK:
+
+<CodeGroup>
+
+```python REST (before)
+import os
+
+import requests
+
+response = requests.post(
+    os.environ["AZUREML_SCORING_URI"],
+    headers={
+        "Authorization": f"Bearer {os.environ['AZUREML_ENDPOINT_KEY']}",
+        "Content-Type": "application/json",
+    },
+    json={"data": [[1.0, 2.0, 3.0, 4.0]]},
+    timeout=60,
+)
+response.raise_for_status()
+prediction = response.json()
+```
+
+```python SDK (before)
+from azure.ai.ml import MLClient
+from azure.identity import DefaultAzureCredential
+
+ml_client = MLClient(
+    DefaultAzureCredential(), "SUBSCRIPTION_ID", "RESOURCE_GROUP", "WORKSPACE"
+)
+raw = ml_client.online_endpoints.invoke(
+    endpoint_name="my-endpoint",
+    deployment_name="blue",
+    request_file="sample-request.json",
+)
+```
+
+</CodeGroup>
+
+On a queue-based endpoint, wrap the payload in `input` and read the result from `output`:
+
+<CodeGroup>
+
+```python REST (after)
+import os
+
+import requests
+
+response = requests.post(
+    f"https://api.runpod.ai/v2/{os.environ['RUNPOD_ENDPOINT_ID']}/runsync",
+    headers={
+        "Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}",
+        "Content-Type": "application/json",
+    },
+    json={"input": {"data": [[1.0, 2.0, 3.0, 4.0]]}},
+    timeout=120,
+)
+response.raise_for_status()
+job = response.json()
+if job["status"] != "COMPLETED":
+    raise RuntimeError(f"Job {job['id']} ended as {job['status']}")
+prediction = job["output"]
+```
+
+```python SDK (after)
+import os
+
+import runpod
+
+endpoint = runpod.Endpoint(os.environ["RUNPOD_ENDPOINT_ID"])
+prediction = endpoint.run_sync({"data": [[1.0, 2.0, 3.0, 4.0]]})
+```
+
+</CodeGroup>
+
+Check `status` as well as the HTTP code, because a job that fails in the handler reports `"status": "FAILED"` in the response body. `/runsync` waits 90 seconds by default (adjust with the `?wait=` query parameter, in milliseconds). If the job is still running when the wait ends, the status is `IN_QUEUE` or `IN_PROGRESS`, and you poll `/status/JOB_ID` for the result.
+
+For a load balancing endpoint, only the base URL and the auth header change:
+
+```python
+import os
+
+import requests
+
+response = requests.post(
+    f"https://{os.environ['RUNPOD_ENDPOINT_ID']}.api.runpod.ai/generate",
+    headers={"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}"},
+    json={"prompt": "Hello"},
+    timeout=120,
+)
+response.raise_for_status()
+```
+
+### Batch and long-running requests
+
+A batch endpoint invocation (`az ml batch-endpoint invoke --name my-batch-endpoint --input ...`) starts a job against data in storage. On Runpod, submit one `/run` request per unit of work, pass the data location in the input, and let a webhook notify you:
+
+```python
+import os
+
+import requests
+
+response = requests.post(
+    f"https://api.runpod.ai/v2/{os.environ['RUNPOD_ENDPOINT_ID']}/run",
+    headers={"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}"},
+    json={
+        "input": {"blob_path": "batches/2026-11-14/part-0001.jsonl"},
+        "webhook": "https://example.com/hooks/runpod",
+        "policy": {"executionTimeout": 3600000, "ttl": 86400000},
+    },
+    timeout=30,
+)
+job_id = response.json()["id"]
+```
+
+The handler reads the blob with the SAS URL from [Step 5](#keep-data-in-blob-storage) and writes results back to Blob Storage. Runpod posts the job result to the webhook when the job finishes, and retries the call up to two more times if your server doesn't return `200`. Results from `/run` jobs also stay available at `/status/JOB_ID` for 30 minutes after the job completes. Azure Machine Learning parallelizes a batch job across files for you. On Runpod you fan out by submitting one job per file or shard, and the endpoint's worker count sets the parallelism.
+
+### OpenAI-compatible clients
+
+Azure OpenAI code uses either the `AzureOpenAI` client with `azure_endpoint`, `api_version`, and a deployment name, or the newer v1 API through the standard `OpenAI` client:
+
+<CodeGroup>
+
+```python AzureOpenAI client (before)
+import os
+
+from openai import AzureOpenAI
+
+client = AzureOpenAI(
+    azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
+    api_key=os.environ["AZURE_OPENAI_API_KEY"],
+    api_version="2024-10-21",
+)
+
+response = client.chat.completions.create(
+    model="my-deployment-name",
+    messages=[{"role": "user", "content": "Hello"}],
+)
+```
+
+```python v1 API (before)
+import os
+
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1/",
+    api_key=os.environ["AZURE_OPENAI_API_KEY"],
+)
+
+response = client.chat.completions.create(
+    model="my-deployment-name",
+    messages=[{"role": "user", "content": "Hello"}],
+)
+```
+
+</CodeGroup>
+
+On Runpod, use the standard `OpenAI` client with a Runpod base URL and API key. There's no `api_version`, and `model` is the model name, not a deployment name:
+
+<CodeGroup>
+
+```python Public Endpoint (after)
+import os
+
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://api.runpod.ai/v2/qwen3-32b-awq/openai/v1",
+    api_key=os.environ["RUNPOD_API_KEY"],
+)
+
+response = client.chat.completions.create(
+    model="Qwen/Qwen3-32B-AWQ",
+    messages=[{"role": "user", "content": "Hello"}],
+)
+```
+
+```python Your vLLM endpoint (after)
+import os
+
+from openai import OpenAI
+
+client = OpenAI(
+    base_url=f"https://api.runpod.ai/v2/{os.environ['RUNPOD_ENDPOINT_ID']}/openai/v1",
+    api_key=os.environ["RUNPOD_API_KEY"],
+)
+
+response = client.chat.completions.create(
+    model="Qwen/Qwen2.5-0.5B-Instruct",
+    messages=[{"role": "user", "content": "Hello"}],
+)
+```
+
+</CodeGroup>
+
+vLLM workers serve `/chat/completions`, `/completions`, and `/models`. If your code uses the Responses API, Azure content filtering results, or Entra ID token providers, replace those parts: call chat completions, apply your own moderation, and authenticate with the API key. Changing models changes output quality and behavior, so rerun your evaluations before you switch production traffic.
+
+### Control-plane automation
+
+Replace Azure CLI and SDK calls in CI and scripts with `runpodctl`, REST API v2, or the Runpod SDK. The [CLI command map](#cli-command-map) and [API map](#api-map) list the equivalents. Store `RUNPOD_API_KEY` in your CI secret store in place of the service principal credentials used for `az login`.
+
+## Step 8: Verify, cut over, and shut down
+
+1. **Send real requests from outside Runpod.** Use production-shaped payloads, not a health check. For Pods, connect over SSH or the proxy URL and run the actual job.
+2. **Compare outputs.** Send the same inputs to both sides and diff the results. Expect small numeric differences if the GPU model changed.
+3. **Measure latency, including cold starts.** Check the endpoint's **Metrics** tab for delay time, execution time, and cold start time. If cold starts are too slow, raise the minimum workers or the idle timeout, or enable FlashBoot.
+4. **Run both in parallel.** Shift a share of traffic in your client or gateway, watch error rates, then raise the share. Keep the Azure deployment until you've seen a full traffic cycle.
+5. **Set a cost guard on Runpod.** Cap `workers-max` on every endpoint, enable [low balance notifications](/accounts-billing/billing), and review `runpodctl billing pods` and `runpodctl billing serverless` after the first day.
+
+When Runpod has carried full traffic for long enough, stop the matching Azure charges. Deleting a resource group removes everything in it, so only do that if nothing else lives there. Otherwise, go resource by resource:
+
+```bash
+# VMs: a stopped VM that isn't deallocated still bills for compute.
+az vm deallocate -g RESOURCE_GROUP -n VM_NAME
+az vm delete -g RESOURCE_GROUP -n VM_NAME --yes
+
+# Azure Machine Learning: deployments bill for their instances until deleted.
+az ml online-endpoint delete --name ENDPOINT_NAME -g RESOURCE_GROUP -w WORKSPACE --yes
+az ml compute stop --name COMPUTE_INSTANCE -g RESOURCE_GROUP -w WORKSPACE
+az ml compute delete --name COMPUTE_NAME -g RESOURCE_GROUP -w WORKSPACE --yes
+
+# Container Apps
+az containerapp delete -g RESOURCE_GROUP -n APP_NAME --yes
+```
+
+Then check for what's commonly left behind:
+
+- **Managed disks and snapshots.** Depending on each VM's delete options, deleting the VM can leave its OS disk, data disks, NIC, and public IP. List unattached disks with ``az disk list --query '[?managedBy==`null`].[id]' -o tsv``, and review `az snapshot list`.
+- **Public IP addresses.** Review `az network public-ip list --output table` and delete addresses that are no longer attached.
+- **Compute instances and clusters.** A compute instance bills while it's running, and a stopped one keeps holding quota, so delete the ones you won't restart. Compute clusters with a minimum node count above zero keep nodes running.
+- **Online deployments.** Deleting the endpoint deletes its deployments. If you keep the endpoint, delete unused deployments with `az ml online-deployment delete`.
+- **GPU workload profiles.** Dedicated GPU workload profiles in a Container Apps environment are allocated per node, not per app, so remove the profile (or the environment) when no app needs it.
+- **ACR storage.** Delete repositories you no longer pull from with `az acr repository delete`, or keep the registry if Runpod still pulls from it.
+- **Log Analytics workspaces and Application Insights.** Workspaces created alongside Container Apps environments and Azure Machine Learning workspaces outlive the workloads and can keep accruing charges for the data they hold. List them with `az monitor log-analytics workspace list`.
+- **Storage accounts.** Delete Blob containers and file shares only after you've verified the copy on Runpod and you have another backup.
+- **Reservations and savings plans.** These are commitments that continue after the resources are gone. Review them in the Azure portal.
+- **Azure OpenAI and Foundry deployments.** Delete provisioned deployments you no longer call.
+
+## Migrate your Terraform
+
+The [Runpod Terraform provider](/integrations/terraform/overview) 2.x is built on REST API v2 and manages Pods, Serverless endpoints, templates, network and global volumes, registry credentials, and Instant Clusters. If you use Bicep or ARM templates, there's no Runpod equivalent: use Terraform or call REST API v2 from your pipeline.
+
+### Resource map
+
+| Azure resource | Runpod resource | Notes |
+| --- | --- | --- |
+| `azurerm_linux_virtual_machine` (GPU size) | `runpod_pod` | `size` becomes `gpu_type_id` and `gpu_count`. `custom_data` becomes the image and `args`. |
+| `azurerm_linux_virtual_machine_scale_set` | `runpod_serverless_endpoint` | For request-driven scaling. Use `count` or `for_each` on `runpod_pod` for a fixed fleet. |
+| `azurerm_network_interface`, `azurerm_public_ip`, `azurerm_network_security_group`, `azurerm_virtual_network`, `azurerm_subnet` | `ports` on `runpod_pod` | No network resources to declare. |
+| `azurerm_managed_disk` | `persistent_volume` on `runpod_pod`, or `runpod_network_volume` | Prefer a network volume for data you can't recreate. |
+| `azurerm_storage_account`, `azurerm_storage_share` | `runpod_network_volume` or `runpod_global_volume` | Or keep the storage account and read it from Runpod. |
+| `azurerm_container_registry` | `runpod_registry` | Stores pull credentials. The registry itself can stay on Azure. |
+| `azurerm_machine_learning_workspace` | None | Keep it if you still use the workspace for tracking or the model registry. |
+| `azurerm_machine_learning_compute_cluster` | `runpod_pod`, or the Runpod SDK `@app.task` outside Terraform | Runpod has no idle cluster to declare. |
+| `azurerm_machine_learning_compute_instance` | `runpod_pod` with `start_jupyter = true` | |
+| `azapi_resource` of type `Microsoft.MachineLearningServices/workspaces/onlineEndpoints` and `.../deployments` | `runpod_serverless_endpoint` | The `azurerm` provider has no online endpoint resource, so these are usually `azapi_resource` blocks or `az ml` calls. |
+| `azurerm_container_app_environment`, `azurerm_container_app` (GPU workload profile) | `runpod_template` and `runpod_serverless_endpoint` with `endpoint_type = "LOAD_BALANCER"` | |
+| `azurerm_kubernetes_cluster_node_pool` (GPU) | `runpod_serverless_endpoint` or `runpod_pod` per workload | |
+| `azurerm_key_vault_secret` | Runpod secret, referenced as `{{ RUNPOD_SECRET_name }}` in `env` | Create the secret with REST API v2 or the console. |
+
+### Run both providers side by side
+
+During the transition, declare both providers in one configuration so a single plan shows what's added on Runpod and what's removed from Azure:
+
+```hcl providers.tf
+terraform {
+  required_version = ">= 1.6"
+
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~> 5.0"
+    }
+    runpod = {
+      source  = "runpod/runpod"
+      version = "~> 2.0"
+    }
+  }
+}
+
+provider "azurerm" {
+  features {}
+  subscription_id = var.subscription_id
+}
+
+# Reads the key from the RUNPOD_API_KEY environment variable.
+provider "runpod" {}
+```
+
+Keep whatever `azurerm` version constraint you already use. Add the Runpod resources first and apply, verify the workload, move traffic, and only then remove the Azure resource blocks in a separate change, so `terraform destroy` behavior for the Azure side is reviewed on its own. Resources from the two providers can reference each other, for example an Azure storage account name in a Runpod endpoint's `env`.
+
+### Example 1: GPU Linux VM to a Pod
+
+Before, a GPU VM needs a network interface, a disk, and the VM itself, on top of an existing resource group, virtual network, and subnet:
+
+```hcl azure-vm.tf
+resource "azurerm_network_interface" "trainer" {
+  name                = "trainer-nic"
+  location            = azurerm_resource_group.ml.location
+  resource_group_name = azurerm_resource_group.ml.name
+
+  ip_configuration {
+    name                          = "internal"
+    subnet_id                     = azurerm_subnet.ml.id
+    private_ip_address_allocation = "Dynamic"
+  }
+}
+
+resource "azurerm_linux_virtual_machine" "trainer" {
+  name                  = "trainer"
+  resource_group_name   = azurerm_resource_group.ml.name
+  location              = azurerm_resource_group.ml.location
+  size                  = "Standard_NC24ads_A100_v4"
+  admin_username        = "azureuser"
+  network_interface_ids = [azurerm_network_interface.trainer.id]
+  custom_data           = base64encode(file("${path.module}/cloud-init.txt"))
+
+  admin_ssh_key {
+    username   = "azureuser"
+    public_key = file("~/.ssh/id_rsa.pub")
+  }
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Premium_LRS"
+    disk_size_gb         = 256
+  }
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-server-jammy"
+    sku       = "22_04-lts"
+    version   = "latest"
+  }
+}
+```
+
+After, the Pod, its storage, and the credential for pulling from ACR are three resources:
+
+```hcl runpod-pod.tf
+variable "acr_pull_username" {
+  type = string
+}
+
+variable "acr_pull_password" {
+  type      = string
+  sensitive = true
+}
+
+resource "runpod_registry" "acr" {
+  name     = "acr-myregistry"
+  username = var.acr_pull_username
+  password = var.acr_pull_password
+}
+
+resource "runpod_network_volume" "training" {
+  name        = "training-data"
+  size        = 500
+  data_center = "US-KS-2"
+}
+
+resource "runpod_pod" "trainer" {
+  name             = "trainer"
+  image            = "myregistry.azurecr.io/train:v1"
+  registry         = runpod_registry.acr.id
+  gpu_type_id      = "NVIDIA A100 80GB PCIe"
+  gpu_count        = 1
+  min_cuda_version = "12.8"
+  cloud            = "SECURE"
+  disk             = 50
+  data_center_ids  = [runpod_network_volume.training.data_center]
+  ports            = ["22/tcp", "8888/http"]
+  start_ssh        = true
+  args             = "python /app/train.py"
+
+  network_volumes = [{
+    volume_id = runpod_network_volume.training.id
+    path      = "/workspace"
+  }]
+
+  env = {
+    EPOCHS                  = "10"
+    AZURE_CONTAINER_SAS_URL = "{{ RUNPOD_SECRET_azure_container_sas_url }}"
+  }
+}
+
+output "pod_id" {
+  value = runpod_pod.trainer.id
+}
+```
+
+`start_ssh` injects the SSH keys registered on your Runpod account, which replaces `admin_ssh_key`, and needs an image that honors the convention (the official Runpod images do). `disk` is the ephemeral container disk, so anything that must survive goes on the network volume. Changing `gpu_type_id`, `gpu_count`, `cloud`, or `data_center_ids` replaces the Pod. To stop the Pod without removing it from the configuration, set `desired_state = "EXITED"`.
+
+### Example 2: Container Apps GPU app to a Serverless endpoint
+
+Before, a GPU app needs an environment with a GPU workload profile and the app with its registry secret, ingress, and scale settings:
+
+```hcl azure-container-app.tf
+resource "azurerm_container_app_environment" "gpu" {
+  name                       = "gpu-env"
+  location                   = azurerm_resource_group.ml.location
+  resource_group_name        = azurerm_resource_group.ml.name
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.ml.id
+
+  workload_profile {
+    name                  = "gpu-t4"
+    workload_profile_type = "Consumption-GPU-NC8as-T4"
+  }
+}
+
+resource "azurerm_container_app" "api" {
+  name                         = "gpu-api"
+  container_app_environment_id = azurerm_container_app_environment.gpu.id
+  resource_group_name          = azurerm_resource_group.ml.name
+  revision_mode                = "Single"
+  workload_profile_name        = "gpu-t4"
+
+  secret {
+    name  = "acr-password"
+    value = var.acr_pull_password
+  }
+
+  registry {
+    server               = azurerm_container_registry.ml.login_server
+    username             = var.acr_pull_username
+    password_secret_name = "acr-password"
+  }
+
+  template {
+    min_replicas = 0
+    max_replicas = 3
+
+    container {
+      name   = "api"
+      image  = "${azurerm_container_registry.ml.login_server}/gpu-api:v1"
+      cpu    = 8.0
+      memory = "56Gi"
+
+      env {
+        name  = "MODEL_NAME"
+        value = "my-model"
+      }
+    }
+
+    http_scale_rule {
+      name                = "http-rule"
+      concurrent_requests = "4"
+    }
+  }
+
+  ingress {
+    external_enabled = true
+    target_port      = 8000
+
+    traffic_weight {
+      latest_revision = true
+      percentage      = 100
+    }
+  }
+}
+```
+
+After, a Serverless template holds the container settings and the endpoint holds the GPU pool and scaling. It reuses `runpod_registry.acr` from the first example:
+
+```hcl runpod-endpoint.tf
+resource "runpod_template" "api" {
+  name          = "gpu-api"
+  image         = "${azurerm_container_registry.ml.login_server}/gpu-api:v1"
+  registry      = runpod_registry.acr.id
+  serverless    = true
+  disk          = 20
+  ports         = ["8000/http"]
+  start_ssh     = false
+  start_jupyter = false
+
+  env = {
+    MODEL_NAME  = "my-model"
+    PORT        = "8000"
+    PORT_HEALTH = "8000"
+  }
+}
+
+resource "runpod_serverless_endpoint" "api" {
+  name             = "gpu-api"
+  template_id      = runpod_template.api.id
+  endpoint_type    = "LOAD_BALANCER"
+  gpu_pools        = ["AMPERE_16"]
+  gpu_count        = 1
+  min_cuda_version = "12.8"
+  scaling_type     = "REQUEST_COUNT"
+  scaling_value    = 4
+  workers_min      = 0
+  workers_max      = 3
+  idle_timeout     = 30
+  flashboot        = "FLASHBOOT"
+  timeout          = 300000
+}
+
+output "api_base_url" {
+  value = runpod_serverless_endpoint.api.request_urls.base
+}
+```
+
+`endpoint_type` is required and changing it replaces the endpoint. A load balancing endpoint only accepts `REQUEST_COUNT` scaling. The `request_urls.base` output replaces the Container App's ingress FQDN in your clients.
+
+For an Azure Machine Learning online deployment declared with `azapi_resource`, the target is the same pair of resources with a queue-based endpoint:
+
+```hcl runpod-queue-endpoint.tf
+resource "runpod_template" "scoring" {
+  name          = "my-endpoint-worker"
+  image         = "myregistry.azurecr.io/inference/worker:v1"
+  registry      = runpod_registry.acr.id
+  serverless    = true
+  disk          = 20
+  start_ssh     = false
+  start_jupyter = false
+}
+
+resource "runpod_serverless_endpoint" "scoring" {
+  name          = "my-endpoint"
+  template_id   = runpod_template.scoring.id
+  endpoint_type = "QUEUE"
+  gpu_pools     = ["AMPERE_16"]
+  scaling_type  = "QUEUE_DELAY"
+  scaling_value = 4
+  workers_min   = 0
+  workers_max   = 3
+  timeout       = 60000
+}
+
+output "scoring_runsync_url" {
+  value = runpod_serverless_endpoint.scoring.request_urls.run_sync
+}
+```
+
+`instanceType` and `sku.capacity` from the `azapi_resource` body become `gpu_pools` and the `workers_min` to `workers_max` range. `timeout` is in milliseconds, like `request_timeout_ms`. For every argument, see the [provider reference on the Terraform Registry](https://registry.terraform.io/providers/runpod/runpod/latest/docs). To report a provider problem, [open an issue on GitHub](https://github.com/runpod/terraform-provider-runpod/issues).
+
+## Reference
+
+### CLI command map
+
+| Azure CLI | Runpod |
+| --- | --- |
+| `az login` | `export RUNPOD_API_KEY=...`, or `rp login` for the SDK |
+| `az vm list-skus -l LOCATION` | `runpodctl gpu list`, `runpodctl datacenter list` |
+| `az vm create` | `runpodctl pod create` |
+| `az vm list -d` | `runpodctl pod list --all` |
+| `az vm show` | `runpodctl pod get POD_ID` |
+| `az vm start`, `az vm restart` | `runpodctl pod start POD_ID`, `runpodctl pod restart POD_ID` |
+| `az vm deallocate` | `runpodctl pod stop POD_ID` |
+| `az vm delete` | `runpodctl pod delete POD_ID` |
+| `ssh azureuser@IP` | `runpodctl ssh info POD_ID`, then `ssh` |
+| `az ml online-endpoint create` plus `az ml online-deployment create` | `runpodctl template create --serverless` plus `runpodctl serverless create` |
+| `az ml online-endpoint list`, `show` | `runpodctl serverless list`, `runpodctl serverless get ENDPOINT_ID` |
+| `az ml online-deployment update --set instance_count=N` | `runpodctl serverless update ENDPOINT_ID --workers-min N --workers-max M` |
+| `az ml online-endpoint update --traffic "blue=90 green=10"` | No equivalent. Split across two endpoints in your client. |
+| `az ml online-endpoint invoke` | `curl https://api.runpod.ai/v2/ENDPOINT_ID/runsync` |
+| `az ml online-deployment get-logs` | `runpodctl serverless logs ENDPOINT_ID` |
+| `az ml online-endpoint delete` | `runpodctl serverless delete ENDPOINT_ID` |
+| `az ml job create`, `az ml job stream` | `runpodctl pod create`, `runpodctl pod logs POD_ID --follow`, or `rp flash dev` |
+| `az ml compute create`, `stop`, `delete` | `runpodctl pod create`, `stop`, `delete` |
+| `az containerapp create`, `az containerapp up` | `POST /v2/serverless` with `"type": "LOAD_BALANCER"` |
+| `az containerapp update --image` | `runpodctl template update TEMPLATE_ID --image ...` |
+| `az containerapp logs show` | `runpodctl serverless logs ENDPOINT_ID` |
+| `az containerapp delete` | `runpodctl serverless delete ENDPOINT_ID` |
+| `az acr login`, `az acr token create` | `runpodctl registry create` |
+| `azcopy sync`, `azcopy copy` | `aws s3 sync` against the network volume [S3-compatible API](/storage/s3-api), or `azcopy` inside a Pod |
+| `az monitor` metrics and log queries | `runpodctl pod logs`, `runpodctl serverless logs`, the endpoint **Metrics** tab |
+| `az disk create` | `runpodctl network-volume create` |
+
+### API map
+
+| Azure call | Runpod REST API v2 |
+| --- | --- |
+| `PUT .../Microsoft.Compute/virtualMachines/NAME` | `POST https://api.runpod.io/v2/pods` |
+| VM `start`, `deallocate`, `restart` actions | `POST /v2/pods/POD_ID/action` with `{"action": "start"}`, `"stop"`, or `"restart"` |
+| `DELETE .../virtualMachines/NAME` | `DELETE /v2/pods/POD_ID` |
+| `MLClient.online_endpoints.begin_create_or_update` plus `online_deployments.begin_create_or_update` | `POST /v2/serverless` |
+| `MLClient.online_deployments.begin_create_or_update` (update) | `PATCH /v2/serverless/ENDPOINT_ID` |
+| `MLClient.online_endpoints.invoke`, scoring URI | `POST https://api.runpod.ai/v2/ENDPOINT_ID/runsync` or `/run` |
+| `MLClient.online_deployments.get_logs` | `GET /v2/serverless/ENDPOINT_ID/workers/WORKER_ID/logs` |
+| `MLClient.online_endpoints.begin_delete` | `DELETE /v2/serverless/ENDPOINT_ID` |
+| `MLClient.batch_endpoints.invoke` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/run` with a `webhook` |
+| Azure OpenAI `/openai/v1/chat/completions` | `https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1/chat/completions` |
+| ACR pull credentials | `POST /v2/registries` |
+| Key Vault `set secret` | `POST /v2/account/secrets` |
+| Managed disk create | `POST /v2/network-volumes` |
+| Resource SKUs list | `GET /v2/catalog/gpus`, `GET /v2/catalog/datacenters` |
+| Cost Management queries | `GET /v2/billing/pods`, `/v2/billing/serverless`, `/v2/billing/network-volumes` |
+
+### Configuration field map
+
+| Azure field | Runpod field (REST API v2) | `runpodctl` flag |
+| --- | --- | --- |
+| VM `size`, deployment `instance_type` | `gpu.id` and `gpu.count` (Pods), `gpu.pools` and `gpu.count` (Serverless) | `--gpu-id`, `--gpu-count` |
+| `location` | `dataCenterIds` | `--data-center-ids` |
+| VM image, deployment `environment` | `image` | `--image` |
+| `custom_data`, job `command` | `cmd`, `entrypoint`, or `args` | `--docker-args` (Pods), `--docker-start-cmd` (templates) |
+| `environment_variables`, `--env-vars` | `env` | `--env` |
+| OS disk size | `disk` | `--container-disk-in-gb` |
+| Data disk | `mounts.network` or `mounts.persistent` | `--network-volume-id`, `--volume-in-gb` |
+| NSG rules, `--target-port`, `--ingress` | `ports` | `--ports` |
+| `instance_count`, `--min-replicas`, `--max-replicas` | `workers.min`, `workers.max` | `--workers-min`, `--workers-max` |
+| Azure Monitor autoscale rule, HTTP scale rule | `scaling.type` with `queueDelay` or `requestCount` | `--scale-by`, `--scale-threshold` |
+| `request_settings.request_timeout_ms` | `timeout` (milliseconds) | `--execution-timeout` (seconds) |
+| `liveness_route`, `readiness_route` | `/ping`, or `HEALTH_CHECK_PATH` in `env` | Not applicable |
+| `scoring_route.port`, `--target-port` | `PORT` and `PORT_HEALTH` in `env`, plus `ports` | Not applicable |
+| ACR registry credentials | `registry` | `--registry-auth-id` |
+| `auth_mode` | Not applicable. All endpoints use the Runpod API key. | Not applicable |
+| Spot `priority`, `eviction_policy` | Not applicable in REST API v2 | Not applicable |
+
+### Environment variable map
+
+| Azure (inside the container) | Runpod | Notes |
+| --- | --- | --- |
+| `AZUREML_MODEL_DIR` | A path you choose, such as `/models` or `/runpod-volume/models` | Runpod doesn't mount a registered model. |
+| `CONTAINER_APP_PORT` | `PORT` | Set on load balancing endpoints. Defaults to `80`. |
+| `CONTAINER_APP_NAME`, `CONTAINER_APP_REPLICA_NAME` | `RUNPOD_POD_ID` | Identifies the Pod or Serverless worker. |
+| Azure region from instance metadata | `RUNPOD_DC_ID` | Data center ID. |
+| GPU count from the VM size | `RUNPOD_GPU_COUNT` | |
+| Public IP and SSH port | `RUNPOD_PUBLIC_IP`, `RUNPOD_TCP_PORT_22` | Available when the Pod has a public IP. |
+| `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_CLIENT_SECRET` | The same names, set from Runpod secrets | For calling back into Azure with a service principal. |
+
+### Status map
+
+| Azure VM power state | Runpod Pod status | Compute billing |
+| --- | --- | --- |
+| Creating | `PROVISIONING` | |
+| Starting | `STARTING` | |
+| Running | `RUNNING` | Billed on both. |
+| Stopped (allocated) | No equivalent | Billed on Azure. |
+| Deallocated | `EXITED` | Not billed on either. Disks on Azure and the volume disk on Runpod still bill. |
+| Failed provisioning state | `ERROR` | A Pod in `ERROR` still exists, so delete it. |
+| Deleted | `TERMINATED` | |
+
+Serverless jobs move through `IN_QUEUE`, `IN_PROGRESS`, and then `COMPLETED`, `FAILED`, `CANCELLED`, or `TIMED_OUT`. Workers report `INITIALIZING`, `IDLE`, `RUNNING`, `THROTTLED`, or `UNHEALTHY`. `THROTTLED` means the worker is waiting on GPU capacity.
+
+## Migrate with a coding agent
+
+A coding agent can run the inventory, propose the mapping, and migrate one workload at a time. Install the Runpod skills and MCP server first.
+
+<Tabs>
+  <Tab title="Claude Code">
+    The plugin also connects the hosted MCP server:
+
+    ```bash
+    claude plugin marketplace add runpod/runpod-plugins-official
+    claude plugin install runpod@runpod
+    ```
+  </Tab>
+  <Tab title="Other agents">
+    Install the skills, then the hosted MCP server. Replace `AGENT_ID` and `CLIENT_ID` with your agent's identifiers:
+
+    ```bash
+    npx skills add runpod/runpod-plugins-official --skill '*' --agent AGENT_ID --global
+    npx @runpod/mcp-server@latest add --client CLIENT_ID
+    ```
+  </Tab>
+</Tabs>
+
+The MCP server signs in with OAuth ("Sign in with Runpod"), so you don't need an API key to start. See [Agent skills](/get-started/agent-skills) and [MCP servers](/get-started/mcp-servers) for details.
+
+Then give the agent a prompt like this one:
+
+```text
+Use the runpod-cloud-migrate skill to migrate this project's GPU workloads from Azure to Runpod.
+
+1. Inventory first. Scan this repo for Azure usage (azure.ai.ml, AzureOpenAI, score.py with
+   init()/run(), az ml / az vm / az containerapp commands, azurerm_ and azapi_ Terraform resources,
+   azurecr.io images, blob.core.windows.net URLs). If the Azure CLI is logged in, list GPU VMs,
+   Azure Machine Learning online and batch endpoints, compute, and Container Apps GPU apps
+   read-only. Don't change anything on Azure.
+2. Show me a plan: each workload, its Runpod target (Pod, queue-based endpoint, load balancing
+   endpoint, Public Endpoint, Instant Cluster, or @app.task), the GPU type or pool, where data and
+   images will live, what stays on Azure, and an hourly cost estimate from live Runpod pricing.
+   List every difference that needs my decision (private networking, managed identity, proprietary
+   models, traffic splitting).
+3. Wait for my approval before creating anything billable on Runpod.
+4. Migrate one workload first. Translate the code, build a linux/amd64 image, deploy it, and verify
+   it with a real request. Show me the output next to the Azure output.
+5. Update the client code and Terraform for that workload, with both providers side by side.
+6. Never stop, deallocate, or delete Azure resources, and never rotate or delete Azure credentials,
+   without my explicit approval. When I approve, give me the shutdown commands to review first.
+```
+
+## Troubleshooting
+
+**The Pod or worker fails to pull an image from ACR.** The registry credential is wrong, expired, or scoped to another repository, or the registry blocks public network access. Check that `docker login myregistry.azurecr.io` works with the same username and password from outside Azure, that the token has `content/read` on that repository, and that the template or Pod references the registry credential ID.
+
+**The container exits immediately with an exec format error.** The image was built for ARM. Rebuild with `docker build --platform linux/amd64`.
+
+**CUDA or driver errors at startup that didn't happen on Azure.** The host's driver is older than your image's CUDA runtime expects. Set `--min-cuda-version` (or `gpu.minCudaVersion`) to match the CUDA version in your image.
+
+**The handler fails with a `TypeError` or `KeyError` on the input.** The code still treats the request as a raw JSON string or expects the payload at the top level. On Runpod, read `job["input"]`, and make sure clients send `{"input": {...}}`.
+
+**`os.getenv("AZUREML_MODEL_DIR")` returns `None`.** That variable is set only by Azure Machine Learning. Point the code at the path where you baked or mounted the model.
+
+**A load balancing worker shows as running but requests time out or return `502`.** The health check isn't passing. Make sure the server listens on `0.0.0.0`, the port is listed in `ports`, both `PORT` and `PORT_HEALTH` are set to it, and `GET /ping` (or your `HEALTH_CHECK_PATH`) returns `200`.
+
+**`{"error":"no workers available"}` on the first request.** The endpoint scaled to zero and the worker wasn't ready in time. Retry with backoff, or set the minimum workers to 1 for latency-sensitive endpoints.
+
+**`DefaultAzureCredential` fails inside a Pod or worker.** There's no managed identity outside Azure. Set `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, and `AZURE_CLIENT_SECRET` from Runpod secrets, or switch to a SAS URL.
+
+**Requests to Blob Storage, Key Vault, or a database time out.** The Azure resource only allows traffic from a VNet or private endpoint. Enable its public endpoint with authentication and firewall rules, or keep the component that needs private access on Azure and call it through an API you expose.
+
+**Data written by a job is gone after the Pod restarts.** It was written to the container disk. Write to `/workspace` on a volume disk or network volume, or to `/runpod-volume` on Serverless.
+
+**A Pod create fails for lack of capacity.** The GPU type isn't in stock in that data center right now. Try another type that fits the workload or another data center, or deploy from the console with **Deploy when available**. If a network volume pins you to a data center, check stock there before you copy data.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Serverless overview" href="/serverless/overview" icon="bolt" horizontal>
+    How endpoints, workers, and scaling work.
+  </Card>
+  <Card title="Build a load balancing worker" href="/serverless/load-balancing/build-a-worker" icon="hammer" horizontal>
+    Serve your own HTTP API on Serverless.
+  </Card>
+  <Card title="Terraform provider" href="/integrations/terraform/overview" icon="code" horizontal>
+    Manage Runpod resources as code.
+  </Card>
+  <Card title="Network volumes" href="/storage/network-volumes" icon="hard-drive" horizontal>
+    Persistent storage for Pods and Serverless.
+  </Card>
+</CardGroup>

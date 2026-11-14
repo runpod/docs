@@ -1,0 +1,1392 @@
+---
+title: "Migrate from fal to Runpod"
+sidebarTitle: "fal"
+description: "Move fal Model API calls, fal Serverless apps, and fal Compute instances to Runpod Public Endpoints, Serverless, Pods, and Instant Clusters."
+---
+
+This guide is for teams that run production workloads on [fal](https://fal.ai/docs) and want to move some or all of them to Runpod. Calls to fal's hosted [Model APIs](https://fal.ai/docs/documentation/model-apis/overview) map to Runpod [Public Endpoints](/public-endpoints/overview), `fal.App` deployments on [fal Serverless](https://fal.ai/docs/documentation/serverless) map to Runpod [Serverless](/serverless/overview) endpoints, and [fal Compute](https://fal.ai/docs/documentation/compute) instances map to [Pods](/pods/overview) and [Instant Clusters](/instant-clusters). By the end, each workload runs on Runpod, your client code calls Runpod, and the fal resources that were billing are shut down.
+
+<Tip>
+  A coding agent can do most of this migration for you. See [Migrate with a coding agent](#migrate-with-a-coding-agent).
+</Tip>
+
+## How fal maps to Runpod
+
+| fal concept | Runpod equivalent | Notes |
+| --- | --- | --- |
+| Model APIs (hosted model gallery, model IDs such as `fal-ai/flux/dev`) | [Public Endpoints](/public-endpoints/overview) | Hosted models you call with an API key. The catalogs overlap but aren't identical. See the [model map](#model-map). |
+| Queue API (`https://queue.fal.run/MODEL_ID`) | `/run` and `/status/JOB_ID` on `https://api.runpod.ai/v2/ENDPOINT_ID` | Same submit, poll, and fetch pattern. On Runpod the result comes back in the status response. |
+| Sync endpoint (`https://fal.run/MODEL_ID`), `subscribe` | `/runsync` | Waits 90 seconds by default. Raise it with `?wait=` (up to 300000 ms). |
+| Streaming (`/stream`, SSE) | `/stream/JOB_ID` on queue-based endpoints, or your own SSE route on a load-balancing endpoint | Text Public Endpoints also expose an OpenAI-compatible route. |
+| Realtime (`@fal.realtime`, WebSocket) | [Load-balancing endpoint](/serverless/load-balancing/overview) with your own WebSocket route | See [Realtime and WebSocket inference](#realtime-and-websocket-inference). |
+| Workflow endpoints (`workflows/OWNER/NAME`) | Your own orchestration code | Chain Public Endpoint calls in your application. |
+| fal Serverless (`fal.App`, `@fal.endpoint`) | [Serverless](/serverless/overview): the [Runpod SDK](/sdk/overview) (`runpod.App`) or a custom image with a handler | Queue-based endpoints for jobs, load-balancing endpoints for your own HTTP routes. |
+| Runner | Worker | One container instance that serves requests. |
+| `machine_type`, `num_gpus` | GPU pools and GPU types, `gpu_count` | See the [GPU map](#gpu-map). |
+| `min_concurrency`, `max_concurrency`, `keep_alive` | Active (minimum) workers, max workers, idle timeout | See the [configuration field map](#configuration-field-map). |
+| `requirements`, `ContainerImage` | SDK `dependencies` and `system_dependencies`, or your own Docker image and [template](/pods/templates/overview) | Images must be `linux/amd64`. |
+| `/data` persistent storage | [Network volume](/storage/network-volumes), [global volume](/storage/globalvolume/overview), or [cached models](/serverless/endpoints/model-caching) | Network volumes mount at `/runpod-volume` on Serverless and `/workspace` on Pods, and live in one data center. |
+| fal CDN (`fal.toolkit.Image`, `fal_client.upload_file`) | Your own S3-compatible bucket with the `rp_upload` helper, or base64 in the response | Public Endpoints return hosted output URLs that expire after 7 days. |
+| `fal secrets set` | [Runpod secrets](/pods/templates/secrets) | You reference each secret explicitly in the environment. |
+| `regions` | `datacenter` (SDK), `dataCenterIds` (REST), `--data-center-ids` (runpodctl) | GPU stock varies by data center. |
+| fal Compute (`1xH100-SXM`, `8xH100-SXM`) | [Pods](/pods/overview), [Instant Clusters](/instant-clusters) | Pods are containers, not VMs. |
+| Billing: per output (Model APIs), per second of runner lifetime (Serverless), per hour (Compute) | Per output (Public Endpoints), per second while workers run (Serverless), per second (Pods) | See [Serverless pricing](/serverless/pricing) and [Pod pricing](/pods/pricing). |
+| `fal` CLI | [`runpodctl`](/runpodctl/overview) and the [`rp` CLI](/sdk/cli) | `rp flash` commands develop and deploy SDK apps. |
+| `fal-client`, `@fal-ai/client` | `runpod` Python package, plain HTTP, [`@runpod/ai-sdk-provider`](/public-endpoints/ai-sdk) | The Runpod SDKs are built on REST API v2. |
+| Platform APIs (`https://api.fal.ai/v1`) | [REST API v2](/api-reference-v2/overview) (`https://api.runpod.io/v2`) | Manage endpoints, templates, volumes, secrets, and billing. |
+| `Authorization: Key FAL_KEY` | `Authorization: Bearer RUNPOD_API_KEY` | One API key for inference and management. |
+| Teams and organizations | [Organizations](/organizations/orgs-overview) | Roles, groups, and billing per organization. |
+| Dashboard logs and analytics, `fal runners logs` | Endpoint **Logs** and **Metrics** tabs, [worker logs](/serverless/development/logs) | [Job states and metrics](/serverless/endpoints/job-states) lists what's tracked. |
+| fal MCP server | [Runpod MCP server](/get-started/mcp-servers) | OAuth sign-in. |
+
+## What's different
+
+### What works differently
+
+**The request body is wrapped.** fal takes model parameters at the top level of the JSON body. Runpod takes them inside an `input` object, and options such as `webhook` and `policy` sit beside `input`.
+
+**The result arrives with the status.** fal has separate status and result URLs. Runpod's `/status/JOB_ID` returns the status and, once the job completes, the `output`.
+
+**Failures have their own statuses.** fal reports `IN_QUEUE`, `IN_PROGRESS`, and `COMPLETED`, and a failed request is `COMPLETED` with an `error` field. Runpod adds `FAILED`, `CANCELLED`, and `TIMED_OUT`. Update any code that treats `COMPLETED` as the only terminal state.
+
+**Results don't stay around as long.** fal stores request payloads for 90 days by default. Runpod keeps the result of a `/run` job for 30 minutes after completion and a `/runsync` result for 1 minute. Fetch results promptly or use a webhook, and store what you need.
+
+**Output URLs expire.** Public Endpoint output URLs (`image_url`, `video_url`, `audio_url`, `result`) expire after 7 days. If you relied on fal CDN URLs as long-lived links, copy outputs to your own storage.
+
+**Secrets are opt-in per endpoint.** By default fal injects every secret in the environment into a runner. On Runpod you map each secret into an environment variable yourself, with `runpod.Secret("NAME")` in the SDK or `{{ RUNPOD_SECRET_NAME }}` in a template or endpoint.
+
+**Model weights aren't cached for you.** fal sets `HF_HOME` to `/data/.cache/huggingface` on every runner. On Runpod, weights download to the worker's container disk on each cold start unless you use [cached models](/serverless/endpoints/model-caching), a volume, or bake them into the image.
+
+**Storage is attached, not ambient.** `/data` is mounted on every fal runner in your account. A Runpod network volume is created with a size, lives in one data center, and is attached to specific endpoints or Pods. Attaching one limits those workers to that data center.
+
+**Auth is always a Runpod API key.** fal apps can be `private`, `public`, or `shared`. Runpod Serverless endpoints check a Runpod API key on every request. For unauthenticated access, put your own backend in front of the endpoint.
+
+**Idle timeout defaults are shorter.** fal's `keep_alive` defaults to 60 seconds. The Runpod SDK's `idle_timeout` also defaults to 60, but the console default is 5 seconds and the REST v2 default is 10. Set it explicitly.
+
+**Execution timeouts are shorter by default.** fal's `request_timeout` defaults to 3600 seconds. Runpod's execution timeout defaults to 600 seconds in the console and 300000 ms in REST v2. The SDK's `execution_timeout_ms` defaults to no limit.
+
+**You build images yourself for the custom-image path.** `fal deploy` builds containers remotely. With the Runpod SDK, `rp flash deploy` also packages your code without Docker. With a custom worker, you build and push a `linux/amd64` image, or let the [GitHub integration](/serverless/workers/github-integration) build it.
+
+### What has no direct equivalent
+
+| On fal | On Runpod | Workaround |
+| --- | --- | --- |
+| Workflow endpoints that chain models in one call | Not a hosted feature | Chain calls in your own code. See the [text-to-video pipeline tutorial](/tutorials/public-endpoints/text-to-video-pipeline). |
+| `fal_client.upload_file` and `fal.storage.upload` for input files | Public Endpoint model pages take input media as URLs | Host inputs in your own bucket and pass a URL the endpoint can fetch. |
+| Automatic CDN upload of `Image` and `File` outputs from your own app | Your handler uploads to your bucket with `rp_upload`, or returns base64 | See [Step 4](#step-4-move-your-images-and-code). |
+| Signed webhooks (`X-Fal-Webhook-Signature`) | The Runpod webhook docs describe retries, not a signature | Put an unguessable token in the webhook URL and confirm the job with `/status/JOB_ID`. |
+| `fal.realtime` client and msgpack protocol | Raw WebSockets on a load-balancing endpoint | Define your own message format. |
+| `shared` auth (callers pay with their own key) | Each account calls its own endpoints | Publish the worker to the [Hub](/hub/overview) so others deploy it in their account. |
+| `concurrency_buffer`, `concurrency_buffer_perc` | Autoscaling by queue delay or request count | Keep active workers for headroom and tune the scaler threshold. |
+| 90-day request history and per-request payload APIs | Results expire in minutes | Persist inputs and outputs from your webhook receiver. |
+| Automatic retries of failed runner attempts (up to 10) | `/retry/JOB_ID` requeues a failed or timed-out job | Call `/retry` from your client or webhook receiver. |
+
+Going the other way, some things exist on Runpod that you may not have used on fal: text models with an OpenAI-compatible route on Public Endpoints, `@app.task` for run-to-completion jobs on a dedicated Pod, per-second Pod billing, and Community Cloud or Secure Cloud placement for Pods.
+
+## Requirements
+
+- A [Runpod account](/accounts-billing/manage-accounts) with credits.
+- A [Runpod API key](/get-started/credentials).
+- Access to your fal account or team, with the `fal` CLI installed and logged in (`fal auth login`).
+- Python 3.10 to 3.14 for the Runpod SDK.
+- Docker, if you'll deploy a custom image.
+- An S3-compatible bucket, if your app returns files and you don't want to return base64.
+
+## Step 1: Take inventory of what you run on fal
+
+List everything in each fal account and team before you move anything. If you use teams, switch with `fal account set TEAM_NAME` and repeat.
+
+```bash
+# Who you're logged in as, and which accounts you can switch to
+fal auth whoami
+fal account list
+
+# Environments (main, staging, and so on)
+fal environments list
+
+# Deployed apps, per environment
+fal apps list --json
+fal apps list --env staging --json
+
+# Runners for one app, to see real concurrency
+fal apps runners APP_NAME
+
+# Secret names (values are never shown)
+fal secrets list
+fal secrets list --env staging
+
+# Files on /data
+fal files list
+fal files list models/
+
+# API keys
+fal keys list
+```
+
+fal Compute instances don't appear in the app list. List them in the [Compute dashboard](https://fal.ai/dashboard/compute) or through the Platform API.
+
+```bash
+curl -s "https://api.fal.ai/v1/compute/instances" \
+  -H "Authorization: Key $FAL_KEY"
+```
+
+For each `fal.App`, record these values from the source file or `pyproject.toml`: `machine_type`, `num_gpus`, `min_concurrency`, `max_concurrency`, `keep_alive`, `max_multiplexing`, `request_timeout`, `startup_timeout`, `regions`, `requirements` or the `ContainerImage` Dockerfile, the secrets it reads, every `/data` path it touches, and every `@fal.endpoint` and `@fal.realtime` path. Scaling values changed with `fal apps scale` override the code, so trust `fal apps list --json` over the source for those.
+
+Then find the code that calls fal. This command finds SDK imports, CLI usage, hostnames, and environment variables.
+
+```bash
+grep -rnE "fal_client|@fal-ai/|@ai-sdk/fal|import fal\b|from fal[. ]|fal\.run|queue\.fal\.run|fal\.media|api\.fal\.ai|FAL_KEY|FAL_API_KEY|fal (deploy|run|apps|secrets|files) |\[tool\.fal" \
+  --include="*.py" --include="*.ts" --include="*.tsx" --include="*.js" --include="*.mjs" \
+  --include="*.toml" --include="*.yml" --include="*.yaml" --include="*.sh" --include="*.env*" \
+  --exclude-dir=node_modules --exclude-dir=.venv .
+```
+
+Write down every model ID you call (strings such as `fal-ai/flux/dev` and `workflows/OWNER/NAME`), whether each call uses `subscribe`, `submit`, `run`, `stream`, or `realtime`, and whether it uses webhooks, `fal_client.upload_file`, or stored fal CDN URLs.
+
+## Step 2: Set up Runpod
+
+Create an [API key](/get-started/credentials) in the console, then install the tools you need.
+
+```bash
+# runpodctl: manage endpoints, templates, Pods, and volumes
+curl -fsSL https://cli.runpod.net | sudo bash
+
+# Runpod SDK and the rp CLI (Python 3.10 to 3.14)
+pip install runpod
+
+# Log in once. Credentials are saved to ~/.runpod/config.toml
+rp login
+
+# For scripts and CI
+export RUNPOD_API_KEY="YOUR_API_KEY"
+```
+
+On macOS you can also install `runpodctl` with `brew install runpod/runpodctl/runpodctl`. For agent-driven work, connect the [Runpod MCP server](/get-started/mcp-servers).
+
+## Step 3: Choose where each workload lands
+
+| What you run on fal | Where it lands on Runpod |
+| --- | --- |
+| Calls to a hosted model that Runpod also hosts | [Public Endpoint](/public-endpoints/overview) |
+| Calls to a hosted model that isn't a Public Endpoint | Deploy the open model yourself on Serverless, or check the [Hub](/hub/overview) for a ready-made worker. Closed models stay with a provider that hosts them. |
+| `fal.App` called through the queue (`subscribe`, `submit`, webhooks) | Serverless queue-based endpoint: `@app.queue` in the Runpod SDK, or a custom image with a handler |
+| `fal.App` with several HTTP routes, SSE streaming, or an existing HTTP server (`exposed_port`) | Serverless load-balancing endpoint: `@app.api` in the Runpod SDK, or a custom image that serves HTTP |
+| `@fal.realtime` or `is_websocket=True` endpoints | Serverless load-balancing endpoint with a WebSocket route |
+| ComfyUI workflow deployed as a `fal.App` | The [ComfyUI worker](/tutorials/serverless/comfyui) from the Hub, or a customized `runpod/worker-comfyui` image |
+| `@fal.function` one-off jobs, training runs | `@app.task` in the Runpod SDK (one Pod per call), or a Pod |
+| fal Compute `1xH100-SXM` | Pod |
+| fal Compute `8xH100-SXM`, single node | Pod with multiple GPUs |
+| fal Compute multi-node in one sector (InfiniBand) | [Instant Cluster](/instant-clusters) |
+
+### Model map
+
+These fal model IDs have a counterpart in the Runpod [model reference](/public-endpoints/reference). The Runpod endpoint ID is the path segment in `https://api.runpod.ai/v2/ENDPOINT_ID/runsync`. Both catalogs change, so check the model reference and the [Hub playground](https://console.runpod.io/hub?tabSelected=public_endpoints) before you commit to a mapping.
+
+| fal model ID | Runpod Public Endpoint ID | Runpod model page |
+| --- | --- | --- |
+| `fal-ai/flux/dev` | `black-forest-labs-flux-1-dev` | [Flux Dev](/public-endpoints/models/flux-dev) |
+| `fal-ai/flux/schnell` | `black-forest-labs-flux-1-schnell` | [Flux Schnell](/public-endpoints/models/flux-schnell) |
+| `fal-ai/flux-kontext/dev` | `black-forest-labs-flux-1-kontext-dev` | [Flux Kontext Dev](/public-endpoints/models/flux-kontext-dev) |
+| `fal-ai/qwen-image` | `qwen-image-t2i` (with LoRAs: `qwen-image-t2i-lora`) | [Qwen Image](/public-endpoints/models/qwen-image), [Qwen Image LoRA](/public-endpoints/models/qwen-image-lora) |
+| `fal-ai/qwen-image-edit` | `qwen-image-edit` | [Qwen Image Edit](/public-endpoints/models/qwen-image-edit) |
+| `fal-ai/qwen-image-edit-2511` | `qwen-image-edit-2511` | [Qwen Image Edit 2511](/public-endpoints/models/qwen-image-edit-2511) |
+| `fal-ai/qwen-image-edit-2511/lora` | `qwen-image-edit-2511-lora` | [Qwen Image Edit 2511 LoRA](/public-endpoints/models/qwen-image-edit-2511-lora) |
+| `fal-ai/bytedance/seedream/v4/text-to-image` | `seedream-v4-t2i` | [Seedream 4.0 T2I](/public-endpoints/models/seedream-4-t2i) |
+| `fal-ai/bytedance/seedream/v4/edit` | `seedream-v4-edit` | [Seedream 4.0 Edit](/public-endpoints/models/seedream-4-edit) |
+| `fal-ai/z-image/turbo` | `z-image-turbo` | [Z-Image Turbo](/public-endpoints/models/z-image-turbo) |
+| `fal-ai/nano-banana-2/edit` | `google-nano-banana-2-edit` | [Nano Banana 2 Edit](/public-endpoints/models/nano-banana-2-edit) |
+| `fal-ai/nano-banana-pro/edit` | `nano-banana-pro-edit` | [Nano Banana Pro Edit](/public-endpoints/models/nano-banana-pro-edit) |
+| `wan/v2.6/text-to-image` | `wan-2-6-t2i` | [WAN 2.6 T2I](/public-endpoints/models/wan-2-6-t2i) |
+| `wan/v2.6/text-to-video` | `wan-2-6-t2v` | [WAN 2.6 T2V](/public-endpoints/models/wan-2-6-t2v) |
+| `wan/v2.6/image-to-video` | `wan-2-6-i2v` | [WAN 2.6 I2V](/public-endpoints/models/wan-2-6-i2v) |
+| `fal-ai/wan-25-preview/image-to-video` | `wan-2-5` | [WAN 2.5](/public-endpoints/models/wan-2-5) |
+| `fal-ai/wan/v2.2-a14b/image-to-video` | `wan-2-2-i2v-720` | [WAN 2.2 I2V](/public-endpoints/models/wan-2-2-i2v) |
+| `fal-ai/wan/v2.2-a14b/image-to-video/lora` | `wan-2-2-t2v-720-lora` | [WAN 2.2 I2V LoRA](/public-endpoints/models/wan-2-2-i2v-lora) |
+| `fal-ai/kling-video/v2.6/standard/motion-control` | `kling-v2-6-std-motion-control` | [Kling v2.6 Motion Control](/public-endpoints/models/kling-v2-6-motion-control) |
+| `bytedance/seedance-2.5/text-to-video` | `tdq07exynr7zux` | [Seedance 2.5 T2V](/public-endpoints/models/seedance-2-5-t2v) |
+| `bytedance/seedance-2.5/image-to-video` | `16jsvx5ncmm24x` | [Seedance 2.5 I2V](/public-endpoints/models/seedance-2-5-i2v) |
+| `fal-ai/vidu/q3/text-to-video` | `vidu-q3-t2v` | [Vidu Q3 T2V](/public-endpoints/models/vidu-q3-t2v) |
+| `fal-ai/vidu/q3/image-to-video` | `vidu-q3-i2v` | [Vidu Q3 I2V](/public-endpoints/models/vidu-q3-i2v) |
+| `fal-ai/infinitalk` | `infinitetalk` | [InfiniteTalk](/public-endpoints/models/infinitetalk) |
+| `fal-ai/minimax/speech-02-hd` | `minimax-speech-02-hd` | [Minimax Speech 02 HD](/public-endpoints/models/minimax-speech) |
+| `fal-ai/chatterbox/text-to-speech/turbo` | `chatterbox-turbo` | [Chatterbox Turbo](/public-endpoints/models/chatterbox-turbo) |
+
+<Warning>
+  A matching name doesn't mean matching output. The two platforms can run different versions, tiers, default steps, and guidance values of the same model family, and fal lists both pro and standard tiers for some Kling endpoints. Run your own prompts through both before you switch traffic, and compare parameters on each Runpod model page.
+</Warning>
+
+Runpod also hosts text models (for example `qwen3-32b-awq` and `gpt-oss-120b`) with an OpenAI-compatible route at `https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1`. For fal models that aren't in the table, such as models from the FLUX Pro, Veo, Ideogram, and ElevenLabs families, or other Kling and Sora variants, check the model reference for a current listing, then plan to keep the call on a provider that hosts the model or self-host an open alternative on Serverless.
+
+### GPU map
+
+fal machine types name a GPU class. Runpod Serverless selects hardware by GPU pool, and Pods select by GPU type. Pick by the VRAM your model needs, then check live stock with `runpodctl gpu list` or `GET /v2/catalog/gpus`, because availability varies by data center.
+
+| fal `machine_type` | VRAM on fal | Runpod Serverless pool | Runpod GPU types in the pool |
+| --- | --- | --- | --- |
+| `GPU-A100` | 40 GB | `AMPERE_48` (48 GB) or `AMPERE_80` (80 GB) | A6000, A40, or A100 80GB |
+| `GPU-L40` | 48 GB | `ADA_48_PRO` | L40, L40S, RTX 6000 Ada |
+| `GPU-H100` | 80 GB | `ADA_80_PRO` | H100 PCIe, H100 80GB HBM3, H100 NVL |
+| `GPU-RTXPRO6000` | 96 GB | `BLACKWELL_96` | RTX PRO 6000 Blackwell |
+| `GPU-H200` | 141 GB | `HOPPER_141` | H200 |
+| `GPU-B200` | 192 GB | `BLACKWELL_180` | B200 (listed at 180 GB) |
+| `XS`, `S`, `M`, `L`, `XL` (CPU) | n/a | CPU instance IDs such as `cpu3c-2-4` | See [CPU types](/references/cpu-types) |
+
+fal's `GPU-A100` is the 40 GB card. Runpod's A100 pool is the 80 GB card, so a workload sized for 40 GB also fits the 48 GB pool. A list such as `machine_type = ["GPU-H100", "GPU-A100"]` maps to a list of pools, for example `gpu=["H100", "A100"]` in the SDK. See [GPU types](/references/gpu-types) for every type and pool.
+
+## Step 4: Move your images and code
+
+If you only call hosted models, skip to [Step 7](#step-7-update-the-code-that-calls-fal).
+
+### The fal app you're starting from
+
+This is the shape of a typical `fal.App`: `setup()` loads the model once per runner, and one endpoint takes a pydantic input and returns an `Image` that fal uploads to its CDN.
+
+```python fal_app.py
+import fal
+from pydantic import BaseModel, Field
+from fal.toolkit import Image
+
+
+class Input(BaseModel):
+    prompt: str = Field(description="The prompt to generate an image from")
+
+
+class Output(BaseModel):
+    image: Image
+
+
+class MyApp(fal.App):
+    app_name = "my-demo-app"
+    machine_type = "GPU-H100"
+    keep_alive = 300
+    min_concurrency = 0
+    max_concurrency = 5
+    requirements = [
+        "diffusers[torch]==0.32.2",
+        "transformers[sentencepiece]==4.51.0",
+        "accelerate==1.6.0",
+    ]
+
+    def setup(self):
+        import torch
+        from diffusers import StableDiffusionXLPipeline
+
+        self.pipe = StableDiffusionXLPipeline.from_pretrained(
+            "stabilityai/stable-diffusion-xl-base-1.0",
+            torch_dtype=torch.float16,
+            variant="fp16",
+            use_safetensors=True,
+        ).to("cuda")
+
+    @fal.endpoint("/")
+    def run(self, request: Input) -> Output:
+        result = self.pipe(request.prompt)
+        return Output(image=Image.from_pil(result.images[0]))
+```
+
+Callers get `{"image": {"url": "https://...fal.media/..."}}`. On Runpod you choose between two paths: the Runpod SDK, which is closest to the fal workflow, or a custom image with a handler, which gives you full control of the container.
+
+### Option A: The Runpod SDK
+
+<Tabs>
+  <Tab title="Queue endpoint (@app.queue)">
+    Use `@app.queue` when callers use `subscribe`, `submit`, or webhooks today. It creates a queue-based endpoint with `/run`, `/runsync`, and `/status`.
+
+    ```python main.py
+    import runpod
+
+    app = runpod.App("my-demo-app")
+
+    sdxl = runpod.Model("stabilityai/stable-diffusion-xl-base-1.0")
+
+    _PIPE = None
+
+
+    @app.queue(
+        gpu="H100",              # machine_type = "GPU-H100"
+        workers=(0, 5),          # (min_concurrency, max_concurrency)
+        idle_timeout=300,        # keep_alive
+        model=sdxl,              # staged on the host before the worker starts
+        dependencies=[
+            "diffusers==0.32.2",
+            "transformers[sentencepiece]==4.51.0",
+            "accelerate==1.6.0",
+        ],
+    )
+    def generate(prompt: str):
+        global _PIPE
+        import base64
+        import io
+
+        import torch
+        from diffusers import StableDiffusionXLPipeline
+
+        # Deployed workers import this module once, so the load runs once per worker.
+        if _PIPE is None:
+            _PIPE = StableDiffusionXLPipeline.from_pretrained(
+                "stabilityai/stable-diffusion-xl-base-1.0",
+                torch_dtype=torch.float16,
+                variant="fp16",
+                use_safetensors=True,
+            ).to("cuda")
+
+        image = _PIPE(prompt).images[0]
+        buffer = io.BytesIO()
+        image.save(buffer, format="JPEG", quality=95)
+        return {
+            "image_b64": base64.b64encode(buffer.getvalue()).decode("utf-8"),
+            "content_type": "image/jpeg",
+            "width": image.width,
+            "height": image.height,
+        }
+
+
+    @runpod.local_entrypoint
+    def main():
+        result = generate.remote("A cyberpunk cityscape at night with neon lights")
+        print(result["width"], result["height"], len(result["image_b64"]))
+    ```
+
+    The function's keyword arguments become the job `input`, so a caller sends `{"input": {"prompt": "..."}}`. The pydantic `Input` model becomes a typed function signature. `torch` is already installed on the built-in GPU images, so it isn't listed in `dependencies`. Packages are imported inside the function because top-level imports run on your machine.
+  </Tab>
+
+  <Tab title="HTTP service (@app.api)">
+    Use `@app.api` when you want the same class shape as `fal.App`: a setup hook and one method per route. It creates a load-balancing endpoint, so requests go straight to a worker with no queue.
+
+    ```python main.py
+    import runpod
+
+    app = runpod.App("my-demo-app")
+
+    sdxl = runpod.Model("stabilityai/stable-diffusion-xl-base-1.0")
+
+
+    @app.api(
+        gpu="H100",
+        workers=(0, 5),
+        idle_timeout=300,
+        model=sdxl,
+        dependencies=[
+            "diffusers==0.32.2",
+            "transformers[sentencepiece]==4.51.0",
+            "accelerate==1.6.0",
+        ],
+    )
+    class MyApp:
+        @runpod.init
+        def setup(self):
+            # Runs once when a worker starts, like fal's setup()
+            import torch
+            from diffusers import StableDiffusionXLPipeline
+
+            self.pipe = StableDiffusionXLPipeline.from_pretrained(
+                "stabilityai/stable-diffusion-xl-base-1.0",
+                torch_dtype=torch.float16,
+                variant="fp16",
+                use_safetensors=True,
+            ).to("cuda")
+
+        @runpod.post("/generate")
+        async def generate(self, body: dict):
+            import base64
+            import io
+
+            image = self.pipe(body["prompt"]).images[0]
+            buffer = io.BytesIO()
+            image.save(buffer, format="JPEG", quality=95)
+            return {
+                "image_b64": base64.b64encode(buffer.getvalue()).decode("utf-8"),
+                "content_type": "image/jpeg",
+            }
+
+        @runpod.get("/health")
+        async def health(self):
+            return {"status": "ok"}
+
+
+    @runpod.local_entrypoint
+    def main():
+        result = MyApp.post("/generate", {"prompt": "A cyberpunk cityscape at night"})
+        print(len(result["image_b64"]))
+    ```
+
+    Callers post the JSON body itself to `https://ENDPOINT_ID.api.runpod.ai/generate`, with no `input` wrapper. Load-balancing endpoints have a 5.5 minute processing timeout per request and a 30 MB payload limit, and they don't queue or retry requests.
+  </Tab>
+</Tabs>
+
+Both versions return the image as base64 because nothing on Runpod uploads your outputs for you. Job requests and results are JSON with a size limit (10 MB for `/run`, 20 MB for `/runsync`), so return base64 only for small outputs. For video, audio, or large images, upload to your own bucket and return the URL, as Option B does.
+
+`model=sdxl` replaces fal's automatic Hugging Face cache on `/data`. Runpod stages the weights on the host before the worker starts, and libraries that use the standard Hugging Face cache find them. Gated models need an `HF_TOKEN` on the same resource, passed as `env={"HF_TOKEN": runpod.Secret("hf-token")}`.
+
+### Option B: A custom image with a handler
+
+Use this path when you already have a Dockerfile (a `ContainerImage` on fal), need system packages or a pinned CUDA stack, or want the response to carry a file URL.
+
+The handler loads the model at module level, which runs once per worker, and uses the `rp_upload` helper to put the image in your S3-compatible bucket.
+
+```python handler.py
+import runpod
+import torch
+from diffusers import StableDiffusionXLPipeline
+from runpod.serverless.utils import rp_upload
+
+# Module level: runs once when the worker starts, like fal's setup()
+pipe = StableDiffusionXLPipeline.from_pretrained(
+    "stabilityai/stable-diffusion-xl-base-1.0",
+    torch_dtype=torch.float16,
+    variant="fp16",
+    use_safetensors=True,
+).to("cuda")
+
+
+def handler(job):
+    job_input = job["input"]
+    prompt = job_input.get("prompt")
+    if not prompt:
+        return {"error": "Input is missing the 'prompt' key."}
+
+    image = pipe(prompt).images[0]
+    image_path = f"/tmp/{job['id']}.png"
+    image.save(image_path)
+
+    # Reads BUCKET_ENDPOINT_URL, BUCKET_ACCESS_KEY_ID, and BUCKET_SECRET_ACCESS_KEY
+    image_url = rp_upload.upload_image(job["id"], image_path)
+
+    return {
+        "image": {
+            "url": image_url,
+            "content_type": "image/png",
+            "width": image.width,
+            "height": image.height,
+        }
+    }
+
+
+runpod.serverless.start({"handler": handler})
+```
+
+The return value keeps fal's `image.url` shape, so callers change `result["image"]["url"]` to `result["output"]["image"]["url"]`. Input validation that pydantic did on fal is now your code. Returning a dictionary with an `error` key marks the job as failed.
+
+The Dockerfile installs the handler's dependencies on a CUDA base image and starts the handler.
+
+```dockerfile Dockerfile
+FROM runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404
+
+WORKDIR /
+RUN pip install --no-cache-dir runpod "diffusers==0.32.2" \
+    "transformers[sentencepiece]==4.51.0" "accelerate==1.6.0"
+
+COPY handler.py /handler.py
+
+CMD ["python", "-u", "/handler.py"]
+```
+
+If you used `ContainerImage.from_dockerfile_str` on fal, start from that Dockerfile and add three things back: `pip install runpod`, a `COPY` of your handler, and a `CMD` that runs it. Build for `linux/amd64` and push to a registry Runpod can pull from.
+
+```bash
+docker build --platform linux/amd64 -t DOCKER_USERNAME/my-demo-app:v1 .
+docker push DOCKER_USERNAME/my-demo-app:v1
+```
+
+For a private registry, save credentials with `runpodctl registry create --name "docker-hub" --username "DOCKER_USERNAME"` and pass the returned ID as `--registry-auth-id` when you create the template. This replaces the `registries` parameter on fal's `ContainerImage`.
+
+<Warning>
+  This handler downloads the SDXL weights to the container disk on every cold start. Add a cached model in [Step 6](#step-6-deploy-on-runpod), bake the weights into the image, or use a network volume. See [Step 5](#step-5-move-your-data-and-models).
+</Warning>
+
+### Existing HTTP servers
+
+If your fal app runs in direct server mode (`exposed_port` in `pyproject.toml`), the same image runs on a Runpod [load-balancing endpoint](/serverless/load-balancing/overview). Your server must answer `GET /ping` with `200` when it's ready (`204` while initializing) and listen on the port in the `PORT` environment variable, which defaults to `80`. If you set `PORT`, set `PORT_HEALTH` to the same value and expose that port on the endpoint. To use a different health path, set `HEALTH_CHECK_PATH`.
+
+### Streaming endpoints
+
+A fal endpoint at `/stream` that returns a `StreamingResponse` has two Runpod forms. On a queue-based endpoint, write a generator handler (or a generator function under `@app.queue`) that yields chunks, and have clients read them from `/stream/JOB_ID`. On a load-balancing endpoint, keep your FastAPI `StreamingResponse` as it is. See [handler functions](/serverless/workers/handler-functions) for streaming handlers and progress updates.
+
+### Realtime and WebSocket inference
+
+Runpod supports WebSocket connections on load-balancing endpoints. Queue-based endpoints don't accept custom routes, so a WebSocket route there returns `not allowed for QB API`. To move a `@fal.realtime` or `is_websocket=True` endpoint:
+
+1. Serve the WebSocket route from your own HTTP server (for example FastAPI's `@app.websocket("/ws")`) alongside `GET /ping`, in a custom image deployed as a load-balancing endpoint.
+2. Replace fal's realtime protocol with your own messages. `@fal.realtime` uses fal's binary msgpack protocol and the `fal_client.realtime()` and `fal.realtime.connect()` clients. On Runpod the client is any WebSocket library, and the frames are whatever your server sends.
+3. Connect to `wss://ENDPOINT_ID.api.runpod.ai/ws` and send `Authorization: Bearer YOUR_API_KEY` as a header on the connection request.
+4. Raise the client's connection timeout. The default of about 5 seconds isn't enough when a worker has to start. The Runpod docs recommend `open_timeout=60`.
+
+```python client.py
+import asyncio
+import json
+
+import websockets
+
+
+async def main():
+    url = "wss://ENDPOINT_ID.api.runpod.ai/ws"
+    headers = [("Authorization", "Bearer YOUR_API_KEY")]
+
+    async with websockets.connect(
+        url, additional_headers=headers, open_timeout=60.0
+    ) as ws:
+        await ws.send(json.dumps({"prompt": "a sunset over mountains"}))
+        while True:
+            message = json.loads(await ws.recv())
+            if message.get("done"):
+                break
+            print(message)
+
+
+asyncio.run(main())
+```
+
+The load-balancing limits apply: a request waits up to 2 minutes for a worker, processing is limited to 5.5 minutes per request, and payloads are limited to 30 MB. Test how long your sessions stay open before you rely on them, and keep at least one active worker for interactive use so the first connection doesn't wait on a cold start. A browser can't hold your API key safely, so keep the proxy pattern you used with fal (`proxyUrl`) and connect from your backend. See [Build a load-balancing worker](/serverless/load-balancing/build-a-worker#optional-websocket-support) and the [worker-lb-websocket example](https://github.com/runpod-workers/worker-lb-websocket).
+
+fal's hosted realtime models (`fal-ai/fast-lcm-diffusion`, `fal-ai/fast-turbo-diffusion`) aren't in the Runpod model reference. To keep that feature, self-host the model behind a WebSocket route.
+
+### ComfyUI workflows
+
+fal's ComfyUI pattern runs the ComfyUI server in a custom container inside a `fal.App` and posts an API-format workflow to it. On Runpod, the [ComfyUI worker](/tutorials/serverless/comfyui) does the same job as a ready-made queue-based endpoint. Deploy it from the [Hub listing](https://console.runpod.io/hub/runpod-workers/worker-comfyui), or use one of the `runpod/worker-comfyui` images (`-base`, `-flux1-schnell`, `-flux1-dev`, `-sdxl`, `-sd3`).
+
+Your exported `workflow_api.json` goes in the request as `{"input": {"workflow": { ... }}}`, and the result returns images as base64 in `output.images[0].data`. The Hub listing ships with FLUX.1-dev-fp8 and works only with that model. For other checkpoints, LoRAs, or custom nodes, build a customized image by following the worker's [customization guide](https://github.com/runpod-workers/worker-comfyui/blob/main/docs/customization.md), the same way you packaged nodes and models into the fal container.
+
+### Runtime environment variables
+
+Code that reads fal's injected variables needs new names. See the [environment variable map](#environment-variable-map). `FAL_KEY` deserves attention: fal injects it so an app can call other fal models, and those calls are billed to you. If your worker calls Runpod Public Endpoints or other endpoints, pass a Runpod API key to it as a secret.
+
+## Step 5: Move your data and models
+
+Decide what each `/data` path was for, because the Runpod target differs.
+
+| What's on `/data` | Runpod target | How |
+| --- | --- | --- |
+| Hugging Face cache (`/data/.cache/huggingface`) | [Cached models](/serverless/endpoints/model-caching) | Don't copy it. Set `model=runpod.Model("ORG/NAME")` in the SDK or `--model-reference` on the endpoint. Weights appear under `/runpod-volume/huggingface-cache/hub/`. |
+| Your own weights, LoRAs, and checkpoints | [Network volume](/storage/network-volumes) | Copy once, attach to the endpoint, read from `/runpod-volume`. |
+| Files shared across regions | [Global volume](/storage/globalvolume/overview) (beta) | Not tied to a data center. GPU compute only. |
+| Scratch files and per-request temp output | Container disk | Ephemeral. Size it with `container_disk_gb` or the template's container disk. |
+| Datasets and checkpoints from Compute instances | Network volume, or a Pod's volume disk at `/workspace` | Volume disk is deleted with the Pod. A network volume outlives it. |
+
+Create the network volume in the data center where you want workers to run. Check GPU stock there first, because an attached volume keeps the endpoint in that data center.
+
+```bash
+runpodctl network-volume create --name "models" --size 100 --data-center-id "US-KS-2"
+```
+
+Download your files from fal to a machine with enough disk, then copy them to the volume through the [S3-compatible API](/storage/s3-api). Create an S3 API key in the console first and configure it with `aws configure`. The bucket name is the network volume ID.
+
+```bash
+# From fal /data to local disk
+fal files list models/
+fal files download models/my-lora.safetensors ./export/my-lora.safetensors
+
+# From local disk to the Runpod network volume
+aws s3 cp --region US-KS-2 \
+    --endpoint-url https://s3api-us-ks-2.runpod.io/ \
+    ./export/my-lora.safetensors \
+    s3://NETWORK_VOLUME_ID/models/my-lora.safetensors
+
+# Check it arrived
+aws s3 ls --region US-KS-2 \
+    --endpoint-url https://s3api-us-ks-2.runpod.io/ \
+    s3://NETWORK_VOLUME_ID/models/
+```
+
+The S3 API is available in the data centers listed on the [S3 API page](/storage/s3-api). For large transfers, or a data center that isn't listed, start a Pod with the volume attached and pull the files from their original source there (for example with `hf download` or `wget`), which avoids routing everything through your machine. `aws s3 sync` works for basic cases but can have trouble with very large file counts.
+
+<Tip>
+  Loading weights directly from the network mount on every cold start is slower than loading from local disk. The [volume cache](/serverless/development/volume-cache) pattern copies them to the worker's disk first.
+</Tip>
+
+Files on the fal CDN (generated outputs and `fal_client.upload_file` uploads) are public URLs with a retention you may have configured. If your database stores `fal.media` URLs, download those files to your own storage before you close the account.
+
+Recreate secrets by name. Values can't be read back from fal, so take them from your secret manager.
+
+```bash
+rp secret add hf-token
+rp secret list
+```
+
+`rp secret add` prompts for the value, which keeps it out of your shell history. Secret names that start with `RUNPOD` are rejected.
+
+## Step 6: Deploy on Runpod
+
+### Public Endpoints
+
+There's nothing to deploy. Public Endpoints are live for every account, and your API key works on all of them. Go to [Step 7](#step-7-update-the-code-that-calls-fal).
+
+### Serverless with the Runpod SDK
+
+`rp flash dev` plays the role of `fal run`: it creates temporary endpoints, runs your `@runpod.local_entrypoint`, streams worker logs, and deletes the endpoints when you exit. `rp flash deploy` plays the role of `fal deploy`.
+
+<Tabs>
+  <Tab title="fal">
+    ```bash
+    fal run fal_app.py::MyApp
+    fal deploy fal_app.py::MyApp --env staging
+    fal apps scale my-demo-app --min-concurrency 1 --max-concurrency 10 --keep-alive 300
+    ```
+  </Tab>
+
+  <Tab title="Runpod">
+    ```bash
+    rp flash dev main.py
+    rp flash deploy --env staging
+    rp flash env get staging
+    ```
+  </Tab>
+</Tabs>
+
+Scaling lives in code on Runpod (`workers=(1, 10)`, `idle_timeout=300`), so change the decorator and deploy again. `rp flash deploy` prints a link to each endpoint. To change scaling on a live endpoint without a deploy, use `runpodctl serverless update ENDPOINT_ID --workers-min 1 --workers-max 10 --idle-timeout 300`.
+
+### Serverless with a custom image
+
+Create a Serverless template for the image, then an endpoint from the template. This is the queue-based deployment of the handler from Option B.
+
+```bash
+runpodctl template create --name "my-demo-app" --serverless \
+  --image "DOCKER_USERNAME/my-demo-app:v1" \
+  --container-disk-in-gb 30 \
+  --env '{"BUCKET_ENDPOINT_URL":"https://BUCKET_NAME.s3.us-west-2.amazonaws.com","BUCKET_ACCESS_KEY_ID":"{{ RUNPOD_SECRET_bucket_access_key_id }}","BUCKET_SECRET_ACCESS_KEY":"{{ RUNPOD_SECRET_bucket_secret_access_key }}"}'
+
+runpodctl serverless create --name "my-demo-app" \
+  --template-id TEMPLATE_ID \
+  --gpu-id ADA_80_PRO \
+  --workers-min 0 --workers-max 5 \
+  --idle-timeout 300 \
+  --execution-timeout 600 \
+  --min-cuda-version 12.8 \
+  --model-reference https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0:main
+```
+
+`--gpu-id` takes a pool ID or a GPU type ID. `--model-reference` attaches a cached model so workers don't download the weights. To attach the network volume from Step 5, add `--network-volume-id NETWORK_VOLUME_ID`. Each Serverless template binds to one endpoint, so create a template per endpoint. Check `runpodctl serverless create --help` for the full flag list.
+
+The same endpoint through REST API v2, without a separate template:
+
+```bash
+curl -X POST "https://api.runpod.io/v2/serverless" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-demo-app",
+    "image": "DOCKER_USERNAME/my-demo-app:v1",
+    "type": "QUEUE",
+    "gpu": {"pools": ["ADA_80_PRO"], "count": 1, "minCudaVersion": "12.8"},
+    "workers": {"min": 0, "max": 5, "idleTimeout": 300},
+    "scaling": {"type": "QUEUE_DELAY", "queueDelay": 4},
+    "timeout": 600000,
+    "flashboot": "FLASHBOOT",
+    "disk": 30,
+    "env": {
+      "BUCKET_ENDPOINT_URL": "https://BUCKET_NAME.s3.us-west-2.amazonaws.com",
+      "BUCKET_ACCESS_KEY_ID": "{{ RUNPOD_SECRET_bucket_access_key_id }}",
+      "BUCKET_SECRET_ACCESS_KEY": "{{ RUNPOD_SECRET_bucket_secret_access_key }}"
+    }
+  }'
+```
+
+`type` and `scaling` are required in REST v2, and its defaults differ from the console: FlashBoot is `OFF` and the idle timeout is 10 seconds unless you set them. In the console, the same flow is **Serverless**, then **New Endpoint**.
+
+### Load-balancing endpoint (HTTP servers and WebSockets)
+
+Create a load-balancing endpoint through REST API v2 with `"type": "LOAD_BALANCER"` and a request-count scaler. Expose the port your server binds and set `PORT` and `PORT_HEALTH` to match it.
+
+```bash
+curl -X POST "https://api.runpod.io/v2/serverless" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-realtime-app",
+    "image": "DOCKER_USERNAME/my-realtime-app:v1",
+    "type": "LOAD_BALANCER",
+    "gpu": {"pools": ["ADA_48_PRO"], "count": 1},
+    "workers": {"min": 1, "max": 3, "idleTimeout": 60},
+    "scaling": {"type": "REQUEST_COUNT", "requestCount": 4},
+    "ports": ["8000/http"],
+    "env": {"PORT": "8000", "PORT_HEALTH": "8000"}
+  }'
+```
+
+With `workers.min` at 1, one worker bills continuously. Wait for `GET https://ENDPOINT_ID.api.runpod.ai/ping` to return `200` before you send traffic. If the ports don't match, the worker shows as running but never becomes healthy.
+
+### Pods and Instant Clusters (fal Compute)
+
+A fal Compute instance is an Ubuntu machine you SSH into. A Pod is a container with SSH, so install your stack in the image or on a volume rather than with a VM-level setup, and note that Pods don't run Docker Compose.
+
+```bash
+runpodctl pod create --name "train-h100" \
+  --image "runpod/pytorch:1.0.3-cu1281-torch291-ubuntu2404" \
+  --gpu-id "NVIDIA H100 80GB HBM3" \
+  --gpu-count 1 \
+  --container-disk-in-gb 50 \
+  --network-volume-id NETWORK_VOLUME_ID \
+  --ports "22/tcp,8888/http"
+```
+
+For the `8xH100-SXM` shape, set `--gpu-count 8` if a host with eight GPUs is in stock in your data center. For multi-node training that used InfiniBand between 8-GPU instances in one fal sector, deploy an [Instant Cluster](/instant-clusters), which provides high-speed networking between nodes with Slurm, PyTorch, or Ray setups. GPU and cluster availability varies by data center and over time, so check stock before you plan a cutover date, and add your SSH key with `rp ssh add` or in the console. Check `runpodctl pod create --help` for the full flag list.
+
+## Step 7: Update the code that calls fal
+
+### Hosted model calls
+
+The examples below call FLUX.1 dev. Four things change: the URL, the auth header, the `input` wrapper, and the parameter and output names.
+
+| | fal | Runpod |
+| --- | --- | --- |
+| Submit | `POST https://queue.fal.run/fal-ai/flux/dev` | `POST https://api.runpod.ai/v2/black-forest-labs-flux-1-dev/run` |
+| Sync | `POST https://fal.run/fal-ai/flux/dev` | `POST https://api.runpod.ai/v2/black-forest-labs-flux-1-dev/runsync` |
+| Status | `GET .../requests/REQUEST_ID/status` | `GET .../status/JOB_ID` |
+| Result | `GET .../requests/REQUEST_ID` | Included in the status response as `output` |
+| Cancel | `PUT .../requests/REQUEST_ID/cancel` | `POST .../cancel/JOB_ID` |
+| Auth header | `Authorization: Key FAL_KEY` | `Authorization: Bearer RUNPOD_API_KEY` |
+| Body | `{"prompt": "..."}` | `{"input": {"prompt": "..."}}` |
+| Job ID field | `request_id` | `id` |
+| Image URL | `images[0].url` | `output.image_url` |
+
+For FLUX.1 dev, the parameters map as follows. Other models differ, so read the Runpod model page for each one.
+
+| fal parameter | Runpod parameter | Notes |
+| --- | --- | --- |
+| `prompt` | `prompt` | Same. |
+| `image_size` (preset such as `landscape_4_3`, or width and height) | `width`, `height` | Integers divisible by 64, from 256 to 1536. Default 1024. |
+| `guidance_scale` (default 3.5) | `guidance` (default 7.5) | Set it explicitly to keep your current look. |
+| `num_inference_steps` (default 28) | `num_inference_steps` (default 28) | Same name. Range 1 to 50. |
+| `seed` | `seed` | `-1` means random on Runpod. |
+| `output_format` (`jpeg`, `png`) | `image_format` (`jpeg`, `png`) | Renamed. |
+| `num_images` | One image per request | Send several requests with `/run`. |
+| not listed | `negative_prompt` | Available on Runpod. |
+| `sync_mode`, `acceleration`, `enable_safety_checker` | Not listed on the Runpod Flux Dev page | Remove them. |
+
+Across models, the common renames are `image_url` to `image`, `image_urls` to `images`, and `audio_url` to `audio`. Sizes are often a `size` string such as `1024*1024` or `1280*720`. Outputs are `output.image_url`, `output.video_url`, `output.audio_url`, or `output.result`, depending on the model, plus `output.cost`.
+
+<Tabs>
+  <Tab title="Python">
+    Before, with `fal-client`:
+
+    ```python fal_call.py
+    import fal_client
+
+    # Blocking call through the queue
+    result = fal_client.subscribe(
+        "fal-ai/flux/dev",
+        arguments={
+            "prompt": "A serene mountain landscape at sunset",
+            "image_size": {"width": 1024, "height": 1024},
+            "num_inference_steps": 28,
+            "guidance_scale": 3.5,
+            "seed": 42,
+            "output_format": "png",
+        },
+    )
+    print(result["images"][0]["url"])
+
+    # Submit, poll, and fetch
+    handle = fal_client.submit(
+        "fal-ai/flux/dev",
+        arguments={"prompt": "A serene mountain landscape at sunset"},
+    )
+    for event in handle.iter_events():
+        if isinstance(event, fal_client.InProgress):
+            print("Processing...")
+    result = handle.get()
+    print(result["images"][0]["url"])
+    ```
+
+    After, with plain HTTP:
+
+    ```python runpod_call.py
+    import os
+    import time
+
+    import requests
+
+    BASE_URL = "https://api.runpod.ai/v2/black-forest-labs-flux-1-dev"
+    HEADERS = {
+        "Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}",
+        "Content-Type": "application/json",
+    }
+    TERMINAL = {"COMPLETED", "FAILED", "CANCELLED", "TIMED_OUT"}
+
+
+    def wait_for(job: dict) -> dict:
+        """Poll /status until the job reaches a terminal state."""
+        delay = 1.0
+        while job["status"] not in TERMINAL:
+            time.sleep(delay)
+            delay = min(delay * 1.5, 10.0)
+            response = requests.get(
+                f"{BASE_URL}/status/{job['id']}", headers=HEADERS, timeout=30
+            )
+            response.raise_for_status()
+            job = response.json()
+        if job["status"] != "COMPLETED":
+            raise RuntimeError(f"Job {job['id']} ended as {job['status']}: {job}")
+        return job
+
+
+    payload = {
+        "input": {
+            "prompt": "A serene mountain landscape at sunset",
+            "width": 1024,
+            "height": 1024,
+            "num_inference_steps": 28,
+            "guidance": 3.5,
+            "seed": 42,
+            "image_format": "png",
+        }
+    }
+
+    # Blocking call (replaces fal_client.subscribe and fal_client.run)
+    response = requests.post(
+        f"{BASE_URL}/runsync", headers=HEADERS, json=payload, timeout=120
+    )
+    response.raise_for_status()
+    job = wait_for(response.json())  # Keeps polling if /runsync returned early
+    print(job["output"]["image_url"])
+
+    # Submit, poll, and fetch (replaces fal_client.submit)
+    response = requests.post(f"{BASE_URL}/run", headers=HEADERS, json=payload, timeout=30)
+    response.raise_for_status()
+    job = wait_for(response.json())
+    print(job["output"]["image_url"])
+    ```
+
+    `/runsync` returns the finished job when it completes within the wait window. If it doesn't, the response carries the job `id` and a non-terminal status, and `wait_for` picks it up from `/status`. The polling interval grows instead of running in a tight loop, which keeps you within the endpoint's rate limits.
+  </Tab>
+
+  <Tab title="JavaScript">
+    Before, with `@fal-ai/client`:
+
+    ```javascript fal-call.mjs
+    import { fal } from "@fal-ai/client";
+
+    // Blocking call through the queue
+    const result = await fal.subscribe("fal-ai/flux/dev", {
+      input: {
+        prompt: "A serene mountain landscape at sunset",
+        image_size: { width: 1024, height: 1024 },
+        num_inference_steps: 28,
+        guidance_scale: 3.5,
+        seed: 42,
+        output_format: "png",
+      },
+    });
+    console.log(result.data.images[0].url);
+
+    // Submit, poll, and fetch
+    const { request_id } = await fal.queue.submit("fal-ai/flux/dev", {
+      input: { prompt: "A serene mountain landscape at sunset" },
+    });
+    const status = await fal.queue.status("fal-ai/flux/dev", { requestId: request_id });
+    console.log(status.status);
+    const queued = await fal.queue.result("fal-ai/flux/dev", { requestId: request_id });
+    console.log(queued.data.images[0].url);
+    ```
+
+    After, with `fetch`:
+
+    ```javascript runpod-call.mjs
+    const BASE_URL = "https://api.runpod.ai/v2/black-forest-labs-flux-1-dev";
+    const HEADERS = {
+      Authorization: `Bearer ${process.env.RUNPOD_API_KEY}`,
+      "Content-Type": "application/json",
+    };
+    const TERMINAL = new Set(["COMPLETED", "FAILED", "CANCELLED", "TIMED_OUT"]);
+
+    async function waitFor(job) {
+      let delay = 1000;
+      while (!TERMINAL.has(job.status)) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        delay = Math.min(delay * 1.5, 10000);
+        const response = await fetch(`${BASE_URL}/status/${job.id}`, { headers: HEADERS });
+        if (!response.ok) throw new Error(`Status check failed: ${response.status}`);
+        job = await response.json();
+      }
+      if (job.status !== "COMPLETED") {
+        throw new Error(`Job ${job.id} ended as ${job.status}: ${JSON.stringify(job)}`);
+      }
+      return job;
+    }
+
+    const payload = {
+      input: {
+        prompt: "A serene mountain landscape at sunset",
+        width: 1024,
+        height: 1024,
+        num_inference_steps: 28,
+        guidance: 3.5,
+        seed: 42,
+        image_format: "png",
+      },
+    };
+
+    // Blocking call (replaces fal.subscribe and fal.run)
+    let response = await fetch(`${BASE_URL}/runsync`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+    let job = await waitFor(await response.json());
+    console.log(job.output.image_url);
+
+    // Submit, poll, and fetch (replaces fal.queue.submit, status, and result)
+    response = await fetch(`${BASE_URL}/run`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+    job = await waitFor(await response.json());
+    console.log(job.output.image_url);
+    ```
+
+    As with fal, don't ship the API key to a browser. Keep these calls on your server, where your `@fal-ai/server-proxy` route used to be.
+  </Tab>
+
+  <Tab title="cURL">
+    Before, with the fal queue API:
+
+    ```bash
+    # Submit
+    curl -X POST "https://queue.fal.run/fal-ai/flux/dev" \
+      -H "Authorization: Key $FAL_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"prompt": "A serene mountain landscape at sunset", "num_inference_steps": 28}'
+
+    # Status (use the status_url from the submit response)
+    curl "https://queue.fal.run/fal-ai/flux/requests/REQUEST_ID/status" \
+      -H "Authorization: Key $FAL_KEY"
+
+    # Result
+    curl "https://queue.fal.run/fal-ai/flux/requests/REQUEST_ID" \
+      -H "Authorization: Key $FAL_KEY"
+
+    # Cancel
+    curl -X PUT "https://queue.fal.run/fal-ai/flux/requests/REQUEST_ID/cancel" \
+      -H "Authorization: Key $FAL_KEY"
+    ```
+
+    After, with Runpod:
+
+    ```bash
+    # Submit
+    curl -X POST "https://api.runpod.ai/v2/black-forest-labs-flux-1-dev/run" \
+      -H "Authorization: Bearer $RUNPOD_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"input": {"prompt": "A serene mountain landscape at sunset", "num_inference_steps": 28}}'
+
+    # Status and result in one call
+    curl "https://api.runpod.ai/v2/black-forest-labs-flux-1-dev/status/JOB_ID" \
+      -H "Authorization: Bearer $RUNPOD_API_KEY"
+
+    # Cancel
+    curl -X POST "https://api.runpod.ai/v2/black-forest-labs-flux-1-dev/cancel/JOB_ID" \
+      -H "Authorization: Bearer $RUNPOD_API_KEY"
+
+    # Blocking call (replaces https://fal.run/fal-ai/flux/dev)
+    curl -X POST "https://api.runpod.ai/v2/black-forest-labs-flux-1-dev/runsync" \
+      -H "Authorization: Bearer $RUNPOD_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"input": {"prompt": "A serene mountain landscape at sunset"}}'
+    ```
+
+    The completed response looks like this:
+
+    ```json
+    {
+      "id": "sync-a1b2c3d4-e5f6-7890-abcd-ef1234567890-u1",
+      "status": "COMPLETED",
+      "delayTime": 17,
+      "executionTime": 3986,
+      "workerId": "oqk7ao1uomckye",
+      "output": {
+        "image_url": "https://image.runpod.ai/abc123/output.png",
+        "cost": 0.02097152
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+Use `/run` with polling or a webhook for video models, which can run longer than the `/runsync` wait window.
+
+### Input files
+
+`fal_client.upload_file("image.png")` and `fal.storage.upload(file)` return a fal CDN URL that you pass to a model. Runpod Public Endpoint model pages take input media as URLs (for example `input.image` on WAN 2.5 and `input.images` on Nano Banana 2 Edit). Upload inputs to your own bucket and pass a URL the endpoint can fetch, such as a presigned URL.
+
+### Webhooks
+
+fal takes the webhook as a `fal_webhook` query parameter (or `webhook_url` in the clients). Runpod takes a top-level `webhook` field in the body.
+
+<Tabs>
+  <Tab title="fal">
+    ```bash
+    curl -X POST "https://queue.fal.run/fal-ai/flux/dev?fal_webhook=https://example.com/api/webhook" \
+      -H "Authorization: Key $FAL_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"prompt": "A serene mountain landscape at sunset"}'
+    ```
+  </Tab>
+
+  <Tab title="Runpod">
+    ```bash
+    curl -X POST "https://api.runpod.ai/v2/black-forest-labs-flux-1-dev/run" \
+      -H "Authorization: Bearer $RUNPOD_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "input": {"prompt": "A serene mountain landscape at sunset"},
+        "webhook": "https://example.com/api/webhook"
+      }'
+    ```
+  </Tab>
+</Tabs>
+
+Update your receiver for three differences:
+
+- **Payload.** fal posts `{"request_id", "status": "OK" or "ERROR", "payload"}`. Runpod posts the job object, the same shape `/status` returns: `id`, `status` (`COMPLETED`, `FAILED`, and so on), and `output`.
+- **Retries.** fal retries with backoff for up to about an hour. Runpod expects a `200` and retries up to 2 more times with a 10-second delay, so make the receiver fast and reliable, and fall back to `/status/JOB_ID` for jobs you haven't heard about. Results are only retained for 30 minutes after completion.
+- **Verification.** If you verify fal's `X-Fal-Webhook-Signature` today, replace it with a secret token in the webhook URL path or query, and confirm the job by calling `/status/JOB_ID` with your API key.
+
+### Vercel AI SDK
+
+If you call fal through `@ai-sdk/fal`, switch to [`@runpod/ai-sdk-provider`](/public-endpoints/ai-sdk). The provider reads `RUNPOD_API_KEY` in place of `FAL_API_KEY` or `FAL_KEY`.
+
+<Tabs>
+  <Tab title="fal">
+    ```typescript
+    import { fal } from "@ai-sdk/fal";
+    import { generateImage } from "ai";
+
+    const { image } = await generateImage({
+      model: fal.image("fal-ai/flux/dev"),
+      prompt: "A serene mountain landscape at sunset",
+      aspectRatio: "16:9",
+      providerOptions: {
+        fal: { guidance_scale: 3.5, num_inference_steps: 28 },
+      },
+    });
+    ```
+  </Tab>
+
+  <Tab title="Runpod">
+    ```typescript
+    import { runpod } from "@runpod/ai-sdk-provider";
+    import { experimental_generateImage as generateImage } from "ai";
+
+    const { image } = await generateImage({
+      model: runpod.image("black-forest-labs-flux-1-dev"),
+      prompt: "A serene mountain landscape at sunset",
+      aspectRatio: "16:9",
+      providerOptions: {
+        runpod: { guidance: 3.5, num_inference_steps: 28 },
+      },
+    });
+    ```
+  </Tab>
+</Tabs>
+
+Install it with `npm install @runpod/ai-sdk-provider ai`. Model-specific options move from the `fal` key to the `runpod` key in `providerOptions`, with Runpod's parameter names. The provider's model IDs for some image and video models differ from the REST endpoint IDs (for example `alibaba/wan-2.6-t2v`), so copy them from the [supported models tables](/public-endpoints/ai-sdk#supported-models). The Runpod page imports `experimental_generateImage`. Use whichever export your installed `ai` version provides. The provider also accepts your own Serverless endpoint ID as a model identifier.
+
+### Calls to your own app
+
+A deployed `fal.App` is called by its `OWNER/APP_NAME` ID. A Runpod endpoint is called by its endpoint ID.
+
+<Tabs>
+  <Tab title="fal">
+    ```python
+    import fal_client
+
+    result = fal_client.subscribe(
+        "your-username/my-demo-app",
+        arguments={"prompt": "A cyberpunk cityscape at night"},
+    )
+    print(result["image"]["url"])
+
+    handle = fal_client.submit(
+        "your-username/my-demo-app",
+        arguments={"prompt": "A cyberpunk cityscape at night"},
+        webhook_url="https://example.com/api/webhook",
+    )
+    print(handle.request_id)
+    ```
+  </Tab>
+
+  <Tab title="Runpod">
+    ```python
+    import runpod
+
+    endpoint = runpod.Endpoint("ENDPOINT_ID")
+
+    # Blocking call
+    result = endpoint.run_sync({"prompt": "A cyberpunk cityscape at night"}, timeout=120)
+    print(result["image"]["url"])
+
+    # Submit and check later
+    run_request = endpoint.run({"prompt": "A cyberpunk cityscape at night"})
+    print(run_request.status())
+    print(run_request.output())
+    ```
+  </Tab>
+</Tabs>
+
+`runpod.Endpoint` wraps the input in `{"input": ...}` for you and reads the API key from `rp login`, `RUNPOD_API_KEY`, or `runpod.api_key`. To send a webhook, post to `/run` directly with a top-level `webhook` field as shown above. From another SDK codebase, you can also call a deployed app by name with `runpod.Queue(app="my-demo-app", name="generate")` or `runpod.Api(app="my-demo-app", name="MyApp")`.
+
+### Control-plane automation
+
+Scripts and CI jobs that run the `fal` CLI or call `https://api.fal.ai/v1` move to `runpodctl`, the `rp` CLI, or REST API v2. See the [CLI command map](#cli-command-map) and [API map](#api-map). In CI, replace the fal key with a `RUNPOD_API_KEY` secret and run `rp flash deploy --env production` in place of `fal deploy --env production`.
+
+## Step 8: Verify, cut over, and shut down
+
+<Steps>
+  <Step title="Send a real request from outside">
+    Call each Runpod endpoint from the environment your production clients run in, not from the machine you deployed from. For a queue-based endpoint:
+
+    ```bash
+    curl -s -X POST "https://api.runpod.ai/v2/ENDPOINT_ID/runsync" \
+      -H "Authorization: Bearer $RUNPOD_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"input": {"prompt": "A cyberpunk cityscape at night"}}'
+
+    curl -s "https://api.runpod.ai/v2/ENDPOINT_ID/health" \
+      -H "Authorization: Bearer $RUNPOD_API_KEY"
+    ```
+
+    Open the returned URL or decode the base64 and check the output is what you expect.
+  </Step>
+
+  <Step title="Compare outputs and latency">
+    Run the same prompts and seeds through fal and Runpod. Compare output quality, then the timing fields: `delayTime` (queue wait, including any cold start) and `executionTime` on Runpod against `metrics.inference_time` and your measured wall-clock time on fal. Measure a cold request and a warm one separately.
+  </Step>
+
+  <Step title="Run both in parallel">
+    Put the provider behind a flag in your client so a request can go to either. Send a small share of traffic to Runpod, watch the endpoint's **Metrics** and **Logs** tabs, and check that webhooks arrive and that your code handles `FAILED` and `TIMED_OUT`.
+  </Step>
+
+  <Step title="Shift traffic">
+    Raise the share in stages. Before each stage, confirm your max workers and scaler settings can absorb the new volume. Keep fal deployed until you've gone a full traffic cycle on Runpod.
+  </Step>
+
+  <Step title="Stop billing on fal">
+    Scale warm runners to zero first, then delete what you no longer need. Deleting is permanent, so export `/data` files and any CDN outputs you need before you run these.
+
+    ```bash
+    # Stop paying for warm runners while you finish verifying
+    fal apps scale APP_NAME --min-concurrency 0 --concurrency-buffer 0
+
+    # Delete apps, per environment
+    fal apps delete APP_NAME
+    fal apps delete APP_NAME --env staging
+
+    # Confirm nothing is still running
+    fal apps list
+    fal runners list
+
+    # Remove stored files and secrets
+    fal files rm models/my-lora.safetensors
+    fal secrets unset HF_TOKEN
+
+    # Revoke keys your services no longer use
+    fal keys list
+    fal keys revoke KEY_ID
+    ```
+
+    Delete fal Compute instances in the [Compute dashboard](https://fal.ai/dashboard/compute) or with `DELETE https://api.fal.ai/v1/compute/instances/INSTANCE_ID`. They bill per hour while they exist. Model API usage stops when your code stops calling it.
+  </Step>
+
+  <Step title="Set a cost guard on Runpod">
+    Keep `workers` minimums at 0 for endpoints that don't need warm capacity, set a max worker count you're comfortable paying for, and set an execution timeout so a stuck job can't run indefinitely. Delete network volumes and stopped Pods you no longer need, because storage bills until it's deleted. Review spend on the [billing page](/accounts-billing/billing).
+  </Step>
+</Steps>
+
+## Reference
+
+### CLI command map
+
+| fal CLI | Runpod |
+| --- | --- |
+| `pip install fal` | `pip install runpod` (includes `rp`), plus `runpodctl` |
+| `fal auth login` | `rp login` |
+| `fal auth whoami` | `runpodctl user` |
+| `fal run app.py::MyApp` | `rp flash dev main.py` |
+| `fal deploy app.py::MyApp` | `rp flash deploy`, or `runpodctl template create --serverless` then `runpodctl serverless create` |
+| `fal deploy ... --env staging` | `rp flash deploy --env staging` |
+| `fal environments list` | `rp flash env list --app APP_NAME` |
+| `fal apps list` | `rp flash app list`, `runpodctl serverless list` |
+| `fal apps scale APP --min-concurrency N --max-concurrency M --keep-alive S` | `runpodctl serverless update ENDPOINT_ID --workers-min N --workers-max M --idle-timeout S` |
+| `fal apps runners APP` | `runpodctl serverless get ENDPOINT_ID --include-workers` |
+| `fal apps delete APP` | `rp flash undeploy --app APP_NAME`, or `runpodctl serverless delete ENDPOINT_ID` |
+| `fal runners logs` | Endpoint **Logs** tab in the console. For Pods, `rp logs POD_ID --follow` |
+| `fal runners shell RUNNER_ID` | [SSH into a worker](/serverless/development/ssh-into-workers). For Pods, `rp ssh POD_ID` |
+| `fal secrets set NAME=VALUE` | `rp secret add NAME` |
+| `fal secrets list` | `rp secret list` |
+| `fal secrets unset NAME` | `rp secret delete NAME` |
+| `fal files list`, `fal files upload`, `fal files download` | `aws s3 ls` and `aws s3 cp` against the [network volume S3 API](/storage/s3-api) |
+| `fal queue flush APP` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/purge-queue` |
+| `fal keys create` | Create a key in the console. See [credentials](/get-started/credentials) |
+
+### API map
+
+| fal | Runpod |
+| --- | --- |
+| `POST https://queue.fal.run/MODEL_ID` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/run` |
+| `POST https://fal.run/MODEL_ID` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/runsync` |
+| `GET https://queue.fal.run/OWNER/APP/requests/ID/status` | `GET https://api.runpod.ai/v2/ENDPOINT_ID/status/JOB_ID` |
+| `GET https://queue.fal.run/OWNER/APP/requests/ID` | Same `/status/JOB_ID` call, `output` field |
+| `GET .../requests/ID/status/stream` (SSE status updates) | Poll `/status/JOB_ID`, or use a webhook |
+| `PUT .../requests/ID/cancel` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/cancel/JOB_ID` |
+| `POST https://fal.run/MODEL_ID/stream` | `GET https://api.runpod.ai/v2/ENDPOINT_ID/stream/JOB_ID` after `/run` |
+| `?fal_webhook=URL` | `"webhook": "URL"` in the request body |
+| `X-Fal-Request-Start-Timeout` header | Closest: `"policy": {"ttl": MILLISECONDS}` in the request body. TTL covers queue time and execution time together. |
+| App `request_timeout` | `"policy": {"executionTimeout": MILLISECONDS}`, or the endpoint's execution timeout |
+| `fal_client.subscribe`, `fal.subscribe` | `/runsync`, or `runpod.Endpoint(ID).run_sync(...)` |
+| `fal_client.submit`, `fal.queue.submit` | `/run`, or `runpod.Endpoint(ID).run(...)` |
+| `fal_client.realtime`, `fal.realtime.connect` | Any WebSocket client to `wss://ENDPOINT_ID.api.runpod.ai/PATH` |
+| `GET https://api.fal.ai/v1/serverless/...` (apps, metrics, logs) | `GET https://api.runpod.io/v2/serverless`, `/v2/serverless/ID/metrics/requests`, `/v2/serverless/ID/workers/WORKER_ID/logs` |
+| `GET https://api.fal.ai/v1/compute/instances` | `GET https://api.runpod.io/v2/pods` |
+| `GET https://api.fal.ai/v1/models/usage`, `/v1/serverless/usage` | `GET https://api.runpod.io/v2/billing`, `/v2/billing/serverless` |
+
+### Configuration field map
+
+| `fal.App` attribute | Runpod SDK argument | `runpodctl serverless create` flag | REST v2 field |
+| --- | --- | --- | --- |
+| `app_name` | `runpod.App("NAME")`, `name=` | `--name` | `name` |
+| `machine_type` | `gpu=` or `cpu=` | `--gpu-id`, or `--compute-type CPU --instance-id` | `gpu.pools`, or `cpu` |
+| `num_gpus` | `gpu_count=` | `--gpu-count` | `gpu.count` |
+| `min_concurrency` | `workers=(MIN, MAX)` | `--workers-min` | `workers.min` |
+| `max_concurrency` (fal default 2) | `workers=(MIN, MAX)` (SDK default `(0, 3)`) | `--workers-max` | `workers.max` |
+| `keep_alive` (fal default 60 s) | `idle_timeout=` (seconds, default 60) | `--idle-timeout` (1 to 3600) | `workers.idleTimeout` |
+| `max_multiplexing` | `max_concurrency=` on `@app.queue` | A [concurrent handler](/serverless/workers/concurrent-handler) in your image | A concurrent handler in your image |
+| `scaling_delay` | `scaler_type="QUEUE_DELAY"`, `scaler_value=` | `--scale-by delay --scale-threshold` | `scaling.type`, `scaling.queueDelay` |
+| `request_timeout` | `execution_timeout_ms=` | `--execution-timeout` (seconds) | `timeout` (ms) |
+| `startup_timeout` | `env={"RUNPOD_INIT_TIMEOUT": "SECONDS"}` | `RUNPOD_INIT_TIMEOUT` in the template env | `env.RUNPOD_INIT_TIMEOUT` |
+| `regions` | `datacenter=` | `--data-center-ids` | `dataCenterIds` |
+| `requirements` | `dependencies=`, `system_dependencies=` | Installed in your image | Installed in your image |
+| `image = ContainerImage(...)` | `image=`, `registry_auth=` | Template `--image`, `--registry-auth-id` | `image`, `registry` |
+| `secrets = [...]` | `env={"KEY": runpod.Secret("NAME")}` | Template `--env` with `{{ RUNPOD_SECRET_NAME }}` | `env` with `{{ RUNPOD_SECRET_NAME }}` |
+| `/data` | `mounts={"/runpod-volume": runpod.NetworkVolume("NAME")}`, or `model=` | `--network-volume-id`, `--model-reference` | `mounts.network`, `mounts.global` |
+| `exposed_port` (direct server mode) | `@app.api` | Template `--ports` plus `PORT` env | `type: "LOAD_BALANCER"`, `ports`, `env.PORT` |
+| `app_auth` | Runpod API key on every request | Runpod API key on every request | Runpod API key on every request |
+
+### Environment variable map
+
+| fal runner variable | Runpod | Notes |
+| --- | --- | --- |
+| `FAL_KEY` | A Runpod API key you pass as a secret | Serverless workers don't get an account-wide key unless you provide one. Pods receive a Pod-scoped `RUNPOD_API_KEY`. |
+| `FAL_APP_ID`, `FAL_APP_NAME` | `RUNPOD_ENDPOINT_ID` | Set automatically on Serverless workers. |
+| `FAL_REGION` | `RUNPOD_DC_ID` | Listed for Pods. |
+| `FAL_JOB_ID` (runner ID) | `RUNPOD_POD_ID` | Listed for Pods. On Serverless, the job ID is `job["id"]` in the handler. |
+| `HF_HOME=/data/.cache/huggingface` | Not set for you | Use cached models, or set the cache path yourself. |
+| Your secrets (injected by name) | Variables you map with `runpod.Secret` or `{{ RUNPOD_SECRET_NAME }}` | Nothing is injected unless you reference it. |
+| n/a | `PORT`, `PORT_HEALTH`, `HEALTH_CHECK_PATH` | Load-balancing endpoints. |
+| n/a | `BUCKET_ENDPOINT_URL`, `BUCKET_ACCESS_KEY_ID`, `BUCKET_SECRET_ACCESS_KEY` | Read by the `rp_upload` helper. |
+
+### Status map
+
+| fal queue status | Runpod job status | Notes |
+| --- | --- | --- |
+| `IN_QUEUE` | `IN_QUEUE` | Waiting for a worker. fal includes `queue_position`. |
+| `IN_PROGRESS` | `IN_PROGRESS` | A worker picked up the job. |
+| `COMPLETED` (no `error`) | `COMPLETED` | Result is in `output`. |
+| `COMPLETED` with `error` and `error_type` | `FAILED` | The job hit an error. |
+| Cancel response `OK` or `CANCELLATION_REQUESTED` | `CANCELLED` | Cancelled with `/cancel/JOB_ID`. |
+| `504` with `X-Fal-Request-Timeout-Type: user`, or `request_timeout` exceeded | `TIMED_OUT` | The job expired before a worker picked it up, or the worker didn't report back in time. |
+| Webhook `status: "OK"` or `"ERROR"` | Webhook body `status: "COMPLETED"`, `"FAILED"`, and so on | The Runpod webhook body is the job object. |
+
+## Migrate with a coding agent
+
+Install the Runpod plugin or skills and connect the MCP server. MCP sign-in is OAuth ("Sign in with Runpod"), so you don't need an API key to start. See [agent skills](/get-started/agent-skills) and [MCP servers](/get-started/mcp-servers).
+
+<Tabs>
+  <Tab title="Claude Code">
+    ```bash
+    # The plugin also connects the hosted MCP server
+    claude plugin marketplace add runpod/runpod-plugins-official
+    claude plugin install runpod@runpod
+    ```
+  </Tab>
+
+  <Tab title="Other agents">
+    ```bash
+    # Codex, Cursor, and others: skills, then the hosted MCP server
+    npx skills add runpod/runpod-plugins-official --skill '*' --agent AGENT_ID --global
+    npx @runpod/mcp-server@latest add --client CLIENT_ID
+    ```
+  </Tab>
+</Tabs>
+
+Then give the agent this prompt from the root of your repository:
+
+```text
+Migrate this project from fal to Runpod using the runpod-cloud-migrate skill.
+
+1. Inventory first, and change nothing yet. Find every use of fal in this repo:
+   fal_client, @fal-ai/client, @ai-sdk/fal, fal.App classes, [tool.fal] in
+   pyproject.toml, fal CLI calls in scripts and CI, queue.fal.run and fal.run URLs,
+   FAL_KEY and FAL_API_KEY, webhook receivers that read fal payloads, and stored
+   fal.media URLs. If the fal CLI is logged in, also run the read-only commands:
+   fal apps list --json, fal secrets list, fal files list, fal environments list.
+2. Classify each workload: hosted model call (Runpod Public Endpoint), fal.App
+   (Runpod SDK @app.queue or @app.api, or a custom image with a handler),
+   realtime or WebSocket endpoint (load-balancing endpoint), ComfyUI app
+   (ComfyUI worker), or fal Compute instance (Pod or Instant Cluster).
+3. For hosted model calls, map each fal model ID to a Runpod Public Endpoint ID
+   only if the Runpod model reference lists it. List the models with no match
+   and stop to ask me what to do with them.
+4. Show me a written plan before creating anything: the target for each workload,
+   the GPU pool for each endpoint, where model weights and /data files will live,
+   which secrets I need to recreate, every code change, and a cost estimate from
+   Runpod's published pricing with the assumptions you used.
+5. Wait for my approval before you create anything billable on Runpod (endpoints,
+   Pods, volumes, clusters).
+6. Migrate one workload end to end first. Verify it with a real request from
+   outside the worker, and show me the response and the delayTime and
+   executionTime values. Then continue with the rest.
+7. Update client code behind a flag so I can run fal and Runpod in parallel.
+   Handle the Runpod statuses FAILED, CANCELLED, and TIMED_OUT, the "input"
+   wrapper, the Bearer auth header, and the 30-minute result retention.
+8. Never delete, scale down, or modify fal resources, and never revoke fal keys,
+   without my explicit approval. When I approve, list the exact fal commands
+   first.
+```
+
+## Troubleshooting
+
+**`401` from every Runpod request.** The client still sends `Authorization: Key ...`. Runpod expects `Authorization: Bearer YOUR_API_KEY`. On WebSockets, send the header on the connection request.
+
+**The job fails validation or ignores your parameters.** The body isn't wrapped in `input`, or it uses fal parameter names. Send `{"input": {...}}` and rename parameters per the Runpod model page (`image_size` to `width` and `height`, `guidance_scale` to `guidance`, `image_url` to `image`).
+
+**`KeyError: 'images'` or `undefined` when reading the result.** The output shape changed. Read `output.image_url`, `output.video_url`, `output.audio_url`, or `output.result`, depending on the model.
+
+**`/status` returns `404` or no output for a job that finished.** Results are kept for 30 minutes after a `/run` job completes and 1 minute for `/runsync`, and a job's TTL (24 hours by default) deletes it regardless of state. Fetch results sooner or use a webhook.
+
+**Code waits forever on a job that failed.** A polling loop that only exits on `COMPLETED` never sees `FAILED`, `CANCELLED`, or `TIMED_OUT`. Treat all four as terminal.
+
+**Jobs end as `TIMED_OUT` that finished on fal.** fal's `request_timeout` defaults to 3600 seconds, and Runpod's execution timeout defaults to 600 seconds in the console and 300000 ms in REST v2. Raise the endpoint's execution timeout or set `policy.executionTimeout` on the request.
+
+**Every cold start downloads the model again.** fal cached Hugging Face downloads on `/data` without configuration. On Runpod, add a cached model (`model=` or `--model-reference`), bake weights into the image, or use a network volume with the volume cache pattern.
+
+**`os.getenv("HF_TOKEN")` is `None` on the worker.** Secrets aren't injected automatically. Create the secret, then reference it with `runpod.Secret("hf-token")` or `{{ RUNPOD_SECRET_hf-token }}` in the endpoint's environment. Values in a local `.env` file aren't sent to workers.
+
+**A load-balancing worker shows as running but requests hang or return `502`.** The server isn't listening where the health check looks. Bind `0.0.0.0` on `PORT`, set `PORT_HEALTH` to the same port, expose that port, and answer `GET /ping` with `200`. An error of `not allowed for QB API` means the endpoint was created as queue-based.
+
+**WebSocket connections time out on connect.** The client gave up while a worker was starting. Set `open_timeout=60` or the equivalent in your client, and keep one active worker for interactive apps.
+
+**The job fails when the handler returns a large image or video.** Job payloads are limited to 10 MB for `/run` and 20 MB for `/runsync`. Upload the file to your bucket with `rp_upload` and return the URL.
+
+**The image won't start, or the worker exits immediately.** Images built on Apple silicon default to `arm64`. Build with `docker build --platform linux/amd64`. If CUDA initialization fails, set a minimum CUDA version on the endpoint that matches your image.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Public Endpoint model reference" href="/public-endpoints/reference" icon="book" horizontal>
+    Check current models, parameters, and pricing.
+  </Card>
+
+  <Card title="Runpod SDK overview" href="/sdk/overview" icon="python" horizontal>
+    Define queue, API, and task resources in Python.
+  </Card>
+
+  <Card title="Endpoint settings" href="/serverless/endpoints/endpoint-configurations" icon="sliders" horizontal>
+    Tune workers, idle timeout, and autoscaling.
+  </Card>
+
+  <Card title="Load-balancing endpoints" href="/serverless/load-balancing/overview" icon="network-wired" horizontal>
+    Serve your own HTTP and WebSocket routes.
+  </Card>
+</CardGroup>

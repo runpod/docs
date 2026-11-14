@@ -1,0 +1,1008 @@
+---
+title: "Migrate from Lambda to Runpod"
+sidebarTitle: "Lambda"
+description: "Move Lambda On-Demand Cloud instances, filesystems, firewall rules, and 1-Click Clusters to Runpod Pods, network volumes, and Instant Clusters."
+---
+
+This guide is for teams that run training, fine-tuning, or self-hosted inference on [Lambda](https://lambda.ai), the GPU cloud formerly called Lambda Labs. It maps [On-Demand Cloud](https://docs.lambda.com/public-cloud/on-demand/) instances to Pods, [filesystems](https://docs.lambda.com/public-cloud/filesystems/) to network volumes, [firewall rules](https://docs.lambda.com/public-cloud/firewalls/) to exposed ports, [1-Click Clusters](https://docs.lambda.com/public-cloud/1-click-clusters/) to Instant Clusters, and [Lambda Cloud API](https://docs.lambda.com/api/cloud) calls to the Runpod REST API v2. At the end, your workloads run on Runpod, your data lives on a network volume, and your automation calls Runpod instead of Lambda.
+
+<Note>
+This page is about Lambda the GPU cloud. If you're moving functions off AWS Lambda, see [Migrate from AWS to Runpod](/migrate/aws).
+</Note>
+
+<Tip>
+A coding agent can do most of this migration for you. See [Migrate with a coding agent](#migrate-with-a-coding-agent).
+</Tip>
+
+## How Lambda maps to Runpod
+
+The biggest change is the unit of compute. A Lambda instance is a virtual machine that you configure after it boots. A Runpod Pod is a container that starts from an image, so your environment moves into a Dockerfile or a template.
+
+| Lambda concept | Runpod equivalent | Notes |
+| --- | --- | --- |
+| On-Demand Cloud instance (VM, Ubuntu, `ubuntu` user with `sudo`) | [Pod](/pods/overview) (container, `root` user) | Billed while it runs on both platforms. A Pod can also be stopped and restarted. |
+| Instance type (for example `gpu_1x_a10`) | GPU type ID plus GPU count (for example `NVIDIA RTX A5000`, count 1) | vCPU and RAM come from the host machine. Set a floor with `gpu.minVcpuCountPerGpu` and `gpu.minRamPerGpu` in REST v2. |
+| Lambda Stack image (`lambda-stack-24-04`, `lambda-stack-22-04`) | Official Runpod PyTorch [templates](/pods/templates/overview) and `runpod/pytorch` images | PyTorch, CUDA, SSH, and JupyterLab are preinstalled. Add TensorFlow or JAX yourself if you use them. |
+| GPU Base and Ubuntu Server images | Any `linux/amd64` container image | For example an `nvidia/cuda` or `ubuntu` base image. |
+| cloud-init `user_data` | Dockerfile, template start command, and environment variables | Build setup into the image instead of running it at boot. |
+| Root volume (512 GiB to 22 TiB, lost on terminate) | Container disk (ephemeral) plus volume disk at `/workspace` | You choose both sizes at create time. The container disk defaults to 20 GB in `runpodctl`. |
+| Filesystem (`/lambda/nfs/NAME`, region-bound, attach at launch) | [Network volume](/storage/network-volumes) (`/workspace`, pinned to one data center, attach at create) | A network volume has a provisioned size. A Lambda filesystem bills for what you use. |
+| Filesystem S3 Adapter (`files.REGION.lambda.com`) | [S3-compatible API](/storage/s3-api) for network volumes (`s3api-DC.runpod.io`) | Both are available in select locations only. |
+| Firewall rules and rulesets (TCP, UDP, ICMP, source CIDR) | [Exposed ports](/pods/configuration/expose-ports) (`PORT/http`, `PORT/tcp`) | Runpod exposes TCP and HTTP. Access control lives in your application. |
+| Public IPv4 on every instance | HTTPS proxy URL, or public IP with a mapped external port | See [What works differently](#what-works-differently). |
+| Private IP between instances | [Global networking](/pods/networking) (`POD_ID.runpod.internal`) | Private network between your NVIDIA GPU Pods, in supported data centers. |
+| SSH keys (per workspace, one key per launch) | [SSH public keys](/get-started/credentials#ssh-public-keys) (per account, all keys injected) | |
+| JupyterLab (**Launch** in the console) | JupyterLab on port 8888 in official PyTorch templates | Set `JUPYTER_PASSWORD` when you create Pods outside the console. |
+| 1-Click Cluster (reserved by the week) | [Instant Cluster](/instant-clusters) (on demand) | See the size ranges in [What works differently](#what-works-differently). |
+| Managed Slurm, unmanaged Slurm | [Slurm Clusters](/instant-clusters/slurm-clusters) | |
+| Self-hosted inference server on an instance | Pod, or [Serverless](/serverless/overview) endpoint that scales to zero | Serverless has no Lambda counterpart, so this is a redesign, not a rename. |
+| Regions (`us-east-1`, `europe-central-1`, and others) | Data centers (`US-GA-1`, `EU-RO-1`, and others) | List them with `runpodctl datacenter list`. |
+| Per-minute billing, weekly invoices | Per-second billing from a prepaid credit balance | Organizations on Runpod are invoiced post-paid. |
+| Lambda Cloud API (`https://cloud.lambda.com/api/v1`) | [REST API v2](/api-reference-v2/overview) (`https://api.runpod.io/v2`) | Plus `runpodctl`, the Runpod SDK, an MCP server, and a Terraform provider. |
+| API key (`Authorization: Bearer` or Basic) | API key (`Authorization: Bearer`), `RUNPOD_API_KEY` | Runpod keys can be restricted or read-only. |
+| Account, workspaces, IAM roles, SSO | Account, teams, [Organizations](/organizations/orgs-overview) with roles and groups | |
+| Audit events (`GET /api/v1/audit-events`) | Audit logs in REST v2 | |
+| Guest Agent metrics in the console | Telemetry tab and logs in the console, `runpodctl pod logs` | |
+| Private Cloud (reserved single-tenant clusters) | Custom plans through [Runpod sales](https://ecykq.share.hsforms.com/2MZdZATC3Rb62Dgci7knjbA) | |
+
+Lambda sunset its hosted Inference API (the shutdown date was September 25, 2025), so this guide covers inference that you host yourself on instances. If you still have code that calls a Lambda-hosted model, [Public Endpoints](/public-endpoints/overview) and [Serverless vLLM](/serverless/vllm/get-started) are the Runpod options.
+
+## What's different
+
+### What works differently
+
+**You get a container, not a VM.** On Lambda you have a full virtual machine with its own kernel, `systemd`, and a Docker daemon. On a Pod, Runpod runs Docker for you and your image's start command is the container's main process. That has four practical consequences:
+
+- Docker and Docker Compose don't run inside a Pod. If your instance runs `docker run` or `docker compose up`, deploy each image as its own Pod, or combine the services into one image with a start script.
+- Services you manage with `systemctl` need to start from your image's start command instead. Official Runpod images start SSH and JupyterLab from `/start.sh`.
+- The container shares the host's kernel and NVIDIA driver. You pick a host by CUDA version (`--min-cuda-version`) instead of installing a driver or kernel module.
+- Anything you installed by hand over SSH has to be captured in a Dockerfile, or reinstalled onto `/workspace`.
+
+**A Pod can stop without losing its volume.** Lambda instances can be launched, restarted, or terminated, and Lambda's docs recommend containers and backups to preserve state. A Pod can also be stopped: the GPU is released, the volume disk at `/workspace` is kept, and you pay for volume storage while it's stopped. When you start it again, the GPUs on that host may be in use. See [zero GPU Pods](/pods/troubleshooting/zero-gpus).
+
+**Only `/workspace` persists.** On a Lambda instance, the whole root volume lasts until you terminate. On a Pod, the container disk is cleared when the Pod stops, restarts, or has its configuration edited. Keep anything you need on the volume disk or a network volume.
+
+**Ports are exposed, not firewalled.** Lambda opens ports with firewall rules that can restrict the source IP range. A Pod exposes the ports you list, to the public internet, in one of two ways:
+
+- `PORT/http` gives you `https://POD_ID-PORT.proxy.runpod.net`. It's HTTPS only and has a 100-second response timeout.
+- `PORT/tcp` gives you a public IP and a mapped external port that usually differs from the internal port. Request a port above 70000 to get matching internal and external ports, and read the assigned port from `RUNPOD_TCP_PORT_70000`.
+
+**SSH connects as `root` on a mapped port.** Instead of `ssh ubuntu@INSTANCE_IP`, you use `ssh root@POD_IP -p EXTERNAL_PORT`, or the proxied `ssh POD_USER@ssh.runpod.io` form. The proxied form gives you a shell only. SCP, SFTP, rsync, and port forwarding need the direct connection.
+
+**Storage has a provisioned size.** A Lambda filesystem has no size to set and bills for the GiB you use. A network volume has a size from 10 GB to 4,096 GB that you choose and can grow later (contact support for more than 4 TB). A [global volume](/storage/globalvolume/overview) (beta) is the usage-billed option on Runpod.
+
+**Billing is prepaid.** Lambda bills in one-minute increments and sends weekly invoices. Runpod bills per second against a credit balance. You need at least one hour of credit for a configuration to deploy it, and Pods stop when your balance reaches \$0. Set up [auto-pay or low balance notifications](/accounts-billing/billing) before you move production.
+
+**Clusters start on demand, at a different size range.** A 1-Click Cluster is reserved in weeks, covers 16 to 512 H100 or B200 GPUs, and includes three CPU head nodes. An Instant Cluster deploys on demand with 2 to 8 nodes (16 to 64 GPUs) of B200, H200, H100, or A100, and one of the GPU nodes is the primary node. Larger clusters go through Runpod sales. Availability depends on current stock in each data center.
+
+### What has no direct equivalent
+
+**On Runpod (Lambda features to plan around):**
+
+- **Docker, Docker Compose, and kernel access inside the machine.** Use one image per Pod. To build images from inside a Pod, see [Build Docker images with Bazel](/tutorials/pods/build-docker-images), or build in CI and push to a registry.
+- **UDP and ICMP.** Pods accept TCP and HTTP connections. Move UDP protocols to TCP, or keep that service elsewhere.
+- **Source IP allowlists.** Exposed ports are reachable by anyone who has the address. Require authentication in your service, keep internal services on global networking without exposing a port, or reach them through an SSH tunnel.
+- **ARM instances (GH200).** Runpod images must be `linux/amd64`. Rebuild ARM images for x86-64.
+- **Several filesystems on one instance.** `runpodctl pod create` and the console attach one network volume per Pod, plus one global volume if you need a second mount. REST API v2 accepts up to four network volumes in `mounts.network`, all in the Pod's data center. The simplest plan is to merge your filesystems into one network volume with subdirectories.
+- **Managed Kubernetes on a cluster.** Instant Clusters come as Slurm, Ray, PyTorch training, or general application clusters. Port Kubernetes workloads to one of those, or to Pods and Serverless endpoints.
+- **Fixed vCPU and RAM per instance type.** Pod CPU and memory depend on the host. Use the REST v2 placement floors if your job needs a minimum.
+
+**On Lambda (Runpod features you can adopt):**
+
+- **Scale to zero.** A [Serverless](/serverless/overview) endpoint runs your image only while requests are in flight. A self-hosted inference server that sits idle on an instance is a good candidate.
+- **Stop and resume.** Stop a Pod overnight and keep its volume.
+- **Hosted models.** [Public Endpoints](/public-endpoints/overview) serve models over an API with no deployment.
+- **Restricted API keys.** Lambda API keys have full access to all API operations. Runpod keys can be read-only or restricted.
+
+## Requirements
+
+- A Lambda account with access to the workspaces you're migrating, and a [Lambda Cloud API key](https://cloud.lambda.com/api-keys).
+- A [Runpod account](/accounts-billing/manage-accounts) with credits and a [Runpod API key](/get-started/credentials#api-keys).
+- An SSH key pair. You can reuse the public key you already use on Lambda.
+- `curl` and `jq` for the inventory commands.
+- Docker on your local machine or in CI, and a container registry, if you build a custom image.
+
+## Step 1: Take inventory of what you run on Lambda
+
+Lambda's docs describe two interfaces, the console and the Cloud API. The API gives you an inventory you can save and diff. Export your key first.
+
+```bash
+export LAMBDA_API_KEY="YOUR_LAMBDA_API_KEY"
+export LAMBDA_API="https://cloud.lambda.com/api/v1"
+```
+
+List every running instance with the fields you need to recreate it.
+
+```bash
+curl -s -H "Authorization: Bearer $LAMBDA_API_KEY" "$LAMBDA_API/instances" \
+  | jq '.data[] | {id, name, status, ip, region: .region.name,
+      type: .instance_type.name, gpus: .instance_type.specs.gpus,
+      vcpus: .instance_type.specs.vcpus, memory_gib: .instance_type.specs.memory_gib,
+      image: .image, filesystems: .file_system_names, ssh_keys: .ssh_key_names,
+      firewall_rulesets, tags}' > lambda-instances.json
+```
+
+To list the nodes of one 1-Click Cluster, add the `cluster_id` query parameter. The Lambda API allows about one request per second, so run these commands one at a time.
+
+Next, export storage, SSH keys, and firewall configuration.
+
+```bash
+# Filesystems: name, region, mount point, and approximate bytes used
+curl -s -H "Authorization: Bearer $LAMBDA_API_KEY" "$LAMBDA_API/filesystems" \
+  | jq '.data[] | {id, name, region: .region.name, mount_point, is_in_use, bytes_used}' \
+  > lambda-filesystems.json
+
+# SSH public keys
+curl -s -H "Authorization: Bearer $LAMBDA_API_KEY" "$LAMBDA_API/ssh-keys" \
+  | jq '.data[] | {name, public_key}' > lambda-ssh-keys.json
+
+# Global firewall rules and per-instance rulesets
+curl -s -H "Authorization: Bearer $LAMBDA_API_KEY" "$LAMBDA_API/firewall-rules" \
+  | jq '.data' > lambda-firewall-rules.json
+curl -s -H "Authorization: Bearer $LAMBDA_API_KEY" "$LAMBDA_API/firewall-rulesets" \
+  | jq '.data' > lambda-firewall-rulesets.json
+```
+
+`bytes_used` tells you how large each network volume needs to be. Lambda updates it every few hours, so add headroom. The firewall files tell you which ports each workload serves: every TCP rule becomes an exposed port, and every UDP rule or source restriction needs a decision (see [What has no direct equivalent](#what-has-no-direct-equivalent)).
+
+The API doesn't know what's installed inside each VM, so capture that over SSH. Run this on each instance you plan to move.
+
+```bash
+ssh ubuntu@INSTANCE_IP 'bash -s' <<'EOF' > instance-snapshot.txt
+echo "== OS and GPU";        lsb_release -ds; nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
+echo "== Python packages";   python3 --version; pip freeze
+echo "== Apt packages you added"; apt-mark showmanual
+echo "== Containers";        sudo docker ps --format '{{.Image}} {{.Ports}} {{.Command}}'
+echo "== Services";          systemctl list-units --type=service --state=running --no-pager
+echo "== Cron";              crontab -l 2>/dev/null
+echo "== Listening ports";   sudo ss -tlnup
+echo "== Disk";              df -h / /lambda/nfs/* 2>/dev/null
+echo "== Environment";       env | cut -d= -f1 | sort
+EOF
+```
+
+The snapshot is the input for your Dockerfile in Step 4. The environment section prints variable names only, so secrets stay out of the file. If you launched instances with cloud-init, find the `user_data` you passed at launch in your own scripts, because it's write-only in the API.
+
+Finally, find the code and configuration that reference Lambda.
+
+```bash
+grep -rnE "cloud\.lambda(labs)?\.(com|ai)|LAMBDA_API_KEY|instance-operations/|/lambda/nfs|lambda-stack|files\.[a-z0-9-]+\.lambda\.com|lambdaspaces\.com" \
+  --exclude-dir={.git,node_modules,.venv} .
+```
+
+The pattern covers all three API hostnames (`cloud.lambda.com`, `cloud.lambda.ai`, and `cloud.lambdalabs.com`), the filesystem mount path, the S3 Adapter endpoints, and JupyterLab URLs. Also search for hardcoded instance IP addresses and for `ubuntu@` in SSH configs and CI scripts.
+
+## Step 2: Set up Runpod
+
+Create an account, add credits, and create an API key on the [Credentials page](/get-started/credentials). Then install the CLI and register your SSH key.
+
+```bash
+# Install runpodctl (or: brew install runpod/runpodctl/runpodctl)
+curl -fsSL https://cli.runpod.net | sudo bash
+
+# Configure your API key and SSH access interactively
+runpodctl doctor
+
+# Register the same public key you use on Lambda
+runpodctl ssh add-key --key-file ~/.ssh/id_ed25519.pub
+runpodctl ssh list-keys
+```
+
+Lambda attaches exactly one SSH key per launch. Runpod injects every key on your account into your Pods, so add each teammate's key once instead of editing `authorized_keys`. Keys must be in OpenSSH format (`ssh-ed25519 AAAA...`). If you saved Lambda keys in another format, convert them with `ssh-keygen -i`, or read the public key back from your private key with `ssh-keygen -y -f KEY_FILE`.
+
+Install the other tools as you need them:
+
+- **Runpod SDK**: `pip install runpod` installs the Python SDK and the `rp` CLI. Run `rp login` to store your key. See the [SDK overview](/sdk/overview).
+- **MCP server**: lets a coding agent manage your Runpod resources. See [MCP servers](/get-started/mcp-servers).
+- **Terraform**: see [Migrate your Terraform](#migrate-your-terraform).
+
+## Step 3: Choose where each workload lands
+
+Use the inventory to place each workload. Most Lambda instances become Pods, and the exceptions are worth finding early.
+
+| What the instance does on Lambda | Runpod target | Why |
+| --- | --- | --- |
+| Interactive development, notebooks, SSH sessions | [Pod](/pods/overview) with an official PyTorch template | Closest match to a Lambda Stack instance. |
+| Long training or fine-tuning run on one machine | Pod with a network volume | Checkpoints survive the Pod. |
+| Always-on inference server (vLLM, Triton, a custom API) | Pod with an exposed HTTP port | Same shape as today. |
+| Inference server with idle periods or bursty traffic | [Serverless load-balancing endpoint](/serverless/load-balancing/overview) | Keeps your HTTP server and scales to zero. |
+| OpenAI-compatible LLM serving | [Serverless vLLM](/serverless/vllm/get-started) | Prebuilt worker with an OpenAI-compatible route. |
+| Batch jobs triggered by a queue or script | [Serverless queue endpoint](/serverless/overview) | Per-request billing with async job status. |
+| Calls to a hosted model | [Public Endpoint](/public-endpoints/overview) | No deployment. |
+| Multi-node training on a 1-Click Cluster | [Instant Cluster](/instant-clusters) | Slurm, PyTorch, or Ray across nodes. |
+| CPU node next to a cluster | CPU Pod | `runpodctl pod create --compute-type cpu`. |
+
+Then map each instance type to a Runpod GPU type. Lambda instance type names encode the GPU count and model, for example `gpu_1x_a10` or `gpu_8x_h100_sxm5gdr`. Get the exact names you use from your inventory or from `GET /api/v1/instance-types`. On Runpod, the GPU model is the `--gpu-id` and the count is `--gpu-count`.
+
+| Lambda GPU (VRAM per GPU) | Runpod GPU type ID | Notes |
+| --- | --- | --- |
+| B200 (180 GB) | `NVIDIA B200` | |
+| H100 SXM (80 GB) | `NVIDIA H100 80GB HBM3` | |
+| H100 PCIe (80 GB) | `NVIDIA H100 PCIe` | |
+| A100 SXM (80 GB) | `NVIDIA A100-SXM4-80GB` | |
+| A100 SXM or PCIe (40 GB) | `NVIDIA A100 80GB PCIe` or `NVIDIA A100-SXM4-80GB` | Runpod lists the 80 GB A100. For a 48 GB card, use `NVIDIA A40`, `NVIDIA RTX A6000`, or `NVIDIA L40S`. |
+| A6000 (48 GB) | `NVIDIA RTX A6000` | |
+| A10 (24 GB) | `NVIDIA RTX A5000`, `NVIDIA L4`, or `NVIDIA GeForce RTX 4090` | Runpod's GPU list has no A10. Choose a 24 GB card that fits the workload. |
+| RTX 6000 (24 GB) | `NVIDIA RTX A5000` or another 24 GB card | |
+| Tesla V100 (16 GB) | `Tesla V100-PCIE-16GB` or `Tesla V100-SXM2-16GB` | |
+| GH200 (96 GB, ARM) | `NVIDIA H100 NVL` (94 GB) or `NVIDIA RTX PRO 6000 Blackwell Server Edition` (96 GB) | Rebuild your image for `linux/amd64`. |
+
+The full list is in [GPU types](/references/gpu-types). Stock varies by data center and changes through the day, so check what's deployable before you commit to a type.
+
+```bash
+# GPU types with stock right now
+runpodctl gpu list
+
+# Stock per data center
+runpodctl datacenter list
+
+# REST v2: availability for an 8-GPU Pod, with CUDA 12.8 or later
+curl -s -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  "https://api.runpod.io/v2/catalog/gpus?include=AVAILABILITY&product=POD&count=8&minCudaVersion=12.8"
+```
+
+The catalog also reports `maxCount`, the largest GPU count a single Pod of that type can have. If a multi-GPU instance type has no single-Pod match, consider an Instant Cluster.
+
+Pick the data center before you create storage. A network volume is pinned to one data center, and Pods that mount it run there, the same way a Lambda filesystem ties you to its region.
+
+## Step 4: Move your images and code
+
+How much work this step takes depends on how you use the instance today.
+
+### If you already run containers on Lambda
+
+Lambda instances ship with Docker and the NVIDIA Container Toolkit, so many teams already run `docker run --gpus all`. That image runs on a Pod with three checks:
+
+- **Architecture**: the image must be `linux/amd64`. Build with `docker build --platform linux/amd64` if you build on an ARM machine.
+- **Registry access**: for a private image, add a registry credential with `runpodctl registry create` and pass its ID as `--registry-auth-id`. For Amazon ECR, see [Use private ECR images](/tutorials/pods/use-private-ecr-images).
+- **Run flags**: translate your `docker run` flags with the table below.
+
+| `docker run` on a Lambda instance | Runpod Pod |
+| --- | --- |
+| `--gpus all` | `--gpu-id` and `--gpu-count`. All requested GPUs are visible to the container. |
+| `-p 8000:8000` | `--ports "8000/http"` or `--ports "8000/tcp"` |
+| `-e KEY=value` | `--env '{"KEY":"value"}'`, or a [secret](/pods/templates/secrets) reference |
+| `-v /lambda/nfs/NAME:/data` | `--network-volume-id`, mounted at `/workspace` |
+| `-v $HOME/.cache/huggingface:/root/.cache/huggingface` | Set `HF_HOME=/workspace/huggingface` so the cache persists |
+| Image arguments after the image name | `--docker-args "..."` |
+| `--ipc=host`, `--privileged`, `--network host` | The [`runpodctl pod create` reference](/runpodctl/reference/runpodctl-pod) lists no matching flags. Test that your workload runs without them. |
+| `docker compose up` | One Pod per service, connected with global networking |
+
+### If you work directly on the VM with Lambda Stack
+
+Pick the official PyTorch template closest to your Lambda Stack image and reinstall the rest of your environment on top.
+
+| Lambda image | Default Python | Closest Runpod template | Image |
+| --- | --- | --- | --- |
+| Lambda Stack 24.04 (`lambda-stack-24-04`) | 3.12 | `runpod-torch-v280` | `runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404` (Ubuntu 24.04, Python 3.12, PyTorch 2.8.0, CUDA 12.8.1) |
+| Lambda Stack 22.04 (`lambda-stack-22-04`) | 3.10 | `runpod-torch-v220` | `runpod/pytorch:2.2.0-py3.10-cuda12.1.1-devel-ubuntu22.04` |
+
+Run `runpodctl template list --type official` to see the current list. Check the PyTorch version in your snapshot against the template, because Lambda Stack updates its packages over time.
+
+For anything you run more than once, capture the environment in an image. This Dockerfile turns the snapshot from Step 1 into a Pod image.
+
+```dockerfile Dockerfile
+FROM runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404
+
+ENV PYTHONUNBUFFERED=1 \
+    HF_HOME=/workspace/huggingface
+
+# Apt packages from the "Apt packages you added" section of your snapshot
+RUN apt-get update --yes && \
+    DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
+        git tmux htop rsync && \
+    rm -rf /var/lib/apt/lists/*
+
+# Python packages from pip freeze, minus the ones the base image provides
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir --break-system-packages -r /tmp/requirements.txt
+
+WORKDIR /workspace
+```
+
+Remove `torch`, `torchvision`, and the `nvidia-*` packages from `requirements.txt` so `pip` doesn't replace the CUDA build of PyTorch that the base image ships. The Ubuntu 24.04 base marks the system Python as externally managed, which is why the install uses `--break-system-packages`. The image keeps the base image's `/start.sh`, so SSH and JupyterLab still start.
+
+Build for `linux/amd64` and push the image to your registry.
+
+```bash
+docker build --platform linux/amd64 -t YOUR_REGISTRY/lambda-env:v1 .
+docker push YOUR_REGISTRY/lambda-env:v1
+```
+
+If your instance starts a long-running process from `systemd` or cron, add a start script that launches the base services and then your process. See [Create a custom template](/pods/templates/create-custom-template#step-4-configure-container-startup-behavior) for the three startup patterns.
+
+### Paths and environment variables
+
+Update anything that assumed the Lambda VM layout.
+
+| On a Lambda instance | On a Runpod Pod |
+| --- | --- |
+| `/home/ubuntu` (user `ubuntu`, `sudo` for root) | `/root` (user `root`, no `sudo` needed) |
+| `/lambda/nfs/FILESYSTEM_NAME` | `/workspace` |
+| Root volume persists until terminate | Only `/workspace` persists across stop and restart |
+| `sudo systemctl restart SERVICE` | Restart the process, or `runpodctl pod restart POD_ID` |
+| Variables in `~/.bashrc` | Pod environment variables. They're set for the container's main process, so export them in your shell profile too if you need them in SSH sessions. |
+
+Runpod sets `RUNPOD_POD_ID`, `RUNPOD_PUBLIC_IP`, `RUNPOD_TCP_PORT_22`, `RUNPOD_GPU_COUNT`, and other variables in every Pod. See the [environment variable map](#environment-variable-map).
+
+## Step 5: Move your data and models
+
+Create the network volume first, in the data center you chose in Step 3. Size it from `bytes_used` in your filesystem inventory.
+
+<Tabs>
+  <Tab title="runpodctl">
+    ```bash
+    runpodctl network-volume create --name "training-data" --size 500 --data-center-id "US-KS-2"
+    ```
+  </Tab>
+  <Tab title="REST API">
+    ```bash
+    curl --request POST \
+      --url https://api.runpod.io/v2/network-volumes \
+      --header "Authorization: Bearer $RUNPOD_API_KEY" \
+      --header 'Content-Type: application/json' \
+      --data '{"name": "training-data", "size": 500, "dataCenter": "US-KS-2"}'
+    ```
+  </Tab>
+</Tabs>
+
+The command returns the volume ID you'll attach to Pods. Network volumes are available on Secure Cloud. A volume can grow later but can't shrink.
+
+Then start a transfer Pod with the volume attached. A CPU Pod is enough for copying data, and data transfer in and out of Runpod has no ingress or egress fee.
+
+```bash
+runpodctl pod create \
+  --name "lambda-transfer" \
+  --compute-type cpu \
+  --image "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404" \
+  --network-volume-id "NETWORK_VOLUME_ID" \
+  --data-center-ids "US-KS-2" \
+  --ports "22/tcp"
+
+runpodctl ssh info POD_ID
+```
+
+`runpodctl ssh info` prints the direct SSH command with the Pod's public IP and external port. You need the direct form, because rsync doesn't work over the proxied SSH connection. If the command reports no public IP, recreate the transfer Pod as a GPU Pod on Secure Cloud. Then connect and install the copy tools on the Pod with `apt update && apt install -y rsync`.
+
+Choose a transfer path based on where the data is.
+
+<Tabs>
+  <Tab title="rsync from a Lambda instance">
+    This works in every Lambda region. The filesystem must be attached to a running instance, and Lambda only attaches filesystems at launch. If the filesystem isn't mounted anywhere, launch a small instance with it attached.
+
+    Connect to the Lambda instance with agent forwarding so it can authenticate to the Pod with your local key, then push the data.
+
+    ```bash
+    ssh -A ubuntu@INSTANCE_IP
+
+    # On the Lambda instance
+    tmux new-session -s migrate
+    rsync -avP --inplace -e "ssh -p POD_SSH_PORT" \
+      /lambda/nfs/FILESYSTEM_NAME/ root@POD_IP:/workspace/
+    ```
+
+    The trailing slash on the source copies the directory's contents into `/workspace`. If the transfer is interrupted, run the same command again and rsync continues where it stopped. Running inside `tmux` keeps the copy alive if your SSH session drops.
+  </Tab>
+  <Tab title="Lambda Filesystem S3 Adapter">
+    If your filesystem is in a region with the [Filesystem S3 Adapter](https://docs.lambda.com/public-cloud/s3-adapter-filesystems/) (Lambda lists `us-east-2`, `us-east-3`, and `us-midwest-2`) and was created in March 2025 or later, you can pull the data without a running Lambda instance. Generate an access key pair on the Filesystem S3 Adapter Keys page of the Lambda console and copy the filesystem's bucket name from the Filesystems page.
+
+    On the transfer Pod, install s5cmd from its releases page, then copy the bucket onto the volume.
+
+    ```bash
+    export AWS_ACCESS_KEY_ID="LAMBDA_S3_ACCESS_KEY"
+    export AWS_SECRET_ACCESS_KEY="LAMBDA_S3_SECRET_KEY"
+    export AWS_REGION="us-east-2"
+    export S3_ENDPOINT_URL="https://files.us-east-2.lambda.com"
+
+    s5cmd ls "s3://LAMBDA_BUCKET_NAME/"
+    s5cmd cp "s3://LAMBDA_BUCKET_NAME/*" /workspace/
+    ```
+
+    These are the environment variables and commands from Lambda's S3 Adapter docs, run from the Pod so the data lands on the network volume. Lambda's docs note that `aws s3` needs `request_checksum_calculation = WHEN_REQUIRED` and `response_checksum_validation = WHEN_REQUIRED` in the profile to work with the adapter.
+  </Tab>
+  <Tab title="Object storage or a model hub">
+    If the source of truth is an S3-compatible bucket, copy from the bucket onto the volume instead of from Lambda. From the transfer Pod, use the same tools Lambda documents for imports.
+
+    ```bash
+    # From S3-compatible storage with rclone (configure the remote first with: rclone config)
+    rclone -P copy REMOTE:BUCKET_NAME /workspace/datasets --transfers 16
+
+    # Or use Cloud Sync from the Pod's page in the console
+    ```
+
+    [Cloud Sync](/pods/storage/cloud-sync) supports Amazon S3, Google Cloud Storage, Azure Blob Storage, Backblaze B2, and Dropbox. Model weights that came from a public hub are often faster to download again than to copy. Set `HF_HOME=/workspace/huggingface` so the cache lands on the volume.
+  </Tab>
+  <Tab title="Small files">
+    For a few files, use `runpodctl send` and `runpodctl receive`. `runpodctl` is preinstalled on Pods. Install it on the Lambda instance with the same install command as in Step 2.
+
+    ```bash
+    # On the Lambda instance
+    runpodctl send checkpoints.tar
+
+    # On the Pod, with the code printed by the send command
+    cd /workspace && runpodctl receive CODE
+    ```
+  </Tab>
+</Tabs>
+
+Verify the copy before you rely on it. Compare file counts and total size on both sides.
+
+```bash
+# On the Lambda instance
+find /lambda/nfs/FILESYSTEM_NAME -type f | wc -l; du -sb /lambda/nfs/FILESYSTEM_NAME
+
+# On the Pod
+find /workspace -type f | wc -l; du -sb /workspace
+```
+
+Delete hidden `.Trash-*` directories on the Lambda side before you copy if you used JupyterLab there, because they count toward size and aren't needed. When the copy checks out, delete the transfer Pod with `runpodctl pod delete POD_ID`. The data stays on the network volume.
+
+After the migration, you can read and write the volume without a Pod through the [S3-compatible API](/storage/s3-api), in data centers that support it.
+
+## Step 6: Deploy on Runpod
+
+### Deploy a Pod
+
+This is the direct replacement for launching an instance. The example recreates an 8-GPU H100 instance with a filesystem and two open ports.
+
+<Tabs>
+  <Tab title="Lambda (before)">
+    ```bash
+    curl --request POST "https://cloud.lambda.com/api/v1/instance-operations/launch" \
+      --header "Authorization: Bearer $LAMBDA_API_KEY" \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "region_name": "us-east-1",
+        "instance_type_name": "gpu_8x_h100_sxm5gdr",
+        "ssh_key_names": ["my-key"],
+        "file_system_names": ["training-data"],
+        "name": "trainer",
+        "image": {"family": "lambda-stack-24-04"}
+      }'
+    ```
+  </Tab>
+  <Tab title="runpodctl (after)">
+    ```bash
+    runpodctl pod create \
+      --name "trainer" \
+      --template-id "runpod-torch-v280" \
+      --gpu-id "NVIDIA H100 80GB HBM3" \
+      --gpu-count 8 \
+      --data-center-ids "US-KS-2" \
+      --network-volume-id "NETWORK_VOLUME_ID" \
+      --container-disk-in-gb 100 \
+      --ports "22/tcp,8888/http,8000/http" \
+      --min-cuda-version 12.8 \
+      --env '{"JUPYTER_PASSWORD":"YOUR_JUPYTER_PASSWORD","HF_HOME":"/workspace/huggingface"}'
+    ```
+  </Tab>
+  <Tab title="REST API (after)">
+    ```bash
+    curl --request POST "https://api.runpod.io/v2/pods" \
+      --header "Authorization: Bearer $RUNPOD_API_KEY" \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "name": "trainer",
+        "templateId": "runpod-torch-v280",
+        "gpu": {"id": "NVIDIA H100 80GB HBM3", "count": 8, "minCudaVersion": "12.8"},
+        "dataCenterIds": ["US-KS-2"],
+        "mounts": {"network": [{"volumeId": "NETWORK_VOLUME_ID", "path": "/workspace"}]},
+        "disk": 100,
+        "ports": ["22/tcp", "8888/http", "8000/http"],
+        "startSsh": true,
+        "startJupyter": true,
+        "env": {"HF_HOME": "/workspace/huggingface"}
+      }'
+    ```
+  </Tab>
+</Tabs>
+
+A few things in the Runpod version have no line in the Lambda request. Ports are part of the Pod, not a separate firewall object. The container disk size is explicit, and it's much smaller than a Lambda root volume, so large files belong on `/workspace`. The data center must be the one that holds the network volume. To use your own image from Step 4, replace the template with `--image YOUR_REGISTRY/lambda-env:v1`. In the console, the same flow is **Pods**, then **Deploy**.
+
+The create call returns before the container is up. Wait for it, then connect.
+
+```bash
+until [ "$(runpodctl pod get POD_ID --output json | jq -r '.runtimeStatus')" = "running" ]; do
+  sleep 5
+done
+
+runpodctl ssh info POD_ID
+```
+
+JupyterLab is at `https://POD_ID-8888.proxy.runpod.net`, and a service on port 8000 is at `https://POD_ID-8000.proxy.runpod.net`.
+
+### Deploy a self-hosted inference server
+
+Lambda's tutorials serve models with vLLM in Docker on an instance. On Runpod, the vLLM image is the Pod's image, and the arguments after the image name become the start command.
+
+<Tabs>
+  <Tab title="Lambda (before)">
+    ```bash
+    # On the instance, after SSH
+    sudo docker run --gpus all --ipc=host \
+      -v "$HOME/.cache/huggingface":/root/.cache/huggingface \
+      -p 8000:8000 \
+      --env "HUGGING_FACE_HUB_TOKEN=$HF_TOKEN" \
+      vllm/vllm-openai --model meta-llama/Meta-Llama-3.1-8B-Instruct
+    ```
+  </Tab>
+  <Tab title="Runpod Pod (after)">
+    ```bash
+    runpodctl pod create \
+      --name "llama-server" \
+      --image "vllm/vllm-openai:latest" \
+      --gpu-id "NVIDIA A100 80GB PCIe" \
+      --volume-in-gb 100 \
+      --ports "8000/http" \
+      --env '{"HUGGING_FACE_HUB_TOKEN":"YOUR_HF_TOKEN","HF_HOME":"/workspace/huggingface"}' \
+      --docker-args "--model meta-llama/Meta-Llama-3.1-8B-Instruct --api-key YOUR_SERVER_KEY"
+    ```
+  </Tab>
+</Tabs>
+
+On Lambda, the firewall kept port 8000 closed until you opened it. On Runpod, the proxy URL is public as soon as the Pod runs, so the example starts vLLM with `--api-key`. Pin the image to a version tag for production, and store the Hugging Face token as a [secret](/pods/templates/secrets). Requests through the proxy must respond within 100 seconds, so use streaming for long generations or expose the port as `8000/tcp`.
+
+If the server sits idle for part of the day, deploy the vLLM worker on Serverless instead. It scales to zero and bills per second while workers run.
+
+```bash
+runpodctl hub search vllm
+runpodctl serverless create --hub-id HUB_ID --name "llama-server" \
+  --env MODEL_NAME=meta-llama/Meta-Llama-3.1-8B-Instruct
+```
+
+The endpoint serves an OpenAI-compatible API at `https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1`. See [Deploy vLLM on Serverless](/serverless/vllm/get-started) for model settings and gated models.
+
+### Deploy an Instant Cluster
+
+For a 1-Click Cluster workload, create an Instant Cluster in the same data center as your network volume. In the console, open **Instant Clusters**, click **Create Cluster**, choose the cluster type (for example **Slurm Cluster**), the GPU type, the Pod count, and the network volume. With REST v2:
+
+```bash
+curl --request POST "https://api.runpod.io/v2/clusters" \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "name": "distributed-training",
+    "type": "SLURM",
+    "compute": {"gpuTypeId": "NVIDIA H100 80GB HBM3", "gpuCountPerPod": 8, "podCount": 4},
+    "templateId": "9yo900pjtt",
+    "dataCenterIds": ["US-KS-2"],
+    "mounts": {"network": [{"volumeId": "NETWORK_VOLUME_ID", "path": "/workspace"}]},
+    "startSsh": true
+  }'
+```
+
+`type` is `SLURM`, `RAY`, `TRAINING`, or `APPLICATION`. The template ID in the example is the official PyTorch 2.8.0 template for clusters. Confirm the current ID with `runpodctl template search pytorch --type official`. Slurm Clusters need an official Runpod PyTorch image.
+
+What changes from a 1-Click Cluster:
+
+- **No separate head nodes.** The primary node (`NODE_RANK=0`) is one of the GPU nodes. On a Slurm Cluster it's the controller, and you submit jobs there with `sbatch`.
+- **Shared storage is the network volume** at `/workspace` on every node, in place of the shared `/home` and `/data` on Lambda's Slurm clusters.
+- **Inter-node traffic uses `ens1` to `ens8`.** Set `NCCL_SOCKET_IFNAME=ens1`. Runpod sets `PRIMARY_ADDR`, `NODE_ADDR`, `NUM_NODES`, and `WORLD_SIZE` on every node. See the [configuration reference](/instant-clusters/configuration).
+- **No reservation window.** The cluster bills while it exists, so delete it when the job finishes. Whether you can create it depends on current stock of that GPU in the data center.
+
+## Step 7: Update the code that calls Lambda
+
+### Clients of your services
+
+Every client that reaches a service by instance IP needs the new address.
+
+| On Lambda | On Runpod |
+| --- | --- |
+| `http://INSTANCE_IP:8000` | `https://POD_ID-8000.proxy.runpod.net` |
+| `tcp://INSTANCE_IP:5432` | `POD_IP:EXTERNAL_PORT` from the Pod's **Connect** menu |
+| `ssh ubuntu@INSTANCE_IP` | The command from `runpodctl ssh info POD_ID` |
+| `ssh -L 8000:127.0.0.1:8000 ubuntu@INSTANCE_IP` | `ssh -L 8000:127.0.0.1:8000 root@POD_IP -p EXTERNAL_PORT` |
+| Private IP between instances | `POD_ID.runpod.internal` with global networking |
+| JupyterLab URL from the console | `https://POD_ID-8888.proxy.runpod.net` |
+
+For an OpenAI-compatible server, the change is the base URL and key.
+
+```python client.py
+from openai import OpenAI
+
+# Before: vLLM on a Lambda instance
+# client = OpenAI(base_url="http://INSTANCE_IP:8000/v1", api_key="YOUR_SERVER_KEY")
+
+# After: the same vLLM server on a Runpod Pod
+client = OpenAI(
+    base_url="https://POD_ID-8000.proxy.runpod.net/v1",
+    api_key="YOUR_SERVER_KEY",
+)
+
+# After, if you moved to Serverless vLLM instead:
+# client = OpenAI(
+#     base_url="https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1",
+#     api_key="YOUR_RUNPOD_API_KEY",
+# )
+
+response = client.chat.completions.create(
+    model="meta-llama/Meta-Llama-3.1-8B-Instruct",
+    messages=[{"role": "user", "content": "Say hello."}],
+)
+print(response.choices[0].message.content)
+```
+
+The Pod's public IP and external ports can change when a Pod is reset or recreated, and the proxy URL changes when the Pod ID changes. Put production traffic behind your own DNS name or configuration value instead of hardcoding either one. A Serverless endpoint URL stays the same across worker restarts.
+
+### Automation that calls the Lambda Cloud API
+
+Scripts that launch, poll, and terminate instances translate one call at a time. This is a typical launch-and-wait script before and after.
+
+<Tabs>
+  <Tab title="Lambda (before)">
+    ```python launch.py
+    import os
+    import time
+
+    import requests
+
+    API = "https://cloud.lambda.com/api/v1"
+    HEADERS = {"Authorization": f"Bearer {os.environ['LAMBDA_API_KEY']}"}
+
+    launch = requests.post(
+        f"{API}/instance-operations/launch",
+        headers=HEADERS,
+        json={
+            "region_name": "us-east-1",
+            "instance_type_name": "gpu_1x_a10",
+            "ssh_key_names": ["my-key"],
+            "file_system_names": ["training-data"],
+            "name": "worker",
+        },
+    )
+    launch.raise_for_status()
+    instance_id = launch.json()["data"]["instance_ids"][0]
+
+    while True:
+        instance = requests.get(f"{API}/instances/{instance_id}", headers=HEADERS).json()["data"]
+        if instance["status"] == "active":
+            break
+        time.sleep(15)
+
+    print(f"ssh ubuntu@{instance['ip']}")
+
+    # Later
+    requests.post(
+        f"{API}/instance-operations/terminate",
+        headers=HEADERS,
+        json={"instance_ids": [instance_id]},
+    ).raise_for_status()
+    ```
+  </Tab>
+  <Tab title="Runpod (after)">
+    ```python launch.py
+    import os
+    import time
+
+    import requests
+
+    API = "https://api.runpod.io/v2"
+    HEADERS = {"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}"}
+
+    create = requests.post(
+        f"{API}/pods",
+        headers=HEADERS,
+        json={
+            "name": "worker",
+            "templateId": "runpod-torch-v280",
+            "gpu": {"id": "NVIDIA RTX A5000", "count": 1},
+            "dataCenterIds": ["US-KS-2"],
+            "mounts": {"network": [{"volumeId": "NETWORK_VOLUME_ID", "path": "/workspace"}]},
+            "ports": ["22/tcp"],
+            "startSsh": True,
+        },
+    )
+    create.raise_for_status()
+    pod_id = create.json()["id"]
+
+    while True:
+        pod = requests.get(f"{API}/pods/{pod_id}", headers=HEADERS).json()
+        if pod["status"] == "RUNNING" and pod["ssh"]["direct"]:
+            break
+        if pod["status"] == "ERROR":
+            raise RuntimeError(f"Pod {pod_id} failed to start")
+        time.sleep(10)
+
+    print(pod["ssh"]["direct"]["command"])
+
+    # Later
+    requests.delete(f"{API}/pods/{pod_id}", headers=HEADERS).raise_for_status()
+    ```
+  </Tab>
+</Tabs>
+
+The differences that matter in code:
+
+- **Response envelope**: Lambda wraps results in `data` and errors in `error.code`. REST v2 returns the resource at the top level.
+- **Batching**: Lambda's terminate and restart calls take a list of instance IDs. REST v2 acts on one Pod per request.
+- **Capacity errors**: both APIs reject a create when the GPU type has no stock. REST v2 places exactly the GPU type you ask for and doesn't fall back to another type, so keep your retry or fallback logic.
+- **SSH readiness**: `RUNNING` means the container is up. The script also waits for `ssh.direct`, which appears once port 22 has a public mapping.
+- **Rate limits**: Lambda allows one request per second and one launch per 12 seconds. REST v2 reports its limits in `RateLimit-Policy` response headers.
+
+The full route mapping is in the [API map](#api-map).
+
+## Step 8: Verify, cut over, and shut down
+
+Test from outside Runpod, the way your users or jobs will reach the workload.
+
+```bash
+# HTTP service through the proxy
+curl -s https://POD_ID-8000.proxy.runpod.net/v1/models -H "Authorization: Bearer YOUR_SERVER_KEY"
+
+# GPU, CUDA, and the volume, without opening an SSH session
+curl -s --request POST "https://api.runpod.io/v2/pods/POD_ID/exec" \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
+  --header 'Content-Type: application/json' \
+  --data '{"command": ["sh", "-c", "nvidia-smi --query-gpu=name,memory.total --format=csv && python -c \"import torch; print(torch.__version__, torch.cuda.is_available())\" && df -h /workspace"]}'
+```
+
+Then work through the cutover:
+
+1. **Compare results.** Run the same training step, evaluation, or inference request on both platforms and compare outputs and throughput. Differences usually trace back to a package version in the image.
+2. **Run both in parallel.** Keep the Lambda instance up while the Pod takes a share of jobs or traffic.
+3. **Do a final data sync.** Run the rsync from Step 5 again to pick up files written since the first copy.
+4. **Shift traffic.** Point DNS, client configuration, and schedulers at Runpod.
+5. **Set cost guards on Runpod.** Enable low balance notifications or auto-pay in [Billing](/accounts-billing/billing), stop or delete Pods that finish their work, and review spend with `runpodctl billing pods`. Accounts have a default spend limit of \$80 per hour across all resources. Contact support if your workloads need more.
+
+When Runpod has carried the workload for long enough that you trust it, stop billing on Lambda. Lambda bills instances until you terminate them and filesystems for as long as they exist, mounted or not.
+
+<Warning>
+Terminating a Lambda instance destroys its root volume, and deleting a filesystem destroys its data. Lambda can't recover either one. Confirm your copy on Runpod first.
+</Warning>
+
+```bash
+# 1. Terminate instances (shutting down from inside the VM doesn't stop billing)
+curl --request POST "$LAMBDA_API/instance-operations/terminate" \
+  --header "Authorization: Bearer $LAMBDA_API_KEY" \
+  --header 'Content-Type: application/json' \
+  --data '{"instance_ids": ["INSTANCE_ID_1", "INSTANCE_ID_2"]}'
+
+# 2. Delete filesystems once no instance has them mounted
+curl --request DELETE "$LAMBDA_API/filesystems/FILESYSTEM_ID" \
+  --header "Authorization: Bearer $LAMBDA_API_KEY"
+
+# 3. Confirm nothing is left
+curl -s -H "Authorization: Bearer $LAMBDA_API_KEY" "$LAMBDA_API/instances" | jq '.data | length'
+curl -s -H "Authorization: Bearer $LAMBDA_API_KEY" "$LAMBDA_API/filesystems" | jq '.data | length'
+```
+
+Lambda's docs warn that `sudo shutdown` or `sudo systemctl poweroff` inside an instance doesn't end billing, so always terminate through the API or console. 1-Click Cluster reservations run for their reserved term and can't be extended, so time the cluster cutover to the end of the reservation. Afterward, delete SSH keys, firewall rulesets, and API keys you no longer need in the Lambda console, and check the **Usage** page for your last charges.
+
+## Migrate your Terraform
+
+Lambda's docs don't cover a Terraform provider, and the Lambda providers on the Terraform Registry are community projects. If you use one, or you want to put the migrated resources under Terraform for the first time, the Runpod provider is built on REST API v2 and covers the same ground.
+
+| What you manage on Lambda | Runpod resource |
+| --- | --- |
+| Instance | `runpod_pod` |
+| Filesystem | `runpod_network_volume` |
+| SSH key | `runpod_account_ssh_keys` (one resource that owns every key on the account) |
+| Firewall rule or ruleset | `ports` on `runpod_pod` |
+| 1-Click Cluster | `runpod_cluster` |
+| Image and startup configuration | `runpod_template` |
+
+This configuration creates the SSH keys, a network volume, and a Pod that mounts it.
+
+```hcl main.tf
+terraform {
+  required_version = ">= 1.6"
+  required_providers {
+    runpod = {
+      source  = "runpod/runpod"
+      version = "~> 2.0"
+    }
+  }
+}
+
+# Reads RUNPOD_API_KEY from the environment
+provider "runpod" {}
+
+resource "runpod_account_ssh_keys" "this" {
+  keys = [trimspace(file("~/.ssh/id_ed25519.pub"))]
+}
+
+resource "runpod_network_volume" "training_data" {
+  name        = "training-data"
+  size        = 500
+  data_center = "US-KS-2"
+}
+
+resource "runpod_pod" "trainer" {
+  name             = "trainer"
+  image            = "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404"
+  gpu_type_id      = "NVIDIA H100 80GB HBM3"
+  gpu_count        = 8
+  cloud            = "SECURE"
+  disk             = 100
+  min_cuda_version = "12.8"
+  data_center_ids  = [runpod_network_volume.training_data.data_center]
+
+  network_volumes = [{
+    volume_id = runpod_network_volume.training_data.id
+    path      = "/workspace"
+  }]
+
+  ports     = ["22/tcp", "8888/http"]
+  start_ssh = true
+
+  depends_on = [runpod_account_ssh_keys.this]
+}
+
+output "pod_id" {
+  value = runpod_pod.trainer.id
+}
+```
+
+`runpod_account_ssh_keys` replaces the account's whole key set, so list every key your team needs. Changing `gpu_type_id`, `gpu_count`, or `data_center_ids` replaces the Pod, which is why data belongs on the network volume. Set `desired_state = "EXITED"` to stop a Pod while keeping it in your configuration. See [Manage Runpod infrastructure with Terraform](/integrations/terraform/overview) and the [provider reference](https://registry.terraform.io/providers/runpod/runpod/latest/docs) for every argument.
+
+## Reference
+
+### API map
+
+Lambda routes are relative to `https://cloud.lambda.com/api/v1`. Runpod routes are relative to `https://api.runpod.io`.
+
+| Lambda Cloud API | Runpod REST v2 | `runpodctl` |
+| --- | --- | --- |
+| `GET /instances` | `GET /v2/pods` | `runpodctl pod list` |
+| `GET /instances/{id}` | `GET /v2/pods/{id}` | `runpodctl pod get POD_ID` |
+| `POST /instances/{id}` (rename, tags) | `PATCH /v2/pods/{id}` | `runpodctl pod update POD_ID` |
+| `POST /instance-operations/launch` | `POST /v2/pods` | `runpodctl pod create` |
+| `POST /instance-operations/restart` | `POST /v2/pods/{id}/action` with `{"action": "restart"}` | `runpodctl pod restart POD_ID` |
+| `POST /instance-operations/terminate` | `DELETE /v2/pods/{id}` | `runpodctl pod delete POD_ID` |
+| No stop operation | `POST /v2/pods/{id}/action` with `{"action": "stop"}` or `{"action": "start"}` | `runpodctl pod stop`, `runpodctl pod start` |
+| `GET /instance-types` | `GET /v2/catalog/gpus?include=AVAILABILITY&product=POD` | `runpodctl gpu list` |
+| `GET /regions` | `GET /v2/catalog/datacenters` | `runpodctl datacenter list` |
+| `GET /images` | `GET /v2/catalog/templates`, `GET /v2/templates` | `runpodctl template list` |
+| `GET /ssh-keys` | `GET /v2/account/ssh-keys` | `runpodctl ssh list-keys` |
+| `POST /ssh-keys`, `DELETE /ssh-keys/{id}` | `PUT /v2/account/ssh-keys` (replaces the full set) | `runpodctl ssh add-key`, `runpodctl ssh remove-key` |
+| `GET /filesystems` | `GET /v2/network-volumes` | `runpodctl network-volume list` |
+| `POST /filesystems` | `POST /v2/network-volumes` | `runpodctl network-volume create` |
+| `DELETE /filesystems/{id}` | `DELETE /v2/network-volumes/{id}` | `runpodctl network-volume delete VOLUME_ID` |
+| `GET` and `PUT /firewall-rules`, `/firewall-rulesets` | `ports` on `POST /v2/pods` and `PATCH /v2/pods/{id}` | `--ports` on `runpodctl pod create` and `pod update` |
+| `GET /audit-events` | Audit logs in REST v2 | |
+| No equivalent | `POST /v2/pods/{id}/exec` (run a command without SSH) | |
+
+Lambda can generate an SSH key pair for you through `POST /ssh-keys`. On Runpod, generate the pair locally with `ssh-keygen` and register the public key.
+
+### Configuration field map
+
+| Lambda launch field | REST v2 field | `runpodctl pod create` flag |
+| --- | --- | --- |
+| `name` | `name` | `--name` |
+| `region_name` | `dataCenterIds` | `--data-center-ids` |
+| `instance_type_name` | `gpu.id` and `gpu.count` | `--gpu-id` and `--gpu-count` |
+| `image` (`family` or `id`) | `image` or `templateId` | `--image` or `--template-id` |
+| `ssh_key_names` | `startSsh` (uses all account keys) | `--ssh` (on by default) |
+| `file_system_names`, `file_system_mounts` | `mounts.network` (`volumeId`, `path`) | `--network-volume-id` |
+| `firewall_rulesets` | `ports` | `--ports` |
+| `user_data` (cloud-init) | `args`, `entrypoint`, `cmd`, `env` | `--docker-args`, `--env` |
+| `hostname` | No field. Use `RUNPOD_POD_HOSTNAME` or the Pod name. | |
+| `tags` | Not set at Pod create | |
+| `workspace_id` | The account or team that owns the API key | |
+| Root volume size (fixed per instance type) | `disk`, `mounts.persistent.size` | `--container-disk-in-gb`, `--volume-in-gb` |
+
+### Environment variable map
+
+Lambda instances don't document platform-set environment variables, so this table maps where values come from.
+
+| Value | On a Lambda instance | On a Runpod Pod |
+| --- | --- | --- |
+| Instance or Pod ID | From the API or console | `RUNPOD_POD_ID` |
+| Region or data center | From the API or console | `RUNPOD_DC_ID` |
+| Public IP | Instance `ip` field | `RUNPOD_PUBLIC_IP` |
+| SSH port | 22 | `RUNPOD_TCP_PORT_22` |
+| GPU count | `nvidia-smi` | `RUNPOD_GPU_COUNT` |
+| Attached storage | `/lambda/nfs/NAME` | `RUNPOD_VOLUME_ID`, mounted at `/workspace` |
+| Authorized SSH keys | `~/.ssh/authorized_keys` | `PUBLIC_KEY` |
+| JupyterLab token | `jupyter_token` field in the API | `JUPYTER_PASSWORD` |
+| Cluster rendezvous | Node hostnames from the console | `PRIMARY_ADDR`, `NODE_RANK`, `NUM_NODES`, `WORLD_SIZE` |
+
+### Status map
+
+| Lambda instance status | Runpod Pod status | Notes |
+| --- | --- | --- |
+| `booting` | `PROVISIONING`, `STARTING` | `runpodctl` reports both as `runtimeStatus: initializing`. |
+| `active` | `RUNNING` | |
+| `unhealthy` | `ERROR` | A Pod in `ERROR` still exists and can still incur charges. |
+| `terminating` | `TERMINATED` | |
+| `terminated` | `TERMINATED`, then the Pod no longer appears | Treat "not found" as the signal that a Pod is gone. |
+| `preempted` | No equivalent for on-demand Pods | On-demand Pods aren't displaced by other users. |
+| No stopped state | `EXITED` | Stopped. Volume disk kept and billed. |
+
+## Migrate with a coding agent
+
+A coding agent with the Runpod skills and MCP server can run the inventory, write the Dockerfile, create the Runpod resources, and rewrite your API calls. Install them first.
+
+<Tabs>
+  <Tab title="Claude Code">
+    ```bash
+    # The plugin also connects the hosted MCP server
+    claude plugin marketplace add runpod/runpod-plugins-official
+    claude plugin install runpod@runpod
+    ```
+  </Tab>
+  <Tab title="Other agents">
+    ```bash
+    # Skills, then the hosted MCP server (Codex, Cursor, and others)
+    npx skills add runpod/runpod-plugins-official --skill '*' --agent AGENT_ID --global
+    npx @runpod/mcp-server@latest add --client CLIENT_ID
+    ```
+  </Tab>
+</Tabs>
+
+The MCP server signs in with OAuth ("Sign in with Runpod"), so you don't need an API key to start. See [Agent skills](/get-started/agent-skills) and [MCP servers](/get-started/mcp-servers) for supported agents and clients.
+
+Then give your agent this prompt from the root of the repository that holds your Lambda automation.
+
+```text
+Migrate this project from Lambda (the GPU cloud at lambda.ai, not AWS Lambda) to Runpod.
+Use the runpod-cloud-migrate skill and its Lambda reference.
+
+1. Inventory first, read-only. Use the Lambda Cloud API with LAMBDA_API_KEY from my
+   environment to list instances, filesystems, SSH keys, firewall rules, and firewall
+   rulesets. Search this repo for cloud.lambda.com, cloud.lambda.ai, cloud.lambdalabs.com,
+   LAMBDA_API_KEY, instance-operations, and /lambda/nfs. For each instance I approve, SSH in
+   and capture pip freeze, manually installed apt packages, docker ps, running systemd
+   services, cron jobs, and listening ports.
+2. Show me a plan before creating anything: the Runpod target for each workload (Pod,
+   Serverless endpoint, or Instant Cluster), the GPU type ID and count, the data center,
+   network volume sizes, exposed ports, anything that has no direct equivalent (Docker
+   Compose, UDP or source-IP firewall rules, ARM images, multiple filesystems), and an
+   hourly and monthly cost estimate from live Runpod pricing. Check live GPU stock.
+3. Wait for my approval before you create anything billable on Runpod.
+4. Migrate one workload end to end: build or choose the image, create the network volume,
+   copy the data, create the Pod, and update the code that calls Lambda.
+5. Verify with a real request from outside the Pod and a GPU check inside it, and show me
+   the output.
+6. Never terminate Lambda instances, delete Lambda filesystems, or remove Lambda keys
+   without my explicit approval. Don't print secrets or API keys.
+```
+
+## Troubleshooting
+
+**`docker: command not found` or the Docker daemon won't start in a Pod.**
+A Pod is already a container, and Runpod runs Docker for you. Deploy the image as the Pod's image instead of running it inside another Pod, and split Docker Compose services into separate Pods.
+
+**Files outside `/workspace` are gone after a stop, restart, or edit.**
+The container disk is ephemeral. On Lambda the whole root volume lasted until terminate. Move data, model caches (`HF_HOME`), and virtual environments to `/workspace`, and put system packages in the image.
+
+**`sudo: command not found` or scripts fail on `/home/ubuntu`.**
+Pods run as `root`, and official images don't need `sudo`. Remove `sudo` from scripts and replace `/home/ubuntu` with `/root` or `/workspace`.
+
+**`systemctl` fails with a message about `systemd` not being the init system.**
+The container's main process is your image's start command. Start services from a start script, as shown in [Create a custom template](/pods/templates/create-custom-template#step-4-configure-container-startup-behavior).
+
+**SSH asks for a password, or `scp` and `rsync` fail.**
+A password prompt means the key isn't registered: run `runpodctl ssh list-keys` and check that the public key is in OpenSSH format. If the shell works but `scp` and `rsync` fail, you're on the proxied connection. Expose `22/tcp` and use the direct command from `runpodctl ssh info POD_ID`.
+
+**The service works on `localhost` but the proxy URL returns 502.**
+The service is bound to `127.0.0.1`, isn't listening yet, or the port isn't in the Pod's port list. Bind to `0.0.0.0`, check the port with `ss -tlnp`, and confirm the port is exposed as `PORT/http`. JupyterLab on official templates only starts when `JUPYTER_PASSWORD` is set.
+
+**Requests through the proxy fail with 524 after 100 seconds.**
+The HTTP proxy closes connections that take longer than 100 seconds to respond. Stream the response, return a job ID and poll, or expose the port as TCP.
+
+**The container fails to start with a CUDA or driver error, or PyTorch reports no GPU.**
+The host's CUDA version is older than your image needs. On Lambda the driver was part of your VM. On Runpod it belongs to the host, so recreate the Pod with `--min-cuda-version` set to the version your image was built for.
+
+**`pip install` fails with `externally-managed-environment`.**
+The Ubuntu 24.04 PyTorch image protects the system Python. Use `pip install --break-system-packages`, or install into a virtual environment created with `--system-site-packages` so it can see the preinstalled PyTorch.
+
+**The Pod can't be created with the network volume attached.**
+A Pod that mounts a network volume must run in the volume's data center, and that data center needs stock of your GPU type. Check with `runpodctl datacenter list`, choose another GPU type that fits, or create the volume in a data center that has the GPU you need.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Choose a Pod" href="/pods/choose-a-pod" icon="microchip" horizontal>
+    Match GPU type, memory, and storage to your workload.
+  </Card>
+  <Card title="Network volumes" href="/storage/network-volumes" icon="hard-drive" horizontal>
+    Share persistent storage across Pods, clusters, and endpoints.
+  </Card>
+  <Card title="Create a custom template" href="/pods/templates/create-custom-template" icon="layer-group" horizontal>
+    Package your environment as a reusable image and template.
+  </Card>
+  <Card title="Serverless overview" href="/serverless/overview" icon="bolt" horizontal>
+    Move idle inference servers to endpoints that scale to zero.
+  </Card>
+</CardGroup>

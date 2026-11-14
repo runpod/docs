@@ -1,0 +1,929 @@
+---
+title: "Migrate from Fireworks AI to Runpod"
+sidebarTitle: "Fireworks AI"
+description: "Move Fireworks AI serverless inference, on-demand deployments, custom models, and fine-tuning to Runpod Serverless, Public Endpoints, and Pods."
+---
+
+This guide is for teams that call [Fireworks AI](https://docs.fireworks.ai) from production code and want to run the same workloads on Runpod. Fireworks [Serverless inference](https://docs.fireworks.ai/serverless/overview) maps to either a Runpod [Public Endpoint](/public-endpoints/overview) (when Runpod hosts the model) or your own OpenAI-compatible endpoint on [Runpod Serverless](/serverless/vllm/overview). Fireworks [on-demand deployments](https://docs.fireworks.ai/guides/ondemand-deployments), [custom models](https://docs.fireworks.ai/models/uploading-custom-models), and LoRA adapters map to a Serverless endpoint running the vLLM worker, and [training](https://docs.fireworks.ai/fine-tuning/finetuning-intro) maps to a [Pod](/pods/overview). When you finish, your application sends the same OpenAI-format requests to a Runpod base URL, and nothing is left billing on Fireworks.
+
+<Tip>
+You can hand most of this migration to a coding agent. See [Migrate with a coding agent](#migrate-with-a-coding-agent).
+</Tip>
+
+## How Fireworks AI maps to Runpod
+
+Fireworks is a model platform: you pick a model ID and Fireworks runs the inference stack. Runpod is a compute platform with a hosted model catalog on top. On Runpod, you either call a model Runpod already hosts, or you run an open-source inference server (vLLM) on GPUs you configure.
+
+| Fireworks AI concept | Runpod equivalent | Notes |
+| --- | --- | --- |
+| Serverless inference (shared, per-token) | [Public Endpoints](/public-endpoints/overview) | Only for models in the [Public Endpoints catalog](/public-endpoints/reference). Fireworks' serverless catalog is larger. |
+| Serverless inference for a model Runpod doesn't host | Serverless endpoint running the [vLLM worker](/serverless/vllm/overview) | Serves a Hugging Face model you choose. You size the GPU and pay for worker time. |
+| On-demand deployment (dedicated GPUs) | Serverless endpoint running the vLLM worker | The closest match: dedicated workers, autoscaling, scale to zero. |
+| Deployment shape | GPU pool, GPUs per worker, and vLLM environment variables | Runpod has no pre-validated shapes. You choose hardware and serving flags. |
+| Replicas (`--min-replica-count`, `--max-replica-count`) | Active workers and max workers | See [endpoint settings](/serverless/endpoints/endpoint-configurations). |
+| `--scale-to-zero-window` | Idle timeout | Runpod's range is 1 to 3,600 seconds. |
+| `--load-targets` | Autoscaling type (queue delay or request count) | Different signals. See [What works differently](#what-works-differently). |
+| Model ID (`accounts/fireworks/models/NAME`) | Hugging Face repo ID, or a Public Endpoint slug | You can alias the served name with `OPENAI_SERVED_MODEL_NAME_OVERRIDE`. |
+| Custom base model (`firectl model create`) | Hugging Face repo with [cached models](/serverless/endpoints/model-caching), or a [network volume](/storage/network-volumes) | The vLLM worker loads a repo ID or a local path. |
+| LoRA addon (live merge or multi-LoRA) | vLLM `ENABLE_LORA` and `LORA_MODULES`, or a merged model | Adapters load from Hugging Face. |
+| Training API (SFT, DPO, RL) | A [Pod](/pods/overview) running your own training code | Runpod provides GPUs and storage, not a managed training service. |
+| Batch API (paused, per Fireworks docs) | [Batch jobs](/serverless/batch-jobs), or `/run` with webhooks | Queue-based endpoints only. |
+| Datasets | Network volume, or your own object storage | |
+| Secrets (`firectl secret create`) | [Runpod secrets](/pods/templates/secrets) | Reference as `{{ RUNPOD_SECRET_name }}` in an environment variable. |
+| Regions (`--region GLOBAL`, `US`, single regions) | Data centers on the endpoint | Leaving data centers unrestricted gives the scheduler the most hardware to choose from. |
+| Billing: per token (serverless), per GPU-second (deployments) | Per token or per output (Public Endpoints), per second of worker time (Serverless), per second (Pods) | See [Serverless pricing](/serverless/pricing). |
+| Reserved capacity (enterprise) | Active workers, with discounts through sales | Runpod doesn't guarantee GPU capacity. |
+| `firectl` | [`runpodctl`](/runpodctl/overview) | See the [CLI command map](#cli-command-map). |
+| Fireworks Python SDK (`fireworks-ai`) | OpenAI SDK for inference, [Runpod SDK](/sdk/overview) (`pip install runpod`) for building apps | |
+| REST control plane (`api.fireworks.ai/v1/accounts/...`) | [REST API v2](/api-reference-v2/overview) (`api.runpod.io/v2`) | |
+| API key (`FIREWORKS_API_KEY`) | API key (`RUNPOD_API_KEY`) | One key for inference and management. |
+| Users, roles, service accounts | [Organizations](/organizations/orgs-overview) and [roles](/organizations/org-roles) | |
+| Prometheus metrics endpoint for deployments | Endpoint metrics in the console and REST API v2 (`/v2/serverless/ENDPOINT_ID/metrics/...`) | See [What has no direct equivalent](#what-has-no-direct-equivalent). |
+| Infrastructure as code | [Terraform provider](/integrations/terraform/overview) (`runpod/runpod`, built on REST API v2) | Fireworks publishes a Terraform module for bring-your-own-cluster setups, not a provider for deployments. |
+
+## What's different
+
+### What works differently
+
+**You choose the model weights and the serving flags.** A Fireworks model ID hides the checkpoint, precision, chat template, and tool-call parser. On a vLLM endpoint, you pick the Hugging Face repo and set those yourself with [environment variables](/serverless/vllm/environment-variables). Output can differ from Fireworks for the same model family if the quantization or chat template differs, so compare outputs before you cut over.
+
+**Billing moves from tokens to time for your own endpoints.** Fireworks Serverless bills input, cached input, and generated tokens. A Runpod Serverless endpoint bills per second while a worker runs, which includes the cold start, request processing, and the idle timeout. Public Endpoints bill per use (per token for text models). A workload with steady traffic and high GPU utilization behaves differently from a spiky, low-volume one, so estimate from your own request logs.
+
+**A cold endpoint queues requests instead of rejecting them.** A Fireworks deployment scaled to zero returns `503` with `DEPLOYMENT_SCALING_UP` and doesn't queue the request, so clients retry. A Runpod queue-based endpoint holds the request in its queue while a worker starts. The trap is the synchronous path: `/runsync` and the `/openai/v1` route sit behind an edge timeout of about 100 seconds, so a first request that waits on a large model load can return a `524`. Use `/run` plus `/status` for the first request, raise the idle timeout, or keep an active worker.
+
+**Scale-down happens much sooner by default.** Fireworks' default scale-to-zero window is 1 hour (minimum 5 minutes). Runpod's console default idle timeout is 5 seconds, and the maximum is 3,600 seconds. Set it deliberately. Workers are billed while they wait.
+
+**Autoscaling signals are different.** Fireworks scales on load targets such as `concurrent_requests` or `tokens_generated_per_second`. Runpod scales on queue delay (seconds a request waits) or request count (queued plus in-progress requests divided by a target). The vLLM worker's `MAX_CONCURRENCY` (default 30) sets how many requests one worker takes at once.
+
+**Idle resources are cleaned up differently.** Fireworks deletes a deployment with min replicas of 0 after 7 days without traffic. Runpod reduces an idle endpoint's max workers to 2 after 3 days and to 0 after 7 days, and keeps the endpoint. Raise max workers to use it again.
+
+**Model names change.** `accounts/fireworks/models/llama-v3p1-8b-instruct` becomes the Hugging Face repo the worker serves, for example `meta-llama/Llama-3.1-8B-Instruct`. Set `OPENAI_SERVED_MODEL_NAME_OVERRIDE` to serve it under a name of your choice.
+
+**Reasoning output uses a different field.** Fireworks returns reasoning in `reasoning_content`. vLLM v0.32.0 (the version the current vLLM worker release is built on) returns it in `reasoning`. Read both fields in your client. Reasoning also needs `REASONING_PARSER` set on the worker.
+
+**Fireworks request extensions don't carry over.** Remove `service_tier`, `context_length_exceeded_behavior`, `perf_metrics_in_response`, and the `x-session-affinity` header unless you've confirmed the target accepts them. Fireworks lowers `max_tokens` when a request would exceed the context window. On Runpod, set `max_tokens` explicitly. The Runpod vLLM docs list a default of 16.
+
+**Token usage in streams.** Fireworks includes `usage` in the last streamed chunk by default. If your code reads it, test that path against your Runpod endpoint.
+
+**Rate limits are per endpoint, not per model.** Fireworks Serverless enforces adaptive tokens-per-minute limits per model. Runpod enforces request-rate limits per endpoint and operation (see [rate limits](/serverless/endpoints/send-requests#rate-limits)). Throughput on your own endpoint is bounded by your workers.
+
+### What has no direct equivalent
+
+| Fireworks AI feature | Status on Runpod | Workaround |
+| --- | --- | --- |
+| Large shared serverless catalog, including Priority, Fast, and Spot variants | Public Endpoints host a smaller catalog. Service tiers aren't part of it. | Deploy the model on your own vLLM endpoint. Use active workers for consistent latency. |
+| Embeddings (`/v1/embeddings`) and reranking (`/v1/rerank`) | The vLLM worker docs list `/chat/completions`, `/completions`, and `/models`. | Run an embedding server on a [load balancing endpoint](/serverless/load-balancing/overview) or a custom [queue worker](/serverless/workers/handler-functions). Budget time for this. |
+| Responses API (`/v1/responses`) with stored state and server-run MCP tools | Not documented for the vLLM worker or Public Endpoints. | Use chat completions and keep conversation state in your application. |
+| Anthropic-compatible Messages API | Not documented on Runpod. | Use the OpenAI-compatible route, or put a translation gateway in front. |
+| Deployment shapes (validated hardware and precision per model) | You size the GPU yourself. | Use the [VRAM estimates](/serverless/vllm/configuration#gpu-selection), then test. |
+| Managed Training API | Runpod doesn't run training jobs for you. | Train on a Pod with your own code. See [Step 5](#step-5-move-your-data-and-models). |
+| Serverless LoRA inference billed per token | LoRA adapters run on your own endpoint. | Serve adapters with `ENABLE_LORA`. |
+| Prompt caching discount | Your own endpoint bills by time, so there's no cached-token rate. | `ENABLE_PREFIX_CACHING=true` enables vLLM prefix caching for speed. |
+| Multi-region placement with automatic cross-region moves (`GLOBAL`) | An endpoint can run in several data centers, with no cross-region replica migration feature. | Leave data centers unrestricted, and list several GPU pools. |
+| Reserved capacity with a capacity guarantee | No capacity guarantee. | Active workers keep workers running. Talk to sales about committed pricing. |
+| Direct routes over AWS PrivateLink or GCP Private Service Connect | Not documented on Runpod. | Check [security and compliance](/references/security-and-compliance) and ask sales. |
+| AMD accelerators (`AMD_MI325X_256GB`, `AMD_MI350X_288GB`) | The vLLM worker is a CUDA image. | Use an NVIDIA GPU with enough VRAM. |
+
+Going the other way, Runpod gives you things Fireworks deployments don't: any container image and any inference engine, SSH access to Pods, network volumes shared between training and serving, a job queue with webhooks and `/status` polling, and a [batch jobs](/serverless/batch-jobs) API while Fireworks' Batch API is paused.
+
+## Requirements
+
+- A [Runpod account](/accounts-billing/manage-accounts) with credits and a [Runpod API key](/get-started/credentials).
+- `firectl` signed in to the Fireworks account you're migrating (`firectl whoami` shows the account).
+- A [Hugging Face access token](https://huggingface.co/docs/hub/en/security-tokens) if any model is gated or private.
+- Your Fireworks request logs or billing export, to size GPUs and estimate cost.
+
+## Step 1: Take inventory of what you run on Fireworks AI
+
+List every resource in the account. Add `--output json` (or `-o json`) to capture the full configuration.
+
+```bash
+firectl whoami                          # the account you're signed in to
+firectl deployment list --output json   # on-demand deployments
+firectl deployed-model list             # LoRA adapters loaded on deployments
+firectl model list                      # custom base models and adapters
+firectl model list --kind HF_PEFT_ADDON # LoRA adapters only
+firectl dataset list                    # training datasets
+firectl supervised-fine-tuning-job list # training jobs
+firectl router list                     # routers
+firectl secret list                     # secret names
+firectl reservation list                # reserved capacity (enterprise)
+firectl quota list                      # GPU quotas and rate limits
+```
+
+For each deployment, export the settings you'll translate in Step 3 and Step 6.
+
+```bash
+firectl deployment get DEPLOYMENT_ID --output json
+```
+
+Record the base model, deployment shape, accelerator type and count, precision, min and max replica counts, the three scaling windows, load targets, region, max context length, and whether addons are enabled. `replicaStats.readyReplicaCount` shows how many replicas are serving.
+
+Serverless usage has no resource to list, so find it in code. This command finds SDK imports, base URLs, model IDs, and environment variables.
+
+```bash
+grep -rnE "api\.fireworks\.ai|accounts/[a-z0-9-]+/(models|deployments|routers)/|FIREWORKS_API_KEY|fireworks-ai|from fireworks|import fireworks|@ai-sdk/fireworks|fireworks_ai/|firectl" \
+  --include="*.py" --include="*.ts" --include="*.tsx" --include="*.js" --include="*.go" \
+  --include="*.json" --include="*.yaml" --include="*.yml" --include="*.toml" --include="*.env*" \
+  --include="*.sh" --include="Dockerfile*" .
+```
+
+For each call site, write down the model ID, the route (`/chat/completions`, `/completions`, `/embeddings`, `/rerank`, `/responses`, or the Anthropic-compatible `/v1/messages`), and which features it uses: streaming, tools, `response_format`, vision input, `reasoning_effort`, or `service_tier`. Gateways such as LiteLLM reference Fireworks as `fireworks_ai/MODEL`, so check their config files too.
+
+<Note>
+Fireworks' docs say the Batch API is paused and that stored Batch input datasets and job outputs will be permanently deleted. If you have Batch data there, download it now with `firectl dataset download DATASET_ID --output-dir ./data`.
+</Note>
+
+## Step 2: Set up Runpod
+
+Create an API key on the [API keys page](https://console.runpod.io/user/settings), then install the CLI and export the key.
+
+```bash
+curl -fsSL https://cli.runpod.net | sudo bash   # or: brew install runpod/runpodctl/runpodctl
+export RUNPOD_API_KEY="YOUR_API_KEY"
+runpodctl doctor
+```
+
+`runpodctl doctor` stores the key and verifies the setup. You need `runpodctl` 2.4.0 or later for `--model-reference`. Check with `runpodctl version`.
+
+Inference clients keep using the OpenAI SDK, so there's nothing else to install for them. If you also want to build custom workers in Python, install the Runpod SDK with `pip install runpod` (see the [SDK overview](/sdk/overview)). To let a coding agent manage resources, connect the [Runpod MCP server](/get-started/mcp-servers).
+
+## Step 3: Choose where each workload lands
+
+Use this table to place each item from your inventory.
+
+| Fireworks AI workload | Runpod target | Why |
+| --- | --- | --- |
+| Serverless call to a model that Runpod hosts | Public Endpoint | No deployment. OpenAI-compatible for the text models listed below. |
+| Serverless call to any other open model | Serverless queue endpoint with the vLLM worker and a cached model | You run the model. Scale to zero when idle. |
+| On-demand deployment of a base model | Serverless queue endpoint with the vLLM worker | Same shape: dedicated workers, min and max, scale to zero. |
+| On-demand deployment that needs a newer vLLM than the Hub worker ships, or direct HTTP without a queue | Serverless load balancing endpoint running `vllm/vllm-openai` | Your requests go straight to the vLLM server. |
+| Custom base model or merged fine-tune | Same as above, loading from Hugging Face or a network volume | |
+| LoRA adapter (live merge or multi-LoRA) | vLLM worker with `ENABLE_LORA` and `LORA_MODULES`, or merge and serve as a base model | |
+| Embedding or reranking model | Load balancing endpoint or custom queue worker | No prebuilt path in the Runpod docs. |
+| Training job | Pod with a network volume | Run your own trainer. |
+| Batch or offline inference | Queue endpoint with [batch jobs](/serverless/batch-jobs), or `/run` with a webhook | |
+| Image generation (for example FLUX.1 [dev] on a Fireworks deployment) | Public Endpoint where listed, otherwise a [Hub](/hub/overview) worker | Request format changes. |
+| Speech-to-text | Hub worker (`runpodctl hub search whisper --type SERVERLESS`) | Public Endpoints list text-to-speech models, not transcription. |
+
+### Models that Runpod hosts
+
+Build your model map from the [Public Endpoints model reference](/public-endpoints/reference), which lists image, video, audio (text-to-speech), and text models with their prices. These are the text models with pages in the Runpod docs today.
+
+| Runpod model | Endpoint slug | `model` value on the OpenAI route | Notes |
+| --- | --- | --- | --- |
+| [Qwen3 32B AWQ](/public-endpoints/models/qwen3-32b) | `qwen3-32b-awq` | `Qwen/Qwen3-32B-AWQ` | Documented as OpenAI-compatible. |
+| [Moonshot Kimi](/public-endpoints/models/moonshot-kimi) | `moonshot-kimi` | `kimi-k2.6` (default), `kimi-k2.7-code`, `kimi-k3`, `kimi-k3.1-pro`, `kimi-k3.1-pro-highspeed` | Documented as OpenAI-compatible. One endpoint serves all five variants. |
+| [GPT-OSS 120B](/public-endpoints/models/gpt-oss-120b) | `gpt-oss-120b` | `gpt-oss-120b` on the model page, `openai/gpt-oss-120b` on the [AI coding tools page](/public-endpoints/ai-coding-tools) | Documented as OpenAI-compatible, with tool calling in the [AI SDK guide](/public-endpoints/ai-sdk). Call `/models` to confirm the ID. Not in the model reference table. |
+| [Cogito 671B v2.1](/public-endpoints/models/cogito-671b) | `cogito-671b-v2-1-fp8-dynamic` | `cogito-671b-v2-1-fp8-dynamic` | Documented as OpenAI-compatible. Not in the model reference table, so confirm it in the playground. |
+| [IBM Granite 4.0](/public-endpoints/models/granite-4) | `granite-4-0-h-small` | Check the model | The model page documents the native `/runsync` route with `input.messages`. |
+
+The OpenAI-compatible base URL for a Public Endpoint is `https://api.runpod.ai/v2/SLUG/openai/v1`. Every Public Endpoint also accepts the native routes: `https://api.runpod.ai/v2/SLUG/runsync` and `/run`.
+
+For Fireworks model IDs that match these, such as `accounts/fireworks/models/gpt-oss-120b` or `accounts/fireworks/models/kimi-k3`, compare the model card on each side before you assume they're the same checkpoint and precision. For everything else, the general answer is your own vLLM endpoint: Fireworks' serverless catalog is larger than Runpod's Public Endpoints catalog.
+
+### GPU mapping
+
+Fireworks accelerator types translate to Runpod GPU pools (for Serverless) or GPU type IDs (for Pods) as follows. IDs come from the [GPU types reference](/references/gpu-types).
+
+| Fireworks accelerator | Runpod Serverless pool | Runpod GPU type IDs | VRAM |
+| --- | --- | --- | --- |
+| `NVIDIA_A100_80GB` | `AMPERE_80` | `NVIDIA A100 80GB PCIe`, `NVIDIA A100-SXM4-80GB` | 80 GB |
+| `NVIDIA_H100_80GB` | `ADA_80_PRO` | `NVIDIA H100 80GB HBM3`, `NVIDIA H100 PCIe` | 80 GB |
+| `NVIDIA_H200_141GB` | `HOPPER_141` | `NVIDIA H200` | 141 GB |
+| `NVIDIA_B200_180GB` | Read the pool from `GET /v2/catalog/gpus` | `NVIDIA B200` | 180 GB |
+| `NVIDIA_B300_288GB` | Read the pool from `GET /v2/catalog/gpus` | `NVIDIA B300 SXM6 AC` | 288 GB |
+| `AMD_MI325X_256GB`, `AMD_MI350X_288GB` | None for the vLLM worker | Use an NVIDIA type with enough VRAM | |
+
+You aren't limited to the hardware Fireworks used. A model that Fireworks served on an 80 GB card at FP8 may fit a 48 GB pool (`AMPERE_48`, `ADA_48_PRO`) or a 24 GB pool (`AMPERE_24`, `ADA_24`) depending on its size and quantization. Pick the GPU that fits the model and your latency target, and list more than one pool so workers have a fallback. Stock varies by data center, so check it before you commit to a pool.
+
+```bash
+runpodctl gpu list
+```
+
+## Step 4: Move your images and code
+
+Most Fireworks users have no container images to move, because Fireworks runs the inference server. On Runpod, the prebuilt [vLLM worker](/serverless/vllm/overview) fills that role, so this step is about translating serving configuration into environment variables.
+
+The vLLM worker turns any `vllm serve` flag into an environment variable in upper snake case (`--max-model-len` becomes `MAX_MODEL_LEN`). `VLLM_EXTRA_ARGS` passes flags that have no variable.
+
+| What Fireworks decided for you | Set on the Runpod vLLM worker |
+| --- | --- |
+| Model checkpoint | `MODEL_NAME` (Hugging Face repo ID or local path), `MODEL_REVISION` |
+| Context length (`--max-context-length`) | `MAX_MODEL_LEN` |
+| Precision (`--precision FP8`, `FP4`, `BF16`) | Choose a repo with the quantization you want. Set `QUANTIZATION` or `DTYPE` when the model's docs call for it. |
+| Tool calling | `ENABLE_AUTO_TOOL_CHOICE=true` and `TOOL_CALL_PARSER` (for example `llama3_json`, `hermes`, `mistral`) |
+| Reasoning | `REASONING_PARSER` (for example `deepseek_r1`, `qwen3`) |
+| Chat template | The model's own template, or `CUSTOM_CHAT_TEMPLATE` |
+| GPUs per replica (`--accelerator-count`) | GPUs per worker. The worker sets `TENSOR_PARALLEL_SIZE` to the number of visible GPUs. |
+| Speculative decoding (`--draft-model`) | `SPECULATIVE_MODEL`, `NUM_SPECULATIVE_TOKENS` |
+| LoRA addons (`--enable-addons`) | `ENABLE_LORA=true`, `LORA_MODULES`, `MAX_LORAS`, `MAX_LORA_RANK` |
+| Gated or private weights | `HF_TOKEN`, from a Runpod secret |
+| Served model name | `OPENAI_SERVED_MODEL_NAME_OVERRIDE` |
+
+Check the model's Hugging Face README and the [model-specific settings](/serverless/vllm/configuration#model-specific-configurations) for the parser and tokenizer values your model family needs.
+
+If the model needs a vLLM version newer than the Hub worker ships, use the upstream `vllm/vllm-openai` image on a load balancing endpoint instead (see [Step 6](#step-6-deploy-on-runpod)). Any image you build yourself must be `linux/amd64`.
+
+If you run workloads vLLM doesn't serve (embeddings with a different server, rerankers, image models), you write a worker. A queue worker is a Python handler started with `runpod.serverless.start({"handler": handler})`. See [handler functions](/serverless/workers/handler-functions) and [deploy a worker](/serverless/workers/deploy).
+
+## Step 5: Move your data and models
+
+### Base models from the Fireworks library
+
+If you deploy a Fireworks-hosted model (`accounts/fireworks/models/NAME`), don't move weights. Find the matching Hugging Face repo and reference it. Runpod [caches the model](/serverless/endpoints/model-caching) on worker hosts.
+
+### Custom models and fine-tuned weights
+
+Download each custom model and adapter from Fireworks.
+
+```bash
+firectl model download MODEL_ID ./weights/MODEL_ID
+```
+
+Fireworks' docs note that an adapter is tied to the exact base checkpoint it was trained against, which can differ from the public Hugging Face weights. Download the base with `firectl model download` too if you aren't sure, or ask Fireworks which base was used.
+
+To serve a fine-tune as a single model, merge the adapter into the base. This follows the PEFT recipe in Fireworks' own docs.
+
+```python merge.py
+from peft import PeftModel
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+base = AutoModelForCausalLM.from_pretrained("./weights/base", torch_dtype="bfloat16")
+merged = PeftModel.from_pretrained(base, "./weights/adapter").merge_and_unload()
+
+merged.save_pretrained("./weights/merged")
+AutoTokenizer.from_pretrained("./weights/base").save_pretrained("./weights/merged")
+```
+
+The merged directory is a standard Hugging Face checkpoint in BF16. Then put the weights where a Runpod worker can load them. You have three options.
+
+<Tabs>
+  <Tab title="Hugging Face repo (recommended)">
+    Push the merged model (or the adapter) to a private Hugging Face repo. The endpoint then uses cached models, which gives the fastest cold starts and no data-center pinning.
+
+    ```bash
+    hf auth login
+    hf repos create YOUR_ORG/my-model --private
+    hf upload YOUR_ORG/my-model ./weights/merged
+    ```
+
+    Create the repository first. `hf upload` creates a missing repository for you, and a repository created that way isn't private unless you ask for it.
+
+    Reference it in Step 6 with `--model-reference https://huggingface.co/YOUR_ORG/my-model:main` and an `HF_TOKEN` that can read the repo.
+  </Tab>
+  <Tab title="Network volume">
+    Use a network volume when the weights can't go to Hugging Face. Create the volume in a data center that supports the [S3-compatible API](/storage/s3-api), then upload with the AWS CLI and an S3 API key from the [Credentials page](https://console.runpod.io/user/credentials).
+
+    ```bash
+    runpodctl network-volume create --name fw-models --size 100 --data-center-id US-KS-2
+
+    aws s3 sync ./weights/merged s3://NETWORK_VOLUME_ID/models/my-model/ \
+      --region US-KS-2 \
+      --endpoint-url https://s3api-us-ks-2.runpod.io/
+    ```
+
+    The volume mounts at `/runpod-volume` on Serverless workers, so set `MODEL_NAME=/runpod-volume/models/my-model`. A network volume pins the endpoint to the volume's data center, which narrows the GPUs available to it.
+  </Tab>
+  <Tab title="Bake into the image">
+    For a fully reproducible image, build a custom vLLM worker image with the model inside. See [deployment options](/serverless/vllm/overview#deployment-options). The image must be `linux/amd64`.
+  </Tab>
+</Tabs>
+
+### LoRA adapters without merging
+
+To keep adapters separate (the equivalent of Fireworks multi-LoRA), push each adapter to Hugging Face and load it by name. `LORA_MODULES` takes a JSON list.
+
+```text
+ENABLE_LORA=true
+MAX_LORA_RANK=64
+LORA_MODULES=[{"name": "support-adapter", "path": "YOUR_ORG/support-adapter"}]
+```
+
+Clients then set `model` to the adapter name (`support-adapter`) instead of Fireworks' `MODEL#DEPLOYMENT` form. Set `MAX_LORA_RANK` to at least your adapter's rank (the default is 16), and `MAX_LORAS` to the number of adapters used in one batch.
+
+### Datasets and training
+
+Fireworks training datasets use the OpenAI chat format (`messages` with `role` and `content`), which most open-source trainers read directly. Download them, then train on a Pod that writes to a network volume.
+
+```bash
+firectl dataset download DATASET_ID --output-dir ./data
+
+runpodctl network-volume create --name ft-train --size 100 --data-center-id US-KS-2
+runpodctl pod create --name ft-train \
+  --image "runpod/pytorch:1.0.3-cu1281-torch291-ubuntu2404" \
+  --gpu-id "NVIDIA A100 80GB PCIe" \
+  --data-center-ids US-KS-2 \
+  --network-volume-id NETWORK_VOLUME_ID \
+  --volume-mount-path /workspace
+runpodctl ssh info POD_ID
+```
+
+The Pod and the volume must be in the same data center, so confirm the GPU has stock there before you create the volume. Run your trainer over SSH (for example PEFT with the Transformers `Trainer`, or Axolotl), write checkpoints under `/workspace`, then delete the Pod with `runpodctl pod delete POD_ID`. The volume keeps the adapter. See [connect to a Pod](/pods/connect-to-a-pod) and the [fine-tuning overview](/fine-tune).
+
+Runpod has no managed counterpart to Fireworks' Serverless Training, reinforcement fine-tuning, or DPO jobs. You bring the training loop, and a Pod bills per second until you stop or delete it.
+
+## Step 6: Deploy on Runpod
+
+### Public Endpoint
+
+There's nothing to deploy. Confirm the model works for your prompts in the [Hub playground](https://console.runpod.io/hub?tabSelected=public_endpoints), then go to [Step 7](#step-7-update-the-code-that-calls-fireworks-ai).
+
+### vLLM queue endpoint from the Hub
+
+This is the default target for on-demand deployments and for serverless models Runpod doesn't host. The before and after below deploy Llama 3.1 8B Instruct with scale to zero and up to three replicas.
+
+<Tabs>
+  <Tab title="Before: Fireworks AI">
+    ```bash
+    firectl deployment create accounts/fireworks/models/llama-v3p1-8b-instruct \
+      --deployment-shape default \
+      --min-replica-count 0 \
+      --max-replica-count 3 \
+      --scale-to-zero-window 10m \
+      --load-targets concurrent_requests=4 \
+      --wait
+    ```
+  </Tab>
+  <Tab title="After: Runpod">
+    ```bash
+    runpodctl hub search vllm    # prints the listing ID for runpod-workers/worker-vllm
+
+    runpodctl serverless create \
+      --name llama-31-8b \
+      --hub-id HUB_ID \
+      --gpu-id AMPERE_24 \
+      --workers-min 0 \
+      --workers-max 3 \
+      --idle-timeout 600 \
+      --scale-by delay \
+      --scale-threshold 4 \
+      --model-reference https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct:main \
+      --env MODEL_NAME=meta-llama/Llama-3.1-8B-Instruct \
+      --env MAX_MODEL_LEN=8192 \
+      --env ENABLE_AUTO_TOOL_CHOICE=true \
+      --env TOOL_CALL_PARSER=llama3_json \
+      --env HF_TOKEN='{{ RUNPOD_SECRET_hf_token }}'
+    ```
+  </Tab>
+</Tabs>
+
+What matters in the Runpod command:
+
+- `--hub-id` takes the listing ID that `runpodctl hub search vllm` returns. Replace `HUB_ID` with the ID from your own search output.
+- `--gpu-id` accepts a pool ID or a GPU type ID. Always pass it. Without it, the endpoint uses the Hub release's default pools, which may be larger GPUs than you need.
+- `--model-reference` attaches the cached model. It takes the full Hugging Face URL with a ref (`:main`, a tag, or a commit), and it's GPU only. Each endpoint supports one cached model. Keep `MODEL_NAME` pointed at the same repo.
+- `--idle-timeout 600` mirrors the 10-minute scale-to-zero window. Lower it to pay for less idle time, or raise it (up to 3,600) to avoid cold starts.
+- `--scale-by delay --scale-threshold 4` adds workers when requests wait longer than 4 seconds. Request count scaling (`--scale-by requests`) is the closer match to a `concurrent_requests` load target and is the recommended scaler for LLM workloads, but REST API v2 rejects an idle timeout on a queue-based endpoint that scales on request count. This example keeps the long idle timeout, so it scales on queue delay. If you prefer request count scaling, drop the idle timeout and use active workers to stay warm.
+- `--workers-min` is the number of active workers. Set it to 1 or more to mirror `--min-replica-count` above 0. Active workers bill continuously.
+- `HF_TOKEN` references a [Runpod secret](/pods/templates/secrets) named `hf_token`. Llama models are gated, so create the secret first. Public models don't need a token.
+- `--env` applies with `--hub-id`. With `--template-id`, environment variables come from the template.
+
+The command prints the endpoint ID. In the console, the same deployment is **Hub** > **vLLM** > **Deploy**, with the model in the **Model** field. See the [vLLM quickstart](/serverless/vllm/get-started).
+
+A new endpoint isn't ready when the create call returns. Poll its health until a worker is ready.
+
+```bash
+runpodctl serverless get ENDPOINT_ID
+curl -s "https://api.runpod.ai/v2/ENDPOINT_ID/health" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY"
+```
+
+The first deployment can take several minutes while hosts pull the worker image and the model. You aren't billed for a cached model download.
+
+### vLLM load balancing endpoint (alternative)
+
+Use this when you need a specific `vllm/vllm-openai` tag or want requests to reach vLLM directly with no queue. Create it with REST API v2. The `args` string holds the `vllm serve` arguments, and the three environment variables tell Runpod where the health check lives.
+
+```bash
+curl -X POST "https://api.runpod.io/v2/serverless" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "qwen3-8b-lb",
+    "type": "LOAD_BALANCER",
+    "image": "vllm/vllm-openai:v0.32.0",
+    "args": "Qwen/Qwen3-8B --max-model-len 8192 --gpu-memory-utilization 0.90 --enable-auto-tool-choice --tool-call-parser hermes --reasoning-parser qwen3 --port 8000",
+    "env": { "PORT": "8000", "PORT_HEALTH": "8000", "HEALTH_CHECK_PATH": "/health" },
+    "ports": ["8000/http"],
+    "disk": 50,
+    "gpu": { "pools": ["AMPERE_24"], "count": 1, "minCudaVersion": "13.0" },
+    "workers": { "min": 0, "max": 3, "idleTimeout": 600 },
+    "scaling": { "type": "REQUEST_COUNT", "requestCount": 4 },
+    "flashboot": "FLASHBOOT",
+    "timeout": 600000
+  }'
+```
+
+The OpenAI base URL for this endpoint type is `https://ENDPOINT_ID.api.runpod.ai/v1`, and the gateway checks your Runpod API key, so don't also set a vLLM API key. This image is a CUDA 13 build, which is why the request sets `minCudaVersion`. Weights download to the container disk, so size `disk` for the model plus headroom. Load balancing endpoints don't have a queue, `/run`, webhooks, or batch jobs.
+
+### Translate the rest of your deployment settings
+
+| `firectl deployment create` flag | `runpodctl serverless create` flag | REST API v2 field |
+| --- | --- | --- |
+| Model argument (`accounts/.../models/NAME`) | `--model-reference`, `--env MODEL_NAME=` | `env.MODEL_NAME` |
+| `--deployment-shape`, `--accelerator-type` | `--gpu-id` | `gpu.pools` |
+| `--accelerator-count` | `--gpu-count` | `gpu.count` |
+| `--min-replica-count` | `--workers-min` | `workers.min` |
+| `--max-replica-count` | `--workers-max` | `workers.max` |
+| `--scale-to-zero-window`, `--scale-down-window` | `--idle-timeout` (seconds) | `workers.idleTimeout` |
+| `--scale-up-window`, `--load-targets` | `--scale-by`, `--scale-threshold` | `scaling.type`, `scaling.queueDelay` or `scaling.requestCount`. On a queue-based endpoint, REST API v2 rejects `workers.idleTimeout` together with `REQUEST_COUNT` scaling. |
+| `--region` | `--data-center-ids` | `dataCenterIds` |
+| `--max-context-length` | `--env MAX_MODEL_LEN=` | `env.MAX_MODEL_LEN` |
+| `--display-name` | `--name` | `name` |
+| `--wait` | Poll `/health` | Poll `/health` |
+
+## Step 7: Update the code that calls Fireworks AI
+
+For chat and text completions, three values change: the base URL, the API key, and the model name.
+
+| | Fireworks AI | Runpod vLLM queue endpoint | Runpod Public Endpoint |
+| --- | --- | --- | --- |
+| Base URL | `https://api.fireworks.ai/inference/v1` | `https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1` | `https://api.runpod.ai/v2/SLUG/openai/v1` |
+| API key | `FIREWORKS_API_KEY` | `RUNPOD_API_KEY` | `RUNPOD_API_KEY` |
+| Model | `accounts/fireworks/models/NAME` or `accounts/ACCOUNT_ID/deployments/DEPLOYMENT_ID` | Hugging Face repo ID, or your `OPENAI_SERVED_MODEL_NAME_OVERRIDE` | The value on the model's page |
+
+Put the base URL and model name behind configuration so you can switch back during cutover.
+
+### Python (OpenAI SDK)
+
+<Tabs>
+  <Tab title="Before: Fireworks AI">
+    ```python
+    import os
+    from openai import OpenAI
+
+    client = OpenAI(
+        base_url="https://api.fireworks.ai/inference/v1",
+        api_key=os.environ["FIREWORKS_API_KEY"],
+    )
+
+    response = client.chat.completions.create(
+        model="accounts/fireworks/models/llama-v3p1-8b-instruct",
+        messages=[{"role": "user", "content": "Say hello in one word."}],
+        max_tokens=64,
+    )
+    print(response.choices[0].message.content)
+    ```
+  </Tab>
+  <Tab title="After: Runpod vLLM endpoint">
+    ```python
+    import os
+    from openai import OpenAI
+
+    client = OpenAI(
+        base_url=f"https://api.runpod.ai/v2/{os.environ['RUNPOD_ENDPOINT_ID']}/openai/v1",
+        api_key=os.environ["RUNPOD_API_KEY"],
+    )
+
+    response = client.chat.completions.create(
+        model="meta-llama/Llama-3.1-8B-Instruct",
+        messages=[{"role": "user", "content": "Say hello in one word."}],
+        max_tokens=64,
+    )
+    print(response.choices[0].message.content)
+    ```
+  </Tab>
+  <Tab title="After: Runpod Public Endpoint">
+    ```python
+    import os
+    from openai import OpenAI
+
+    client = OpenAI(
+        base_url="https://api.runpod.ai/v2/qwen3-32b-awq/openai/v1",
+        api_key=os.environ["RUNPOD_API_KEY"],
+    )
+
+    response = client.chat.completions.create(
+        model="Qwen/Qwen3-32B-AWQ",
+        messages=[{"role": "user", "content": "Say hello in one word."}],
+        max_tokens=512,
+    )
+    print(response.choices[0].message.content)
+    ```
+  </Tab>
+</Tabs>
+
+Always set `max_tokens`. Qwen3 is a reasoning model, so a small `max_tokens` can end the response inside its thinking block.
+
+### Python (Fireworks SDK)
+
+The Fireworks SDK (`from fireworks import Fireworks`) exposes the same `chat.completions.create` call shape, so inference code moves to the OpenAI SDK with a changed import and constructor.
+
+<Tabs>
+  <Tab title="Before: Fireworks SDK">
+    ```python
+    import os
+    from fireworks import Fireworks
+
+    client = Fireworks(api_key=os.environ["FIREWORKS_API_KEY"])
+
+    stream = client.chat.completions.create(
+        model="accounts/fireworks/models/llama-v3p1-8b-instruct",
+        messages=[{"role": "user", "content": "Write a haiku about queues."}],
+        max_tokens=128,
+        stream=True,
+    )
+    for chunk in stream:
+        if chunk.choices and chunk.choices[0].delta.content:
+            print(chunk.choices[0].delta.content, end="", flush=True)
+    ```
+  </Tab>
+  <Tab title="After: OpenAI SDK on Runpod">
+    ```python
+    import os
+    from openai import OpenAI
+
+    client = OpenAI(
+        base_url=f"https://api.runpod.ai/v2/{os.environ['RUNPOD_ENDPOINT_ID']}/openai/v1",
+        api_key=os.environ["RUNPOD_API_KEY"],
+    )
+
+    stream = client.chat.completions.create(
+        model="meta-llama/Llama-3.1-8B-Instruct",
+        messages=[{"role": "user", "content": "Write a haiku about queues."}],
+        max_tokens=128,
+        stream=True,
+    )
+    for chunk in stream:
+        if chunk.choices and chunk.choices[0].delta.content:
+            print(chunk.choices[0].delta.content, end="", flush=True)
+    ```
+  </Tab>
+</Tabs>
+
+Replace `fireworks-ai` with `openai` in your dependencies once no code imports it. Code that uses the Fireworks SDK for platform automation (`client.deployments.create(...)`, datasets, training jobs) moves to `runpodctl` or REST API v2. See the [API map](#api-map).
+
+### TypeScript
+
+<Tabs>
+  <Tab title="Before: Fireworks AI">
+    ```typescript
+    import OpenAI from "openai";
+
+    const client = new OpenAI({
+      apiKey: process.env.FIREWORKS_API_KEY,
+      baseURL: "https://api.fireworks.ai/inference/v1",
+    });
+
+    const response = await client.chat.completions.create({
+      model: "accounts/fireworks/models/llama-v3p1-8b-instruct",
+      messages: [{ role: "user", content: "Say hello in one word." }],
+      max_tokens: 64,
+    });
+    console.log(response.choices[0].message.content);
+    ```
+  </Tab>
+  <Tab title="After: Runpod">
+    ```typescript
+    import OpenAI from "openai";
+
+    const client = new OpenAI({
+      apiKey: process.env.RUNPOD_API_KEY,
+      baseURL: `https://api.runpod.ai/v2/${process.env.RUNPOD_ENDPOINT_ID}/openai/v1`,
+    });
+
+    const response = await client.chat.completions.create({
+      model: "meta-llama/Llama-3.1-8B-Instruct",
+      messages: [{ role: "user", content: "Say hello in one word." }],
+      max_tokens: 64,
+    });
+    console.log(response.choices[0].message.content);
+    ```
+  </Tab>
+</Tabs>
+
+If you use the Vercel AI SDK, the [`@runpod/ai-sdk-provider`](/public-endpoints/ai-sdk) package works with Public Endpoints and with your own endpoint IDs.
+
+### curl
+
+<Tabs>
+  <Tab title="Before: Fireworks AI">
+    ```bash
+    curl https://api.fireworks.ai/inference/v1/chat/completions \
+      -H "Authorization: Bearer $FIREWORKS_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "accounts/fireworks/models/llama-v3p1-8b-instruct",
+        "messages": [{"role": "user", "content": "Say hello in one word."}],
+        "max_tokens": 64
+      }'
+    ```
+  </Tab>
+  <Tab title="After: Runpod">
+    ```bash
+    curl https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1/chat/completions \
+      -H "Authorization: Bearer $RUNPOD_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "meta-llama/Llama-3.1-8B-Instruct",
+        "messages": [{"role": "user", "content": "Say hello in one word."}],
+        "max_tokens": 64
+      }'
+    ```
+  </Tab>
+</Tabs>
+
+### Tool calling
+
+The request and response format stays the OpenAI `tools` format. On your own endpoint, it works only when the worker has `ENABLE_AUTO_TOOL_CHOICE=true` and a `TOOL_CALL_PARSER` that matches the model, as set in Step 6.
+
+```python
+tools = [{
+    "type": "function",
+    "function": {
+        "name": "get_weather",
+        "description": "Get the current weather for a location",
+        "parameters": {
+            "type": "object",
+            "properties": {"location": {"type": "string", "description": "City name"}},
+            "required": ["location"],
+        },
+    },
+}]
+
+response = client.chat.completions.create(
+    model="meta-llama/Llama-3.1-8B-Instruct",
+    messages=[{"role": "user", "content": "What's the weather in San Francisco?"}],
+    tools=tools,
+    max_tokens=256,
+)
+print(response.choices[0].message.tool_calls)
+```
+
+If `tool_calls` comes back empty and the call appears as text in `content`, the parser doesn't match the model's tool format.
+
+### Feature parity for the OpenAI-compatible surface
+
+Each cell reflects what the platform's docs state. "Check the model" means the docs don't settle it, so test before you rely on it.
+
+| Feature | Fireworks AI | Runpod vLLM endpoint | Runpod Public Endpoints |
+| --- | --- | --- | --- |
+| `/chat/completions` | Yes | Yes | Yes, for the text models documented as OpenAI-compatible |
+| `/completions` | Yes | Yes | Check the model |
+| `/models` | Check the Fireworks API reference | Yes | Check the model |
+| Streaming (`stream: true`) | Yes | Yes | Yes (documented for Qwen3, Kimi, GPT-OSS, Cogito) |
+| `usage` in the final stream chunk | Yes, by default | Check the model | Check the model |
+| Tool calling | Yes, on supported models | Yes, with `ENABLE_AUTO_TOOL_CHOICE` and `TOOL_CALL_PARSER`. Depends on the model. | Documented for GPT-OSS 120B. Check other models. |
+| JSON mode and JSON schema (`response_format`) | Yes (`json_object`, `json_schema`) | Not covered in the Runpod docs. The worker exposes `GUIDED_DECODING_BACKEND`. Check the model. | Check the model |
+| Grammar mode (BNF) | Yes | Check the model | Check the model |
+| Reasoning | Yes (`reasoning_effort`, output in `reasoning_content`) | Yes, with `REASONING_PARSER`. Output in `reasoning` on vLLM v0.32.0. | Kimi documents `reasoning_effort`. Check other models. |
+| Vision input (`image_url`) | Yes, on vision models | Depends on the model you deploy | Kimi K2.6 is described as multimodal. Check the model. |
+| Embeddings | Yes (`/v1/embeddings`) | Not listed for the vLLM worker | Not listed |
+| Reranking | Yes (`/v1/rerank`) | Not listed | Not listed |
+| Responses API | Yes (`/v1/responses`) | Not listed | Not listed |
+| Anthropic Messages API | Yes | Not listed | Not listed |
+| LoRA adapters | Yes (deployments, and serverless for select bases) | Yes (`ENABLE_LORA`, `LORA_MODULES`) | Not applicable for text models |
+| Async jobs | The Responses API can run jobs in the background. Chat completions are synchronous. | Yes (`/run`, `/status`, webhooks) | Yes (`/run`, `/status`) |
+
+### Batch and offline inference
+
+Fireworks' Batch API used JSONL files with `custom_id` and `body` per line. On a Runpod queue endpoint, each request is a job. The vLLM worker's native input takes `messages` and a `sampling_params` object. This script submits a Fireworks-format batch file as Runpod jobs and records which job belongs to which `custom_id`.
+
+```python submit_batch.py
+import json
+import os
+import sys
+
+import requests
+
+ENDPOINT_ID = os.environ["RUNPOD_ENDPOINT_ID"]
+HEADERS = {
+    "Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}",
+    "Content-Type": "application/json",
+}
+SAMPLING_KEYS = ("max_tokens", "temperature", "top_p", "top_k", "stop", "presence_penalty", "frequency_penalty")
+
+with open(sys.argv[1]) as batch_file, open("jobs.jsonl", "a") as jobs_file:
+    for line in batch_file:
+        item = json.loads(line)
+        body = item["body"]
+        payload = {
+            "input": {
+                "messages": body["messages"],
+                "sampling_params": {k: body[k] for k in SAMPLING_KEYS if k in body},
+            },
+            "webhook": os.environ.get("RESULT_WEBHOOK_URL"),
+        }
+        if payload["webhook"] is None:
+            del payload["webhook"]
+        response = requests.post(
+            f"https://api.runpod.ai/v2/{ENDPOINT_ID}/run", headers=HEADERS, json=payload, timeout=30
+        )
+        response.raise_for_status()
+        jobs_file.write(json.dumps({"custom_id": item["custom_id"], "job_id": response.json()["id"]}) + "\n")
+```
+
+Fetch each result with `GET https://api.runpod.ai/v2/ENDPOINT_ID/status/JOB_ID`, or receive it at the webhook URL. Async results are kept for 30 minutes after completion, so collect them promptly or use webhooks. `/run` accepts 1,000 requests per 10 seconds per endpoint, so pace large files. For very large offline workloads, [batch jobs](/serverless/batch-jobs) run on dedicated batch workers and take a JSON array of the same `{"input": ...}` objects.
+
+### Image and audio models
+
+Public Endpoints for image, video, and text-to-speech models use the native job format, not the OpenAI format. A request is `POST https://api.runpod.ai/v2/SLUG/runsync` (or `/run`) with a body of `{"input": {...}}`, and the result is under `output` (for example `output.image_url`).
+
+```bash
+curl -X POST "https://api.runpod.ai/v2/black-forest-labs-flux-1-dev/runsync" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"prompt": "A serene mountain landscape at sunset", "width": 1024, "height": 1024}}'
+```
+
+Output URLs expire after 7 days, so download results you need to keep. Each model's page lists its parameters.
+
+### Control-plane automation
+
+Scripts and CI jobs that call `firectl` or the Fireworks REST API move to `runpodctl` or REST API v2. See the [CLI command map](#cli-command-map) and the [API map](#api-map).
+
+## Step 8: Verify, cut over, and shut down
+
+<Steps>
+  <Step title="Send a real request from outside">
+    Use the same prompts your application sends, from the same network. For a cold endpoint, submit the first request asynchronously so the model load doesn't hit the synchronous timeout.
+
+    ```bash
+    JOB=$(curl -s -X POST "https://api.runpod.ai/v2/ENDPOINT_ID/run" \
+      -H "Authorization: Bearer $RUNPOD_API_KEY" -H "Content-Type: application/json" \
+      -d '{"input": {"messages": [{"role": "user", "content": "Say hello in one word."}], "sampling_params": {"max_tokens": 16}}}' | jq -r .id)
+    curl -s "https://api.runpod.ai/v2/ENDPOINT_ID/status/$JOB" -H "Authorization: Bearer $RUNPOD_API_KEY"
+    ```
+
+    When the job is `COMPLETED`, a worker is warm and the OpenAI route responds normally.
+  </Step>
+  <Step title="Compare outputs and latency">
+    Replay a sample of production prompts against both platforms. Compare output quality, tool-call correctness, JSON validity, time to first token, and tokens per second. Differences usually trace to quantization, chat template, or parser settings.
+  </Step>
+  <Step title="Measure cost on real traffic">
+    Run representative load, then read worker time from the endpoint's **Metrics** tab or `runpodctl billing serverless`. Tune the idle timeout, active workers, and GPU pool from that data.
+  </Step>
+  <Step title="Run both in parallel and shift traffic">
+    Switch the base URL and model name through configuration for a small share of traffic, watch error rates and latency, then increase the share. Keep the Fireworks path callable until you're done.
+  </Step>
+  <Step title="Shut down Fireworks AI">
+    After traffic has moved and you've downloaded any weights and datasets you need, stop the resources that bill.
+
+    ```bash
+    firectl deployment list
+    firectl deployment scale DEPLOYMENT_ID --replica-count=0   # reversible: stop GPU billing first
+    firectl deployment delete DEPLOYMENT_ID                    # then delete
+    firectl model list
+    firectl model delete MODEL_ID                              # custom models and adapters
+    firectl dataset delete DATASET_ID
+    firectl reservation list                                   # reservations bill until they end
+    firectl api-key list
+    firectl api-key delete --help                              # revoke keys the old path used
+    ```
+
+    Fireworks bills reserved capacity until the reservation ends whether or not you use it, so talk to your Fireworks account manager about any reservation. Serverless usage stops billing when you stop sending requests.
+  </Step>
+</Steps>
+
+On the Runpod side, guard cost with three settings: max workers caps concurrency and spend, active workers of 0 lets the endpoint scale to zero, and the execution timeout stops runaway jobs. Delete test endpoints with `runpodctl serverless delete ENDPOINT_ID`, and check for leftover network volumes with `runpodctl network-volume list`.
+
+## Reference
+
+### CLI command map
+
+| `firectl` | `runpodctl` |
+| --- | --- |
+| `firectl signin`, `firectl set-api-key API_KEY` | `runpodctl doctor`, or `runpodctl config --apiKey YOUR_API_KEY` |
+| `firectl whoami` | `runpodctl user` |
+| `firectl deployment create MODEL --deployment-shape default` | `runpodctl serverless create --hub-id HUB_ID --gpu-id POOL --model-reference URL` |
+| `firectl deployment list` | `runpodctl serverless list` |
+| `firectl deployment get DEPLOYMENT_ID` | `runpodctl serverless get ENDPOINT_ID --include-template --include-workers` |
+| `firectl deployment update DEPLOYMENT_ID --max-replica-count 5` | `runpodctl serverless update ENDPOINT_ID --workers-max 5` |
+| `firectl deployment scale DEPLOYMENT_ID --replica-count=0` | `runpodctl serverless update ENDPOINT_ID --workers-min 0` (scales to zero when idle, and starts a worker on the next request) |
+| `firectl deployment delete DEPLOYMENT_ID` | `runpodctl serverless delete ENDPOINT_ID` |
+| `firectl deployment-shape-version match --model MODEL` | `runpodctl gpu list` (you choose the hardware) |
+| `firectl model create MODEL_ID /path` | `hf upload`, or upload to a network volume |
+| `firectl model load-lora ADAPTER --deployment DEPLOYMENT` | Set `LORA_MODULES` on the endpoint |
+| `firectl dataset create`, `firectl dataset download` | `runpodctl network-volume create` plus the S3-compatible API |
+| `firectl supervised-fine-tuning-job create` | `runpodctl pod create` and your own trainer |
+| `firectl secret create --name NAME --value VALUE` | Create a secret in the console, reference it as `{{ RUNPOD_SECRET_NAME }}` |
+| `firectl quota list` | `runpodctl gpu list`, `runpodctl datacenter list` |
+| `firectl billing get-usage` | `runpodctl billing serverless`, `runpodctl billing pods` |
+| `firectl version`, `firectl upgrade` | `runpodctl version`, `runpodctl update` |
+
+### API map
+
+| Fireworks AI | Runpod |
+| --- | --- |
+| `POST https://api.fireworks.ai/inference/v1/chat/completions` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1/chat/completions` |
+| `POST https://api.fireworks.ai/inference/v1/completions` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1/completions` |
+| `POST https://api.fireworks.ai/inference/v1/embeddings`, `/rerank`, `/responses` | No prebuilt route. See [What has no direct equivalent](#what-has-no-direct-equivalent). |
+| `POST https://api.fireworks.ai/v1/accounts/ACCOUNT_ID/deployments` | `POST https://api.runpod.io/v2/serverless` |
+| List, get, update, and delete deployment | `GET /v2/serverless`, `GET`, `PATCH`, and `DELETE /v2/serverless/ENDPOINT_ID` |
+| Scale deployment | `PATCH /v2/serverless/ENDPOINT_ID` (`workers.min`, `workers.max`) |
+| `GET https://api.fireworks.ai/v1/accounts/ACCOUNT_ID/metrics` (Prometheus) | `GET /v2/serverless/ENDPOINT_ID/metrics/requests`, `/metrics/cold-starts`, `/metrics/workers` |
+| Billing usage | `GET /v2/billing/serverless`, `GET /v2/billing/endpoints` |
+| Batch inference jobs | `POST https://api.runpod.ai/v2/ENDPOINT_ID/batch`, or `/run` |
+| `client.deployments.create(...)` (Fireworks Python SDK) | `POST /v2/serverless` or `runpodctl serverless create` |
+
+Note the two Runpod hosts: `api.runpod.ai` serves requests to endpoints, and `api.runpod.io` serves the management API. Both take `Authorization: Bearer RUNPOD_API_KEY`.
+
+### Environment variable map
+
+These are client-side variables, since Fireworks doesn't run your containers.
+
+| Fireworks AI | Runpod |
+| --- | --- |
+| `FIREWORKS_API_KEY` | `RUNPOD_API_KEY` |
+| `OPENAI_BASE_URL` or `OPENAI_API_BASE` set to `https://api.fireworks.ai/inference/v1` | `https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1` |
+| `OPENAI_API_KEY` set to a Fireworks key | Set to a Runpod API key |
+| `ANTHROPIC_BASE_URL` set to `https://api.fireworks.ai/inference` | No equivalent route |
+| `~/.fireworks/auth.ini` (`firectl` credentials) | `~/.runpod/config.toml` (written by `runpodctl doctor` or `rp login`) |
+
+### Status map
+
+| Fireworks deployment state | Runpod equivalent |
+| --- | --- |
+| `CREATING` | Workers **Initializing** (pulling the image, downloading cached models) |
+| `READY` | `/health` reports a ready worker. Workers are **Idle** or **Running**. |
+| `READY`, shown as "Scaled to 0" | All workers **Idle** (scaled down, not billed) |
+| `UPDATING` | A new endpoint release rolling out. Old workers show **Outdated**. |
+| `FAILED` | Workers **Unhealthy**. Read the worker logs. |
+| `PARTIAL_READY` (some replicas waiting on capacity) | Some workers **Throttled** |
+| `DELETING`, `DELETED` | Endpoint deleted |
+
+Request-level states on a Runpod queue endpoint are `IN_QUEUE`, `IN_PROGRESS`, `COMPLETED`, `FAILED`, `CANCELLED`, and `TIMED_OUT`. Fireworks chat completion requests are synchronous and have no job state.
+
+## Migrate with a coding agent
+
+Install the Runpod skills and MCP server in your agent. MCP sign-in uses OAuth ("Sign in with Runpod"), so you don't need an API key to start.
+
+<Tabs>
+  <Tab title="Claude Code">
+    ```bash
+    # The plugin also connects the hosted MCP server
+    claude plugin marketplace add runpod/runpod-plugins-official
+    claude plugin install runpod@runpod
+    ```
+  </Tab>
+  <Tab title="Other agents">
+    ```bash
+    # Codex, Cursor, and others: skills, then the hosted MCP server
+    npx skills add runpod/runpod-plugins-official --skill '*' --agent AGENT_ID --global
+    npx @runpod/mcp-server@latest add --client CLIENT_ID
+    ```
+  </Tab>
+</Tabs>
+
+See [agent skills](/get-started/agent-skills) and [MCP servers](/get-started/mcp-servers) for agent and client IDs. Then give the agent this prompt from the root of your repository.
+
+```text
+Use the runpod-cloud-migrate skill to migrate this project from Fireworks AI to Runpod.
+
+1. Inventory first. Scan the repo for Fireworks usage (api.fireworks.ai, accounts/*/models/*,
+   accounts/*/deployments/*, FIREWORKS_API_KEY, the fireworks-ai SDK, firectl) and, if firectl
+   is signed in, list deployments, models, deployed LoRA adapters, datasets, and training jobs.
+   Treat Fireworks as read-only.
+2. For each model, tell me whether Runpod hosts it as a Public Endpoint or whether it needs
+   its own vLLM Serverless endpoint, which Hugging Face repo you'd serve, and which features
+   each call site uses (streaming, tools, response_format, vision, reasoning, embeddings,
+   rerank, the Responses API).
+3. Show me a plan with the GPU pool, worker counts, idle timeout, and an hourly cost bound
+   for each endpoint. List every gap that needs my decision. Wait for my approval before
+   creating anything billable.
+4. Migrate one workload: deploy it, put the base URL and model name behind configuration,
+   and verify with a real request (chat, streaming, and a tool call if the code uses tools).
+5. Report what you created, what it costs while running, and what is still billing.
+   Never scale down or delete Fireworks deployments, models, or datasets without my
+   explicit approval.
+```
+
+## Troubleshooting
+
+**The first request returns a 524 or times out.** The synchronous routes have an edge timeout of about 100 seconds, and the first request to a cold worker waits for the model to load. Send the first request with `/run` and poll `/status`, raise the idle timeout so workers stay warm between requests, or set one active worker.
+
+**"Invalid model" or a 404 on the model name.** You sent the Fireworks ID. The `model` value must be the Hugging Face repo the worker serves or your `OPENAI_SERVED_MODEL_NAME_OVERRIDE` value. List what the endpoint serves with `client.models.list()`.
+
+**Responses are cut off after a few tokens.** Fireworks adjusts `max_tokens` to the context window for you. The Runpod vLLM docs list a default `max_tokens` of 16. Set it on every request.
+
+**Tool calls come back as plain text.** The worker is missing `ENABLE_AUTO_TOOL_CHOICE=true`, or `TOOL_CALL_PARSER` doesn't match the model's tool format. See the [model-specific settings](/serverless/vllm/configuration#model-specific-configurations).
+
+**The reasoning trace disappeared.** Your client reads `reasoning_content`. vLLM v0.32.0 returns `reasoning`. Read both, and set `REASONING_PARSER` on the worker. Without a parser, thinking text arrives inside `content`.
+
+**Workers stay throttled or never start.** The selected pool has no free GPUs in the allowed data centers, or the endpoint's CUDA constraint excludes the available hosts. Add a second GPU pool, remove data center restrictions, and check stock with `runpodctl gpu list`. A network volume restricts the endpoint to one data center.
+
+**The worker crashes while loading the model.** Usually out of memory. vLLM reserves VRAM for the KV cache on top of the weights. Lower `MAX_MODEL_LEN`, use a quantized repo, or move to a larger pool. Gated models fail to download without a valid `HF_TOKEN`.
+
+**Output quality differs from Fireworks.** Check that the Hugging Face repo matches the checkpoint and precision Fireworks served, and that the chat template is the model's own. For fine-tunes, confirm you merged the adapter into the exact base it was trained on.
+
+**The bill is higher than expected at low traffic.** A long idle timeout or an active worker bills for time with no requests. Lower the idle timeout, set active workers to 0, or move low-volume models to a Public Endpoint if one is listed.
+
+**429 responses.** On Runpod, a 429 is the endpoint's request-rate limit, not a sign that workers are saturated. Queue-based endpoints hold excess requests in the queue, so watch queue delay and raise max workers.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="vLLM on Serverless" href="/serverless/vllm/overview" icon="bolt" horizontal>
+    Deploy and configure OpenAI-compatible LLM endpoints.
+  </Card>
+  <Card title="Public Endpoints" href="/public-endpoints/reference" icon="book" horizontal>
+    Browse the models Runpod hosts and their parameters.
+  </Card>
+  <Card title="Endpoint settings" href="/serverless/endpoints/endpoint-configurations" icon="gear" horizontal>
+    Tune workers, idle timeout, and autoscaling.
+  </Card>
+  <Card title="Cached models" href="/serverless/endpoints/model-caching" icon="database" horizontal>
+    Cut cold starts by caching Hugging Face models on hosts.
+  </Card>
+</CardGroup>
