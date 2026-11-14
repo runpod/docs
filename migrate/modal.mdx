@@ -1,0 +1,1219 @@
+---
+title: "Migrate from Modal to Runpod"
+sidebarTitle: "Modal"
+description: "Move Modal Functions, Clses, web endpoints, Volumes, and Secrets to the Runpod SDK and Serverless, with before and after code."
+---
+
+This guide is for teams that run production workloads on [Modal](https://modal.com/docs/guide/intro) and want to run them on Runpod. Modal [Functions](https://modal.com/docs/guide/functions) and [Clses](https://modal.com/docs/guide/lifecycle-functions) map to queue resources in the [Runpod SDK](/sdk/overview), [Web Functions](https://modal.com/docs/guide/webhooks) and [Servers](https://modal.com/docs/guide/servers) map to API resources and load-balancing endpoints, long jobs map to tasks, [Volumes](https://modal.com/docs/guide/volumes) map to network volumes, and [Secrets](https://modal.com/docs/guide/secrets) map to Runpod secrets. When you finish, each workload runs on Runpod, your callers use Runpod URLs or the Runpod client, and your Modal Apps are stopped.
+
+Most of the work is a code translation, because both platforms define infrastructure with Python decorators. Apps that depend on a long `modal.Image` build chain have a second path: a Docker image with a handler function or an HTTP server.
+
+<Tip>
+  You can hand this migration to a coding agent. See [Migrate with a coding agent](#migrate-with-a-coding-agent).
+</Tip>
+
+## How Modal maps to Runpod
+
+| Modal concept | Runpod equivalent | Notes |
+| --- | --- | --- |
+| `modal.App` | `runpod.App` | Both group resources that deploy together. |
+| `@app.function` | `@app.queue` (request and response work) or `@app.task` (long jobs) | A queue resource is an autoscaling [queue-based Serverless endpoint](/serverless/overview). A task is one Pod per call. |
+| `@app.cls` with `@modal.enter` and `@modal.method` | `@app.queue` with a module-level cache, or `@app.api` with `@runpod.init` | A queue resource wraps a function, not a class. An API resource wraps a class and serves routes. |
+| `@modal.fastapi_endpoint`, `@modal.asgi_app`, `@modal.wsgi_app`, `@modal.web_server` | `@app.api`, or a [load-balancing endpoint](/serverless/load-balancing/overview) running your own HTTP server | `@app.api` routes are `@runpod.get` and `@runpod.post` methods. To keep a full FastAPI or Flask app, use a load-balancing endpoint. |
+| `@app.server` (Modal Servers) | Load-balancing endpoint | Both route HTTP straight to a process listening on a port, with no queue. |
+| Modal Endpoints (Shared and Dedicated LLM endpoints) | [Public Endpoints](/public-endpoints/overview), or a [vLLM worker](/serverless/vllm/overview) on your own endpoint | Hosted models versus your own autoscaling endpoint. |
+| `modal.Image` builder chain | `dependencies=`, `system_dependencies=`, `image=`, or a Dockerfile | The SDK installs pip and apt packages on Runpod's runtime image. There's no chained image builder. |
+| `modal.Volume` | [Network volume](/storage/network-volumes) (`runpod.NetworkVolume`) or [global volume](/storage/globalvolume/overview) (`runpod.GlobalVolume`, beta) | Network volumes live in one data center. Global volumes are object-backed and GPU only. |
+| `modal.CloudBucketMount` | Read the bucket from your code, or copy it to a network volume | See [Step 5](#step-5-move-your-data-and-models). |
+| `modal.Secret` | Runpod secret (`runpod.Secret`) | A Modal Secret holds several key and value pairs. A Runpod secret holds one value, and you choose the environment variable name where you use it. |
+| `modal.Dict`, `modal.Queue` | An external store such as Redis or a database | See [What has no direct equivalent](#what-has-no-direct-equivalent). |
+| `modal.Cron`, `modal.Period` | An external scheduler that calls the endpoint | See [What has no direct equivalent](#what-has-no-direct-equivalent). |
+| `modal.Sandbox` | A [Pod](/pods/overview) you create and delete through the API | The closest match in the sources for this guide. Check the differences before you move sandbox workloads. |
+| `@modal.clustered` (multi-node) | [Instant Clusters](/instant-clusters/pytorch) | Multi-node training and serving. |
+| GPU strings (`gpu="H100"`, `"L4"`, `"H100:8"`) | `gpu="H100"`, GPU pools (`runpod.GpuGroup`), exact devices (`runpod.GpuType`), `gpu_count=8` | See the [GPU mapping table](#gpu-mapping). |
+| `cpu=`, `memory=` | `cpu="cpu3c-2-4"` instance IDs for CPU resources | CPU resources use fixed vCPU and memory shapes. `gpu` and `cpu` are mutually exclusive. |
+| `min_containers`, `max_containers`, `scaledown_window` | `workers=(min, max)`, `idle_timeout` | Old Modal names: `keep_warm`, `concurrency_limit`, `container_idle_timeout`. |
+| `region=`, `cloud=` | `datacenter=` | Runpod places workloads by data center ID, such as `US-KS-2`. |
+| Workspace | Runpod account or [team](/accounts-billing/manage-accounts) | |
+| Environment (`modal deploy --env`) | App environment (`rp flash deploy --env`) | Modal Environments also scope Secrets and Volumes. Runpod secrets and volumes belong to the account. |
+| Token ID and token secret (`MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET`) | One API key (`RUNPOD_API_KEY`) | `rp login` stores it in `~/.runpod/config.toml`. |
+| Proxy Tokens (`Modal-Key`, `Modal-Secret` headers) | `Authorization: Bearer` with your Runpod API key | Modal Web Functions are public unless you set `requires_proxy_auth=True`. Requests to Runpod endpoints carry an API key. |
+| `modal` CLI | `rp` (installed with the SDK) and [`runpodctl`](/runpodctl/overview) | `rp flash` handles apps. `runpodctl` manages endpoints, Pods, templates, and volumes. |
+| Python, JavaScript, and Go SDKs | [Python, JavaScript, and Go SDKs](/serverless/sdks), plus [REST API v2](/api-reference-v2/overview) | The decorator-based app SDK is Python. |
+| Billing: CPU, memory, and GPU metered separately per second, invoiced monthly | Billing: each worker or Pod billed per second, drawn from a prepaid balance | See [Serverless pricing](/serverless/pricing) and [Billing](/accounts-billing/billing). Modal's Starter plan includes monthly credits. |
+| `modal app logs`, dashboard | Dev session log streaming, `rp logs POD_ID`, endpoint logs and metrics in the console | See [Logs](/serverless/development/logs). |
+
+## What's different
+
+### What works differently
+
+**Arguments and results are JSON on queue resources.** Modal serializes arguments and return values with cloudpickle, so you can pass most Python objects. Runpod queue jobs are JSON. Pass strings, numbers, lists, and dicts, send binary data as base64 or as a URL, and write large outputs to a volume or object storage. Whole-number floats can arrive as integers, so cast numeric inputs.
+
+**Payload and result limits are smaller.** Modal Web Functions accept request bodies up to 4 GiB, and results from `.spawn()` are kept for 7 days. Runpod queue endpoints accept 10 MB on `/run` and 20 MB on `/runsync`, load-balancing endpoints accept 30 MB per request and response, and job results are kept for 30 minutes after an async job and 1 minute after a sync job. If a caller fetches results hours later, send them to a webhook or write them to storage.
+
+**Images are assembled differently.** A `modal.Image` is built by chaining methods and cached by Modal. In the Runpod SDK, you list pip packages in `dependencies` and apt packages in `system_dependencies`, and `rp flash deploy` packages your code and dependencies into an artifact of up to 1,500 MB that runs on Runpod's runtime image. For anything beyond that, set `image=` to your own image or build a Docker worker.
+
+**Classes become functions or route classes.** `@app.queue` wraps a function. To load a model once per worker, cache it in a module-level variable, or move to `@app.api`, where a method marked `@runpod.init` runs once when each worker starts. The SDK docs show a startup hook only, so move `@modal.exit` cleanup into your own shutdown handling.
+
+**Web endpoints are authenticated and have a different URL shape.** A Modal Web Function gets a `modal.run` URL and is public by default. A Runpod queue endpoint is called at `https://api.runpod.ai/v2/ENDPOINT_ID/runsync` with a JSON body under `input`, and a load-balancing endpoint at `https://ENDPOINT_ID.api.runpod.ai/PATH`. Both expect `Authorization: Bearer` with a Runpod API key. If browsers or third parties call your Modal URL without credentials, put a proxy that holds the key in front of the endpoint.
+
+**Timeout units change.** Modal's `timeout` is in seconds and defaults to 300. The SDK's `execution_timeout_ms` is in milliseconds and defaults to 0, which means no limit. `timeout=600` becomes `execution_timeout_ms=600000`.
+
+**Volumes don't need commits.** A Modal Volume is snapshotted with `commit()` and refreshed with `reload()`. A network volume behaves like a mounted file system: writes are visible to other workers right away, so delete the `commit()` and `reload()` calls. Queue and API resources mount one volume, always at `/runpod-volume`. Tasks can mount one network volume and one global volume at paths you choose.
+
+**A network volume pins compute to its data center.** Every resource that mounts a network volume runs in that volume's data center, which narrows the GPUs available to it. GPU stock varies by data center, so check live stock before you choose where a volume lives.
+
+**Idle endpoints are scaled down.** Runpod reduces max workers to 2 on an endpoint that receives no requests for 3 days, and to 0 after 7 days. Raise max workers again before you send traffic to an endpoint that sat unused.
+
+**Requests to an empty load-balancing endpoint can fail.** Queue endpoints hold jobs until a worker is ready, like Modal Functions. Load-balancing endpoints have no queue, like Modal Servers, so clients should retry while the first worker starts.
+
+**Billing is per worker, from a prepaid balance.** Modal meters CPU cores, memory, and GPUs as separate line items and invoices monthly. Runpod bills each Serverless worker per second from start to stop, including cold start, execution, and the idle timeout, plus storage, and deducts charges from a balance you fund in advance. Size workers and `idle_timeout` with that in mind.
+
+### What has no direct equivalent
+
+| Modal feature | On Runpod |
+| --- | --- |
+| `modal.Cron` and `modal.Period` schedules | Call the endpoint's `/run` URL from an external scheduler, such as a GitHub Actions schedule, cron on a host you run, or your workflow orchestrator. For a task, run `rp flash dev main.py --once` on the schedule. |
+| `modal.Dict` and `modal.Queue` | Use an external store such as Redis or a database, with the connection string in a Runpod secret. If a Queue only feeds work to a Function, the queue-based endpoint replaces it. |
+| `.map()`, `.starmap()`, `.for_each()`, `.spawn_map()` | Submit jobs in a loop with `.spawn()` and collect them with `job.result()`, or use `asyncio.gather` over `fn.remote.aio(...)`. For large offline runs, see [Batch jobs](/serverless/batch-jobs). |
+| `@modal.batched` (dynamic batching) | Accept a list in one job and batch on the caller, or raise `max_concurrency` and batch inside the worker. |
+| `retries=` and `modal.Retries` | Retry in the caller, or call `job.retry()` (`/retry/JOB_ID`) on a failed job. Tasks are plain Pods, so make training resumable from checkpoints. |
+| `buffer_containers` | Raise the minimum in `workers=(min, max)`, or tune `scaler_type` and `scaler_value`. |
+| `enable_memory_snapshot` | FlashBoot is on by default for queue and API resources. It's a different mechanism, so measure cold starts instead of assuming parity. |
+| `modal.parameter` (parametrized Clses) and `with_options` | Pass the value as input, or deploy one resource per configuration. |
+| Custom domains on Web Functions | Point your domain at a proxy or CDN you control that forwards to the endpoint URL. |
+| `modal.Proxy` (static outbound IPs) | This guide has no mapping for it. If a database or API allowlists your Modal Proxy IP, plan another egress path and test it before cutover. |
+| `modal.forward` tunnels | Run the process on a [Pod and expose its port](/pods/configuration/expose-ports). |
+| `modal.Sandbox` (exec, file, and snapshot APIs) | Create a Pod, run commands in it, and delete it. Startup time and isolation differ, so benchmark before you move agent or code-execution workloads. |
+| Separate `cpu=` and `memory=` requests on a GPU Function | The SDK's resource parameters have no separate core or memory request for GPU resources. Choose the GPU that fits the workload, and `gpu_count` for more. |
+
+Runpod has features without a Modal counterpart that affect how you design the port: `runpod.Model` stages Hugging Face weights on the host before a worker starts, `@app.task` gives a job a dedicated Pod with no execution limit, and network volumes expose an [S3-compatible API](/storage/s3-api) so you can load data without running compute.
+
+## Requirements
+
+- A Modal workspace you can read with the `modal` CLI (`modal token info` shows the active token).
+- A [Runpod account](/accounts-billing/manage-accounts) with a funded balance.
+- Python 3.10 to 3.14 on your machine. Dev sessions and tasks run your code on the same Python version as your local interpreter.
+- Docker, only if you use the custom image path.
+- The AWS CLI, only if you copy data with the S3-compatible API.
+
+## Step 1: Take inventory of what you run on Modal
+
+List every App, in every Environment, with its Functions, Servers, and deployment history:
+
+```bash
+modal profile current
+modal environment list
+modal app list --json
+modal app info APP_NAME
+modal app history APP_NAME
+modal container list --json
+```
+
+Repeat the App commands with `--env ENVIRONMENT_NAME` for each Environment. `modal app info` lists each Function and Server in the App, and `modal container list` shows what's running now.
+
+Next, list the storage and configuration objects that Apps reference by name:
+
+```bash
+modal volume list --json
+modal volume ls VOLUME_NAME /
+modal secret list --json
+modal dict list
+modal queue list
+modal endpoint list
+```
+
+`modal secret list` returns names, not values. Collect the values from the system you created them from, because you'll re-enter them on Runpod.
+
+Then find the code. This search covers Modal imports, decorators, lookups, CLI calls in scripts and CI, credentials, and hard-coded URLs:
+
+```bash
+grep -rnE --include='*.py' --include='*.ts' --include='*.js' --include='*.go' \
+  --include='*.yml' --include='*.yaml' --include='*.sh' --include='*.toml' --include='Dockerfile*' \
+  'import modal|from modal|modal\.(App|Stub|Image|Volume|Secret|Dict|Queue|Cron|Period|Sandbox|Function|Cls|CloudBucketMount)|@modal\.|\.from_name\(|modal (run|serve|deploy|shell|volume|secret)|MODAL_TOKEN_(ID|SECRET)|MODAL_ENVIRONMENT|\.modal\.run|\.modal\.host' .
+```
+
+For each Function, Cls, and Server, record these settings from its decorator: `gpu`, `cpu`, `memory`, `ephemeral_disk`, `timeout`, `retries`, `schedule`, `region`, `min_containers`, `max_containers`, `buffer_containers`, `scaledown_window`, `volumes`, `secrets`, the image definition, and any `@modal.concurrent` or `@modal.batched` settings. Older code uses names that Modal has since renamed. Treat them as the same settings:
+
+| Name in older code | Current Modal name |
+| --- | --- |
+| `modal.Stub` | `modal.App` |
+| `keep_warm` | `min_containers` |
+| `concurrency_limit` | `max_containers` |
+| `container_idle_timeout` | `scaledown_window` |
+| `allow_concurrent_inputs=N` | `@modal.concurrent(max_inputs=N)` |
+| `@modal.web_endpoint` | `@modal.fastapi_endpoint` |
+| `mount=`, `modal.Mount`, `Image.copy_local_dir` | `Image.add_local_dir`, `Image.add_local_file`, `Image.add_local_python_source` |
+| `@modal.build` | A Volume, or `Image.run_function` |
+| `.lookup()` | `.from_name()` |
+
+Finally, record who calls each workload: Python callers that use `modal.Function.from_name` or `modal.Cls.from_name`, HTTP clients that call `modal.run` URLs, which of those URLs require Proxy Tokens, and any custom domains.
+
+## Step 2: Set up Runpod
+
+Install the Runpod SDK, which includes the `rp` CLI, and log in:
+
+```bash
+pip install runpod
+rp login
+```
+
+`rp login` opens your browser and saves credentials to `~/.runpod/config.toml`. In CI, set the `RUNPOD_API_KEY` environment variable instead. Create keys on the [Credentials page](/get-started/credentials).
+
+Install `runpodctl` to manage endpoints, templates, and volumes from the terminal:
+
+```bash
+curl -fsSL https://cli.runpod.net | sudo bash
+runpodctl doctor
+```
+
+`runpodctl doctor` configures the API key and checks the setup. On macOS you can also install with `brew install runpod/runpodctl/runpodctl`. If you automate with an agent, connect the [Runpod MCP server](/get-started/mcp-servers).
+
+## Step 3: Choose where each workload lands
+
+| Modal workload | Runpod target | Why |
+| --- | --- | --- |
+| `@app.function` or `@app.cls` called with `.remote()` or `.spawn()`, seconds to minutes per call | `@app.queue` | Autoscaling job queue, scales to zero, every job is queued. |
+| Function with `timeout` near the 24-hour maximum, training, fine-tuning, batch pipelines | `@app.task` | One dedicated Pod per call, terminated when the function returns. |
+| `@modal.fastapi_endpoint` or a small `@modal.asgi_app` with JSON routes | `@app.api` | Load-balanced HTTP routes on a class, with a once-per-worker init hook. |
+| Full FastAPI, Flask, or Django app, streaming responses, `@modal.web_server`, `@app.server` | Load-balancing endpoint with a custom image | You keep your HTTP server and add a `/ping` health route. |
+| App with a long `modal.Image` chain, `from_dockerfile`, or a prebuilt inference server | Custom Docker image with a [handler function](/serverless/workers/handler-functions) | Full control of the image. Queue semantics stay the same. |
+| Modal Shared Endpoint (per-token LLM API) | [Public Endpoint](/public-endpoints/overview) | Hosted model, no infrastructure. |
+| Modal Dedicated Endpoint, or a vLLM Server | [vLLM worker](/serverless/vllm/overview) | OpenAI-compatible route at `https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1`. |
+| `modal.Sandbox`, `modal shell`, notebooks, tunnels | [Pod](/pods/overview) | Long-lived container with SSH and exposed ports. |
+| `@modal.clustered` multi-node jobs | [Instant Cluster](/instant-clusters/pytorch) | Multi-node networking for training frameworks. |
+| Scheduled Function | The matching target above, triggered by an external scheduler | Runpod runs the work. Your scheduler starts it. |
+
+### GPU mapping
+
+Choose the GPU that fits the workload's memory and throughput needs, then confirm it's in stock where your data lives. In the SDK, a short name such as `"H100"` matches every device whose name contains it, and a `runpod.GpuGroup` pool allows any GPU in that pool. Queue and API resources select hardware by pool. Tasks select by device.
+
+| Modal `gpu=` | Runpod SDK `gpu=` | Pool | Notes |
+| --- | --- | --- | --- |
+| `"T4"` | `runpod.GpuGroup.AMPERE_16` | `AMPERE_16` | The pool holds 16 GB cards (RTX A4000, RTX A4500, RTX 4000 Ada, RTX 2000 Ada). |
+| `"L4"` | `"L4"` | `AMPERE_24` | 24 GB. |
+| `"A10"` (also written `"A10G"`) | `runpod.GpuGroup.AMPERE_24` or `runpod.GpuGroup.ADA_24` | `AMPERE_24`, `ADA_24` | 24 GB class (RTX A5000, L4, RTX 3090, or RTX 4090). |
+| `"L40S"` | `"L40S"` | `ADA_48_PRO` | 48 GB. |
+| `"A100"`, `"A100-40GB"` | `runpod.GpuGroup.AMPERE_48` or `runpod.GpuGroup.AMPERE_80` | `AMPERE_48`, `AMPERE_80` | Runpod's A100 pool is 80 GB. A 40 GB workload also fits a 48 GB pool. |
+| `"A100-80GB"` | `runpod.GpuGroup.AMPERE_80` | `AMPERE_80` | 80 GB. |
+| `"RTX-PRO-6000"` | `runpod.GpuGroup.BLACKWELL_96` | `BLACKWELL_96` | 96 GB. |
+| `"H100"`, `"H100!"` | `"H100"` | `ADA_80_PRO` | Modal may run `"H100"` on an H200. On Runpod, `"H100"` stays on H100 variants. |
+| `"H200"` | `"H200"` | `HOPPER_141` | 141 GB. |
+| `"B200"`, `"B200+"` | `"B200"` | `BLACKWELL_180` | 180 GB. |
+| `"B300"` | Check `runpodctl gpu list` | | The [GPU reference](/references/gpu-types) lists a B300 device. Confirm the ID and stock before you plan on it. |
+| `"any"` | `runpod.GpuGroup.ANY` | | Any available GPU. |
+| `"H100:8"` | `gpu="H100", gpu_count=8` | | The count is a separate argument. |
+| `["H100", "A100-80GB"]` | `["H100", runpod.GpuGroup.AMPERE_80]` | | A list sets fallbacks. Automatic switching between listed GPUs needs a worker maximum of at least 5. |
+
+See live stock with `runpodctl gpu list`, and see [GPU types](/sdk/configuration/gpu-types) for every pool and device name. For CPU-only Functions, pick an instance ID from [CPU types](/sdk/configuration/cpu-types), for example `cpu="cpu3c-2-4"` for 2 vCPUs and 4 GB. Modal's `cpu=` counts physical cores, and Runpod CPU instances count vCPUs.
+
+## Step 4: Move your images and code
+
+### Translate the image
+
+Start by deciding whether the `modal.Image` fits the SDK's built-in path. This table maps each builder method:
+
+| `modal.Image` method | Runpod SDK | Dockerfile |
+| --- | --- | --- |
+| `debian_slim(python_version="3.12")` | Runpod runtime image. Workers use your local Python version, or `rp flash deploy --python-version`. | `FROM python:3.12-slim` |
+| `pip_install(...)`, `uv_pip_install(...)`, `pip_install_from_requirements(...)` | `dependencies=[...]` and `requirements.txt` | `RUN pip install ...` |
+| `apt_install(...)` | `system_dependencies=[...]` | `RUN apt-get update && apt-get install -y ...` |
+| `env({...})` | `env={...}` | `ENV` |
+| `add_local_python_source(...)`, `add_local_dir(...)`, `add_local_file(...)` | Deploy packages the project directory, filtered by `.gitignore` and `.runpodignore`. | `COPY` |
+| `from_registry("org/image:tag")`, `from_aws_ecr(...)` | `image="org/image:tag"` with `registry_auth=` for private images | `FROM org/image:tag` |
+| `from_dockerfile("Dockerfile")` | Build and push the image, then set `image=` | Use the Dockerfile as is. |
+| `run_commands(...)`, `dockerfile_commands(...)` | Bake into a custom image | `RUN` |
+| `run_function(download_weights)` | `model=runpod.Model(...)` or a volume | `RUN python download.py`, or keep weights out of the image. |
+| `workdir(...)`, `entrypoint(...)`, `cmd(...)` | Bake into a custom image | `WORKDIR`, `ENTRYPOINT`, `CMD` |
+
+On Runpod's built-in GPU images, `torch`, `torchvision`, `torchaudio`, and `triton` are already installed and are left out of the artifact, so don't pin them. A custom `image=` needs Python and `pip`, because the worker installs the SDK runtime when it starts. All images must be built for `linux/amd64`, which is the same requirement Modal places on external images.
+
+Two habits carry over unchanged: import heavy packages inside the function body, and keep blocking work out of module scope. Replace `modal.is_local()` with `runpod.is_local()`.
+
+<Warning>
+  In a dev session (`rp flash dev`), only the file that defines the app is sent to workers. A project that imports sibling modules works with `rp flash deploy`, which packages the project directory, but fails in a dev session. Keep helpers in the app file or in an installable package while you iterate.
+</Warning>
+
+### Construct-by-construct mapping
+
+| Modal | Runpod SDK | Notes |
+| --- | --- | --- |
+| `app = modal.App("name")` | `app = runpod.App("name")` | `runpod.App("name", env="production")` sets a default environment. |
+| `@app.function(...)` | `@app.queue(...)` or `@app.task(...)` | Resource names need at least 3 characters to deploy. |
+| `@app.cls(...)` + `@modal.method()` | `@app.queue(...)` per method, or `@app.api(...)` on the class | |
+| `@modal.enter()` | Module-level cache in a queue function, or `@runpod.init` on an API class | |
+| `@modal.exit()` | Your own shutdown handling | The SDK docs show a startup hook only. |
+| `@app.local_entrypoint()` | `@runpod.local_entrypoint` | No parentheses. Runs on your machine under `rp flash dev`. |
+| `fn.remote(x)` | `fn.remote(x)` | |
+| `await fn.remote.aio(x)` | `await fn.remote.aio(x)` | |
+| `fn.spawn(x)` then `call.get(timeout=...)` | `fn.spawn(x)` then `job.result(timeout=...)` | Queue jobs also have `job.status()`, `job.cancel()`, and `job.retry()`. |
+| `fn.remote_gen(x)` | `fn.stream(x)` | For generator functions on queue resources. |
+| `fn.local(x)` | `fn.local(x)` | Volumes aren't mounted locally. |
+| `fn.map(xs)` | `[fn.spawn(x) for x in xs]`, then `job.result()` on each | No built-in map. |
+| `gpu="H100:2"` | `gpu="H100", gpu_count=2` | |
+| `cpu=2.0, memory=4096` (CPU Function) | `cpu="cpu3c-2-4"` | Fixed shapes. |
+| `ephemeral_disk=` (MiB) | `container_disk_gb=` (GB) | Defaults: 30 GB on GPU, 10 GB on CPU. |
+| `min_containers=1, max_containers=10` | `workers=(1, 10)` | Default is `(0, 3)`. |
+| `scaledown_window=300` | `idle_timeout=300` | Both in seconds. Both default to 60. |
+| `timeout=600` | `execution_timeout_ms=600000` | Queue and API only. Default is no limit. |
+| `@modal.concurrent(max_inputs=8)` | `max_concurrency=8` | Queue resources only. |
+| `retries=3` | Retry in the caller or with `job.retry()` | |
+| `schedule=modal.Cron("0 8 * * 1")` | External scheduler | |
+| `region="us-east"` | `datacenter="US-KS-2"` | Accepts a list. |
+| `volumes={"/data": vol}` | `mounts={"/runpod-volume": vol}` | Queue and API mount at `/runpod-volume` only. Tasks choose the path. |
+| `modal.Volume.from_name("x", create_if_missing=True)` | `runpod.NetworkVolume("x", size=100)` | Created on first use. Pass `create=False` to require an existing volume. |
+| `vol.commit()`, `vol.reload()` | Delete the call | |
+| `secrets=[modal.Secret.from_name("x")]` | `env={"KEY": runpod.Secret("x")}` | One secret per value. |
+| `modal.Secret.from_dict({...})`, `from_dotenv()` | Plain values in `env={...}` for non-sensitive settings, `runpod.Secret` for the rest | Local `.env` files are never sent to workers. |
+| `image=modal.Image...` | `dependencies=`, `system_dependencies=`, `image=` | |
+| `enable_memory_snapshot=True` | `flashboot=True` (the default) | Different mechanism. |
+| `modal.Function.from_name("app", "fn")` | `runpod.Queue(app="app", name="fn")` | Keyword arguments only. |
+| `modal.Cls.from_name("app", "Model")` | `runpod.Api(app="app", name="Model")` | Call routes with `.post(path, body)` and `.get(path)`. |
+
+### Example 1: A GPU function called with .remote()
+
+This Modal App embeds text on an L4 and is called from a local entrypoint:
+
+```python embed_modal.py
+import modal
+
+app = modal.App("embed")
+
+image = modal.Image.debian_slim(python_version="3.12").uv_pip_install(
+    "sentence-transformers"
+)
+
+
+@app.function(
+    image=image,
+    gpu="L4",
+    timeout=600,
+    scaledown_window=120,
+    max_containers=5,
+)
+def embed(texts: list[str]) -> list[list[float]]:
+    from sentence_transformers import SentenceTransformer
+
+    model = SentenceTransformer("all-MiniLM-L6-v2", device="cuda")
+    return model.encode(texts).tolist()
+
+
+@app.local_entrypoint()
+def main():
+    vectors = embed.remote(["hello", "world"])
+    print(len(vectors), len(vectors[0]))
+```
+
+The Runpod version keeps the function body and moves the configuration onto `@app.queue`:
+
+```python embed_runpod.py
+import runpod
+
+app = runpod.App("embed")
+
+
+@app.queue(
+    gpu="L4",
+    dependencies=["sentence-transformers"],
+    workers=(0, 5),
+    idle_timeout=120,
+    execution_timeout_ms=600000,
+)
+def embed(texts: list[str]) -> list[list[float]]:
+    from sentence_transformers import SentenceTransformer
+
+    model = SentenceTransformer("all-MiniLM-L6-v2", device="cuda")
+    return model.encode(texts).tolist()
+
+
+@runpod.local_entrypoint
+def main():
+    vectors = embed.remote(["hello", "world"])
+    print(len(vectors), len(vectors[0]))
+```
+
+Run it with `rp flash dev embed_runpod.py` in place of `modal run embed_modal.py`. The image definition became `dependencies`, the timeout changed from seconds to milliseconds, and `max_containers=5` became the upper bound of `workers`. The function already returns a list, so its result is valid JSON.
+
+### Example 2: A class that loads a model in @modal.enter
+
+This Modal Cls loads a text-generation model once per container, caches weights on a Volume, and keeps one container warm:
+
+```python textgen_modal.py
+import modal
+
+app = modal.App("textgen")
+
+image = (
+    modal.Image.debian_slim(python_version="3.12")
+    .uv_pip_install("torch", "transformers", "accelerate")
+    .env({"HF_HUB_CACHE": "/cache"})
+)
+hf_cache = modal.Volume.from_name("hf-hub-cache", create_if_missing=True)
+
+
+@app.cls(
+    image=image,
+    gpu="A10",
+    volumes={"/cache": hf_cache},
+    secrets=[modal.Secret.from_name("huggingface")],  # Provides HF_TOKEN
+    min_containers=1,
+    max_containers=4,
+    scaledown_window=300,
+)
+class Generator:
+    @modal.enter()
+    def load(self):
+        from transformers import pipeline
+
+        self.pipe = pipeline(
+            "text-generation", model="Qwen/Qwen2.5-7B-Instruct", device=0
+        )
+
+    @modal.method()
+    def generate(self, prompt: str, max_new_tokens: int = 64) -> str:
+        out = self.pipe(prompt, max_new_tokens=max_new_tokens)
+        return out[0]["generated_text"]
+
+
+@app.local_entrypoint()
+def main():
+    print(Generator().generate.remote("Runpod is"))
+```
+
+On Runpod you have two shapes. Use a queue resource when callers used `.remote()` or `.spawn()`, and an API resource when you want HTTP routes.
+
+<Tabs>
+  <Tab title="Queue resource">
+    The queue version caches the pipeline in a module-level variable, so the load runs once per worker:
+
+    ```python textgen_runpod.py
+    import runpod
+
+    app = runpod.App("textgen")
+
+    qwen = runpod.Model("Qwen/Qwen2.5-7B-Instruct")
+    _PIPE = None
+
+
+    @app.queue(
+        gpu=runpod.GpuGroup.AMPERE_24,
+        workers=(1, 4),
+        idle_timeout=300,
+        model=qwen,
+        dependencies=["transformers", "accelerate"],
+        env={"HF_TOKEN": runpod.Secret("hf-token")},
+    )
+    def generate(prompt: str, max_new_tokens: int = 64) -> str:
+        global _PIPE
+        if _PIPE is None:
+            from transformers import pipeline
+
+            _PIPE = pipeline("text-generation", model=str(qwen.path), device=0)
+        out = _PIPE(prompt, max_new_tokens=max_new_tokens)
+        return out[0]["generated_text"]
+
+
+    @runpod.local_entrypoint
+    def main():
+        print(generate.remote("Runpod is"))
+    ```
+
+    `Generator().generate.remote(...)` became `generate.remote(...)`. The Volume used as a Hugging Face cache became `runpod.Model`, which stages the weights on the host before the worker starts, and `qwen.path` points to them inside the worker.
+  </Tab>
+
+  <Tab title="API resource">
+    The API version keeps the class. `@runpod.init` replaces `@modal.enter()`, and each method becomes a route:
+
+    ```python textgen_api_runpod.py
+    import runpod
+
+    app = runpod.App("textgen")
+
+    qwen = runpod.Model("Qwen/Qwen2.5-7B-Instruct")
+
+
+    @app.api(
+        gpu=runpod.GpuGroup.AMPERE_24,
+        workers=(1, 4),
+        idle_timeout=300,
+        model=qwen,
+        dependencies=["transformers", "accelerate"],
+        env={"HF_TOKEN": runpod.Secret("hf-token")},
+    )
+    class Generator:
+        @runpod.init
+        def load(self):
+            from transformers import pipeline
+
+            self.pipe = pipeline("text-generation", model=str(qwen.path), device=0)
+
+        @runpod.post("/generate")
+        async def generate(self, body: dict):
+            out = self.pipe(
+                body["prompt"], max_new_tokens=body.get("max_new_tokens", 64)
+            )
+            return {"text": out[0]["generated_text"]}
+
+        @runpod.get("/health")
+        async def health(self):
+            return {"status": "ok"}
+
+
+    @runpod.local_entrypoint
+    def main():
+        print(Generator.post("/generate", {"prompt": "Runpod is"}))
+    ```
+
+    A POST route receives the request's JSON body as its one argument. In a dev session you call routes through the class. After deploy, the same routes are served at `https://ENDPOINT_ID.api.runpod.ai/generate`.
+  </Tab>
+</Tabs>
+
+`min_containers=1` became `workers=(1, 4)`, which keeps one worker running and billed at all times. The Modal Secret named `huggingface` held an `HF_TOKEN` key. On Runpod, the secret `hf-token` holds the token value and the `env` mapping names the variable. If your weights aren't on Hugging Face, mount a network volume at `/runpod-volume` and see [Volume cache](/serverless/development/volume-cache) for loading them quickly.
+
+### Example 3: A FastAPI web endpoint
+
+This Modal ASGI app serves two routes, handles 20 concurrent requests per container, and requires a Proxy Token:
+
+```python classify_modal.py
+import modal
+
+app = modal.App("classify")
+
+image = modal.Image.debian_slim(python_version="3.12").uv_pip_install(
+    "fastapi[standard]", "torch", "transformers"
+)
+
+
+@app.function(image=image, gpu="T4", min_containers=1)
+@modal.concurrent(max_inputs=20)
+@modal.asgi_app(requires_proxy_auth=True)
+def web():
+    from fastapi import FastAPI
+    from transformers import pipeline
+
+    api = FastAPI()
+    classifier = pipeline("sentiment-analysis", device=0)
+
+    @api.get("/health")
+    async def health():
+        return {"status": "ok"}
+
+    @api.post("/classify")
+    async def classify(body: dict):
+        return classifier(body["text"])[0]
+
+    return api
+```
+
+<Tabs>
+  <Tab title="API resource">
+    When the routes take and return JSON, translate them to an `@app.api` class:
+
+    ```python classify_runpod.py
+    import runpod
+
+    app = runpod.App("classify")
+
+
+    @app.api(
+        gpu=runpod.GpuGroup.AMPERE_16,
+        workers=(1, 3),
+        dependencies=["transformers"],
+    )
+    class Classifier:
+        @runpod.init
+        def load(self):
+            from transformers import pipeline
+
+            self.classifier = pipeline("sentiment-analysis", device=0)
+
+        @runpod.get("/health")
+        async def health(self):
+            return {"status": "ok"}
+
+        @runpod.post("/classify")
+        async def classify(self, body: dict):
+            return self.classifier(body["text"])[0]
+
+
+    @runpod.local_entrypoint
+    def main():
+        print(Classifier.get("/health"))
+        print(Classifier.post("/classify", {"text": "This works."}))
+    ```
+
+    A GET route takes no arguments and a POST route takes the JSON body. FastAPI features such as path parameters, Pydantic request models, middleware, and streaming responses aren't part of this route model, so use the custom image tab if you depend on them.
+  </Tab>
+
+  <Tab title="Load-balancing endpoint with your FastAPI app">
+    To keep the FastAPI app as it is, run it as the server of a load-balancing endpoint. Add a `/ping` health route and listen on the port in the `PORT` environment variable:
+
+    ```python app.py
+    import os
+
+    import uvicorn
+    from fastapi import FastAPI
+    from transformers import pipeline
+
+    api = FastAPI()
+    classifier = pipeline("sentiment-analysis", device=0)
+
+
+    @api.get("/ping")
+    async def ping():
+        return {"status": "healthy"}
+
+
+    @api.get("/health")
+    async def health():
+        return {"status": "ok"}
+
+
+    @api.post("/classify")
+    async def classify(body: dict):
+        return classifier(body["text"])[0]
+
+
+    if __name__ == "__main__":
+        uvicorn.run(api, host="0.0.0.0", port=int(os.getenv("PORT", "80")))
+    ```
+
+    Package it with a Dockerfile:
+
+    ```dockerfile Dockerfile
+    FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
+
+    WORKDIR /app
+    RUN pip install --no-cache-dir "fastapi[standard]" transformers
+    COPY app.py .
+
+    CMD ["python", "-u", "app.py"]
+    ```
+
+    The load balancer polls `/ping` and sends traffic once it returns `200`. Return `204` while the model loads if startup is slow. Deploy this image in [Step 6](#load-balancing-endpoint-from-a-custom-image).
+  </Tab>
+</Tabs>
+
+On both paths, callers send `Authorization: Bearer` with a Runpod API key in place of the `Modal-Key` and `Modal-Secret` headers. `@modal.concurrent` has no argument on API resources: the routes are `async`, and the endpoint scales on request count (`scaler_type="REQUEST_COUNT"`, `scaler_value=4` by default).
+
+### Example 4: A training job with a Volume and Secrets
+
+This Modal Function trains on an H100, checkpoints to a Volume, logs to Weights & Biases, and retries after a failure:
+
+```python train_modal.py
+import modal
+
+app = modal.App("finetune")
+
+image = modal.Image.debian_slim(python_version="3.12").uv_pip_install("torch", "wandb")
+ckpt = modal.Volume.from_name("checkpoints", create_if_missing=True)
+
+
+@app.function(
+    image=image,
+    gpu="H100",
+    volumes={"/ckpt": ckpt},
+    secrets=[modal.Secret.from_name("wandb")],  # Provides WANDB_API_KEY
+    timeout=24 * 60 * 60,
+    retries=modal.Retries(max_retries=2, initial_delay=10.0, backoff_coefficient=2.0),
+)
+def train(run_name: str, epochs: int = 3) -> dict:
+    from pathlib import Path
+
+    import torch
+    import wandb
+
+    run_dir = Path("/ckpt") / run_name
+    run_dir.mkdir(parents=True, exist_ok=True)
+    state_file = run_dir / "state.pt"
+
+    model = torch.nn.Linear(128, 1).cuda()
+    opt = torch.optim.AdamW(model.parameters(), lr=1e-3)
+    start = 0
+    if state_file.exists():  # Resume after a retry or preemption
+        state = torch.load(state_file)
+        model.load_state_dict(state["model"])
+        start = state["epoch"] + 1
+
+    wandb.init(project="finetune", name=run_name, resume="allow")
+    loss = torch.tensor(0.0)
+    for epoch in range(start, epochs):
+        x = torch.randn(4096, 128, device="cuda")
+        loss = ((model(x) - x.sum(dim=1, keepdim=True)) ** 2).mean()
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+        wandb.log({"epoch": epoch, "loss": loss.item()})
+        torch.save({"model": model.state_dict(), "epoch": epoch}, state_file)
+        ckpt.commit()
+
+    return {"checkpoint": str(state_file), "loss": loss.item()}
+
+
+@app.local_entrypoint()
+def main():
+    print(train.remote("run-1", epochs=3))
+```
+
+On Runpod this is a task. Each call gets its own Pod, and the Pod is terminated when the function returns:
+
+```python train_runpod.py
+import runpod
+
+app = runpod.App("finetune")
+
+ckpt = runpod.NetworkVolume("checkpoints", size=100)
+
+
+@app.task(
+    gpu="H100",
+    mounts={"/ckpt": ckpt},
+    env={"WANDB_API_KEY": runpod.Secret("wandb-api-key")},
+    dependencies=["wandb"],
+    container_disk_gb=50,
+)
+def train(run_name: str, epochs: int = 3) -> dict:
+    import torch
+    import wandb
+
+    run_dir = ckpt.path / run_name
+    run_dir.mkdir(parents=True, exist_ok=True)
+    state_file = run_dir / "state.pt"
+
+    model = torch.nn.Linear(128, 1).cuda()
+    opt = torch.optim.AdamW(model.parameters(), lr=1e-3)
+    start = 0
+    if state_file.exists():  # Resume when you run the task again
+        state = torch.load(state_file)
+        model.load_state_dict(state["model"])
+        start = state["epoch"] + 1
+
+    wandb.init(project="finetune", name=run_name, resume="allow")
+    loss = torch.tensor(0.0)
+    for epoch in range(start, epochs):
+        x = torch.randn(4096, 128, device="cuda")
+        loss = ((model(x) - x.sum(dim=1, keepdim=True)) ** 2).mean()
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+        wandb.log({"epoch": epoch, "loss": loss.item()})
+        torch.save({"model": model.state_dict(), "epoch": epoch}, state_file)
+
+    return {"checkpoint": str(state_file), "loss": loss.item()}
+
+
+@runpod.local_entrypoint
+def main():
+    print(train.remote("run-1", epochs=3))
+```
+
+Run it with `rp flash dev train_runpod.py --once`, which runs the entrypoint a single time and exits with an error if it fails. The changes from the Modal version:
+
+- `ckpt.path` returns the mount path inside the task. Read it inside the function, not at module level.
+- `ckpt.commit()` is gone. Writes to a network volume are durable as they happen.
+- `torch` isn't in `dependencies`, because the built-in GPU image provides it.
+- There's no `timeout`. Tasks have no execution limit, so a hung job keeps billing until you stop it. To bound a run, call `job = train.spawn(...)` and then `await job.wait(timeout=...)`, which terminates the Pod when the wait ends.
+- There's no `retries`. The resume logic stays, and you run the task again after a failure.
+
+<Warning>
+  A task started with `.spawn()` that you never wait on or cancel keeps its Pod running after your script exits. Check the [Pods page](https://console.runpod.io/pods) after interrupted runs.
+</Warning>
+
+### The custom image path: a handler function
+
+When an App can't fit the SDK's dependency model, build a Docker image with a [handler function](/serverless/workers/handler-functions). The handler receives each job as a dict and returns a JSON-serializable result. This handler does the same job as the Modal Cls in Example 2:
+
+```python handler.py
+import runpod
+from transformers import pipeline
+
+# Loaded once when the worker starts, like @modal.enter()
+pipe = pipeline("text-generation", model="Qwen/Qwen2.5-7B-Instruct", device=0)
+
+
+def handler(job):
+    job_input = job["input"]
+    out = pipe(job_input["prompt"], max_new_tokens=job_input.get("max_new_tokens", 64))
+    return {"text": out[0]["generated_text"]}
+
+
+runpod.serverless.start({"handler": handler})
+```
+
+The Dockerfile replaces the `modal.Image` chain line for line:
+
+```dockerfile Dockerfile
+FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
+
+WORKDIR /
+RUN pip install --no-cache-dir runpod transformers accelerate
+COPY handler.py .
+
+CMD ["python", "-u", "/handler.py"]
+```
+
+Test the handler locally with `python handler.py --test_input '{"input": {"prompt": "Runpod is"}}'` before you build. A generator handler streams results the way `remote_gen` does, and a `concurrency_modifier` replaces `@modal.concurrent`. See [Concurrent handlers](/serverless/workers/concurrent-handler). You can also let Runpod build the image from a repository with the [GitHub integration](/serverless/workers/github-integration).
+
+## Step 5: Move your data and models
+
+### Secrets
+
+Re-create each key of each Modal Secret as a Runpod secret:
+
+```bash
+rp secret add hf-token
+rp secret add wandb-api-key
+rp secret list
+```
+
+`rp secret add` prompts for the value, which keeps it out of your shell history. Secret names must be unique in the account, start with a letter or underscore, and can't start with `runpod`. In SDK code, reference a secret with `env={"HF_TOKEN": runpod.Secret("hf-token")}`. In a template or endpoint you create outside the SDK, set the environment variable's value to `{{ RUNPOD_SECRET_hf-token }}`. A changed secret takes effect the next time a worker or Pod boots. See [Manage secrets](/pods/templates/secrets).
+
+### Hugging Face models
+
+If a Volume only caches Hugging Face downloads, don't copy it. Use `model=runpod.Model("owner/name")` on a queue or API resource, or `--model-reference` on an endpoint you create with `runpodctl`. Runpod stages the weights on the host before the worker starts. Gated models need `HF_TOKEN` on the same resource. See [Cached models](/serverless/endpoints/model-caching).
+
+### Volumes
+
+Create a network volume in the data center where you plan to run. Check GPU stock there first, because every resource that mounts the volume runs in that data center:
+
+```bash
+runpodctl gpu list
+runpodctl datacenter list
+runpodctl network-volume create --name checkpoints --size 100 --data-center-id US-KS-2
+```
+
+The command returns the volume ID. Size is in GB, from 10 to 4096, and you can grow a volume later but not shrink it. In SDK code, `runpod.NetworkVolume("checkpoints", create=False)` then refers to this volume by name.
+
+Download the Modal Volume and upload it to the network volume through the volume's [S3-compatible API](/storage/s3-api). You need an S3 API key from the [Credentials page](/get-started/credentials) and a data center that supports the API. Configure the AWS CLI with that key (`aws configure`), then sync:
+
+```bash
+modal volume get checkpoints / ./checkpoints-export
+
+aws s3 sync ./checkpoints-export s3://VOLUME_ID/ \
+  --endpoint-url https://s3api-us-ks-2.runpod.io/ \
+  --region US-KS-2
+```
+
+Files land at the volume root, which is `/runpod-volume` on Serverless workers and `/workspace` on Pods. `aws s3 sync` can have trouble with more than 10,000 files or deeply nested trees, so for large trees copy from inside a Pod as shown next. See [S3-compatible API](/storage/s3-api) for the supported data centers and endpoint URLs.
+
+For a Volume too large to stage on your machine, copy from inside Runpod. Start a CPU Pod with the network volume attached, then run the Modal CLI there:
+
+```bash
+runpodctl pod create --name modal-copy --compute-type cpu --image python:3.12 \
+  --network-volume-id VOLUME_ID --data-center-ids US-KS-2 \
+  --env '{"MODAL_TOKEN_ID":"YOUR_MODAL_TOKEN_ID","MODAL_TOKEN_SECRET":"YOUR_MODAL_TOKEN_SECRET"}'
+
+runpodctl ssh info POD_ID
+# Then, in a shell on the Pod:
+pip install modal
+modal volume get checkpoints / /workspace/
+
+# When the copy finishes, back on your machine:
+runpodctl pod delete POD_ID
+```
+
+Use a short-lived Modal token for this and rotate it afterward, because environment variables are visible in the Pod's configuration.
+
+To serve the same files in several data centers, either create one network volume per data center and copy the data to each, or use a [global volume](/storage/globalvolume/overview). Global volumes are in beta, attach to GPU compute, are billed for storage and requests, and don't support file locking or atomic rename. The S3-compatible API works with network volumes only, so load a global volume from a Pod.
+
+### Cloud bucket mounts
+
+`modal.CloudBucketMount` presents an S3, R2, or GCS bucket as a directory. On Runpod, choose one of these:
+
+- Read and write the bucket from your code with `boto3` or the provider's SDK, with credentials in Runpod secrets. This suits buckets that stay the source of truth.
+- Copy the data to a network volume once, with `aws s3 sync` or `rclone` from a Pod, when workers need file system access to a fixed dataset.
+- Use [Cloud Sync](/pods/storage/cloud-sync) to move data between a Pod and S3, Google Cloud Storage, Azure Blob Storage, Backblaze B2, or Dropbox.
+
+### Dicts and Queues
+
+Export any state you need from `modal.Dict` objects before you shut down (`modal dict items DICT_NAME --all --json`), and load it into the store that replaces them. Values are pickled Python objects, so convert them to a portable format as you export.
+
+## Step 6: Deploy on Runpod
+
+### SDK apps
+
+Deploy from the project directory:
+
+```bash
+rp flash deploy
+rp flash deploy --env production
+rp flash app list
+rp flash env get production
+```
+
+`rp flash deploy` finds every app in the directory, builds an artifact, and creates or updates the endpoints for queue and API resources. It prints a link to each endpoint when it finishes. `--env` plays the role of `modal deploy --env`, and running the command again updates the deployment in place. Tasks aren't deployed as endpoints. They provision a Pod each time your code calls them.
+
+Before you deploy to production, pin GPUs instead of using `GpuGroup.ANY`, set `execution_timeout_ms`, and set `workers` explicitly. See [Configuration best practices](/sdk/configuration/best-practices).
+
+<Note>
+  Deploys and dev sessions add your account API key as `RUNPOD_API_KEY` to each endpoint's environment so that one resource can call another. Anyone who can read the endpoint's template can read that key, so limit who has access to the account or team.
+</Note>
+
+### Queue endpoint from a custom image
+
+Build and push the handler image for `linux/amd64`, then create a Serverless template and an endpoint:
+
+```bash
+docker build --platform linux/amd64 -t YOUR_REGISTRY/textgen:v1 .
+docker push YOUR_REGISTRY/textgen:v1
+
+runpodctl template create --name textgen-v1 --image YOUR_REGISTRY/textgen:v1 --serverless \
+  --container-disk-in-gb 40 \
+  --env '{"HF_TOKEN":"{{ RUNPOD_SECRET_hf-token }}","HF_HUB_CACHE":"/runpod-volume/huggingface-cache/hub"}'
+
+runpodctl serverless create --name textgen --template-id TEMPLATE_ID \
+  --gpu-id AMPERE_24 --workers-min 1 --workers-max 4 \
+  --idle-timeout 300 --execution-timeout 600 --min-cuda-version 12.8 \
+  --model-reference https://huggingface.co/Qwen/Qwen2.5-7B-Instruct:main
+```
+
+`--gpu-id` accepts a pool ID or a device ID, and `--execution-timeout` is in seconds here. `--model-reference` attaches a cached model under `/runpod-volume/huggingface-cache/hub/`. A custom handler doesn't look there on its own, so the template sets `HF_HUB_CACHE` to that path. Without it, the handler downloads the weights again on every cold start. Add `--network-volume-id VOLUME_ID` to mount a network volume at `/runpod-volume`. For a private registry, save credentials with `runpodctl registry create` and pass `--registry-auth-id` when you create the template. In the console, the same flow is **Serverless**, then **New Endpoint**, then **Import from Docker Registry**.
+
+### Load-balancing endpoint from a custom image
+
+The endpoint type is set at creation through REST API v2 or the console. `runpodctl serverless create` creates queue-based endpoints. Create a load-balancing endpoint with a POST to `/v2/serverless`:
+
+```bash
+curl -s -X POST https://api.runpod.io/v2/serverless \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "classify",
+    "image": "YOUR_REGISTRY/classify:v1",
+    "type": "LOAD_BALANCER",
+    "gpu": {"pools": ["AMPERE_16"], "count": 1, "minCudaVersion": "12.8"},
+    "disk": 20,
+    "ports": ["8000/http"],
+    "env": {"PORT": "8000", "PORT_HEALTH": "8000"},
+    "workers": {"min": 1, "max": 3, "idleTimeout": 60},
+    "scaling": {"type": "REQUEST_COUNT", "requestCount": 4},
+    "flashboot": "FLASHBOOT"
+  }'
+```
+
+`type` and `scaling` are required, and load-balancing endpoints scale on `REQUEST_COUNT`. Set `PORT_HEALTH` whenever you change `PORT`, because each defaults to 80 on its own. The response includes the endpoint ID and its request URLs. REST v2 defaults differ from the console's: `flashboot` defaults to `OFF` and `workers.idleTimeout` to 10 seconds, so set them. In the console, choose **Load Balancer** under **Endpoint Type**. See [Build a load balancing worker](/serverless/load-balancing/build-a-worker).
+
+## Step 7: Update the code that calls Modal
+
+### Python callers
+
+Code that looks up a deployed Modal Function changes to a Runpod client. Before:
+
+```python caller_modal.py
+import modal
+
+embed = modal.Function.from_name("embed", "embed")
+vectors = embed.remote(["hello", "world"])
+
+call = embed.spawn(["later"])
+result = call.get(timeout=120)
+
+Generator = modal.Cls.from_name("textgen", "Generator")
+text = Generator().generate.remote("Runpod is")
+```
+
+After, using resources deployed with the Runpod SDK:
+
+```python caller_runpod.py
+import runpod
+
+embed = runpod.Queue(app="embed", name="embed")
+vectors = embed.remote(texts=["hello", "world"])  # Keyword arguments only
+
+job = embed.spawn(texts=["later"])
+result = job.result(timeout=120)
+
+generator = runpod.Api(app="textgen", name="Generator")
+text = generator.post("/generate", {"prompt": "Runpod is"})["text"]
+```
+
+`runpod.Queue` and `runpod.Api` target the `default` environment unless you pass `env=`. They authenticate with `rp login` credentials or `RUNPOD_API_KEY`, in place of `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET`.
+
+For any queue endpoint, including one built from a custom image, call it by ID:
+
+```python caller_endpoint.py
+import runpod
+
+endpoint = runpod.Endpoint("ENDPOINT_ID")
+
+result = endpoint.run_sync({"prompt": "Runpod is"}, timeout=120)
+
+run_request = endpoint.run({"prompt": "Runpod is"})
+print(run_request.status())
+print(run_request.output())
+```
+
+The client wraps your dict as `{"input": {...}}`. For a function deployed with `@app.queue`, the keys of `input` are the function's keyword arguments.
+
+### HTTP callers
+
+A request to a Modal Web Function looks like this:
+
+```bash
+curl -X POST https://WORKSPACE--classify-web.modal.run/classify \
+  -H "Modal-Key: YOUR_PROXY_TOKEN_ID" \
+  -H "Modal-Secret: YOUR_PROXY_TOKEN_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "This works."}'
+```
+
+For an API resource or a load-balancing endpoint, change the host and the auth header. The path and body stay the same:
+
+```bash
+curl -X POST https://ENDPOINT_ID.api.runpod.ai/classify \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "This works."}'
+```
+
+For a queue endpoint, the body moves under `input` and the result comes back under `output`:
+
+```bash
+curl -X POST https://api.runpod.ai/v2/ENDPOINT_ID/runsync \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"prompt": "Runpod is", "max_new_tokens": 64}}'
+```
+
+The response is a JSON envelope with `id`, `status`, `delayTime`, `executionTime`, and `output`, so update clients that read the bare return value.
+
+### Long requests, polling, streaming, and webhooks
+
+| Modal pattern | Runpod pattern |
+| --- | --- |
+| Web Function request longer than 150 seconds, followed through `303` redirects | `/runsync` waits 90 seconds by default (`?wait=` up to 300000 ms). For longer jobs, use `/run` and poll `/status/JOB_ID`. |
+| `fn.spawn()` then `FunctionCall.from_id(id).get()` | `POST /run` returns a job ID. `GET /status/JOB_ID` returns the state and output. |
+| `call.cancel()` | `POST /cancel/JOB_ID` |
+| Generator Function with `remote_gen`, or a streaming response | Generator handler or generator queue function, read with `GET /stream/JOB_ID` or `fn.stream()`. On load-balancing endpoints, stream from your own server. |
+| Polling a web endpoint you wrote for job status | Add `"webhook": "https://your-service.example.com/hook"` next to `input`, and Runpod calls it when the job finishes. |
+| OpenAI-compatible client pointed at a Modal Endpoint or vLLM Server | Set the base URL to `https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1` for a vLLM worker, with the Runpod API key as the API key. |
+
+Job states are `IN_QUEUE`, `IN_PROGRESS`, `COMPLETED`, `FAILED`, `CANCELLED`, and `TIMED_OUT`. A job that isn't picked up or finished within its TTL (24 hours by default) is removed, so set `policy.ttl` and `policy.executionTimeout` on long jobs. See [Send API requests](/serverless/endpoints/send-requests) for rate limits and retry guidance.
+
+### Automation and CI
+
+Replace Modal CLI calls in CI with their Runpod counterparts from the [CLI command map](#cli-command-map), and replace the `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET` secrets with `RUNPOD_API_KEY`. Use `rp flash dev main.py --once` as the smoke test that `modal run` provided. For infrastructure you manage outside the SDK, use [REST API v2](/api-reference-v2/overview) or the [Terraform provider](/integrations/terraform/overview), which is built on REST API v2.
+
+## Step 8: Verify, cut over, and shut down
+
+1. **Send a real request from outside.** Call the deployed endpoint from the network your clients use, with a production-shaped payload, and check the health of a queue endpoint:
+
+    ```bash
+    curl -s https://api.runpod.ai/v2/ENDPOINT_ID/health \
+      -H "Authorization: Bearer YOUR_API_KEY"
+    ```
+
+2. **Compare outputs and latency.** Run the same inputs through Modal and Runpod. Compare results, then measure a cold request (no workers running) and a warm request separately. The endpoint's **Metrics** tab shows delay time, execution time, and cold start time.
+3. **Run both in parallel.** Keep the Modal App deployed. Send a small share of traffic to Runpod from your client or gateway, and watch error rates, `429` responses, and queue delay.
+4. **Shift traffic.** Raise `workers` to cover peak load before you move the rest. Check that the maximum fits your account's worker limit.
+5. **Set cost guards on Runpod.** Set `execution_timeout_ms` on every queue and API resource, keep `workers` maximums deliberate, and remember that a minimum above 0 bills continuously. Review spend on the [Billing page](/accounts-billing/billing).
+6. **Stop billing on Modal.** After the parallel run, stop each App, then delete storage and Secrets you've already copied:
+
+    ```bash
+    modal app list
+    modal app stop APP_NAME --yes
+    modal endpoint list
+    modal endpoint stop ENDPOINT_NAME
+
+    modal volume delete VOLUME_NAME --yes
+    modal dict delete DICT_NAME --yes
+    modal queue delete QUEUE_NAME --yes
+    modal secret delete SECRET_NAME --yes
+    modal container list
+    ```
+
+    `modal app stop` is permanent, so scheduled Functions in the App stop running too. Deleting a Volume deletes its data, so verify the copy on Runpod first. Check `modal endpoint stop --help` for its arguments, and repeat for each Environment with `--env`. Then rotate or delete the Modal tokens and Proxy Tokens your callers used.
+
+<Warning>
+  Undeploying a Runpod app doesn't delete the network volumes it created, and they keep billing. If you roll back to Modal, delete volumes you no longer need from the [Storage page](https://console.runpod.io/user/storage) or with `runpodctl network-volume delete`.
+</Warning>
+
+## Reference
+
+### CLI command map
+
+| Modal CLI | Runpod | Notes |
+| --- | --- | --- |
+| `modal setup`, `modal token new` | `rp login` | Opens a browser. `rp login --api-key YOUR_API_KEY` skips it. |
+| `modal token set --token-id ... --token-secret ...` | `rp login --api-key YOUR_API_KEY`, or `export RUNPOD_API_KEY=...` | |
+| `modal profile activate NAME` | `rp login --profile NAME` | |
+| `modal run app.py` | `rp flash dev app.py --once` | Runs the local entrypoint once and cleans up. |
+| `modal serve app.py` | `rp flash dev app.py` | Live session with temporary endpoints. There's no local HTTP server or dev URL. Call routes from the entrypoint. |
+| `modal deploy app.py` | `rp flash deploy` | Deploys every app in the directory. |
+| `modal deploy --env NAME` | `rp flash deploy --env NAME` | |
+| `modal app list` | `rp flash app list`, `runpodctl serverless list` | |
+| `modal app info NAME` | `rp flash app get NAME`, `rp flash env get ENV_NAME` | |
+| `modal app stop NAME` | `rp flash undeploy --app NAME`, `rp flash app delete NAME` | `undeploy` removes one environment. `app delete` removes all of them. |
+| `modal app rollback NAME` | Redeploy the earlier commit with `rp flash deploy` | |
+| `modal app logs NAME` | Endpoint logs in the console, `rp logs POD_ID` for task Pods | Dev sessions stream worker output to the terminal. |
+| `modal environment create NAME` | `rp flash env add NAME` | |
+| `modal environment list` | `rp flash env list --app NAME` | |
+| `modal volume create NAME` | `runpodctl network-volume create --name NAME --size GB --data-center-id DC` | |
+| `modal volume list` | `runpodctl network-volume list` | |
+| `modal volume put NAME LOCAL REMOTE` | `aws s3 cp LOCAL s3://VOLUME_ID/REMOTE --endpoint-url ... --region DC` | Needs an S3 API key. Add `--recursive` for a directory. |
+| `modal volume get NAME REMOTE LOCAL` | `aws s3 cp s3://VOLUME_ID/REMOTE LOCAL --endpoint-url ... --region DC` | |
+| `modal volume ls NAME` | `aws s3 ls s3://VOLUME_ID/ --endpoint-url ... --region DC` | |
+| `modal volume delete NAME` | `runpodctl network-volume delete VOLUME_ID` | |
+| `modal secret create NAME KEY=VALUE` | `rp secret add NAME` | One value per secret. |
+| `modal secret list` | `rp secret list` | |
+| `modal secret delete NAME` | `rp secret delete NAME` | |
+| `modal shell` | `rp pod create`, then `rp ssh POD_ID` | Or `runpodctl pod create` and `runpodctl ssh info POD_ID`. |
+| `modal container list` | `runpodctl serverless get ENDPOINT_ID --include-workers`, `runpodctl pod list` | |
+| `modal endpoint create --model ...` | `runpodctl serverless create --hub-id ...` for a vLLM worker | Find the Hub ID with `runpodctl hub search vllm`. |
+| `modal billing report` | `runpodctl billing serverless`, `runpodctl billing pods`, or `/v2/billing` in REST API v2 | |
+
+### SDK call map
+
+| Modal SDK | Runpod | REST route behind it |
+| --- | --- | --- |
+| `fn.remote(x)` | `fn.remote(x)`, `endpoint.run_sync({...})` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/runsync` |
+| `fn.spawn(x)` | `fn.spawn(x)`, `endpoint.run({...})` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/run` |
+| `call.get(timeout=0)` | `job.status()`, `run_request.status()` | `GET https://api.runpod.ai/v2/ENDPOINT_ID/status/JOB_ID` |
+| `call.cancel()` | `job.cancel()` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/cancel/JOB_ID` |
+| `fn.remote_gen(x)` | `fn.stream(x)` | `GET https://api.runpod.ai/v2/ENDPOINT_ID/stream/JOB_ID` |
+| `fn.get_current_stats()` | `endpoint.health()` | `GET https://api.runpod.ai/v2/ENDPOINT_ID/health` |
+| `fn.update_autoscaler(...)` | `runpodctl serverless update ENDPOINT_ID --workers-min ... --workers-max ...` | `PATCH https://api.runpod.io/v2/serverless/ENDPOINT_ID` |
+| `modal.Volume.from_name(...)` | `runpod.NetworkVolume(...)` | `POST https://api.runpod.io/v2/network-volumes` |
+| `modal.Secret.from_name(...)` | `runpod.Secret(...)` | `POST https://api.runpod.io/v2/account/secrets` |
+| `app.deploy()` | `rp flash deploy` | |
+
+### Configuration field map
+
+| Modal decorator argument | Runpod SDK argument | `runpodctl serverless create` flag | REST v2 field |
+| --- | --- | --- | --- |
+| `gpu` | `gpu` | `--gpu-id` | `gpu.pools`, `gpu.excludedTypes` |
+| `gpu="TYPE:N"` | `gpu_count` | `--gpu-count` | `gpu.count` |
+| `cpu`, `memory` | `cpu` | `--compute-type CPU --instance-id` | `cpu[].id`, `cpu[].vcpuCount` |
+| `ephemeral_disk` | `container_disk_gb` | `--container-disk-in-gb` on the template | `disk` |
+| `min_containers` | `workers=(min, max)` | `--workers-min` | `workers.min` |
+| `max_containers` | `workers=(min, max)` | `--workers-max` | `workers.max` |
+| `scaledown_window` | `idle_timeout` | `--idle-timeout` | `workers.idleTimeout` |
+| `timeout` | `execution_timeout_ms` | `--execution-timeout` (seconds) | `timeout` (milliseconds) |
+| `@modal.concurrent(max_inputs=)` | `max_concurrency` | Set in the handler (`concurrency_modifier`) | |
+| `region` | `datacenter` | `--data-center-ids` | `dataCenterIds` |
+| `volumes` | `mounts` | `--network-volume-id` | `mounts.network`, `mounts.global` |
+| `secrets` | `env` with `runpod.Secret` | `--env` on the template | `env` |
+| `image` | `image`, `dependencies`, `system_dependencies` | `--image` on the template | `image` |
+| `enable_memory_snapshot` | `flashboot` | `--flash-boot` | `flashboot` |
+| `name` | `name` | `--name` | `name` |
+
+### Environment variable map
+
+| Modal | Runpod | Where |
+| --- | --- | --- |
+| `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET` | `RUNPOD_API_KEY` | Your machine and CI. |
+| `~/.modal.toml` | `~/.runpod/config.toml` | Your machine. |
+| `MODAL_ENVIRONMENT` | `--env` on `rp flash deploy`, or `env=` on `runpod.App` | Your machine and CI. |
+| `MODAL_IS_REMOTE` | `runpod.is_local()` | In code. |
+| `MODAL_REGION` | `RUNPOD_DC_ID` | Inside Pods, including task Pods. |
+| `MODAL_TASK_ID` | `RUNPOD_POD_ID` | Inside Pods, including task Pods. |
+| No counterpart | `RUNPOD_ENDPOINT_ID` | Inside Serverless workers. |
+| No counterpart | `PORT`, `PORT_HEALTH`, `HEALTH_CHECK_PATH` | Inside load-balancing workers. |
+| No counterpart | `RUNPOD_INIT_TIMEOUT` | Endpoint setting for how long a worker may take to initialize (default 420 seconds). |
+
+## Migrate with a coding agent
+
+A coding agent with the Runpod skills and MCP server can do the inventory, translate the code, and deploy with your approval. Install both first.
+
+<Tabs>
+  <Tab title="Claude Code">
+    The plugin also connects the hosted MCP server:
+
+    ```bash
+    claude plugin marketplace add runpod/runpod-plugins-official
+    claude plugin install runpod@runpod
+    ```
+  </Tab>
+
+  <Tab title="Other agents">
+    Install the skills, then the hosted MCP server:
+
+    ```bash
+    npx skills add runpod/runpod-plugins-official --skill '*' --agent AGENT_ID --global
+    npx @runpod/mcp-server@latest add --client CLIENT_ID
+    ```
+  </Tab>
+</Tabs>
+
+The MCP server signs in with OAuth (**Sign in with Runpod**), so you don't need an API key to start. See [Agent skills](/get-started/agent-skills) and [MCP servers](/get-started/mcp-servers) for agent and client IDs.
+
+Then give the agent this prompt from the root of your repository:
+
+```text
+Use the runpod-cloud-migrate skill to migrate this project from Modal to Runpod.
+
+1. Inventory first. Find every modal.App, @app.function, @app.cls, @app.server, web
+   endpoint decorator, schedule, Volume, Secret, Dict, Queue, Sandbox, and
+   CloudBucketMount in the code, and every caller that uses Function.from_name,
+   Cls.from_name, or a modal.run URL. If the modal CLI is authenticated, also run
+   modal app list, modal volume list, and modal secret list. Treat old names
+   (Stub, keep_warm, concurrency_limit, container_idle_timeout,
+   allow_concurrent_inputs, web_endpoint) as their current equivalents.
+2. Show me a plan as a table: each Modal resource, its Runpod target (@app.queue,
+   @app.task, @app.api, a load-balancing endpoint, a custom handler image, a Pod),
+   the GPU mapping, the storage and secret mapping, and every feature with no direct
+   equivalent (schedules, Dict, Queue, map, batched, retries, proxy auth, custom
+   domains, sandboxes) with the workaround you propose.
+3. Include a cost estimate for the Runpod side, with worker counts and idle
+   timeouts, and check live GPU stock in the data center you propose.
+4. Wait for my approval before you create anything billable on Runpod (endpoints,
+   Pods, volumes) or create any secret. I'll enter secret values myself.
+5. Migrate one workload first. Write the Runpod code next to the Modal code without
+   deleting it, run rp flash dev FILE --once, then deploy it.
+6. Verify with a real request to the deployed endpoint and show me the request, the
+   response, and the cold and warm latency.
+7. Never stop, delete, or change any Modal resource (apps, volumes, secrets) without
+   my explicit approval.
+```
+
+## Troubleshooting
+
+**`arguments must be json-serializable`, or a JSON `TypeError` when calling a function.** The function takes or returns a Python object that Modal pickled, such as a NumPy array, a DataFrame, or bytes. Convert to lists, base64 strings, or a URL to a file on a volume or in object storage.
+
+**A job is killed almost immediately.** A Modal `timeout` in seconds was copied into `execution_timeout_ms`. Multiply by 1,000.
+
+**`gpu and cpu are mutually exclusive`.** A Modal Function that set both `gpu=` and `cpu=` or `memory=` was translated argument by argument. Remove `cpu` from GPU resources.
+
+**`ImportError` when you start a dev session or deploy.** The SDK imports your module locally to discover resources, so a top-level `import torch` needs torch on your machine. Move the import into the function body. If you used `with image.imports():` on Modal, move those imports too.
+
+**A sibling module imports under `rp flash deploy` but not under `rp flash dev`.** Dev sessions send only the app's file. Inline the helper or install it as a package.
+
+**Reading `volume.path` raises an error, or files are missing.** The path was read at module level, where the volume isn't mounted, or a queue or API resource mounted the volume somewhere other than `/runpod-volume`. Read `.path` inside the function and change paths that pointed at the old Modal mount point.
+
+**Workers don't start, or the endpoint is throttled.** The network volume pins the endpoint to one data center, and the GPU you chose is scarce there. Allow more GPU types with a list, or move the volume to a data center with stock for the GPU you need.
+
+**`rp flash deploy` fails on a resource name, but the dev session worked.** Queue and API names need at least 3 characters, and dev sessions don't check. Rename the function or class, or pass `name=`.
+
+**The build artifact is larger than 1,500 MB.** Leave out packages the worker image already has with `--exclude`, add data files to `.runpodignore`, or move to a custom image.
+
+**Callers get `401`.** Clients that called a public `modal.run` URL send no credentials. Add `Authorization: Bearer` with a Runpod API key. If the SDK returns `401` while `rp login` succeeded, a stale `RUNPOD_API_KEY` in your shell is taking precedence. Unset it.
+
+**A load-balancing endpoint returns `no workers available` or `502`.** The first worker is still starting, or the server isn't listening where the load balancer checks. Retry with backoff during cold starts, serve `/ping`, and set `PORT` and `PORT_HEALTH` to the port your server uses.
+
+**`/status/JOB_ID` returns `404` for a job that finished.** Results are kept for 30 minutes after an async job. Fetch sooner, use a webhook, or write results to storage.
+
+**An endpoint that worked last week queues jobs without starting workers.** It received no requests for several days, so Runpod lowered its max workers. Raise max workers in the console or with `runpodctl serverless update ENDPOINT_ID --workers-max 3`.
+
+**`.remote()` on a queue function raises `TimeoutError` on a long job.** Depending on your SDK version, a blocking call on a queue resource can stop waiting after a few minutes while the job keeps running. Use `job = fn.spawn(...)` and `job.result(timeout=...)` for long jobs, or move the work to `@app.task`.
+
+If you find a gap or an error in this guide, open an issue in the [Runpod docs repository](https://github.com/runpod/docs/issues).
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Runpod SDK overview" icon="code" horizontal href="/sdk/overview">
+    Apps, queue resources, tasks, API resources, and call styles.
+  </Card>
+
+  <Card title="Resource parameters" icon="sliders" horizontal href="/sdk/configuration/parameters">
+    Every argument on `@app.queue`, `@app.api`, and `@app.task`.
+  </Card>
+
+  <Card title="Load-balancing endpoints" icon="scale-balanced" horizontal href="/serverless/load-balancing/overview">
+    Serve your own HTTP server with custom paths.
+  </Card>
+
+  <Card title="Network volumes" icon="hard-drive" horizontal href="/storage/network-volumes">
+    Persistent storage for models, datasets, and checkpoints.
+  </Card>
+</CardGroup>

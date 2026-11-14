@@ -1,0 +1,1430 @@
+---
+title: "Migrate from Vast.ai to Runpod"
+sidebarTitle: "Vast.ai"
+description: "Move Vast.ai instances, templates, volumes, Serverless endpoints, and automation code to Runpod Pods, Serverless, and REST API v2."
+---
+
+This guide is for teams that run GPU workloads on [Vast.ai](https://vast.ai) and want to run them on Runpod. Vast [instances](https://docs.vast.ai/guides/instances/overview) (on-demand, interruptible, and reserved) map to Runpod [Pods](/pods/overview), [Vast Serverless](https://docs.vast.ai/guides/serverless/index) endpoints, workergroups, and PyWorkers map to Runpod [Serverless](/serverless/overview) endpoints, workers, and handlers, and Vast's machine-local [volumes](https://docs.vast.ai/guides/instances/storage/volumes) map to network volumes and global volumes. When you finish, your images, data, deploy scripts, and client code run against Runpod, and nothing is still billing on Vast.
+
+<Tip>
+You can hand most of this migration to a coding agent. See [Migrate with a coding agent](#migrate-with-a-coding-agent).
+</Tip>
+
+## How Vast.ai maps to Runpod
+
+The biggest structural change is how you get a GPU. On Vast you search a marketplace of offers from individual hosts and rent one specific machine. On Runpod you name a GPU type (and optionally a data center), and the scheduler places your container.
+
+| Vast.ai concept | Runpod equivalent | Notes |
+| --- | --- | --- |
+| Instance (Docker container on a rented offer) | [Pod](/pods/overview) | Both are containers with dedicated GPUs. A Pod is created from a GPU type ID, not an offer ID. |
+| Offer search (`vastai search offers`) | GPU catalog: `runpodctl gpu list`, `runpodctl datacenter list`, `GET /v2/catalog/gpus` | The catalog reports stock per GPU type and data center. There's no per-machine reliability score, bandwidth price, or host choice. |
+| On-demand instance | On-demand Pod | Resources are dedicated to your Pod and can't be displaced by other users. |
+| Interruptible instance (`--bid_price`) | On-demand Pod | `runpodctl`, REST API v2, and the Terraform provider create on-demand Pods. See [What has no direct equivalent](#what-has-no-direct-equivalent). |
+| Reserved instance (`vastai prepay instance`) | On-demand Pod | Runpod has no self-serve prepay discount. See [What has no direct equivalent](#what-has-no-direct-equivalent). |
+| Verified machines, `datacenter=true`, Secure Cloud filter | Secure Cloud (default) and Community Cloud | Set with `--cloud-type` or REST `cloud`. Secure Cloud also accepts `--compliance` and `--country-code` filters. |
+| Virtual machine instance (`vms_enabled=true`) | No equivalent | Pods are containers. See [What has no direct equivalent](#what-has-no-direct-equivalent). |
+| Launch modes: entrypoint, SSH, Jupyter | One Pod type, with `--ssh` and `startJupyter` as options | Enabling SSH on a Pod doesn't replace your image's entrypoint. |
+| `--onstart-cmd`, `--args`, `--entrypoint` | Start command: `--docker-args`, REST `cmd` and `entrypoint` | There's no separate on-start script. |
+| `--env '-e KEY=value'` (Docker options) | `--env '{"KEY":"value"}'`, REST `env` | JSON object, not Docker flags. |
+| `--env '-p 8000:8000'` | `--ports "8000/http,22/tcp"`, REST `ports` | Each port is HTTP (proxied) or TCP (public IP). |
+| UDP port mapping (`-p 8082:8082/udp`) | No equivalent | Pods don't support UDP. |
+| Template (`--template_hash`) | [Template](/pods/templates/overview) (`--template-id`) | Pod templates and Serverless templates are separate. |
+| Container storage (`--disk`) | Container disk plus volume disk | Container disk is erased when a Pod stops. Volume disk at `/workspace` persists across stops. |
+| Local volume (`vastai create volume`) | [Network volume](/storage/network-volumes) | A network volume is independent of any machine but pinned to one data center. |
+| Object storage you manage (S3, R2, GCS) for cross-host data | Network volume, [global volume](/storage/globalvolume/overview), or keep your object storage | A global volume mounts in any data center. |
+| Cloud Sync (`vastai cloud copy`) | [Cloud Sync](/pods/storage/cloud-sync), or the [S3-compatible API](/storage/s3-api) on network volumes | Provider lists differ. See [Step 5](#step-5-move-your-data-and-models). |
+| `vastai copy`, `scp` | `runpodctl send` and `receive`, the [S3-compatible API](/storage/s3-api) on network volumes, `scp`, `rsync` | See [Step 5](#step-5-move-your-data-and-models). |
+| Serverless endpoint plus workergroup | [Serverless endpoint](/serverless/overview) | One resource holds the image, GPU pools, and scaling settings. |
+| Serverless worker running a PyWorker | Worker running a [handler](/serverless/workers/handler-functions), or your own HTTP server on a [load-balancing endpoint](/serverless/load-balancing/overview) | No benchmark step and no workload calculator. |
+| Deployments (`vastai.Deployment`, `@app.remote`, beta) | Runpod SDK app (`runpod.App`, `@app.queue`, `@app.task`, `@app.api`) | Both define remote functions in one Python file. |
+| OpenAI proxy (`https://openai.vast.ai/ENDPOINT_NAME`) | vLLM worker route (`https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1`) | Runpod's route needs the real model name in `model`. |
+| Model Library and Template Library | [Hub](/hub/overview) and [Public Endpoints](/public-endpoints/overview) | Public Endpoints are hosted models you call without deploying anything. |
+| Account environment variables (`vastai create env-var`) | [Secrets](/pods/templates/secrets), referenced as `{{ RUNPOD_SECRET_name }}` | Secrets are referenced per template or Pod, not injected into every container. |
+| Docker login (`--login '-u USER -p TOKEN REGISTRY'`) | Registry credential (`runpodctl registry create`, `--registry-auth-id`) | Stored once, referenced by ID. |
+| Pricing: per-host rates, per second, separate storage and bandwidth | Listed rates per GPU type, per second, no ingress or egress fees | See [Pod pricing](/pods/pricing) and [Serverless pricing](/serverless/pricing). |
+| Prepaid credits, autobilling | Prepaid credits, auto-pay | See [Billing](/accounts-billing/billing). |
+| Infrastructure as code: scripts over the `vastai` CLI or REST API | [Terraform provider](/integrations/terraform/overview) `runpod/runpod`, built on REST API v2 | You can keep scripting with `runpodctl` and REST instead. |
+| `vastai` CLI | [`runpodctl`](/runpodctl/overview) | JSON output by default. |
+| `vastai` Python package (`VastAI`, `Serverless`) | [Runpod SDK](/sdk/overview) (`pip install runpod`) | Apps, an endpoint client, the worker SDK, and an API wrapper. |
+| REST API (`https://console.vast.ai/api/v0`) | [REST API v2](/api-reference-v2/overview) (`https://api.runpod.io/v2`) | Both use `Authorization: Bearer`. |
+| API key (`VAST_API_KEY`, `~/.config/vastai/vast_api_key`) | API key (`RUNPOD_API_KEY`, `~/.runpod/config.toml`) | Both support scoped keys. |
+| Teams and team roles | [Organizations](/organizations/orgs-overview), roles, and groups | |
+| `vastai logs`, `vastai get endpt-logs` | `runpodctl pod logs`, `GET /v2/pods/POD_ID/logs`, [Serverless logs](/serverless/development/logs) | |
+| Agent skill and plugins (`vast-ai/vast-cli`) | [Agent skills](/get-started/agent-skills) and the [MCP server](/get-started/mcp-servers) | |
+
+## What's different
+
+### What works differently
+
+**You pick a GPU type, not a machine.** A Vast create call takes an offer ID from a search. A Runpod create call takes a GPU type ID such as `NVIDIA GeForce RTX 4090` and places it. The create call doesn't search for capacity or fall back to another GPU, so automation that looped over offers becomes a loop over GPU types or data centers that you're willing to accept. Stock varies by data center and changes between a catalog read and a create.
+
+**Your image's entrypoint keeps running.** Vast's SSH and Jupyter launch modes replace the image entrypoint and run your `--onstart-cmd` instead. Runpod has no launch modes. SSH is an option on the Pod (`--ssh`, on by default in `runpodctl`), and your image's `ENTRYPOINT` and `CMD` run as built unless you override them. Move the contents of an on-start script into the Pod's start command or into the image.
+
+**Environment variables are visible in SSH sessions without extra steps.** On Vast you may have added `env >> /etc/environment` to on-start scripts so SSH and Jupyter sessions could see your variables. Drop that line. On Runpod you pass `env` as a JSON object, and the Pod's own variables use the `RUNPOD_` prefix.
+
+**Ports are typed.** Vast maps each `-p` port to a random external port on the host's shared IP over plain TCP. On Runpod, a port declared as `PORT/http` is served at `https://POD_ID-PORT.proxy.runpod.net` over HTTPS, and a port declared as `PORT/tcp` gets a public IP and a mapped external port. The proxy URL is public and unauthenticated, and it closes connections that run longer than 100 seconds, so add authentication in your app and use a TCP port for long-lived connections. Declare every port you need: the console accepts up to 10 HTTP ports per Pod. Requesting a port above 70000 for a matching internal and external port works the same way on both platforms.
+
+**Stopping a Pod clears its container disk.** A stopped Vast instance keeps everything on its disk. A stopped Pod keeps only the volume disk (mounted at `/workspace` by default) or an attached network volume. Anything written elsewhere in the container is gone after a stop, a restart caused by a config change, or a terminate. Write checkpoints and outputs under `/workspace`.
+
+**Storage isn't tied to a machine.** A Vast volume can only attach to instances on the physical machine where it was created. A Runpod network volume attaches to any Pod or Serverless worker in its data center, and a global volume attaches in any data center. You size a network volume up front and can grow it later. You can also change a Pod's container disk and volume disk size with `runpodctl pod update`, where Vast fixes disk size at creation.
+
+**Bandwidth isn't billed.** Vast hosts set per-GB upload and download prices. Runpod Pods bill compute and storage per second with no ingress or egress fees. Remove `inet_up_cost` and `inet_down_cost` terms from any cost model you carry over.
+
+**Status fields have different names and one false friend.** Vast scripts decide from `actual_status`. Runpod's REST API returns one `status` field, and `runpodctl` adds `runtimeStatus`. On Vast, `exited` means the container crashed. On Runpod, `EXITED` means the Pod is stopped and can be started again, and `ERROR` is the failure state. See the [status map](#status-map).
+
+**Serverless is one resource, and requests go through Runpod.** A Vast client asks the Serverless engine for a worker (`/route/`), then sends the request to that worker's address with signed `auth_data`. A Runpod client sends every request to a fixed endpoint URL with your API key, and Runpod queues or load-balances it. There's no workergroup: the endpoint itself holds the image, GPU pools, and scaling settings.
+
+**Serverless scaling uses different inputs.** Vast scales on measured load against benchmarked worker performance (`min_load`, `target_util`, `cold_mult`, `cold_workers`). Runpod scales on queue delay or request count, between a minimum and maximum worker count, with an idle timeout. Endpoints scale to zero by default.
+
+### What has no direct equivalent
+
+On the Runpod side:
+
+- **UDP ports.** Vast maps UDP ports (`-p 8082:8082/udp`, `VAST_UDP_PORT_X`). Pods don't support UDP. Move the protocol to TCP (for example WebRTC over TCP or TURN over TCP, or WireGuard replaced by a TCP-based tunnel), or keep the UDP-facing component elsewhere and connect it to the Pod over TCP.
+- **Bidding for interruptible capacity.** Vast lets you set a bid and pauses the instance when you're outbid. Pod creation in `runpodctl` and REST API v2 has no bid or interruptible field. Run these jobs as on-demand Pods with checkpoints, as a Serverless queue endpoint that scales to zero between jobs, or as an `@app.task` function that provisions a Pod per call and terminates it when the function returns.
+- **Self-serve reserved discounts.** `vastai prepay instance` has no counterpart. Runpod's savings plans are deprecated and can't be purchased. For committed capacity or custom pricing, [contact sales](https://www.runpod.io/contact).
+- **Choosing a host.** Filters such as `reliability`, `inet_down`, `dlperf`, `static_ip`, and `machine_id` don't exist. You choose a GPU type, a cloud tier, a data center or country, a minimum CUDA version, and minimum vCPU and RAM per GPU.
+- **Virtual machines and Docker inside the instance.** Vast VM instances support systemd and nested containers. Pods are containers and don't run Docker Compose. Package each service as its own image and run one Pod per service (NVIDIA GPU Pods in the same account can reach each other over [global networking](/pods/networking)), or run the services as processes in one image.
+- **ARM hosts.** Vast lists `cpu_arch=arm64` offers. Runpod images must be `linux/amd64`.
+- **Copying data off a stopped instance.** `vastai copy` and Cloud Sync work on stopped Vast instances. On Runpod, put data you need without a running Pod on a network volume and read it through the S3-compatible API.
+- **Scheduled Cloud Sync.** `vastai cloud copy --schedule` has no counterpart. Run `aws s3 sync` or `rclone` from cron inside the Pod, or from your own scheduler against the S3-compatible API.
+- **Custom hostname (`-h`).** Pod create has no hostname field. Read `RUNPOD_POD_HOSTNAME` and `RUNPOD_POD_ID` instead.
+- **Benchmark-driven Serverless scaling and mixed-hardware workergroups.** Runpod doesn't benchmark workers or weight requests by cost. Use GPU pools to allow several GPU types, and tune the scaler threshold.
+
+Runpod features that change how you'd build the same thing:
+
+- **Network-attached and cross-region volumes.** Vast volumes are machine-local, so shared data usually lives in external object storage. Network volumes and global volumes can replace that, or you can keep your object storage as is.
+- **A URL derived from the Pod ID.** Vast's Cloudflare tunnel URLs are generated per instance by the Instance Portal. Runpod's proxy URL is built from the Pod ID and port, so you know it before the Pod starts.
+- **Queued jobs with IDs.** Runpod queue endpoints accept a job, return an ID, and let you poll, stream, cancel, or receive a webhook.
+- **Deploy when available.** REST `POST /v2/pods` accepts a `queue` object that holds a Secure Cloud GPU Pod request until capacity appears, depending on your plan.
+- **Hosted models.** [Public Endpoints](/public-endpoints/overview) serve models with no deployment.
+- **Multi-node clusters.** [Instant Clusters](/instant-clusters) provide multi-node Slurm, PyTorch, and Ray environments.
+- **Terraform.** The `runpod/runpod` provider manages Pods, endpoints, templates, and volumes.
+
+## Requirements
+
+- A Vast.ai account with access to the resources you're migrating, and the `vastai` CLI authenticated (`vastai show user` succeeds).
+- A [Runpod account](https://www.console.runpod.io) with credits. Runpod is prepaid, like Vast.
+- Docker images built for `linux/amd64`, in a registry Runpod can pull from.
+- An SSH key pair if you connect to Pods over SSH.
+- `jq` and `curl` for the scripted steps.
+
+## Step 1: Take inventory of what you run on Vast.ai
+
+List every resource on the account, in JSON, so you have a record to work from. Run these with the `vastai` CLI.
+
+```bash inventory.sh
+mkdir -p vast-inventory && cd vast-inventory
+
+vastai show instances --raw     > instances.json      # running and stopped instances
+vastai show volumes --raw       > volumes.json        # local volumes and the instances using them
+vastai show endpoints --raw     > endpoints.json      # Serverless endpoints
+vastai show workergroups --raw  > workergroups.json   # Serverless workergroups
+vastai show deployments --raw   > deployments.json    # Deployments (beta)
+vastai show env-vars --raw      > env-vars.json       # account environment variables
+vastai show connections --raw   > connections.json    # Cloud Sync connections
+vastai show scheduled-jobs --raw > scheduled-jobs.json
+vastai show ssh-keys --raw      > ssh-keys.json
+vastai show api-keys --raw      > api-keys.json
+vastai show invoices-v1 --raw   > invoices.json
+```
+
+`env-vars.json` and `api-keys.json` can contain secrets. Keep the directory out of version control.
+
+For each instance, pull the fields you need to recreate it. The names below are the ones Vast returns from `show instances`.
+
+```bash
+jq -r '.[] | [.id, .label, .actual_status, .gpu_name, .num_gpus, .image_uuid, .disk_space, .geolocation, .dph_total] | @tsv' instances.json
+```
+
+Then open one instance in full (`vastai show instance INSTANCE_ID --raw`) and record what the summary line doesn't show:
+
+- The image and tag, and whether it's private (you passed `--login`).
+- The launch mode (`image_runtype`): entrypoint with arguments, or SSH or Jupyter with an on-start script (`onstart`).
+- Environment variables and port mappings from the Docker options (`extra_env`), including any `/udp` ports.
+- Disk size and what's stored on it, plus any attached volume and its mount path.
+- Whether the instance is on-demand, interruptible (`is_bid` is true), or reserved (it has prepaid credit).
+- The template it came from, if any. Templates you own are in the console under **Templates**, and `vastai search templates` finds them by name.
+
+For each Serverless endpoint, record the endpoint parameters (`max_workers`, `min_load`, `cold_workers`, `target_util`, `inactivity_timeout`) and, for each workergroup, the template or `launch_args`, the `search_params`, and `gpu_ram`. If the workergroup uses a custom PyWorker, note the `PYWORKER_REPO` value and read its `worker.py`.
+
+Finally, find the code that calls Vast. Run this from the root of each repository.
+
+```bash
+grep -rnE "vastai|vast\.ai|VAST_API_KEY|CONTAINER_API_KEY|CONTAINER_ID|VAST_CONTAINERLABEL|VAST_(TCP|UDP)_PORT_|PUBLIC_IPADDR|PYWORKER_REPO|vast_api_key" . \
+  --include='*.py' --include='*.ipynb' --include='*.sh' --include='*.js' --include='*.ts' --include='*.go' \
+  --include='*.yml' --include='*.yaml' --include='*.toml' --include='*.json' --include='*.md' \
+  --include='Dockerfile*' --include='requirements*.txt' --include='.env*'
+```
+
+Each match falls into one of three groups: control-plane code that rents and manages instances, client code that calls a Serverless endpoint, or code inside your container that reads Vast's runtime variables. Steps 4 and 7 cover each group.
+
+## Step 2: Set up Runpod
+
+1. Create an account in the [Runpod console](https://www.console.runpod.io) and add credits on the billing page.
+2. Create an API key on the [Credentials page](/get-started/credentials). Your Vast key doesn't work on Runpod.
+3. Install the tools and sign in.
+
+```bash
+# CLI
+curl -fsSL https://cli.runpod.net | sudo bash      # or: brew install runpod/runpodctl/runpodctl
+export RUNPOD_API_KEY=YOUR_API_KEY
+runpodctl doctor
+
+# Python SDK 2.x (Python 3.10 to 3.14), which includes the rp CLI
+pip install runpod
+rp login
+
+# SSH key, so new Pods accept your key
+runpodctl ssh add-key --key-file ~/.ssh/id_ed25519.pub
+```
+
+`rp login` stores the key in `~/.runpod/config.toml`. In CI, set `RUNPOD_API_KEY` as a secret instead. Register your SSH key before you create Pods: keys apply to Pods created afterward.
+
+If you manage infrastructure as code, the [Terraform provider](/integrations/terraform/overview) is built on REST API v2. To let an agent manage resources, connect the [MCP server](/get-started/mcp-servers).
+
+## Step 3: Choose where each workload lands
+
+Use the shape of the workload, not the Vast product it runs on today, to choose a target.
+
+| Vast.ai workload | Runpod target | Why |
+| --- | --- | --- |
+| On-demand instance you SSH into or use with Jupyter | Pod | Same interactive model, with a volume disk or network volume for persistence. |
+| Entrypoint-mode instance serving an API all day | Pod, or a Serverless load-balancing endpoint if traffic varies | A load-balancing endpoint runs the same HTTP server and adds autoscaling. |
+| Instance your script rents, runs one job on, and destroys | `@app.task` function, or a Pod created and deleted through REST API v2 | `@app.task` provisions a Pod per call and terminates it when the function returns. |
+| Interruptible instances working through a batch | Serverless queue endpoint | The queue holds jobs, and workers scale to zero when it's empty. |
+| Reserved instance running for months | On-demand Pod | Talk to sales about committed capacity. |
+| Serverless endpoint with a vLLM template | Serverless endpoint running the [vLLM worker](/serverless/vllm/get-started) | Includes an OpenAI-compatible route. |
+| Serverless endpoint with a custom PyWorker in front of an HTTP model server | Serverless load-balancing endpoint | Your server receives requests directly on its own paths. |
+| Serverless endpoint doing request and response jobs | Serverless queue endpoint with a handler | Async jobs, status polling, streaming, and webhooks. |
+| Deployment using `@app.remote` | Runpod SDK app with `@app.queue` | Same decorator-on-a-function model. |
+| Calls to a common open model through your own endpoint | [Public Endpoint](/public-endpoints/overview) | Nothing to deploy or scale. |
+| Several instances wired together for distributed training | [Instant Cluster](/instant-clusters) | Multi-node networking with Slurm, PyTorch, or Ray. |
+| VM instance running Docker Compose | One Pod per service | Pods don't run nested containers. |
+
+### Map your GPUs
+
+Vast search queries use `gpu_name` with underscores. Runpod uses GPU type IDs for Pods and GPU pool IDs for Serverless endpoints. The full list is in the [GPU types reference](/references/gpu-types).
+
+| Vast.ai `gpu_name` | Runpod GPU type ID (Pods) | Serverless pool |
+| --- | --- | --- |
+| `RTX_3090` | `NVIDIA GeForce RTX 3090` | `AMPERE_24` |
+| `RTX_4090` | `NVIDIA GeForce RTX 4090` | `ADA_24` |
+| `RTX_5090` | `NVIDIA GeForce RTX 5090` | Check `pool` in the catalog. |
+| `RTX_A6000` | `NVIDIA RTX A6000` | `AMPERE_48` |
+| `RTX_6000Ada` | `NVIDIA RTX 6000 Ada Generation` | `ADA_48_PRO` |
+| `RTX_PRO_6000_S` | `NVIDIA RTX PRO 6000 Blackwell Server Edition` | Check `pool` in the catalog. |
+| `RTX_PRO_6000_WS` | `NVIDIA RTX PRO 6000 Blackwell Workstation Edition` | Check `pool` in the catalog. |
+| `L4` | `NVIDIA L4` | `AMPERE_24` |
+| `L40`, `L40S` | `NVIDIA L40`, `NVIDIA L40S` | `ADA_48_PRO` |
+| `A40` | `NVIDIA A40` | `AMPERE_48` |
+| `A100_PCIE` with `gpu_ram>=79` | `NVIDIA A100 80GB PCIe` | `AMPERE_80` |
+| `A100_SXM4` with `gpu_ram>=79` | `NVIDIA A100-SXM4-80GB` | `AMPERE_80` |
+| `H100_SXM` | `NVIDIA H100 80GB HBM3` | `ADA_80_PRO` |
+| `H100_PCIE`, `H100_NVL` | `NVIDIA H100 PCIe`, `NVIDIA H100 NVL` | `ADA_80_PRO` for H100 PCIe. Check `pool` for NVL. |
+| `H200`, `H200_NVL` | `NVIDIA H200`, `NVIDIA H200 NVL` | `HOPPER_141` for H200. Check `pool` for NVL. |
+| `B200` | `NVIDIA B200` | Check `pool` in the catalog. |
+| `B300` | `NVIDIA B300 SXM6 AC` | Check `pool` in the catalog. |
+
+Choose the GPU by what the workload needs (VRAM, GPU count, CUDA version), then check live stock before you commit to a data center.
+
+```bash
+# What's in stock now, across clouds
+runpodctl gpu list
+
+# Stock per data center
+runpodctl datacenter list
+
+# Pod stock, per data center, with CUDA versions, for the default Secure Cloud
+curl -s "https://api.runpod.io/v2/catalog/gpus?include=AVAILABILITY&product=POD" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  | jq '.gpus[] | {id, memory, pool, availability, dataCenters: [.dataCenters[]? | {id, availability}]}'
+```
+
+Each catalog entry includes `id` (for Pods), `pool` (for Serverless), `memory` in GB, `maxCount` per Pod, and, with `include=AVAILABILITY`, an `availability` level of `NONE`, `LOW`, `MEDIUM`, or `HIGH`. Stock changes continuously, so treat the result as a way to order your candidates.
+
+These Vast search filters translate to Pod create options. The rest have no counterpart.
+
+| Vast.ai search filter | Runpod option |
+| --- | --- |
+| `gpu_name=...` | `--gpu-id`, REST `gpu.id` |
+| `num_gpus=N` | `--gpu-count`, REST `gpu.count` |
+| `cuda_vers>=12.4` | `--min-cuda-version 12.4`, REST `gpu.minCudaVersion` |
+| `cpu_cores_effective>=N` | REST `gpu.minVcpuCountPerGpu` (per GPU, so divide by the GPU count) |
+| `cpu_ram>=N` | REST `gpu.minRamPerGpu` (GB per GPU) |
+| `geolocation in [US,CA]` | `--country-code` (Secure Cloud GPU Pods) or `--data-center-ids` |
+| `datacenter=true` | `--cloud-type SECURE` (the default) |
+| `verified=false`, non-datacenter hosts | `--cloud-type COMMUNITY` |
+| `direct_port_count>=1` | Use Secure Cloud. Community Cloud Pods aren't guaranteed a public IP. |
+
+## Step 4: Move your images and code
+
+### Check the image
+
+Images that run on Vast in entrypoint mode usually run on Runpod unchanged. Check four things.
+
+- **Architecture.** Runpod pulls `linux/amd64` images. If you build on Apple silicon, build with `docker buildx build --platform linux/amd64`.
+- **Registry access.** Replace `--login '-u USER -p TOKEN REGISTRY'` with a stored credential, then pass its ID when you create a Pod or template.
+- **CUDA.** Vast's `@vastai-automatic-tag` picks an image build to match each host. Runpod doesn't rewrite tags, so pin a real tag and set a CUDA floor on the Pod (`--min-cuda-version`) that matches the image.
+- **Vast base image features.** Images built on `vastai/base-image` include the Instance Portal, Cloudflare tunnels, and Vast's Jupyter certificate setup. Those services expect Vast's environment. Use your framework's upstream image or a Runpod image such as `runpod/pytorch` as the base, and reach HTTP services through the Pod proxy.
+
+Store a private registry credential like this.
+
+```bash
+printenv REGISTRY_TOKEN | runpodctl registry create --name "my-registry" --username "USER" --password-stdin
+runpodctl registry list     # copy the ID for --registry-auth-id
+```
+
+### Translate the launch configuration
+
+The before and after below launch the same vLLM server: one image, one port, one environment variable, and arguments passed to the image's entrypoint.
+
+<Tabs>
+  <Tab title="Before: Vast.ai">
+    ```bash
+    vastai create instance OFFER_ID \
+      --image vllm/vllm-openai:latest \
+      --disk 40 \
+      --env "-p 8000:8000 -e HF_TOKEN=hf_xxxxx" \
+      --args --model Qwen/Qwen2.5-7B-Instruct --max-model-len 4096
+    ```
+  </Tab>
+  <Tab title="After: runpodctl">
+    ```bash
+    runpodctl pod create \
+      --name vllm-server \
+      --image vllm/vllm-openai:latest \
+      --gpu-id "NVIDIA GeForce RTX 4090" \
+      --min-cuda-version 12.8 \
+      --container-disk-in-gb 40 \
+      --ports "8000/http" \
+      --env '{"HF_TOKEN":"{{ RUNPOD_SECRET_hf_token }}"}' \
+      --docker-args "--model Qwen/Qwen2.5-7B-Instruct --max-model-len 4096"
+    ```
+  </Tab>
+  <Tab title="After: REST API v2">
+    ```bash
+    curl -s -X POST "https://api.runpod.io/v2/pods" \
+      -H "Authorization: Bearer $RUNPOD_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "vllm-server",
+        "image": "vllm/vllm-openai:latest",
+        "gpu": {"id": "NVIDIA GeForce RTX 4090", "count": 1, "minCudaVersion": "12.8"},
+        "disk": 40,
+        "ports": ["8000/http"],
+        "env": {"HF_TOKEN": "{{ RUNPOD_SECRET_hf_token }}"},
+        "cmd": ["--model", "Qwen/Qwen2.5-7B-Instruct", "--max-model-len", "4096"]
+      }'
+    ```
+  </Tab>
+</Tabs>
+
+Create the `hf_token` secret before you run the Runpod versions. The server is then reachable at `https://POD_ID-8000.proxy.runpod.net/v1/models`. That URL is public, so set an API key on the server (vLLM's `--api-key` argument) before you put real traffic on it. Three things changed: there's no offer ID, the port carries a type, and the Hugging Face token comes from a [secret](/pods/templates/secrets) instead of sitting in the command. Set the CUDA floor to the version your image was built for.
+
+Each launch mode translates as follows.
+
+| Vast.ai launch | Runpod equivalent |
+| --- | --- |
+| Entrypoint mode with `--args A B C` | REST `cmd: ["A", "B", "C"]`, or `--docker-args "A B C"`. The image's `ENTRYPOINT` receives them. |
+| `--entrypoint CMD` | REST `entrypoint: ["CMD"]`, or `--docker-entrypoint` on a template. |
+| `--ssh` or `--jupyter` with `--onstart-cmd 'COMMANDS'` | REST `cmd: ["bash", "-c", "COMMANDS"]` with `startSsh: true`. Your image must start `sshd` when it sees the `PUBLIC_KEY` variable, which Runpod's official images do. If your command replaces the image's own start script, start `sshd` yourself or keep SSH to images you control. |
+| `--onstart FILE` | Bake the script into the image, or fetch and run it from the start command. |
+| `--jupyter` (port 8080) | REST `startJupyter: true` with `8888/http` in `ports`, on an image that includes JupyterLab, such as Runpod's PyTorch images. |
+| `--direct` | Add `22/tcp` to `ports` for direct SSH with `scp`, `rsync`, and port forwarding. Without it you get proxied SSH, which carries an interactive shell only. |
+| `--label NAME` | `--name NAME` |
+| `--disk GB` | `--container-disk-in-gb GB`, plus `--volume-in-gb GB` for the data you need to keep across stops. |
+| `--cancel-unavail` | Not needed. A create that can't be placed returns an error and creates nothing. |
+
+### Convert templates
+
+A Vast template stores the image, Docker options, launch mode, on-start script, disk size, and search filters. A Runpod template stores the image, start command, environment, ports, and disk sizes. GPU choice stays on the Pod or endpoint.
+
+```bash
+runpodctl template create \
+  --name "vllm-qwen" \
+  --image "vllm/vllm-openai:latest" \
+  --container-disk-in-gb 40 \
+  --ports "8000/http,22/tcp" \
+  --env '{"HF_TOKEN":"{{ RUNPOD_SECRET_hf_token }}"}' \
+  --docker-start-cmd "--model,Qwen/Qwen2.5-7B-Instruct,--max-model-len,4096"
+```
+
+`--docker-start-cmd` takes a comma-separated list. Add `--serverless` to create a template for a Serverless endpoint: Pod templates and Serverless templates aren't interchangeable, and a Serverless template binds to one endpoint at a time. For Vast's recommended templates (PyTorch, ComfyUI, vLLM), look for a maintained counterpart with `runpodctl template search NAME --type official` before you convert your own.
+
+### Replace Vast runtime variables in your code
+
+Code inside the container that reads Vast's predefined variables needs new names. The full table is in the [environment variable map](#environment-variable-map). The common cases are `CONTAINER_ID` to `RUNPOD_POD_ID`, `PUBLIC_IPADDR` to `RUNPOD_PUBLIC_IP`, `GPU_COUNT` to `RUNPOD_GPU_COUNT`, and `VAST_TCP_PORT_22` to `RUNPOD_TCP_PORT_22`.
+
+Code that builds its own public URL from `PUBLIC_IPADDR` and `VAST_TCP_PORT_8000` changes shape for HTTP ports, because the proxy URL needs only the Pod ID.
+
+<Tabs>
+  <Tab title="Before: Vast.ai">
+    ```python
+    import os
+
+    public_url = f"http://{os.environ['PUBLIC_IPADDR']}:{os.environ['VAST_TCP_PORT_8000']}"
+    ```
+  </Tab>
+  <Tab title="After: Runpod">
+    ```python
+    import os
+
+    public_url = f"https://{os.environ['RUNPOD_POD_ID']}-8000.proxy.runpod.net"
+    ```
+  </Tab>
+</Tabs>
+
+Scripts that shut the instance down from inside (`vastai stop instance $CONTAINER_ID`) can call REST API v2 instead. Runpod sets a Pod-scoped key in `RUNPOD_API_KEY`. Test that it's allowed to stop its own Pod in your setup, and pass your own key as a secret if it isn't.
+
+```bash
+curl -s -X POST "https://api.runpod.io/v2/pods/$RUNPOD_POD_ID/action" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action": "stop"}'
+```
+
+### Port a PyWorker to a Runpod worker
+
+A PyWorker is an HTTP proxy that sits in front of your model server, reports load, and runs a benchmark before the worker is marked ready. Runpod workers have no proxy layer, so `worker.py` goes away. What replaces it depends on the endpoint type.
+
+Here's a typical PyWorker for a model server with one `/generate` route.
+
+```python worker.py
+from vastai import Worker, WorkerConfig, HandlerConfig, BenchmarkConfig, LogActionConfig
+
+worker_config = WorkerConfig(
+    model_server_url="http://127.0.0.1",
+    model_server_port=18000,
+    model_log_file="/var/log/model/server.log",
+    handlers=[
+        HandlerConfig(
+            route="/generate",
+            allow_parallel_requests=False,
+            max_queue_time=60.0,
+            workload_calculator=lambda payload: 100.0,
+            benchmark_config=BenchmarkConfig(
+                dataset=[{"prompt": "hello world", "max_new_tokens": 64}],
+                runs=8,
+                concurrency=1,
+            ),
+        ),
+    ],
+    log_action_config=LogActionConfig(
+        on_load=["Application startup complete."],
+        on_error=["Traceback (most recent call last):"],
+    ),
+)
+
+Worker(worker_config).run()
+```
+
+<Tabs>
+  <Tab title="After: queue endpoint handler">
+    A queue endpoint calls a handler function once per job. Load the model at import time so it stays in memory between jobs, and return the result. The file below is complete: replace the pipeline with your own model code.
+
+    ```python handler.py
+    import runpod
+    from transformers import pipeline
+
+    # Loaded once per worker, reused for every job
+    generator = pipeline("text-generation", model="Qwen/Qwen2.5-0.5B-Instruct", device=0)
+
+
+    def handler(job):
+        job_input = job["input"]
+        result = generator(
+            job_input["prompt"],
+            max_new_tokens=job_input.get("max_new_tokens", 64),
+        )
+        return {"text": result[0]["generated_text"]}
+
+
+    runpod.serverless.start({"handler": handler})
+    ```
+
+    The image's start command runs `python -u handler.py`. `allow_parallel_requests=False` matches the default of one job per worker at a time. To process several jobs at once on a worker, see [concurrent handlers](/serverless/workers/concurrent-handler).
+  </Tab>
+  <Tab title="After: load-balancing endpoint">
+    A load-balancing endpoint sends HTTP requests straight to your server's own paths. Keep the model server, bind it to the port in `PORT`, and add a `/ping` route that returns `200` when the model is ready.
+
+    ```python server.py
+    import os
+
+    import uvicorn
+    from fastapi import FastAPI
+    from pydantic import BaseModel
+    from transformers import pipeline
+
+    app = FastAPI()
+    generator = pipeline("text-generation", model="Qwen/Qwen2.5-0.5B-Instruct", device=0)
+
+
+    class GenerateRequest(BaseModel):
+        prompt: str
+        max_new_tokens: int = 64
+
+
+    @app.get("/ping")
+    def ping():
+        return {"status": "healthy"}
+
+
+    @app.post("/generate")
+    def generate(request: GenerateRequest):
+        result = generator(request.prompt, max_new_tokens=request.max_new_tokens)
+        return {"text": result[0]["generated_text"]}
+
+
+    if __name__ == "__main__":
+        uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "80")))
+    ```
+
+    Clients call `https://ENDPOINT_ID.api.runpod.ai/generate`. If you change `PORT`, set `PORT_HEALTH` to the same value. The `/ping` route does the job of the PyWorker's `on_load` log match.
+  </Tab>
+</Tabs>
+
+The PyWorker pieces map as follows.
+
+| PyWorker piece | Runpod equivalent |
+| --- | --- |
+| `HandlerConfig(route=...)` | The handler function (queue), or a route on your server (load balancing). |
+| `LogActionConfig.on_load` | Model loaded before `runpod.serverless.start` (queue), or `/ping` returning `200` (load balancing). |
+| `LogActionConfig.on_error` | Raise an exception in the handler, or fail the `/ping` check. |
+| `workload_calculator`, `BenchmarkConfig` | Not needed. Scaling uses queue delay or request count. |
+| `allow_parallel_requests=True` | A concurrent handler (queue), or your server's own concurrency (load balancing). |
+| `max_queue_time` | The endpoint's execution timeout and job TTL settings. See [endpoint settings](/serverless/endpoints/endpoint-configurations). |
+| `PYWORKER_REPO` cloned at start | Bake the code into the image, or deploy from GitHub. See [deploy workers](/serverless/workers/deploy). |
+
+### Port a Deployment to a Runpod SDK app
+
+Vast Deployments (beta) and Runpod SDK apps both turn a decorated Python function into a remote endpoint.
+
+<Tabs>
+  <Tab title="Before: Vast.ai Deployment">
+    ```python deploy.py
+    from vastai import Deployment
+    from vastai.data.query import gpu_name, RTX_4090, RTX_5090
+
+    app = Deployment(name="square")
+
+
+    @app.remote(benchmark_dataset=[{"x": 2}])
+    async def square(x):
+        return x * x
+
+
+    image = app.image("vastai/base-image:@vastai-automatic-tag", 16)
+    image.require(gpu_name.in_([RTX_4090, RTX_5090]))
+    app.configure_autoscaling(min_load=1000)
+    app.ensure_ready()
+    ```
+  </Tab>
+  <Tab title="After: Runpod SDK">
+    ```python main.py
+    import runpod
+
+    app = runpod.App("square")
+
+
+    @app.queue(gpu="4090", workers=(0, 3))
+    def square(x: int):
+        return x * x
+
+
+    @runpod.local_entrypoint
+    def main():
+        print(square.remote(5))
+    ```
+  </Tab>
+</Tabs>
+
+Run the Runpod version with `rp flash dev main.py` while you iterate and `rp flash deploy` to create the production endpoint. There's no benchmark dataset, the `gpu` argument replaces `image.require` (pass a list to allow several GPUs), and `workers=(0, 3)` replaces the load-based autoscaling settings. An `@app.context` class that loads a model once per worker maps most closely to an `@app.api` class with a `@runpod.init` method, which runs once when each worker starts. See [Build an app](/sdk/apps/build-app).
+
+## Step 5: Move your data and models
+
+### Choose the storage
+
+| What you have on Vast.ai | Where it goes on Runpod |
+| --- | --- |
+| Scratch data on the instance disk | Container disk. It's erased when the Pod stops. |
+| Data on the instance disk that you keep across stops | Volume disk at `/workspace`. It's deleted when you delete the Pod. |
+| A local volume reused across instances on one machine | Network volume, which outlives Pods and attaches to any Pod or worker in its data center. |
+| Datasets and weights in S3, R2, or GCS, pulled at boot | Keep them there, or copy them once to a network volume or global volume to skip the download at start. |
+| Weights pulled from Hugging Face at boot on Serverless | [Cached models](/serverless/endpoints/model-caching) (`--model-reference`), so workers start with the weights already on the host. |
+
+A network volume lives in one data center, and every Pod or worker that mounts it must run there. Pick the data center by GPU stock first (`runpodctl datacenter list`), then create the volume. If you want to use the S3-compatible API, choose a data center [where it's available](/storage/s3-api#datacenter-availability).
+
+```bash
+runpodctl network-volume create --name "models" --size 200 --data-center-id "US-KS-2"
+```
+
+A network volume mounts at `/workspace` on Pods and at `/runpod-volume` on Serverless workers. If your Vast volume was mounted at `/data` or `/mnt`, either update the paths in your code or mount the Runpod volume at the old path with `--volume-mount-path` (volume disk) or REST `mounts.network[].path` (network volume). A [global volume](/storage/globalvolume/overview) isn't pinned to a data center and suits read-heavy data such as model weights. It's object-backed, so check its limitations before you use it for write-heavy work.
+
+### Transfer the data
+
+Pick the route that matches where the data is now.
+
+<Tabs>
+  <Tab title="From object storage">
+    If your Vast instances pulled from S3, R2, or GCS, the fastest path is to pull from the same place inside a Pod with the volume attached. No data passes through your machine.
+
+    ```bash
+    # On a Pod with the network volume mounted at /workspace
+    aws s3 sync s3://my-bucket/datasets /workspace/datasets
+    rclone copy r2:my-bucket/models /workspace/models --transfers 16
+    hf download Qwen/Qwen2.5-7B-Instruct --local-dir /workspace/models/qwen2.5-7b
+    ```
+
+    Runpod's [Cloud Sync](/pods/storage/cloud-sync) does the same from the console for Amazon S3, Google Cloud Storage, Azure Blob Storage, Backblaze B2, and Dropbox. Vast's Cloud Sync also connects Google Drive and Hugging Face buckets, which Runpod's doesn't: use `rclone` or `hf download` in the Pod for those.
+  </Tab>
+  <Tab title="Instance to Pod">
+    To copy straight from a running Vast instance to a running Pod, use `runpodctl send` and `receive`. It needs no API key and no open port on either side.
+
+    ```bash
+    # On the Vast instance (install runpodctl there first)
+    curl -fsSL https://cli.runpod.net | bash
+    cd /workspace && runpodctl send ./checkpoints
+    # prints a one-time code
+
+    # On the Pod
+    cd /workspace && runpodctl receive CODE
+    ```
+
+    For large or resumable transfers, use `rsync` over the Pod's direct SSH port. The Pod needs `22/tcp` in its ports. Read the host and port from `runpodctl ssh info POD_ID`. The Vast instance must hold a private key that the Pod accepts: connect to the instance with SSH agent forwarding (`ssh -A`), or create a key pair on the instance and register its public key with `runpodctl ssh add-key` before you create the Pod.
+
+    ```bash
+    # On the Vast instance
+    rsync -avzP --inplace -e "ssh -p POD_SSH_PORT" /workspace/ root@POD_IP:/workspace/
+    ```
+
+    Vast bills bandwidth per GB at the host's rate, so check `inet_up_cost` on the instance before you push a large dataset out of it.
+  </Tab>
+  <Tab title="Your machine to a network volume">
+    The [S3-compatible API](/storage/s3-api) writes to a network volume without a Pod. It needs an S3 API key from the [Credentials page](/get-started/credentials) (separate from your Runpod API key) and a volume in a data center with the S3-compatible API. Configure the AWS CLI with that key as described in [Setup and authentication](/storage/s3-api#setup-and-authentication).
+
+    The bucket name is the volume ID, and the region is the data center ID.
+
+    ```bash
+    # First pull the data down from Vast
+    vastai copy C.INSTANCE_ID:/workspace/datasets local:./datasets
+
+    # Then push it to the volume
+    aws s3 sync ./datasets s3://VOLUME_ID/datasets \
+      --region US-KS-2 \
+      --endpoint-url https://s3api-us-ks-2.runpod.io/
+
+    # List what landed
+    aws s3 ls s3://VOLUME_ID/datasets/ \
+      --region US-KS-2 \
+      --endpoint-url https://s3api-us-ks-2.runpod.io/
+    ```
+
+    With `aws s3 sync`, very large file counts (10,000 or more) can run into issues, so archive small files into a tar first and copy that with `aws s3 cp`.
+  </Tab>
+  <Tab title="From a Vast volume">
+    Vast volumes can't be copied to a local path. Copy the volume to a running instance or to a cloud connection first, then use one of the other routes.
+
+    ```bash
+    vastai copy V.VOLUME_ID:/data/ C.INSTANCE_ID:/workspace/data/
+    ```
+  </Tab>
+</Tabs>
+
+After a transfer, compare file counts and sizes on both sides (`du -sh` and `find . -type f | wc -l`) before you delete anything on Vast.
+
+## Step 6: Deploy on Runpod
+
+### Pods
+
+Create the Pod with the image, ports, and storage you settled on. This example attaches the network volume from Step 5 and opens one HTTP port and direct SSH.
+
+```bash
+runpodctl pod create \
+  --name "trainer" \
+  --image "runpod/pytorch:1.0.3-cu1281-torch291-ubuntu2404" \
+  --gpu-id "NVIDIA GeForce RTX 4090" \
+  --min-cuda-version 12.8 \
+  --container-disk-in-gb 30 \
+  --network-volume-id VOLUME_ID \
+  --data-center-ids "US-KS-2" \
+  --ports "8888/http,22/tcp" \
+  --env '{"MODE":"fast"}'
+```
+
+The command prints the Pod as JSON, including its `id`. A network volume takes the place of the volume disk, so don't pass `--volume-in-gb` with it, and set `--data-center-ids` to the volume's data center. Wait for the container before you connect.
+
+```bash
+until [ "$(runpodctl pod get POD_ID --output json | jq -r '.runtimeStatus')" = "running" ]; do
+  sleep 5
+done
+runpodctl ssh info POD_ID      # prints the ssh command
+runpodctl pod logs POD_ID      # container and system logs
+```
+
+`runtimeStatus: running` means the container is up, not that your service is listening. Probe the port before you send traffic. In the console, the same flow is **Pods**, then **Deploy**. For every flag, see the [`runpodctl pod` reference](/runpodctl/reference/runpodctl-pod).
+
+### Serverless queue endpoints
+
+A Vast endpoint and its workergroup collapse into one Runpod endpoint. Build and push the worker image from Step 4, create a Serverless template for it, then create the endpoint.
+
+<Tabs>
+  <Tab title="Before: Vast.ai">
+    ```bash
+    vastai create endpoint \
+      --endpoint_name "my-endpoint" \
+      --max_workers 5 \
+      --cold_workers 1 \
+      --target_util 0.9
+
+    vastai create workergroup \
+      --endpoint_name "my-endpoint" \
+      --search_params "gpu_ram>=24 num_gpus=1 rentable=true verified=true" \
+      --launch_args "--image my-org/my-worker:1.0 --disk 64 --env '-e PYWORKER_REPO=https://github.com/my-org/my-pyworker -e MODEL_NAME=my-model'" \
+      --gpu_ram 24
+    ```
+  </Tab>
+  <Tab title="After: runpodctl">
+    ```bash
+    runpodctl template create \
+      --name "my-worker" \
+      --image "my-org/my-worker:1.0" \
+      --container-disk-in-gb 64 \
+      --env '{"MODEL_NAME":"my-model"}' \
+      --serverless
+    # copy the template ID from the output
+
+    runpodctl serverless create \
+      --name "my-endpoint" \
+      --template-id TEMPLATE_ID \
+      --gpu-id "ADA_24" \
+      --workers-min 0 \
+      --workers-max 5 \
+      --idle-timeout 60 \
+      --scale-by delay \
+      --scale-threshold 4
+    ```
+  </Tab>
+  <Tab title="After: REST API v2">
+    ```bash
+    curl -s -X POST "https://api.runpod.io/v2/serverless" \
+      -H "Authorization: Bearer $RUNPOD_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "my-endpoint",
+        "type": "QUEUE",
+        "image": "my-org/my-worker:1.0",
+        "disk": 64,
+        "env": {"MODEL_NAME": "my-model"},
+        "gpu": {"pools": ["ADA_24"], "count": 1},
+        "workers": {"min": 0, "max": 5, "idleTimeout": 60},
+        "scaling": {"type": "QUEUE_DELAY", "queueDelay": 4}
+      }'
+    ```
+  </Tab>
+</Tabs>
+
+`gpu_ram>=24` becomes a GPU pool. `max_workers` becomes the maximum worker count. Vast's `cold_workers` (stopped workers kept ready) has no direct counterpart: Runpod workers scale to zero and start on demand, and a minimum worker count above zero keeps workers running and billing. With `--template-id`, environment variables come from the template, so set them there.
+
+For a vLLM endpoint, skip the custom image and deploy the vLLM worker from the Hub with a cached model.
+
+```bash
+runpodctl hub search vllm        # find the Hub ID
+runpodctl serverless create --hub-id HUB_ID --name "my-vllm" \
+  --gpu-id "ADA_24" \
+  --env MODEL_NAME=Qwen/Qwen2.5-7B-Instruct \
+  --model-reference https://huggingface.co/Qwen/Qwen2.5-7B-Instruct:main
+```
+
+### Serverless load-balancing endpoints
+
+For the HTTP server from Step 4, create the endpoint with `type` set to `LOAD_BALANCER`. Load-balancing endpoints scale on request count.
+
+```bash
+curl -s -X POST "https://api.runpod.io/v2/serverless" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-api",
+    "type": "LOAD_BALANCER",
+    "image": "my-org/my-server:1.0",
+    "disk": 30,
+    "ports": ["8000/http"],
+    "env": {"PORT": "8000", "PORT_HEALTH": "8000"},
+    "gpu": {"pools": ["ADA_24"], "count": 1},
+    "workers": {"min": 0, "max": 3},
+    "scaling": {"type": "REQUEST_COUNT", "requestCount": 4}
+  }'
+```
+
+The response includes the endpoint `id`. Requests go to `https://ENDPOINT_ID.api.runpod.ai/PATH`. Load-balancing endpoints have request and processing time limits, listed in the [load-balancing overview](/serverless/load-balancing/overview).
+
+### Run-to-completion jobs
+
+A script that rented an instance, ran one job, and destroyed it can become a function. `@app.task` provisions a Pod for each call and terminates it when the function returns.
+
+```python main.py
+import runpod
+
+app = runpod.App("report-job")
+
+
+@app.task(gpu="4090", env={"MODE": "fast"}, container_disk_gb=30)
+def report():
+    import os
+
+    import torch
+
+    return {"gpu": torch.cuda.get_device_name(0), "mode": os.environ["MODE"]}
+
+
+@runpod.local_entrypoint
+def main():
+    print(report.remote())
+```
+
+Run it with `rp flash dev main.py`. `torch` is already installed on the SDK's built-in GPU images. If you need to keep full control of the Pod lifecycle, use the REST version in Step 7.
+
+## Step 7: Update the code that calls Vast.ai
+
+### Serverless clients
+
+A Vast client resolves an endpoint by name and sends a request to a route on a worker. A Runpod queue client posts a job to a fixed URL that includes the endpoint ID.
+
+<Tabs>
+  <Tab title="Before: Vast.ai SDK">
+    ```python
+    import asyncio
+
+    from vastai import Serverless
+
+
+    async def main():
+        client = Serverless()  # reads VAST_API_KEY
+        endpoint = await client.get_endpoint(name="my-endpoint")
+        result = await endpoint.request(
+            "/generate",
+            {"prompt": "Explain quantum computing", "max_new_tokens": 100},
+            cost=100,
+        )
+        print(result["response"])
+        await client.close()
+
+
+    asyncio.run(main())
+    ```
+  </Tab>
+  <Tab title="After: Runpod HTTP">
+    ```python
+    import os
+
+    import requests
+
+    response = requests.post(
+        "https://api.runpod.ai/v2/ENDPOINT_ID/runsync",
+        headers={"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}"},
+        json={"input": {"prompt": "Explain quantum computing", "max_new_tokens": 100}},
+        timeout=120,
+    )
+    response.raise_for_status()
+    job = response.json()
+    print(job["status"], job.get("output"))
+    ```
+  </Tab>
+  <Tab title="After: Runpod SDK">
+    ```python
+    import runpod
+
+    endpoint = runpod.Endpoint("ENDPOINT_ID")  # reads RUNPOD_API_KEY or the rp login key
+    result = endpoint.run_sync({"prompt": "Explain quantum computing", "max_new_tokens": 100})
+    print(result)
+    ```
+  </Tab>
+</Tabs>
+
+What changes in the client:
+
+- **Addressing.** Endpoints are addressed by ID, not name. Store the ID in configuration.
+- **Body.** The HTTP body wraps your payload in `input`. There's no `cost` argument.
+- **Response.** A queue endpoint returns a job object with `id`, `status`, and `output`. Vast's wrapper with `response` goes away.
+- **Long jobs.** Use `/run` to get a job ID, then poll `/status/JOB_ID`, read `/stream/JOB_ID`, or pass a `webhook` URL in the request. `/runsync` holds the connection open for short jobs.
+- **Retries.** The Vast SDK retries when a worker returns `429`. With a queue endpoint, jobs wait in the queue for a worker instead. Check the job `status` (`IN_QUEUE`, `IN_PROGRESS`, `COMPLETED`, `FAILED`, `CANCELLED`, `TIMED_OUT`).
+- **Sessions.** Vast worker sessions pin requests to one worker. On a load-balancing endpoint, use [worker affinity](/serverless/load-balancing/worker-affinity).
+
+For OpenAI-compatible clients, swap the base URL and key, and send the real model name.
+
+<Tabs>
+  <Tab title="Before: Vast.ai">
+    ```python
+    from openai import OpenAI
+
+    client = OpenAI(
+        api_key="YOUR_VAST_API_KEY",
+        base_url="https://openai.vast.ai/ENDPOINT_NAME",
+    )
+    response = client.chat.completions.create(
+        model="",
+        messages=[{"role": "user", "content": "Hello"}],
+    )
+    ```
+  </Tab>
+  <Tab title="After: Runpod">
+    ```python
+    import os
+
+    from openai import OpenAI
+
+    client = OpenAI(
+        api_key=os.environ["RUNPOD_API_KEY"],
+        base_url="https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1",
+    )
+    response = client.chat.completions.create(
+        model="Qwen/Qwen2.5-7B-Instruct",
+        messages=[{"role": "user", "content": "Hello"}],
+    )
+    ```
+  </Tab>
+</Tabs>
+
+Vast's proxy ignores `model`. Runpod's vLLM worker requires the deployed model name, or the name you set with `OPENAI_SERVED_MODEL_NAME_OVERRIDE`. See [OpenAI compatibility](/serverless/vllm/openai-compatibility).
+
+### Control-plane code: a complete Python program
+
+This program rents a GPU with a given image, environment variable, start command, and HTTP port, waits for the job's output, saves it, and deletes the GPU. The first version uses the `vastai` Python SDK. The second does the same job against Runpod REST API v2.
+
+```python before_vast.py
+import os
+import time
+
+import requests
+from vastai import VastAI
+
+vast = VastAI(api_key=os.environ["VAST_API_KEY"])
+IMAGE = "pytorch/pytorch:2.4.0-cuda12.4-cudnn9-runtime"
+START = (
+    "mkdir -p /workspace/out && cd /workspace/out && "
+    'python -c "import torch; print(torch.cuda.get_device_name(0))" > report.txt && '
+    'echo "mode=$MODE" >> report.txt && python -m http.server 8000'
+)
+
+offers = vast.search_offers(
+    query="gpu_name=RTX_4090 num_gpus=1 reliability>0.98 direct_port_count>=1 dph_total<=0.60",
+    order="dph_total",
+    limit=5,
+    storage=30,
+)
+instance_id = None
+for offer in offers:
+    created = vast.create_instance(
+        id=offer["id"],
+        image=IMAGE,
+        disk=30,
+        label="report-job",
+        env="-e MODE=fast -p 8000:8000",
+        args=["bash", "-c", START],
+        cancel_unavail=True,
+    )
+    if created.get("new_contract"):
+        instance_id = created["new_contract"]
+        break
+if instance_id is None:
+    raise SystemExit("No offer could be rented")
+
+try:
+    deadline = time.time() + 20 * 60
+    saved = False
+    while not saved and time.time() < deadline:
+        instance = vast.show_instance(id=instance_id) or {}
+        status = instance.get("actual_status")
+        if status in ("exited", "unknown", "offline"):
+            raise RuntimeError(f"Instance {instance_id} failed: {status}")
+        port = (instance.get("ports") or {}).get("8000/tcp")
+        if status == "running" and port:
+            url = f"http://{instance['public_ipaddr'].strip()}:{port[0]['HostPort']}/report.txt"
+            try:
+                response = requests.get(url, timeout=10)
+                if response.ok:
+                    with open("report.txt", "w") as f:
+                        f.write(response.text)
+                    saved = True
+            except requests.RequestException:
+                pass
+        if not saved:
+            time.sleep(10)
+    if not saved:
+        raise RuntimeError("Timed out waiting for report.txt")
+finally:
+    vast.destroy_instance(id=instance_id)
+
+print(open("report.txt").read())
+```
+
+```python after_runpod.py
+import os
+import time
+
+import requests
+
+API = "https://api.runpod.io/v2"
+HEADERS = {"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}"}
+IMAGE = "pytorch/pytorch:2.4.0-cuda12.4-cudnn9-runtime"
+START = (
+    "mkdir -p /workspace/out && cd /workspace/out && "
+    'python -c "import torch; print(torch.cuda.get_device_name(0))" > report.txt && '
+    'echo "mode=$MODE" >> report.txt && python -m http.server 8000'
+)
+# GPU types you accept, in order of preference. This replaces the offer search.
+GPU_CANDIDATES = ["NVIDIA GeForce RTX 4090", "NVIDIA RTX A5000", "NVIDIA GeForce RTX 3090"]
+
+
+def create_pod():
+    for gpu_id in GPU_CANDIDATES:
+        response = requests.post(
+            f"{API}/pods",
+            headers=HEADERS,
+            json={
+                "name": "report-job",
+                "image": IMAGE,
+                "gpu": {"id": gpu_id, "count": 1, "minCudaVersion": "12.4"},
+                "disk": 30,
+                "env": {"MODE": "fast"},
+                "ports": ["8000/http"],
+                "cmd": ["bash", "-c", START],
+            },
+            timeout=60,
+        )
+        if response.status_code == 201:
+            return response.json()
+        if response.status_code in (400, 403):
+            continue  # couldn't be placed, or no access to this GPU type: try the next one
+        response.raise_for_status()  # 401, 422, 429: fix the problem, don't loop
+    raise SystemExit("None of the candidate GPU types could be placed")
+
+
+def delete_pod(pod_id):
+    requests.delete(f"{API}/pods/{pod_id}", headers=HEADERS, timeout=60).raise_for_status()
+    for _ in range(12):  # confirm it's gone
+        if requests.get(f"{API}/pods/{pod_id}", headers=HEADERS, timeout=30).status_code == 404:
+            return
+        time.sleep(5)
+    raise RuntimeError(f"Pod {pod_id} still exists. Check the Runpod console.")
+
+
+pod = create_pod()
+pod_id = pod["id"]
+print(f"Created Pod {pod_id} on {pod['gpu']['id']} at ${pod['cost']}/hour")
+
+try:
+    url = f"https://{pod_id}-8000.proxy.runpod.net/report.txt"
+    deadline = time.time() + 20 * 60
+    saved = False
+    while not saved and time.time() < deadline:
+        status = requests.get(f"{API}/pods/{pod_id}", headers=HEADERS, timeout=30).json()["status"]
+        if status in ("ERROR", "EXITED", "TERMINATED"):
+            raise RuntimeError(f"Pod {pod_id} failed: {status}")
+        if status == "RUNNING":
+            try:
+                response = requests.get(url, timeout=10)
+                if response.ok:
+                    with open("report.txt", "w") as f:
+                        f.write(response.text)
+                    saved = True
+            except requests.RequestException:
+                pass
+        if not saved:
+            time.sleep(10)
+    if not saved:
+        raise RuntimeError("Timed out waiting for report.txt")
+finally:
+    delete_pod(pod_id)
+
+print(open("report.txt").read())
+```
+
+What changed:
+
+- The offer search and price cap are gone. You list the GPU types you accept, and a `400` on create means that type couldn't be placed (and a `403` that your account can't use it), so you try the next. A failed create leaves nothing behind. The Pod's hourly rate comes back in `cost`. To cap spend, read `price` from `GET /v2/catalog/gpus` and filter your candidates before you create.
+- `env` is a JSON object, and the port moves out of the Docker options into `ports` with a type.
+- `args` becomes `cmd`.
+- The port lookup (`public_ipaddr` plus `ports["8000/tcp"]`) becomes a URL built from the Pod ID, over HTTPS.
+- `actual_status` becomes `status`, with different values.
+- `/workspace` here is on the container disk, which is fine for a job that's deleted at the end. To keep outputs after the Pod is deleted, attach a network volume.
+
+### Control-plane code: a Bash batch job
+
+This script uploads inputs, runs a GPU job over SSH, downloads the results, and deletes the Pod. If the job or the download fails, it keeps the Pod so you can recover the results. It needs `runpodctl`, `curl`, `jq`, `ssh`, and `scp`, and an SSH key registered with `runpodctl ssh add-key`.
+
+```bash batch_job.sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+API="https://api.runpod.io/v2"
+IMAGE="runpod/pytorch:1.0.3-cu1281-torch291-ubuntu2404"
+GPU_ID="NVIDIA GeForce RTX 4090"
+JOB_SECONDS=3600                      # the job is stopped after this long
+NAME="my-job-$(date +%s)-$RANDOM"     # unique per run, so you can always find what you created
+OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=4)
+mkdir -p inputs && echo "hello" > inputs/example.txt     # sample input: replace with your files
+
+pod_json() { curl -fsS "$API/pods/$POD_ID" -H "Authorization: Bearer $RUNPOD_API_KEY"; }
+
+# 1. Create the Pod with a volume disk at /workspace and direct SSH on 22/tcp
+POD_ID=$(runpodctl pod create \
+  --name "$NAME" \
+  --image "$IMAGE" \
+  --gpu-id "$GPU_ID" \
+  --min-cuda-version 12.8 \
+  --container-disk-in-gb 20 \
+  --volume-in-gb 30 \
+  --ports "22/tcp" | jq -r '.id')
+[ -n "$POD_ID" ] && [ "$POD_ID" != "null" ] || { echo "Pod create failed" >&2; exit 1; }
+echo "Created Pod $POD_ID ($NAME)"
+
+# 2. On exit, delete the Pod unless its results still need recovery
+KEEP=0
+cleanup() {
+  if [ "$KEEP" = 1 ]; then
+    echo "Kept Pod $POD_ID because its results weren't downloaded. It bills until you delete it." >&2
+    echo "Copy /workspace/outputs off it, then run: runpodctl pod delete $POD_ID" >&2
+    return
+  fi
+  runpodctl pod delete "$POD_ID" >/dev/null || true
+  for _ in $(seq 12); do
+    CODE=$(curl -s -o /dev/null -w '%{http_code}' "$API/pods/$POD_ID" -H "Authorization: Bearer $RUNPOD_API_KEY")
+    [ "$CODE" = "404" ] && return 0
+    sleep 5
+  done
+  echo "Deletion not confirmed for Pod $POD_ID. Check the Runpod console." >&2
+  exit 1
+}
+trap cleanup EXIT
+
+# 3. Wait for RUNNING and a direct SSH mapping (up to 15 minutes)
+HOST="" PORT=""
+for _ in $(seq 90); do
+  POD=$(pod_json)
+  STATUS=$(jq -r '.status' <<<"$POD")
+  case "$STATUS" in ERROR|EXITED|TERMINATED) echo "Pod failed: $STATUS" >&2; exit 1;; esac
+  HOST=$(jq -r '.ssh.direct.host // empty' <<<"$POD")
+  PORT=$(jq -r '.ssh.direct.port // empty' <<<"$POD")
+  [ "$STATUS" = "RUNNING" ] && [ -n "$HOST" ] && [ -n "$PORT" ] && break
+  sleep 10
+done
+[ -n "$HOST" ] && [ -n "$PORT" ] || { echo "Timed out waiting for the Pod" >&2; exit 1; }
+
+# 4. Wait for sshd to answer
+for _ in $(seq 18); do ssh "${OPTS[@]}" -p "$PORT" "root@$HOST" true 2>/dev/null && break; sleep 10; done
+ssh "${OPTS[@]}" -p "$PORT" "root@$HOST" true || { echo "SSH never came up on Pod $POD_ID" >&2; exit 1; }
+
+# 5. Upload, run the job with a time limit, download the results
+scp "${OPTS[@]}" -P "$PORT" -r ./inputs "root@$HOST:/workspace/"
+KEEP=1
+ssh "${OPTS[@]}" -p "$PORT" "root@$HOST" "timeout $JOB_SECONDS bash -c \
+  'cd /workspace && mkdir -p outputs && nvidia-smi > outputs/gpu.txt && cp inputs/* outputs/'"
+scp "${OPTS[@]}" -P "$PORT" -r "root@$HOST:/workspace/outputs" ./
+KEEP=0
+echo "Results are in ./outputs"
+```
+
+Compared with a Vast version of this job, there's no offer loop and no `--cancel-unavail`. `/workspace` exists because the Pod has a volume disk. The SSH host and port come from the Pod's `ssh.direct` block, which is populated once `22/tcp` is mapped. Direct SSH needs a public IP, which Secure Cloud (the default) provides. If you only need to run a short command and read its output, `POST /v2/pods/POD_ID/exec` runs an argv array without SSH and waits up to 25 seconds.
+
+For other calls, use the [CLI command map](#cli-command-map) and the [API map](#api-map).
+
+## Step 8: Verify, cut over, and shut down
+
+**Verify from outside.** Send a real request from a machine that isn't on Runpod, using the production payload.
+
+```bash
+# Pod HTTP service
+curl -s https://POD_ID-8000.proxy.runpod.net/v1/models
+
+# Serverless queue endpoint
+curl -s -X POST https://api.runpod.ai/v2/ENDPOINT_ID/runsync \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"prompt": "Hello"}}'
+
+# Endpoint health and worker counts
+curl -s https://api.runpod.ai/v2/ENDPOINT_ID/health -H "Authorization: Bearer $RUNPOD_API_KEY"
+```
+
+Compare outputs against Vast for the same inputs and seeds. Measure latency for both a warm request and a cold start, because Vast's cold workers and Runpod's scale-to-zero workers behave differently on the first request after idle.
+
+**Run both in parallel.** Keep the Vast deployment serving while you shift a share of traffic to Runpod at your load balancer or in client configuration. Watch error rates, queue delay, and job `status` values, then move the rest.
+
+**Set a cost guard on Runpod.** Set `workers.max` and the idle timeout on each endpoint, enable low balance notifications and auto-pay on the [billing page](/accounts-billing/billing), and review `runpodctl pod list --all` and `runpodctl billing pods` after the first day. A stopped Pod still bills for its volume disk, and a network volume bills until you delete it.
+
+**Shut down Vast.** Stopped Vast instances and volumes keep billing for storage, so destroy them once the data is verified on Runpod. Delete Deployments, endpoints, and workergroups first, then destroy any worker instances they leave behind.
+
+```bash
+# Deployments (beta)
+vastai show deployments --raw
+vastai delete deployment DEPLOYMENT_ID
+
+# Serverless
+vastai show endpoints --raw | jq -r '.[].id'
+vastai show workergroups --raw
+vastai delete workergroup WORKERGROUP_ID
+vastai delete endpoint ENDPOINT_ID
+
+# Instances (this deletes their disks)
+vastai show instances --raw | jq -r '.[] | "\(.id)\t\(.label)\t\(.actual_status)"'
+vastai destroy instance INSTANCE_ID -y
+
+# Volumes (only after every instance using them is destroyed)
+vastai show volumes --raw
+vastai delete volume VOLUME_ID
+
+# Confirm nothing is left, then check the balance
+vastai show instances --raw | jq 'length'
+vastai show user
+```
+
+A reserved instance has prepaid credit locked to it. Check Vast's [reserved instances](https://docs.vast.ai/guides/instances/choosing/reserved-instances) page for the refund terms before you destroy one. Finally, turn off autobilling in the Vast console, delete the API keys your automation used, and remove `VAST_API_KEY` from CI secrets.
+
+## Reference
+
+### CLI command map
+
+| Task | Vast.ai CLI | Runpod |
+| --- | --- | --- |
+| Authenticate | `vastai set api-key KEY` | `export RUNPOD_API_KEY=KEY`, or `rp login` |
+| Check the account | `vastai show user` | `runpodctl doctor`, `runpodctl user` |
+| Find GPUs | `vastai search offers 'QUERY'` | `runpodctl gpu list`, `runpodctl datacenter list` |
+| Create | `vastai create instance OFFER_ID --image IMG --disk 30` | `runpodctl pod create --image IMG --gpu-id "GPU_ID" --container-disk-in-gb 30` |
+| Create from a template | `--template_hash HASH` | `--template-id TEMPLATE_ID` |
+| List | `vastai show instances` | `runpodctl pod list --all` |
+| Inspect | `vastai show instance ID` | `runpodctl pod get POD_ID` |
+| Stop, start | `vastai stop instance ID`, `vastai start instance ID` | `runpodctl pod stop POD_ID`, `runpodctl pod start POD_ID` |
+| Reboot | `vastai reboot instance ID` | `runpodctl pod restart POD_ID` |
+| Rename | `vastai label instance ID NAME` | `runpodctl pod update POD_ID --name NAME` |
+| Change the image | `vastai update instance ID --image IMG` | `runpodctl pod update POD_ID --image IMG` |
+| Delete | `vastai destroy instance ID -y` | `runpodctl pod delete POD_ID` |
+| Logs | `vastai logs ID --tail 100` | `runpodctl pod logs POD_ID` |
+| SSH details | `vastai ssh-url ID` | `runpodctl ssh info POD_ID` |
+| Register an SSH key | `vastai create ssh-key "KEY"` | `runpodctl ssh add-key --key-file PATH` |
+| Run a command | `vastai execute ID 'ls -l'` (limited to `ls`, `rm`, `du`), or SSH | SSH, or `POST /v2/pods/POD_ID/exec` |
+| Copy files | `vastai copy SRC DST`, `scp` | `runpodctl send` and `receive`, `scp`, `rsync` |
+| Sync with cloud storage | `vastai cloud copy` | Cloud Sync in the console, or `aws s3` and `rclone` in the Pod |
+| Create a volume | `vastai create volume OFFER_ID -s GB -n NAME` | `runpodctl network-volume create --name NAME --size GB --data-center-id DC` |
+| List, delete volumes | `vastai show volumes`, `vastai delete volume ID` | `runpodctl network-volume list`, `runpodctl network-volume delete VOLUME_ID` |
+| Create a template | `vastai create template --name N --image IMG` | `runpodctl template create --name N --image IMG` |
+| Find templates | `vastai search templates 'QUERY'` | `runpodctl template search QUERY` |
+| Registry login | `--login '-u USER -p TOKEN REGISTRY'` | `runpodctl registry create --name N --username USER --password-stdin` |
+| Create a Serverless endpoint | `vastai create endpoint` plus `vastai create workergroup` | `runpodctl serverless create` |
+| List endpoints | `vastai show endpoints` | `runpodctl serverless list` |
+| Update scaling | `vastai update endpoint ID ...` | `runpodctl serverless update ENDPOINT_ID --workers-max N` |
+| Delete an endpoint | `vastai delete endpoint ID` | `runpodctl serverless delete ENDPOINT_ID` |
+| Billing history | `vastai show invoices-v1` | `runpodctl billing pods`, `runpodctl billing serverless` |
+| JSON output | `--raw` | JSON by default |
+
+### API map
+
+Vast's base URL is `https://console.vast.ai/api/v0`. Runpod's is `https://api.runpod.io/v2`. Both take `Authorization: Bearer KEY`.
+
+| Task | Vast.ai REST and SDK | Runpod REST API v2 |
+| --- | --- | --- |
+| Search for GPUs | `POST /bundles/`, `search_offers()` | `GET /v2/catalog/gpus?include=AVAILABILITY&product=POD` |
+| List data centers | `geolocation` in offers | `GET /v2/catalog/datacenters` |
+| Create | `PUT /asks/OFFER_ID/`, `create_instance()` | `POST /v2/pods` |
+| List | `GET /api/v1/instances/`, `show_instances()` | `GET /v2/pods` (follow `pagination.nextCursor`) |
+| Get one | `GET /instances/ID/`, `show_instance()` | `GET /v2/pods/POD_ID` |
+| Stop, start | `PUT /instances/ID/` with `{"state": "stopped"}` or `{"state": "running"}` | `POST /v2/pods/POD_ID/action` with `{"action": "stop"}` or `{"action": "start"}` |
+| Restart | `reboot_instance()` | `POST /v2/pods/POD_ID/action` with `{"action": "restart"}` |
+| Rename, update | `PUT /instances/ID/` with `{"label": "NAME"}`, `update_instance()` | `PATCH /v2/pods/POD_ID` |
+| Delete | `DELETE /instances/ID/`, `destroy_instance()` | `DELETE /v2/pods/POD_ID` (returns `204`) |
+| Logs | `logs()` | `GET /v2/pods/POD_ID/logs` (Server-Sent Events) |
+| Run a command | `execute()` | `POST /v2/pods/POD_ID/exec` |
+| SSH keys | `create_ssh_key()` | `PUT /v2/account/ssh-keys` (replaces the full set) |
+| Templates | `create_template()` | `POST /v2/templates` |
+| Volumes | `create_volume()` | `POST /v2/network-volumes`, `POST /v2/global-volumes` |
+| Registry credentials | `login` on create | `POST /v2/registries` |
+| Serverless endpoints | `create_endpoint()`, `create_workergroup()` | `POST /v2/serverless` |
+| Endpoint workers | Endpoint workers API | `GET /v2/serverless/ENDPOINT_ID/workers` |
+| Account secrets | `create_env_var()` | `POST /v2/account/secrets` |
+| Billing | `show_invoices_v1()` | `GET /v2/billing/pods`, `GET /v2/billing/serverless` |
+| Change a bid | `PUT /instances/bid_price/ID/` | No equivalent. |
+
+REST API v2 validates request bodies strictly. A `422` lists each violation in `errors`, and a `400` on Pod create means the body was valid but couldn't be placed.
+
+### Configuration field map
+
+| Vast.ai create field | `runpodctl pod create` | REST `POST /v2/pods` |
+| --- | --- | --- |
+| Offer `id` | `--gpu-id`, `--gpu-count` | `gpu.id`, `gpu.count` |
+| `--image` | `--image` | `image` |
+| `--label` | `--name` | `name` (required) |
+| `--disk` | `--container-disk-in-gb`, `--volume-in-gb` | `disk`, `mounts.persistent.size` and `.path` |
+| `--env '-e K=V'` | `--env '{"K":"V"}'` | `env` |
+| `--env '-p 8000:8000'` | `--ports "8000/http"` or `"8000/tcp"` | `ports` |
+| `--args` | `--docker-args` | `cmd` |
+| `--entrypoint` | Set on a template with `--docker-entrypoint` | `entrypoint` |
+| `--onstart-cmd` | `--docker-args` | `cmd: ["bash", "-c", "..."]` |
+| `--ssh`, `--direct` | `--ssh` (default on), plus `22/tcp` in `--ports` | `startSsh: true`, plus `22/tcp` in `ports` |
+| `--jupyter` | Use a template with JupyterLab | `startJupyter: true`, plus `8888/http` in `ports` |
+| `--login` | `--registry-auth-id` | `registry` |
+| `--template_hash` | `--template-id` | `templateId` |
+| `--create-volume`, `--link-volume`, `--mount-path` | `--network-volume-id` | `mounts.network[].volumeId` and `.path` |
+| `--bid_price` | No equivalent. | No equivalent. |
+| `--cancel-unavail` | Not needed. | Not needed. Optional `queue` to wait for capacity. |
+| Search `cuda_vers>=` | `--min-cuda-version` | `gpu.minCudaVersion` |
+| Search `geolocation` | `--country-code`, `--data-center-ids` | `dataCenterIds` |
+| Search `datacenter=true` | `--cloud-type SECURE` | `cloud: "SECURE"` |
+
+Serverless fields map like this.
+
+| Vast.ai Serverless field | `runpodctl serverless create` | REST `POST /v2/serverless` |
+| --- | --- | --- |
+| `--endpoint_name` | `--name` | `name` |
+| `--max_workers` | `--workers-max` | `workers.max` |
+| `--min_load` above zero (keeps workers active) | `--workers-min` | `workers.min` |
+| `--cold_workers`, `--cold_mult`, `--min_cold_load` | No equivalent. | No equivalent. |
+| `--target_util` | `--scale-by`, `--scale-threshold` | `scaling.type` with `queueDelay` or `requestCount` |
+| `--inactivity_timeout` | `--idle-timeout` | `workers.idleTimeout` |
+| Workergroup `--template_hash` | `--template-id` or `--hub-id` | `templateId` |
+| Workergroup `--launch_args "--image ... --disk ..."` | Template `--image`, `--container-disk-in-gb` | `image`, `disk`, `env` |
+| Workergroup `--search_params`, `--gpu_ram` | `--gpu-id` (a pool or type ID), `--gpu-count` | `gpu.pools`, `gpu.excludedTypes`, `gpu.count` |
+| `search_params` with `geolocation` | `--data-center-ids` | `dataCenterIds` |
+
+### Environment variable map
+
+These are the variables each platform sets inside the container.
+
+| Vast.ai variable | Runpod Pod variable | Notes |
+| --- | --- | --- |
+| `CONTAINER_ID` | `RUNPOD_POD_ID` | A Vast ID is an integer. A Pod ID is a string. |
+| `VAST_CONTAINERLABEL` | `RUNPOD_POD_HOSTNAME` | Both identify the container. The values have different formats. |
+| `CONTAINER_API_KEY` | `RUNPOD_API_KEY` | Both are scoped to the instance or Pod. |
+| `PUBLIC_IPADDR` | `RUNPOD_PUBLIC_IP` | Set only when the Pod has a public IP. |
+| `VAST_TCP_PORT_22` | `RUNPOD_TCP_PORT_22` | Public port mapped to SSH. |
+| `VAST_TCP_PORT_X` | `RUNPOD_TCP_PORT_X` | Documented for TCP ports requested above 70000. For HTTP ports, build the proxy URL from `RUNPOD_POD_ID`. |
+| `VAST_UDP_PORT_X` | No equivalent. | Pods don't support UDP. |
+| `GPU_COUNT` | `RUNPOD_GPU_COUNT` | |
+| `SSH_PUBLIC_KEY` | `PUBLIC_KEY` | Authorized SSH public keys. |
+| `PYTORCH_VERSION` | `PYTORCH_VERSION` | Set by the image on both. |
+| `DATA_DIRECTORY` | No equivalent. | The default persistent path is `/workspace`. |
+| `JUPYTER_TOKEN`, `JUPYTER_SERVER_URL`, `JUPYTER_SERVER_ROOT` | `JUPYTER_PASSWORD` | Generated when `startJupyter` is set. |
+| `OPEN_BUTTON_PORT`, `JUPYTER_PORT` | No equivalent. | Port labels on a template name the ports shown in the console. |
+| No equivalent. | `RUNPOD_DC_ID` | Data center ID. |
+| No equivalent. | `RUNPOD_CPU_COUNT` | |
+| No equivalent. | `RUNPOD_VOLUME_ID` | Attached network volume ID. |
+| No equivalent. | `CUDA_VERSION` | |
+
+Serverless workers set their own variables. See [Serverless environment variables](/serverless/development/environment-variables).
+
+### Status map
+
+Vast reports `actual_status` (what the machine reports) and `intended_status` (what you asked for). Runpod's REST API reports one `status`, and `runpodctl` output adds `runtimeStatus` next to `desiredStatus`.
+
+| Vast.ai `actual_status` | Runpod REST `status` | `runpodctl` `runtimeStatus` | What to do |
+| --- | --- | --- | --- |
+| `null`, `created` | `PROVISIONING` | `initializing` | Keep polling, with a time limit. |
+| `loading` | `STARTING` | `initializing` | Keep polling. |
+| `running` | `RUNNING` | `running` | Connect. Probe your service's port before sending traffic. |
+| `stopped` | `EXITED` | `stopped` | Start it or delete it. The volume disk still bills. |
+| `exited` (container crashed) | `ERROR` | `error` | Read the logs, then delete or recreate. |
+| `unknown`, `offline` (host unreachable) | No direct equivalent. | `unknown` means the runtime lookup failed, not that the host is down. | Keep polling on `unknown`. Treat `ERROR` as terminal. |
+| `rebooting` | `STARTING` | `initializing` | Keep polling. |
+| `frozen` | No equivalent. | No equivalent. | |
+| Destroyed (no longer listed) | `TERMINATED`, then `404` | `terminated`, then not found | Treat `404` as the confirmation that a Pod is gone. |
+
+Each Pod response also includes `actions`, the state transitions that are valid right now (`start`, `stop`, `restart`, `terminate`).
+
+Vast Serverless worker states map loosely to Runpod's, because Runpod has no stopped-but-ready worker.
+
+| Vast.ai worker state | Runpod equivalent |
+| --- | --- |
+| Ready (`idle`) | A running worker, idle or processing a job. |
+| Loading, Model Loading | A worker that's initializing (cold start). |
+| Inactive (`stopped`), Unavailable | No equivalent. Idle flex workers shut down after the idle timeout. |
+| Error | An unhealthy worker. Check the endpoint's worker list and logs. |
+
+## Migrate with a coding agent
+
+A coding agent can run the inventory, propose the mapping, and make the changes while you approve each step that costs money.
+
+First, install the Runpod skills and connect the MCP server. MCP sign-in uses OAuth ("Sign in with Runpod"), so you don't need an API key to start. For details, see [agent skills](/get-started/agent-skills) and [MCP servers](/get-started/mcp-servers).
+
+<Tabs>
+  <Tab title="Claude Code">
+    ```bash
+    # Claude Code (the plugin also connects the hosted MCP server)
+    claude plugin marketplace add runpod/runpod-plugins-official
+    claude plugin install runpod@runpod
+    ```
+  </Tab>
+  <Tab title="Other agents">
+    ```bash
+    # Any other agent (Codex, Cursor, and others): skills, then the hosted MCP server
+    npx skills add runpod/runpod-plugins-official --skill '*' --agent AGENT_ID --global
+    npx @runpod/mcp-server@latest add --client CLIENT_ID
+    ```
+  </Tab>
+</Tabs>
+
+Then open your project in the agent and paste this prompt.
+
+```text
+Migrate this project from Vast.ai to Runpod using the runpod-cloud-migrate skill
+and its Vast.ai reference.
+
+1. Inventory first. Run `vastai show instances --raw`, `vastai show volumes --raw`,
+   `vastai show endpoints --raw`, and `vastai show workergroups --raw`, and grep the
+   repo for vastai, VAST_API_KEY, CONTAINER_ID, VAST_TCP_PORT_, VAST_UDP_PORT_,
+   PUBLIC_IPADDR, and PYWORKER_REPO. Don't change anything yet.
+2. Show me a plan: for each instance, endpoint, volume, and call site, the Runpod
+   target (Pod, Serverless queue endpoint, load-balancing endpoint, @app.task,
+   network volume, or global volume), the GPU type or pool, and the data center.
+   Flag anything that uses UDP ports, interruptible bids, reserved instances, VM
+   instances, or host-level search filters, and tell me the options.
+3. Give me a cost estimate from the Runpod GPU catalog for each resource, and wait
+   for my approval before you create anything billable.
+4. Migrate one workload end to end. Replace search-then-create with a create on a
+   GPU type, move Docker options to env and ports, and replace Vast runtime
+   variables with the RUNPOD_ ones.
+5. Verify with a real request from outside Runpod and show me the output next to
+   the Vast output.
+6. Never stop, destroy, or delete anything on Vast.ai without asking me first.
+   When I approve, destroy instances and volumes and confirm nothing is left.
+7. Finish with a report: files changed, resources created with IDs and hourly
+   rates, gaps that remain, and what is still running on each platform.
+```
+
+## Troubleshooting
+
+**The Pod create call returns `400` for a GPU that the catalog showed as available.** Stock changed between the read and the create, or the GPU isn't available in the data center you pinned. Try the next GPU type or data center in your list, or drop `dataCenterIds` if you don't have a network volume. Don't retry a `422`: it means the body is wrong.
+
+**The container exits right away or ignores your startup commands.** On Vast, SSH and Jupyter modes replaced the entrypoint and ran your on-start script. On Runpod the image's own `ENTRYPOINT` runs, and `cmd` is passed to it as arguments. If the image has an entrypoint, either pass arguments it understands or override it with `entrypoint`. Check `runpodctl pod logs POD_ID` to see what ran.
+
+**SSH is refused, or `scp` fails while an interactive shell works.** Proxied SSH carries a shell only. Add `22/tcp` to the Pod's ports for direct SSH, register your key before you create the Pod, and use an image that starts `sshd` from the `PUBLIC_KEY` variable. `runpodctl ssh info POD_ID` reports which condition isn't met. Note that `runpodctl pod update --ports` replaces the whole port list, so include your existing ports.
+
+**Files are missing after a stop and start.** Only `/workspace` (the volume disk or a network volume) survives a stop. Vast kept the whole instance disk. Move outputs, checkpoints, and caches such as `HF_HOME` under `/workspace`.
+
+**A service works on the TCP port but returns `524` through the proxy URL.** The HTTP proxy closes connections after 100 seconds. Return a job ID and poll, stream the response, or expose the service on a TCP port instead.
+
+**A service that listens on UDP is unreachable.** Pods don't route UDP. Switch the service to TCP, or run the UDP-facing part outside Runpod.
+
+**`nvidia-smi` works but your framework reports a CUDA error.** The host's CUDA version is older than the image expects. Vast's `cuda_vers` filter or `@vastai-automatic-tag` handled this for you. Set `--min-cuda-version` (REST `gpu.minCudaVersion`) to the version the image was built for.
+
+**A network volume won't attach, or the Pod can't be placed with it.** The Pod must run in the volume's data center, and that data center needs stock of your GPU type. Check `runpodctl datacenter list` before you create the volume, or use a global volume for data that must follow the workload across data centers.
+
+**Serverless requests sit in `IN_QUEUE`.** No worker has started. Check that the image is `linux/amd64` and pullable, that the GPU pool has stock (add a second pool), and that `workers.max` is above zero. A handler that never calls `runpod.serverless.start` also leaves jobs queued.
+
+**Code still reads `CONTAINER_ID` or `VAST_TCP_PORT_8000` and gets nothing.** Those variables don't exist on Runpod. Rerun the grep from Step 1 inside the image's source and replace them with the names in the [environment variable map](#environment-variable-map).
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Choose a Pod" icon="microchip" horizontal href="/pods/choose-a-pod">
+    Pick a GPU, cloud tier, and storage for your workload.
+  </Card>
+  <Card title="Serverless overview" icon="bolt" horizontal href="/serverless/overview">
+    Learn how endpoints, workers, and handlers fit together.
+  </Card>
+  <Card title="Network volumes" icon="hard-drive" horizontal href="/storage/network-volumes">
+    Share persistent data across Pods and Serverless workers.
+  </Card>
+  <Card title="REST API v2" icon="code" horizontal href="/api-reference-v2/overview">
+    Manage Pods, endpoints, templates, and volumes programmatically.
+  </Card>
+</CardGroup>

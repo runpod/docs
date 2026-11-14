@@ -1,0 +1,1280 @@
+---
+title: "Migrate from CoreWeave to Runpod"
+sidebarTitle: "CoreWeave"
+description: "Move Kubernetes GPU workloads, Slurm clusters, and object storage from CoreWeave to Runpod Pods, Serverless, and Instant Clusters."
+---
+
+This guide is for teams that run GPU workloads on [CoreWeave Kubernetes Service (CKS)](https://docs.coreweave.com/products/cks), [SUNK](https://docs.coreweave.com/products/sunk), [CoreWeave AI Object Storage](https://docs.coreweave.com/products/storage/object-storage), [Distributed File Storage](https://docs.coreweave.com/products/storage/distributed-file-storage/about), or [CoreWeave Inference](https://docs.coreweave.com/products/inference). Runpod doesn't expose a Kubernetes API, so the migration is a translation: each Kubernetes object becomes a Runpod resource that you create directly. Autoscaled inference Deployments become [Serverless](/serverless/overview) endpoints, long-running single-container workloads become [Pods](/pods/overview), Jobs become queue-based endpoints or SDK tasks, PersistentVolumeClaims and buckets become [network volumes](/storage/network-volumes), and SUNK clusters become [Instant Clusters](/instant-clusters) running Slurm. At the end, your containers run on Runpod, your clients call Runpod URLs, and your CoreWeave resources are shut down.
+
+<Tip>
+You can hand this migration to a coding agent. See [Migrate with a coding agent](#migrate-with-a-coding-agent) for the setup commands and a prompt.
+</Tip>
+
+## How CoreWeave maps to Runpod
+
+| CoreWeave concept | Runpod equivalent | Notes |
+| --- | --- | --- |
+| CKS cluster (managed control plane, attached to a VPC) | No cluster object | You create Pods, Serverless endpoints, and Instant Clusters directly with the API, CLI, or Terraform. There's no control plane to provision or upgrade. |
+| Node Pool (`NodePool`, whole bare-metal nodes by `instanceType`) | GPU type and GPU count on each Pod or worker | CoreWeave GPU instances are whole nodes, typically with 8 GPUs. On Runpod you request GPUs per container. |
+| Node Pool autoscaling (Cluster Autoscaler) | Serverless worker scaling | Serverless scales workers between `workers.min` and `workers.max`, including to zero. Pods don't autoscale. |
+| Deployment + Service + HPA, KEDA, or Knative | [Serverless endpoint](/serverless/overview), queue-based or load-balancing | One endpoint replaces the Deployment, the Service, and the autoscaler. |
+| Deployment or StatefulSet with a fixed replica | [Pod](/pods/overview) | One container per Pod. A Pod runs until you stop or delete it. |
+| Job, CronJob | Queue-based endpoint, or `@app.task` in the [Runpod SDK](/sdk/overview) | Queue jobs are submitted over HTTP. The schedule stays in your own scheduler. |
+| Container image, `imagePullSecrets` | Same image, plus a [template](/pods/templates/overview) and registry credentials | Images must be `linux/amd64`. |
+| [Dedicated Inference](https://docs.coreweave.com/products/inference/dedicated) (gateway and deployment) | Load-balancing endpoint, or a [vLLM worker](/serverless/vllm/overview) | Both sides offer OpenAI-compatible routes. Dedicated Inference keeps at least one replica running. Serverless can scale to zero. |
+| [Serverless Inference](https://docs.coreweave.com/products/inference/serverless) (per-token catalog models) | [Public Endpoints](/public-endpoints/overview) | Both are OpenAI-compatible hosted models. The model catalogs differ. |
+| SUNK (Slurm on Kubernetes) | [Instant Clusters with Slurm](/instant-clusters/slurm-clusters) | Slurm nodes are Pods in a Runpod cluster, with no Kubernetes layer underneath. |
+| HPC Interconnect (InfiniBand) | Instant Cluster high-speed interfaces | See [Instant Clusters](/instant-clusters) for supported GPUs and network speeds. |
+| AI Object Storage (S3-compatible, `cwobject.com`, LOTA) | [Network volume](/storage/network-volumes) with the [S3-compatible API](/storage/s3-api), or a [global volume](/storage/globalvolume/overview) | Runpod volumes are file systems you mount. The S3-compatible API reads and writes the same files. |
+| Distributed File Storage (PVC, `shared-vast`, `ReadWriteMany`) | Network volume | A network volume is pinned to one data center. A global volume attaches in any data center. |
+| Local Storage (`emptyDir`, node NVMe) | Container disk | Ephemeral on both sides. |
+| `LoadBalancer` Service, `.coreweave.app` hostname, Ingress | Pod proxy URL, Pod TCP port, or endpoint URL | Runpod generates the hostname and serves HTTPS on it. |
+| VPC, private Services, cluster DNS | [Global networking](/pods/networking) between Pods | Private `POD_ID.runpod.internal` names between Pods in your account. You don't define CIDRs or routes. |
+| Kubernetes Secret | [Runpod secret](/pods/templates/secrets) | Referenced from an environment variable as `{{ RUNPOD_SECRET_name }}`. |
+| ConfigMap | Environment variables, or files on a volume | Set `env` on the Pod, endpoint, or template. |
+| Region and Availability Zone (`US-EAST-04A`) | Data center ID (`US-KS-2`) | List data centers with `runpodctl datacenter list`. |
+| Flex Reservations, Reserved Instances, Spot Instances, and On-Demand capacity plans | On-demand, per-second billing | See [Pod pricing](/pods/pricing) and [Serverless pricing](/serverless/pricing). For committed or reserved capacity, [contact sales](https://ecykq.share.hsforms.com/2MZdZATC3Rb62Dgci7knjbA). |
+| CoreWeave Terraform provider (`coreweave/coreweave`) | [Runpod Terraform provider](/integrations/terraform/overview) (`runpod/runpod`) | See [Migrate your Terraform](#migrate-your-terraform). |
+| `kubectl`, `cwic`, CoreWeave REST APIs | [`runpodctl`](/runpodctl/overview), [REST API v2](/api-reference-v2/overview), the Runpod SDK, the MCP server | The Terraform provider and the SDK are built on REST API v2. |
+| API access token (`CW-SECRET-...`), kubeconfig, Object Storage access key | One Runpod API key (`RUNPOD_API_KEY`), plus an S3 API key for the S3-compatible API | See [Credentials](/get-started/credentials). |
+| Organization, IAM access policies, groups | [Teams](/accounts-billing/manage-accounts) or [Organizations](/organizations/orgs-overview) | Roles are assigned per member. |
+| CoreWeave Grafana, PromQL and LogQL at `observe.coreweave.com` | Console logs and metrics, REST v2 log and metric routes | Instant Clusters include a [Grafana dashboard](/instant-clusters/cluster-observability). |
+
+## What's different
+
+### What works differently
+
+**You request GPUs, not nodes.** A CoreWeave Node Pool gives you whole bare-metal nodes, and Kubernetes packs your containers onto them. On Runpod, each Pod or Serverless worker asks for a GPU type and a GPU count, and Runpod places it. There's no bin-packing, node affinity, taints, or tolerations to carry over. Replace `nodeSelector` on `node.coreweave.cloud/type` with a GPU type ID or pool.
+
+**Autoscaling is a property of the endpoint.** On CKS you combine an HPA or KEDA with Node Pool autoscaling, and CoreWeave documents node scale-up as taking 5 to 15 minutes, depending on the instance type. A Serverless endpoint has one scaler: workers between a minimum and maximum, driven by queue delay or request count, with scale to zero as the default.
+
+**Requests reach your container through Runpod's URLs.** A load-balancing endpoint serves your HTTP server at `https://ENDPOINT_ID.api.runpod.ai/PATH` and requires your Runpod API key as a bearer token. A queue-based endpoint wraps your code in a handler behind `/run` and `/runsync`. A Pod's HTTP port is served at `https://POD_ID-PORT.proxy.runpod.net`, which is public, unauthenticated, and has a 100-second timeout.
+
+**Storage is mounted, not claimed.** A network volume mounts at `/workspace` on Pods and at `/runpod-volume` on Serverless workers. A Pod can choose the mount path through the REST API. A Serverless worker can't, so update paths that pointed at your PVC's `mountPath`.
+
+**Volumes are pinned to a data center.** A network volume lives in one data center, and anything that mounts it runs there. To spread an endpoint across data centers, attach one network volume per data center and copy the data to each, or use a global volume.
+
+**Health checks are a single HTTP path.** Load-balancing workers answer a health path (default `/ping`) with `200` when ready and `204` while initializing. Readiness, liveness, and startup probes collapse into that one check.
+
+**Configuration is flat.** Kubernetes Secrets become Runpod secrets referenced from environment variables. ConfigMaps become environment variables or files you bake into the image or place on a volume.
+
+### What has no direct equivalent
+
+On the Runpod side:
+
+- **The Kubernetes API.** Operators, CRDs, DaemonSets, admission webhooks, Helm charts, and anything that calls the Kubernetes API from inside a container don't carry over. Rebuild the behavior with the Runpod API, or keep that component on a Kubernetes cluster elsewhere.
+- **Multi-container Pods and sidecars.** A Runpod Pod or worker runs one container image, and Pods don't support Docker Compose. Combine the processes into one image with a process supervisor, or run the sidecar as its own Pod and connect over global networking, which requires both to be NVIDIA GPU Pods.
+- **VPC-level networking.** Every CKS cluster attaches to a VPC with CIDRs you can choose, and CoreWeave offers Direct Connect. Runpod's global networking gives Pods private DNS names inside your account at 100 Mbps, on NVIDIA GPU Pods in supported data centers. Pods don't support UDP.
+- **Object storage features.** AI Object Storage has bucket policies, versioning, lifecycle rules, and LOTA caching. A network volume is a file system with a fixed size and an S3-compatible API on top. If you depend on bucket features, keep an object store and mount or sync from it.
+- **Whole-node control.** Kernel settings, GPU driver versions per Node Pool, kubelet overrides, and node shell access have no counterpart. Set a CUDA floor with `minCudaVersion` instead of pinning a driver.
+- **CronJob schedules.** Keep the schedule in a scheduler you already run (CI, Airflow, cron) and have it submit a job to the endpoint.
+- **SUNK features.** SUNK schedules Kubernetes Pods through Slurm, provisions users through SCIM, and gives users login Pods. On Runpod, managed Slurm Clusters come with Slurm and munge installed, and you configure everything else on the controller node.
+
+On the CoreWeave side:
+
+- **Scale to zero per endpoint.** CoreWeave documents that Dedicated Inference doesn't support scale to zero. On CKS, a Node Pool can scale to zero nodes through the Cluster Autoscaler, but GPU capacity scales at whole-node granularity. A Serverless endpoint with `workers.min` set to `0` runs no workers while idle.
+- **Per-container GPU requests without a cluster.** There's no cluster, VPC, or Node Pool to create before the first container starts.
+- **A managed request queue.** Queue-based endpoints give you async submission, status polling, streaming, retries, and webhooks without deploying a queue.
+
+<Note>
+If you want to keep a declarative, multi-cloud workflow rather than calling Runpod directly, two orchestration layers already target Runpod. [SkyPilot](/integrations/skypilot) launches tasks from a YAML file with `cloud: runpod`. [dstack](/integrations/dstack) provisions Pods on Runpod from YAML definitions, including volumes. Neither is Kubernetes, but both can soften the move for teams used to manifests.
+</Note>
+
+## Requirements
+
+- Access to your CoreWeave organization: a kubeconfig for each CKS cluster, an API access token, and an AI Object Storage access key if you use buckets.
+- `kubectl`, and optionally the [CoreWeave Intelligent CLI](https://github.com/coreweave/cwic) (`cwic`).
+- A [Runpod account](https://www.console.runpod.io/home) with a payment method or credits, and a [Runpod API key](/get-started/credentials).
+- Docker, to rebuild or retag images for `linux/amd64`.
+- The AWS CLI and `jq`.
+
+## Step 1: Take inventory of what you run on CoreWeave
+
+Start from the cluster, because most of what you run is described by Kubernetes objects. Point `kubectl` at each CKS cluster and export everything that defines a workload.
+
+List your Node Pools and nodes to see which instance types you use. The second command is adapted from the node alias in CoreWeave's docs and prints the instance type and GPU model for each node:
+
+```bash
+kubectl get nodepool
+kubectl get nodes -o=custom-columns="NAME:metadata.name,TYPE:metadata.labels['node\.coreweave\.cloud\/type'],GPU:metadata.labels['gpu\.nvidia\.com\/model']"
+```
+
+The `INSTANCE TYPE` and `TARGET` columns of the first command tell you how many GPUs you hold. Each GPU instance type is a whole node, so multiply nodes by the GPUs per node.
+
+List the workloads, how they scale, and how they're exposed:
+
+```bash
+kubectl get deploy,statefulset,daemonset,job,cronjob -A -o wide
+kubectl get hpa -A
+kubectl get svc,ingress -A -o wide
+kubectl get pvc -A
+kubectl get crd | grep -Ev "coreweave|cilium"
+```
+
+DaemonSets and CRDs that aren't CoreWeave's own are the items most likely to need redesign, so note what each one does.
+
+Export the full specs so you can translate them offline:
+
+```bash
+mkdir -p inventory
+for kind in deploy statefulset job cronjob hpa svc ingress pvc configmap; do
+  kubectl get "$kind" -A -o yaml > "inventory/$kind.yaml"
+done
+kubectl get secret -A -o custom-columns="NAMESPACE:metadata.namespace,NAME:metadata.name,TYPE:type" > inventory/secrets.txt
+```
+
+The secrets export lists names only, so no secret values land on disk. For each workload, record the image, `command` and `args`, `env`, container ports, `nvidia.com/gpu` count, node selector, volume mounts, and replica range.
+
+If you run SUNK, list the Slurm resources and capture the Slurm configuration from a login node:
+
+```bash
+kubectl get sunkcluster,slurmcluster,nodesets -A
+scontrol show config > inventory/slurm-config.txt
+sinfo -N -l > inventory/slurm-nodes.txt
+```
+
+List your AI Object Storage buckets and their sizes. CoreWeave's docs configure the AWS CLI with a `cw` profile that points at `https://cwobject.com` with virtual-hosted addressing:
+
+```bash
+aws s3 ls --profile cw
+aws s3 ls s3://BUCKET_NAME --recursive --summarize --human-readable --profile cw | tail -2
+```
+
+List Dedicated Inference gateways and deployments in the CoreWeave Cloud Console or through the Dedicated Inference API, and note each deployment's engine, instance type, GPU count, model path, and autoscaling `min` and `max`.
+
+Finally, find the code and configuration that reference CoreWeave. Run this from the root of each repository:
+
+```bash
+grep -rnE "coreweave\.(com|cloud|app)|cwobject\.com|cwlota\.com|cwinference\.com|api\.inference\.wandb\.ai|CW-SECRET-|COREWEAVE_API_TOKEN|shared-vast|svc\.cluster\.local|KUBERNETES_SERVICE_HOST" \
+  --include="*.py" --include="*.ts" --include="*.js" --include="*.go" --include="*.yaml" --include="*.yml" \
+  --include="*.tf" --include="*.sh" --include="*.env*" --include="Dockerfile*" .
+```
+
+Each match is a hostname, credential, storage class, or in-cluster address that changes in Step 7.
+
+## Step 2: Set up Runpod
+
+Create a [Runpod account](https://www.console.runpod.io/home), add credits or a payment method, and create an API key on the [Credentials](/get-started/credentials) page.
+
+Install the CLI and the Python SDK, then set your key:
+
+```bash
+curl -fsSL https://cli.runpod.net | sudo bash
+pip install runpod
+export RUNPOD_API_KEY="YOUR_API_KEY"
+runpodctl doctor
+```
+
+`runpodctl` manages Pods, endpoints, templates, and volumes. The `runpod` package (2.x, Python 3.10 to 3.14) includes the worker SDK, the endpoint client, and the `rp` CLI. `rp login` stores the key in `~/.runpod/config.toml` if you prefer not to export it.
+
+If you manage infrastructure as code, install the [Terraform provider](/integrations/terraform/overview). If you work with a coding agent, connect the [MCP server](/get-started/mcp-servers).
+
+## Step 3: Choose where each workload lands
+
+Use the shape of each Kubernetes object to pick its target.
+
+| Kubernetes object on CKS | Runpod target | Why |
+| --- | --- | --- |
+| Deployment + Service serving HTTP inference, with HPA, KEDA, or Knative | Serverless load-balancing endpoint | Your HTTP server runs unchanged, with custom paths and request-count scaling. |
+| Deployment that consumes a queue, or an API that can take `{"input": ...}` | Serverless queue-based endpoint | Built-in queue, async status, retries, and webhooks. |
+| Deployment running vLLM for an OpenAI-compatible API | [vLLM worker](/serverless/vllm/overview) or load-balancing endpoint | The vLLM worker exposes `/openai/v1` with no server code of your own. |
+| Deployment or StatefulSet pinned at one replica (notebooks, dev boxes, stateful services, anything long-lived) | Pod | Runs until you stop it. Persistent data goes on a network volume. |
+| Job | Queue-based endpoint, or `@app.task` | A queue job per work item, or one ephemeral Pod per call that terminates when the function returns. |
+| CronJob | Queue-based endpoint triggered by your scheduler | The schedule lives outside Runpod. |
+| Multi-node training (MPIJob, PyTorchJob, Ray) or a SUNK cluster | Instant Cluster | Multi-node with high-speed networking, with Slurm or Ray managed for you. |
+| Calls to CoreWeave Serverless Inference | Public Endpoint | Hosted model behind an OpenAI-compatible URL. |
+| DaemonSet, operator, CRD controller | No target | Redesign or keep on Kubernetes. See [What has no direct equivalent](#what-has-no-direct-equivalent). |
+
+<Note>
+Load-balancing endpoints have a 5.5-minute processing limit per request and a 30 MB payload limit, and they drop requests when every worker is busy. Use a queue-based endpoint for long-running or must-not-drop work.
+</Note>
+
+### GPU mapping
+
+CoreWeave instance types are whole nodes. Map the GPU model, then set the GPU count each container requested with `nvidia.com/gpu`.
+
+| CoreWeave instance type | GPU | Runpod GPU type ID | Serverless pool |
+| --- | --- | --- | --- |
+| `gd-8xh100ib-i128` | H100, 80 GB | `NVIDIA H100 80GB HBM3`, `NVIDIA H100 PCIe` | `ADA_80_PRO` |
+| `gd-8xh200ib-i128` | H200, 141 GB | `NVIDIA H200` | `HOPPER_141` |
+| `b200-8x` | B200, 180 GB | `NVIDIA B200` | Check the catalog |
+| `b300-8x` | B300 | `NVIDIA B300 SXM6 AC` | Check the catalog |
+| `gd-8xl40s-i128` | L40S, 48 GB | `NVIDIA L40S` | `ADA_48_PRO` |
+| `gd-8xl40-i128` | L40, 48 GB | `NVIDIA L40` | `ADA_48_PRO` |
+| `gd-8xa100-i128` | A100, 80 GB | `NVIDIA A100-SXM4-80GB`, `NVIDIA A100 80GB PCIe` | `AMPERE_80` |
+| `rtxp6000-8x`, `rtxp6000-8x-v2` | RTX PRO 6000 Blackwell Server Edition, 96 GB | `NVIDIA RTX PRO 6000 Blackwell Server Edition` | Check the catalog |
+| `gb200-4x`, `gb300-4x`, `gb300-4x-e`, `gd-1xgh200` | GB200, GB300, GH200 | Not in the [GPU reference](/references/gpu-types) | Pick by VRAM, or [contact sales](https://ecykq.share.hsforms.com/2MZdZATC3Rb62Dgci7knjbA) |
+
+Pick the GPU that fits the workload's VRAM and throughput needs. A container that used one GPU of an 8-GPU node doesn't need an 8-GPU Pod.
+
+GPU stock varies by data center and changes through the day, so check it before you commit to a type:
+
+```bash
+runpodctl gpu list
+curl -s "https://api.runpod.io/v2/catalog/gpus?include=AVAILABILITY&product=SERVERLESS" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" | jq .
+```
+
+The catalog response includes each GPU type's pool and availability for the product you ask about (`POD`, `CLUSTER`, or `SERVERLESS`).
+
+## Step 4: Move your images and code
+
+Your container images move as they are, with four checks.
+
+**Architecture.** Runpod runs `linux/amd64` images. If you built an image for a different architecture, rebuild it:
+
+```bash
+docker buildx build --platform linux/amd64 -t registry.example.com/acme/llm-server:1.4.2 --push .
+```
+
+**Registry access.** `imagePullSecrets` don't carry over. If the image is private, store the registry credential on Runpod and reference it by ID:
+
+```bash
+printenv REGISTRY_TOKEN | runpodctl registry create --name "acme-registry" --username "acme-puller" --password-stdin
+runpodctl registry list
+```
+
+If your images live in a registry inside the CKS cluster or in CoreWeave's container registry, push them to a registry that stays reachable after the cluster is gone.
+
+**CUDA.** On CKS, CoreWeave manages the GPU driver for the Node Pool. On Runpod, host driver versions vary by machine, so set a floor that matches your image: `--min-cuda-version 12.8` in `runpodctl`, or `gpu.minCudaVersion` in the REST API.
+
+**Command, ports, and environment.** Translate the container spec field by field:
+
+| Kubernetes field | Runpod field (REST v2) | `runpodctl` flag |
+| --- | --- | --- |
+| `image` | `image` | `--image` |
+| `command` (overrides `ENTRYPOINT`) | `entrypoint` | `--docker-entrypoint` on `template create` |
+| `args` (overrides `CMD`) | `cmd` | `--docker-start-cmd` on `template create` |
+| `env[].value` | `env` | `--env` |
+| `env[].valueFrom.secretKeyRef` | `env` with `{{ RUNPOD_SECRET_name }}` | `--env` |
+| `envFrom.configMapRef` | `env` (one key per entry) | `--env` |
+| `ports[].containerPort` | `ports` (`8000/http`, `22/tcp`) | `--ports` |
+| `resources.limits["nvidia.com/gpu"]` | `gpu.count` | `--gpu-count` |
+| `nodeSelector` on `node.coreweave.cloud/type` | `gpu.id` (Pods), `gpu.pools` (Serverless) | `--gpu-id` |
+| `volumeMounts` for a PVC | `mounts.network` | `--network-volume-id` |
+| `emptyDir` | Container disk (`disk`) | `--container-disk-in-gb` |
+
+Move each Kubernetes Secret your workloads read into a Runpod secret. The value is write-only once stored:
+
+```bash
+curl -s -X POST https://api.runpod.io/v2/account/secrets \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" -H "Content-Type: application/json" \
+  -d '{"name": "hf_token", "value": "YOUR_HUGGING_FACE_TOKEN"}'
+```
+
+Reference it from any Pod, endpoint, or template by setting an environment variable's value to `{{ RUNPOD_SECRET_hf_token }}`.
+
+### Multi-container Pods
+
+If a Kubernetes Pod has more than one container, decide per container. Init containers that download models become a one-time copy onto a network volume (Step 5). Log and metrics sidecars usually go away, because Runpod collects container logs. A sidecar your app talks to over `localhost` either moves into the same image under a process supervisor, or becomes its own Pod that you reach at `POD_ID.runpod.internal` with [global networking](/pods/networking). Global networking works between NVIDIA GPU Pods only, so a CPU-only sidecar such as a cache belongs in the same image.
+
+## Step 5: Move your data and models
+
+Choose the destination by how the data is used.
+
+| CoreWeave storage | Runpod destination | Use it when |
+| --- | --- | --- |
+| Distributed File Storage PVC (`shared-vast`) | Network volume | Workloads read and write files and run in one data center. |
+| AI Object Storage bucket holding weights or datasets | Network volume, loaded through the S3-compatible API or from a Pod | You want the files mounted next to compute. |
+| Data read by workers in several data centers | Global volume, or one network volume per data center | The endpoint shouldn't be pinned to a single data center. |
+| Hugging Face models pulled at startup | [Cached models](/serverless/endpoints/model-caching) on the endpoint | The model is on Hugging Face and you run it on Serverless. |
+| `emptyDir`, `/mnt/local` scratch | Container disk | The data doesn't need to survive a restart. |
+
+Create the network volume first, in a data center that has the GPU you chose in Step 3 and that supports the [S3-compatible API](/storage/s3-api#datacenter-availability):
+
+```bash
+runpodctl network-volume create --name "models" --size 200 --data-center-id "US-KS-2"
+```
+
+Size it for the data you're copying. A network volume can grow later but can't shrink.
+
+### Copy from AI Object Storage
+
+The two S3 endpoints use different credentials, so copy through a machine that can reach both. The most reliable route is a Pod with the network volume mounted, because files are written straight to the file system.
+
+<Tabs>
+  <Tab title="From a Pod (recommended)">
+    Start a CPU Pod with the volume attached, then [connect to it](/pods/connect-to-a-pod) with the web terminal or SSH:
+
+    ```bash
+    runpodctl pod create --name "data-copy" --compute-type cpu \
+      --image "runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04" \
+      --network-volume-id NETWORK_VOLUME_ID --data-center-ids US-KS-2
+    ```
+
+    Inside the Pod, install the AWS CLI, configure the `cw` profile the way CoreWeave's docs describe, and sync the bucket onto the volume:
+
+    ```bash
+    pip install awscli
+
+    aws configure --profile cw
+    aws configure set endpoint_url https://cwobject.com --profile cw
+    aws configure set s3.addressing_style virtual --profile cw
+
+    aws s3 sync s3://BUCKET_NAME /workspace/models --profile cw
+    ```
+
+    AI Object Storage requires virtual-hosted addressing, so keep the `addressing_style` line. Use `https://cwobject.com` here, not `http://cwlota.com`, because the LOTA endpoint only works inside a CoreWeave cluster. Delete the Pod when the sync finishes.
+
+    To use Rclone instead, define a remote with CoreWeave's documented settings and copy to the mounted path:
+
+    ```ini ~/.config/rclone/rclone.conf
+    [coreweave]
+    type = s3
+    provider = Other
+    access_key_id = YOUR_CW_ACCESS_KEY_ID
+    secret_access_key = YOUR_CW_SECRET_ACCESS_KEY
+    endpoint = https://cwobject.com
+    force_path_style = false
+    no_check_bucket = true
+    ```
+
+    ```bash
+    rclone copy coreweave:BUCKET_NAME /workspace/models --progress --stats 15s
+    ```
+  </Tab>
+  <Tab title="Through the S3-compatible API">
+    Create an S3 API key on the Runpod [Credentials](https://console.runpod.io/user/credentials) page and store it in a second AWS CLI profile named `runpod`. Then stage the data locally and upload it. The bucket name on the Runpod side is the network volume ID, and the region is the data center ID:
+
+    ```bash
+    aws s3 sync s3://BUCKET_NAME ./stage --profile cw
+
+    aws s3 sync ./stage s3://NETWORK_VOLUME_ID/models --profile runpod \
+      --region US-KS-2 --endpoint-url https://s3api-us-ks-2.runpod.io/
+    ```
+
+    Runpod's `aws s3 sync` support is limited for directories with more than 10,000 files. For large trees, sync in batches or use the Pod method. No Pod needs to be running for this route.
+  </Tab>
+</Tabs>
+
+On a Pod, `/workspace/models/file` is the same file as `s3://NETWORK_VOLUME_ID/models/file` in the S3-compatible API and `/runpod-volume/models/file` on a Serverless worker.
+
+### Copy from a PVC
+
+Distributed File Storage volumes are reachable only from the cluster they live in, so push from inside CKS. This Job mounts the PVC and syncs it to the network volume through Runpod's S3-compatible API:
+
+```yaml pvc-export.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pvc-export
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: sync
+          image: amazon/aws-cli:latest
+          args:
+            - s3
+            - sync
+            - /data
+            - s3://NETWORK_VOLUME_ID/models
+            - --region
+            - US-KS-2
+            - --endpoint-url
+            - https://s3api-us-ks-2.runpod.io/
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef: { name: runpod-s3, key: access_key }
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: { name: runpod-s3, key: secret_key }
+          volumeMounts:
+            - name: data
+              mountPath: /data
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: model-cache
+```
+
+Create the `runpod-s3` Secret from your Runpod S3 API key before you apply the Job. For a PVC with a very large number of small files, archive them into tar files first, or run `rsync` over SSH to a Runpod Pod as described in [Network volumes](/storage/network-volumes#using-rsync-over-ssh).
+
+### Global volumes
+
+A global volume isn't tied to a data center and is designed for data that many Pods or workers read, such as model weights. The S3-compatible API doesn't work with global volumes, so load one by attaching it to a Pod and running the same sync commands inside it. Attach it to a GPU Pod in the console, or set `mounts.global` when you create the Pod with the REST API. See [Global volumes](/storage/globalvolume/overview) for mount paths, request costs, and when to prefer a network volume.
+
+## Step 6: Deploy on Runpod
+
+This section translates one real set of manifests. The inference server below is the kind of workload CoreWeave's own CKS tutorials deploy: a vLLM server behind a Service, with a PVC for model weights, a Hugging Face token in a Secret, a node selector for H100 nodes, and an HPA.
+
+```yaml llm.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-cache
+spec:
+  accessModes: ["ReadWriteMany"]
+  storageClassName: shared-vast
+  resources:
+    requests:
+      storage: 200Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llama-3-1-8b
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: llama-3-1-8b }
+  template:
+    metadata:
+      labels: { app: llama-3-1-8b }
+    spec:
+      nodeSelector:
+        node.coreweave.cloud/type: gd-8xh100ib-i128
+      imagePullSecrets:
+        - name: acme-registry
+      containers:
+        - name: vllm-server
+          image: registry.example.com/acme/llm-server:1.4.2
+          command: ["vllm", "serve"]
+          args:
+            - meta-llama/Llama-3.1-8B-Instruct
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8000"
+            - --download-dir
+            - /models
+          env:
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef: { name: hf-token-secret, key: api_token }
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet: { path: /health, port: 8000 }
+          resources:
+            requests: { nvidia.com/gpu: 1 }
+            limits: { nvidia.com/gpu: 1 }
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: model-cache
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llama-3-1-8b
+  annotations:
+    service.beta.kubernetes.io/coreweave-load-balancer-type: public
+    service.beta.kubernetes.io/external-hostname: llama
+spec:
+  type: LoadBalancer
+  selector: { app: llama-3-1-8b }
+  ports:
+    - port: 80
+      targetPort: 8000
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: llama-3-1-8b
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: llama-3-1-8b }
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+    - type: Pods
+      pods:
+        metric: { name: http_requests_in_flight }
+        target: { type: AverageValue, averageValue: "4" }
+```
+
+On CoreWeave this is reachable at `http://llama.ORG_ID-CLUSTER_NAME.coreweave.app`. The steps below assume you created the `models` network volume and the `hf_token` secret in the earlier steps.
+
+### Serverless load-balancing endpoint
+
+A load-balancing endpoint runs the same HTTP server and replaces the Deployment, Service, and HPA with one resource. The endpoint type is set at creation with the REST API (`runpodctl serverless create` creates queue-based endpoints):
+
+```bash
+curl -s -X POST https://api.runpod.io/v2/serverless \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" -H "Content-Type: application/json" \
+  -d '{
+    "name": "llama-3-1-8b",
+    "type": "LOAD_BALANCER",
+    "image": "registry.example.com/acme/llm-server:1.4.2",
+    "registry": "REGISTRY_AUTH_ID",
+    "entrypoint": ["vllm", "serve"],
+    "cmd": ["meta-llama/Llama-3.1-8B-Instruct", "--host", "0.0.0.0", "--port", "8000",
+            "--download-dir", "/runpod-volume/models"],
+    "ports": ["8000/http"],
+    "disk": 40,
+    "env": {
+      "PORT": "8000",
+      "PORT_HEALTH": "8000",
+      "HEALTH_CHECK_PATH": "/health",
+      "HF_TOKEN": "{{ RUNPOD_SECRET_hf_token }}"
+    },
+    "gpu": {"pools": ["ADA_80_PRO"], "count": 1, "minCudaVersion": "12.8"},
+    "mounts": {"network": [{"volumeId": "NETWORK_VOLUME_ID"}]},
+    "workers": {"min": 0, "max": 4, "idleTimeout": 60},
+    "scaling": {"type": "REQUEST_COUNT", "requestCount": 4},
+    "timeout": 300000
+  }'
+```
+
+The response contains the endpoint `id` and `requestUrls.base`, which is `https://ENDPOINT_ID.api.runpod.ai`. Here's how each piece of the manifests landed:
+
+| In `llm.yaml` | In the endpoint |
+| --- | --- |
+| `command`, `args` | `entrypoint`, `cmd`. The download path changed from `/models` to `/runpod-volume/models` because Serverless mounts volumes at `/runpod-volume`. |
+| `containerPort: 8000` and the Service | `ports`, `PORT`, and `PORT_HEALTH`. Set all three to the same port, or the worker starts but never becomes ready. |
+| `readinessProbe` on `/health` | `HEALTH_CHECK_PATH`. Omit it if your server answers `/ping`. |
+| `secretKeyRef` | `{{ RUNPOD_SECRET_hf_token }}` |
+| `imagePullSecrets` | `registry` |
+| `nodeSelector` and `nvidia.com/gpu: 1` | `gpu.pools` and `gpu.count` |
+| The PVC | `mounts.network` |
+| HPA `minReplicas: 1`, `maxReplicas: 4` | `workers.min: 0`, `workers.max: 4`. Set `min` to `1` to keep one worker warm the way the HPA did. |
+| HPA target of 4 in-flight requests per replica | `scaling.requestCount: 4` |
+
+Wait for a worker to become ready, then send the same OpenAI-style request your clients send today:
+
+```bash
+curl -s https://api.runpod.ai/v2/ENDPOINT_ID/health -H "Authorization: Bearer $RUNPOD_API_KEY"
+
+curl -s https://ENDPOINT_ID.api.runpod.ai/v1/chat/completions \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" -H "Content-Type: application/json" \
+  -d '{"model": "meta-llama/Llama-3.1-8B-Instruct", "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+The first request after scale to zero waits for a cold start, so clients need retries. In the console, click **New Endpoint** on the Serverless page and set **Endpoint Type** to **Load Balancer**. See [Load balancing endpoints](/serverless/load-balancing/overview) for health check behavior and limits.
+
+<Tip>
+If the server is plain vLLM and you don't need custom routes, the [vLLM worker](/serverless/vllm/overview) gives you a queue-based endpoint with an OpenAI-compatible route at `https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1` and no image to maintain.
+</Tip>
+
+### Pod
+
+Use a Pod when the workload should stay up as a single long-running container, the way a one-replica Deployment or StatefulSet does. The same manifests translate to one create call.
+
+<Tabs>
+  <Tab title="runpodctl">
+    Create a template that holds the image, command, ports, and environment, then create the Pod from it:
+
+    ```bash
+    runpodctl template create --name "llama-3-1-8b-pod" \
+      --image "registry.example.com/acme/llm-server:1.4.2" \
+      --registry-auth-id REGISTRY_AUTH_ID \
+      --container-disk-in-gb 40 \
+      --ports "8000/http,22/tcp" \
+      --docker-entrypoint "vllm,serve" \
+      --docker-start-cmd "meta-llama/Llama-3.1-8B-Instruct,--host,0.0.0.0,--port,8000,--download-dir,/workspace/models" \
+      --env '{"HF_TOKEN": "{{ RUNPOD_SECRET_hf_token }}"}'
+
+    runpodctl pod create --name "llama-3-1-8b" --template-id TEMPLATE_ID \
+      --gpu-id "NVIDIA H100 80GB HBM3" --gpu-count 1 \
+      --network-volume-id NETWORK_VOLUME_ID \
+      --data-center-ids US-KS-2 \
+      --min-cuda-version 12.8
+    ```
+
+    The network volume mounts at `/workspace`, so the download path points there.
+  </Tab>
+  <Tab title="REST API v2">
+    The REST API takes the container settings inline and lets you choose the mount path, so `/models` can stay as it was:
+
+    ```bash
+    curl -s -X POST https://api.runpod.io/v2/pods \
+      -H "Authorization: Bearer $RUNPOD_API_KEY" -H "Content-Type: application/json" \
+      -d '{
+        "name": "llama-3-1-8b",
+        "image": "registry.example.com/acme/llm-server:1.4.2",
+        "registry": "REGISTRY_AUTH_ID",
+        "entrypoint": ["vllm", "serve"],
+        "cmd": ["meta-llama/Llama-3.1-8B-Instruct", "--host", "0.0.0.0", "--port", "8000",
+                "--download-dir", "/models"],
+        "ports": ["8000/http", "22/tcp"],
+        "disk": 40,
+        "env": {"HF_TOKEN": "{{ RUNPOD_SECRET_hf_token }}"},
+        "gpu": {"id": "NVIDIA H100 80GB HBM3", "count": 1, "minCudaVersion": "12.8"},
+        "dataCenterIds": ["US-KS-2"],
+        "mounts": {"network": [{"volumeId": "NETWORK_VOLUME_ID", "path": "/models"}]}
+      }'
+    ```
+  </Tab>
+</Tabs>
+
+Wait for the container to report as running, then call it through the proxy URL:
+
+```bash
+until [ "$(runpodctl pod get POD_ID --output json | jq -r '.runtimeStatus')" = "running" ]; do sleep 5; done
+
+curl -s https://POD_ID-8000.proxy.runpod.net/v1/models
+```
+
+<Warning>
+The proxy URL is public and unauthenticated, and requests time out after 100 seconds. The `LoadBalancer` Service it replaces was also public, but if you relied on `loadBalancerSourceRanges` or a private Service, add authentication in your server (for example, vLLM's API key option) or keep the port private and reach it from other Pods over global networking. For long requests or non-HTTP protocols, expose a TCP port instead. See [Expose ports](/pods/configuration/expose-ports).
+</Warning>
+
+A Pod doesn't have an HPA. If the Deployment scaled beyond one replica, use the Serverless endpoint above. In the console, the same Pod is created from **Pods > Deploy**.
+
+### Queue-based endpoint for a Job
+
+A Kubernetes Job runs a container to completion. On Runpod, the same code becomes a handler that processes one job per request. This Job runs a GPU batch script once per input shard:
+
+```yaml embed-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: embed-shard-0001
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        node.coreweave.cloud/type: gd-8xl40s-i128
+      containers:
+        - name: embed
+          image: registry.example.com/acme/embedder:2.1.0
+          command: ["python", "embed.py"]
+          args: ["--input", "/data/shards/0001.jsonl", "--output", "/data/embeddings/0001.parquet"]
+          resources:
+            limits: { nvidia.com/gpu: 1 }
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: datasets
+```
+
+Wrap the script in a handler. The arguments that were hardcoded in the manifest become the job's input:
+
+```python handler.py
+import subprocess
+
+import runpod
+
+
+def handler(job):
+    args = job["input"]
+    result = subprocess.run(
+        ["python", "embed.py", "--input", args["input"], "--output", args["output"]],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr[-2000:])
+    return {"output": args["output"]}
+
+
+runpod.serverless.start({"handler": handler})
+```
+
+Raising an exception marks the job as `FAILED`, which is what a non-zero exit code did for the Job. Build a worker image on top of the existing one:
+
+```dockerfile Dockerfile
+FROM registry.example.com/acme/embedder:2.1.0
+RUN pip install --no-cache-dir runpod
+COPY handler.py .
+ENTRYPOINT []
+CMD ["python", "-u", "handler.py"]
+```
+
+```bash
+docker buildx build --platform linux/amd64 -t registry.example.com/acme/embedder-worker:2.1.0 --push .
+```
+
+Create a Serverless template and an endpoint from it:
+
+```bash
+runpodctl template create --name "embedder-worker" --serverless \
+  --image "registry.example.com/acme/embedder-worker:2.1.0" \
+  --registry-auth-id REGISTRY_AUTH_ID --container-disk-in-gb 20
+
+runpodctl serverless create --name "embedder" --template-id TEMPLATE_ID \
+  --gpu-id ADA_48_PRO --workers-min 0 --workers-max 8 \
+  --network-volume-id NETWORK_VOLUME_ID --execution-timeout 3600
+```
+
+Submit one request per shard. The volume that was at `/data` is at `/runpod-volume` on the worker:
+
+```bash
+curl -s -X POST https://api.runpod.ai/v2/ENDPOINT_ID/run \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" -H "Content-Type: application/json" \
+  -d '{"input": {"input": "/runpod-volume/shards/0001.jsonl", "output": "/runpod-volume/embeddings/0001.parquet"}}'
+
+curl -s https://api.runpod.ai/v2/ENDPOINT_ID/status/JOB_ID -H "Authorization: Bearer $RUNPOD_API_KEY"
+```
+
+The Job fields map as follows:
+
+| Job field | Queue-based endpoint |
+| --- | --- |
+| `parallelism` | `--workers-max`. To process several jobs on one worker, use a [concurrent handler](/serverless/workers/concurrent-handler). |
+| `completions`, indexed Jobs | One `/run` request per work item. |
+| `activeDeadlineSeconds` | `--execution-timeout`, or `policy.executionTimeout` on a request. |
+| `backoffLimit` | Failed jobs can be requeued with `/retry`. |
+| `ttlSecondsAfterFinished` | Results of `/run` jobs are kept for 30 minutes. Write outputs to a volume or pass a `webhook`. |
+| CronJob `schedule` | Your scheduler calls `/run`. |
+
+For large offline workloads that can tolerate multi-hour latency, see [Batch jobs](/serverless/batch-jobs).
+
+If you'd rather not build a worker image, the Runpod SDK can run the same script as a task. Each call provisions a Pod, runs to completion, and terminates:
+
+```python main.py
+import subprocess
+
+import runpod
+
+app = runpod.App("embed-batch")
+datasets = runpod.NetworkVolume("datasets", size=200)
+
+
+@app.task(
+    gpu="L40S",
+    image="registry.example.com/acme/embedder:2.1.0",
+    registry_auth="acme-registry",
+    mounts={"/data": datasets},
+)
+def embed(input_path: str, output_path: str):
+    subprocess.run(
+        ["python", "embed.py", "--input", input_path, "--output", output_path],
+        check=True,
+    )
+    return {"output": output_path}
+
+
+@runpod.local_entrypoint
+def main():
+    print(embed.remote("/data/shards/0001.jsonl", "/data/embeddings/0001.parquet"))
+```
+
+Run it with `rp flash dev main.py`. A task chooses its own mount path, so `/data` stays as it was. See [Build an app](/sdk/apps/build-app) for tasks, volumes, and deployment.
+
+### Instant Cluster with Slurm
+
+A SUNK cluster becomes a managed Slurm Cluster. In the console, open [Instant Clusters](https://console.runpod.io/cluster), click **Create Cluster**, choose **Slurm Cluster**, then set the Pod count, GPU type, region, and an optional network volume. The REST API creates the same thing:
+
+```bash
+curl -s -X POST https://api.runpod.io/v2/clusters \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" -H "Content-Type: application/json" \
+  -d '{
+    "name": "slurm-train",
+    "type": "SLURM",
+    "image": "runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04",
+    "compute": {"gpuTypeId": "NVIDIA H100 80GB HBM3", "gpuCountPerPod": 8, "podCount": 4},
+    "mounts": {"network": [{"volumeId": "NETWORK_VOLUME_ID", "path": "/workspace"}]},
+    "startSsh": true
+  }'
+```
+
+Runpod designates one node as the Slurm controller and the rest as agents, with Slurm and munge configured. Connect to the controller over SSH and submit jobs with the same commands you use on a SUNK login node:
+
+```bash
+sinfo
+sbatch your-job-script.sh
+squeue
+```
+
+Before you move a SUNK workload, check these differences:
+
+- **Images.** Managed Slurm Clusters support only official Runpod PyTorch images. If your `NodeSet` used a custom image, install your dependencies at job start, keep environments on the network volume, or [set up Slurm yourself](/instant-clusters/slurm) on a cluster with your own image.
+- **Size.** Instant Clusters are documented at 2 to 8 nodes. For larger clusters, [contact sales](https://ecykq.share.hsforms.com/2MZdZATC3Rb62Dgci7knjbA). Cluster availability depends on GPU stock, so check it for your GPU type and region before you plan a cutover date.
+- **Shared storage.** The `homeDir` and `additionalMounts` volumes in a `SunkCluster` become one network volume, mounted at `/workspace` on each node, in the cluster's data center.
+- **Users and accounting.** SUNK provisions POSIX users through SCIM and ships an accounting database. On Runpod, you connect with your account's SSH keys and configure users, partitions, and accounting in `/etc/slurm/slurm.conf` on the controller.
+- **Job scripts.** `sbatch` scripts carry over. Change partition names, paths under `/mnt/home` or `/mnt/data`, and any `srun --container-image` usage that relied on SUNK's container support.
+
+## Step 7: Update the code that calls CoreWeave
+
+### Inference clients
+
+For an HTTP server moved to a load-balancing endpoint, the request and response bodies don't change. The hostname changes, and every request needs your Runpod API key.
+
+<Tabs>
+  <Tab title="Before (CoreWeave)">
+    ```python client.py
+    from openai import OpenAI
+
+    client = OpenAI(
+        base_url="http://llama.ORG_ID-CLUSTER_NAME.coreweave.app/v1",
+        api_key="not-used",
+    )
+
+    response = client.chat.completions.create(
+        model="meta-llama/Llama-3.1-8B-Instruct",
+        messages=[{"role": "user", "content": "Hello"}],
+    )
+    print(response.choices[0].message.content)
+    ```
+  </Tab>
+  <Tab title="After (Runpod)">
+    ```python client.py
+    import os
+
+    from openai import OpenAI
+
+    client = OpenAI(
+        base_url="https://ENDPOINT_ID.api.runpod.ai/v1",
+        api_key=os.environ["RUNPOD_API_KEY"],
+        max_retries=5,
+    )
+
+    response = client.chat.completions.create(
+        model="meta-llama/Llama-3.1-8B-Instruct",
+        messages=[{"role": "user", "content": "Hello"}],
+    )
+    print(response.choices[0].message.content)
+    ```
+  </Tab>
+</Tabs>
+
+The retries cover cold starts after the endpoint scales to zero. Use the same pattern for the other URLs you may be replacing:
+
+| Calling today | Call on Runpod | What changes |
+| --- | --- | --- |
+| `LoadBalancer` or Ingress hostname on `.coreweave.app` | `https://ENDPOINT_ID.api.runpod.ai/PATH` (load-balancing), or `https://POD_ID-PORT.proxy.runpod.net/PATH` (Pod) | Hostname. Endpoints require `Authorization: Bearer RUNPOD_API_KEY`. |
+| Dedicated Inference gateway, `https://GATEWAY_NAME.ORG_ID.gw.cwinference.com/v1` | `https://ENDPOINT_ID.api.runpod.ai/v1` (load-balancing), or `https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1` (vLLM worker) | Base URL and API key. The `model` field must match what your server or worker serves. |
+| Serverless Inference, `https://api.inference.wandb.ai/v1` | `https://api.runpod.ai/v2/MODEL_SLUG/openai/v1` ([Public Endpoints](/public-endpoints/overview)) | Base URL, API key, and model ID. Check that the model you use is in the catalog. |
+| In-cluster Service DNS, `http://NAME.NAMESPACE.svc.cluster.local` | The endpoint URL, or `http://POD_ID.runpod.internal:PORT` between Pods with global networking | In-cluster names don't resolve on Runpod. |
+
+### Batch clients
+
+Code that created Kubernetes Jobs now submits queue requests. Async work uses `/run` and polls `/status`, or passes a `webhook` URL to be notified on completion.
+
+<Tabs>
+  <Tab title="Before (CoreWeave)">
+    ```python submit.py
+    from kubernetes import client, config
+
+    config.load_kube_config()
+
+    job = client.V1Job(
+        metadata=client.V1ObjectMeta(name="embed-shard-0001"),
+        spec=client.V1JobSpec(
+            backoff_limit=2,
+            template=client.V1PodTemplateSpec(
+                spec=client.V1PodSpec(
+                    restart_policy="Never",
+                    containers=[
+                        client.V1Container(
+                            name="embed",
+                            image="registry.example.com/acme/embedder:2.1.0",
+                            command=["python", "embed.py"],
+                            args=["--input", "/data/shards/0001.jsonl",
+                                  "--output", "/data/embeddings/0001.parquet"],
+                            resources=client.V1ResourceRequirements(limits={"nvidia.com/gpu": "1"}),
+                        )
+                    ],
+                )
+            ),
+        ),
+    )
+    client.BatchV1Api().create_namespaced_job(namespace="default", body=job)
+    ```
+  </Tab>
+  <Tab title="After (Runpod)">
+    ```python submit.py
+    import os
+    import time
+
+    import requests
+
+    BASE = "https://api.runpod.ai/v2/ENDPOINT_ID"
+    HEADERS = {"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}"}
+
+    job = requests.post(
+        f"{BASE}/run",
+        headers=HEADERS,
+        json={
+            "input": {
+                "input": "/runpod-volume/shards/0001.jsonl",
+                "output": "/runpod-volume/embeddings/0001.parquet",
+            },
+            "policy": {"executionTimeout": 3600000},
+        },
+        timeout=30,
+    ).json()
+
+    while True:
+        status = requests.get(f"{BASE}/status/{job['id']}", headers=HEADERS, timeout=30).json()
+        if status["status"] in ("COMPLETED", "FAILED", "CANCELLED", "TIMED_OUT"):
+            break
+        time.sleep(5)
+
+    print(status)
+    ```
+  </Tab>
+</Tabs>
+
+See [Send requests](/serverless/endpoints/send-requests) for `/runsync`, streaming with `/stream`, webhooks, and rate limits.
+
+### Storage clients
+
+Code that read from AI Object Storage with an S3 client has two options. The simpler one is to read files from the mounted volume path. If the code must keep using S3 calls, point it at the network volume's S3-compatible API:
+
+| Setting | CoreWeave | Runpod |
+| --- | --- | --- |
+| Endpoint URL | `https://cwobject.com`, or `http://cwlota.com` in-cluster | `https://s3api-DATACENTER.runpod.io/` |
+| Bucket | Bucket name | Network volume ID |
+| Region | Availability Zone, such as `US-EAST-04A` | Data center ID, such as `US-KS-2` |
+| Credentials | Object Storage access key | S3 API key from the Runpod console |
+
+Check the [compatibility reference](/storage/s3-api#s3-api-compatibility-reference) for the S3 operations your code uses.
+
+### Control-plane automation
+
+Scripts and CI jobs that drove CoreWeave through `kubectl`, `cwic`, or the CoreWeave API now call `runpodctl` or REST API v2. The [Reference](#reference) section maps the commands. Replace `COREWEAVE_API_TOKEN` and kubeconfig secrets in CI with `RUNPOD_API_KEY`.
+
+## Step 8: Verify, cut over, and shut down
+
+**Verify from outside.** Send production-shaped requests to the Runpod endpoint from a machine outside Runpod, and compare the responses with CoreWeave's for the same inputs. Measure latency for warm requests and for a cold start, then decide whether to keep `workers.min` above zero.
+
+```bash
+curl -s -o /dev/null -w "%{http_code} %{time_total}s\n" \
+  https://ENDPOINT_ID.api.runpod.ai/v1/chat/completions \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" -H "Content-Type: application/json" \
+  -d '{"model": "meta-llama/Llama-3.1-8B-Instruct", "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+**Run both in parallel.** Keep the CoreWeave workload serving while you send a share of traffic to Runpod from your client, gateway, or DNS layer. Watch error rates, cold starts, and worker counts in the endpoint's **Metrics** and **Logs** tabs, or pull them from the API:
+
+```bash
+curl -s "https://api.runpod.io/v2/serverless/ENDPOINT_ID/metrics/requests?interval=1h" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" | jq .
+```
+
+**Shift traffic.** Move the remaining traffic once the Runpod side holds at your peak load. Raise `workers.max` first if your peak needs more workers than you tested with.
+
+**Shut down CoreWeave.** Do this only after you've confirmed the data copy and kept the CoreWeave side idle for a period you're comfortable with. Delete in this order:
+
+```bash
+# 1. Workloads, Services, and autoscalers. Don't run `kubectl delete -f llm.yaml` here:
+#    that file also declares the PVC, and this would delete it with the workloads.
+kubectl delete deployment,service,hpa llama-3-1-8b
+
+# 2. Volumes (after verifying the copy on Runpod)
+kubectl delete pvc model-cache
+
+# 3. Node Pools. CKS removes the nodes without waiting for workloads to finish.
+kubectl delete nodepool NODE_POOL_NAME
+
+# 4. Dedicated Inference: deployments first, then gateways
+cwic inference deployment delete DEPLOYMENT_ID
+cwic inference gateway delete GATEWAY_ID
+
+# 5. Buckets. Only empty buckets can be deleted.
+aws s3 rm s3://BUCKET_NAME --recursive --profile cw
+aws s3api delete-bucket --bucket BUCKET_NAME --profile cw
+```
+
+If you run SUNK, delete the SUNK cluster as well, because a `SunkCluster` manages its own Node Pools. Then delete each CKS cluster from the **Clusters** page of the CoreWeave Cloud Console (the cluster must be in the Running, Failed, or Preempted state), and delete API access tokens and Object Storage access keys you no longer need. If you manage CoreWeave with Terraform, run `terraform destroy` on that configuration instead.
+
+<Warning>
+Deleting resources doesn't end a commitment. CoreWeave bills Reserved Instances at a flat rate for the term whether or not instances are running, so talk to your CoreWeave account team about reserved capacity before you plan the cutover date. Versioned buckets also need their object versions and delete markers removed before the bucket can be deleted.
+</Warning>
+
+**Guard costs on Runpod.** Keep `workers.min` at `0` on endpoints that can tolerate cold starts, and keep the idle timeout short. Stop or delete Pods you aren't using, because a running Pod bills per second whether or not it's serving. Enable [low balance notifications](/accounts-billing/billing#low-balance-notifications), and review spend by resource:
+
+```bash
+runpodctl pod list --all
+runpodctl serverless list
+curl -s "https://api.runpod.io/v2/billing?bucketSize=day&lastN=7" -H "Authorization: Bearer $RUNPOD_API_KEY" | jq .
+```
+
+## Migrate your Terraform
+
+The CoreWeave provider (`coreweave/coreweave`) manages clusters, VPCs, buckets, and Dedicated Inference. Workloads inside the cluster are usually managed with the Kubernetes or Helm providers. The Runpod provider (`runpod/runpod`, `~> 2.0`) is built on REST API v2 and manages the workloads directly.
+
+| CoreWeave or Kubernetes resource | Runpod resource | Notes |
+| --- | --- | --- |
+| `coreweave_networking_vpc` | None | No VPC to declare. Set `global_networking = true` on `runpod_pod` for private Pod-to-Pod traffic. |
+| `coreweave_cks_cluster` | None | Workloads are top-level resources. |
+| `NodePool` manifest (`kubernetes_manifest`) | `gpu_type_id` on `runpod_pod`, `gpu_pools` on `runpod_serverless_endpoint` | Capacity is requested per resource. |
+| `kubernetes_deployment` + `kubernetes_service` + `kubernetes_horizontal_pod_autoscaler` | `runpod_serverless_endpoint` (with `runpod_template` for the command) | `endpoint_type`, `workers_min`, `workers_max`, `scaling_type`, `scaling_value`. |
+| `kubernetes_deployment` or `kubernetes_stateful_set` with one replica | `runpod_pod` | `desired_state` starts and stops it. |
+| `kubernetes_persistent_volume_claim` | `runpod_network_volume` | `data_center` is required. |
+| `coreweave_object_storage_bucket` | `runpod_network_volume` or `runpod_global_volume` | Bucket policy, versioning, lifecycle, and settings resources have no counterpart. |
+| `coreweave_object_storage_access_key` | None | Create an S3 API key in the Runpod console. |
+| `coreweave_inference_gateway`, `coreweave_inference_deployment`, `coreweave_inference_capacity_claim` | `runpod_serverless_endpoint` | One resource covers routing, scaling, and the container. |
+| `coreweave_container_registry_*` | `runpod_registry` | Stores a pull credential for a registry you host elsewhere. |
+| `kubernetes_secret` | None | Create the secret with `POST /v2/account/secrets` and reference it as `{{ RUNPOD_SECRET_name }}` in `env`. |
+| SUNK (`SunkCluster` manifest or Helm release) | `runpod_cluster` with `type = "SLURM"` | Changing most arguments replaces the cluster. |
+
+Here's the infrastructure for the inference server from Step 6 on CoreWeave. The Deployment, Service, and HPA would follow in the Kubernetes provider:
+
+```hcl coreweave.tf
+terraform {
+  required_providers {
+    coreweave = {
+      source = "coreweave/coreweave"
+    }
+  }
+}
+
+provider "coreweave" {
+  # Reads the token from the COREWEAVE_API_TOKEN environment variable.
+}
+
+resource "coreweave_networking_vpc" "default" {
+  name = "default"
+  zone = "US-EAST-04A"
+
+  host_prefixes = [
+    {
+      name     = "primary"
+      type     = "PRIMARY"
+      prefixes = ["10.16.192.0/18"]
+    },
+  ]
+
+  vpc_prefixes = [
+    { name = "pod cidr", value = "10.0.0.0/13" },
+    { name = "service cidr", value = "10.16.0.0/22" },
+    { name = "internal lb cidr", value = "10.32.4.0/22" },
+  ]
+}
+
+resource "coreweave_cks_cluster" "default" {
+  name                   = "inference"
+  version                = "v1.35"
+  zone                   = "US-EAST-04A"
+  vpc_id                 = coreweave_networking_vpc.default.id
+  public                 = true
+  pod_cidr_name          = "pod cidr"
+  service_cidr_name      = "service cidr"
+  internal_lb_cidr_names = ["internal lb cidr"]
+}
+
+resource "coreweave_object_storage_bucket" "models" {
+  name = "acme-models"
+  zone = "US-EAST-04A"
+}
+```
+
+The Runpod configuration declares the volume and the endpoint, and nothing else:
+
+```hcl runpod.tf
+terraform {
+  required_version = ">= 1.6"
+
+  required_providers {
+    runpod = {
+      source  = "runpod/runpod"
+      version = "~> 2.0"
+    }
+  }
+}
+
+provider "runpod" {
+  # Reads the key from the RUNPOD_API_KEY environment variable.
+}
+
+resource "runpod_network_volume" "models" {
+  name        = "models"
+  size        = 200
+  data_center = "US-KS-2"
+}
+
+resource "runpod_template" "llama" {
+  name              = "llama-3-1-8b"
+  image             = "registry.example.com/acme/llm-server:1.4.2"
+  serverless        = true
+  disk              = 40
+  docker_entrypoint = ["vllm", "serve"]
+  args              = "meta-llama/Llama-3.1-8B-Instruct --host 0.0.0.0 --port 8000 --download-dir /runpod-volume/models"
+  ports             = ["8000/http"]
+
+  env = {
+    PORT              = "8000"
+    PORT_HEALTH       = "8000"
+    HEALTH_CHECK_PATH = "/health"
+    HF_TOKEN          = "{{ RUNPOD_SECRET_hf_token }}"
+  }
+}
+
+resource "runpod_serverless_endpoint" "llama" {
+  name             = "llama-3-1-8b"
+  template_id      = runpod_template.llama.id
+  endpoint_type    = "LOAD_BALANCER"
+  gpu_pools        = ["ADA_80_PRO"]
+  gpu_count        = 1
+  min_cuda_version = "12.8"
+  ports            = ["8000/http"]
+  network_volumes  = [runpod_network_volume.models.id]
+  data_center_ids  = ["US-KS-2"]
+  scaling_type     = "REQUEST_COUNT"
+  scaling_value    = 4
+  workers_min      = 0
+  workers_max      = 4
+  timeout          = 300000
+}
+
+output "llama_base_url" {
+  value = runpod_serverless_endpoint.llama.request_urls.base
+}
+```
+
+Terraform creates the volume empty, so load the model data (Step 5) before you send traffic. Don't try to move state between the two providers. Apply the Runpod configuration alongside the CoreWeave one, cut over, then destroy the CoreWeave configuration. For every argument, see the [provider reference on the Terraform Registry](https://registry.terraform.io/providers/runpod/runpod/latest/docs).
+
+## Reference
+
+### CLI command map
+
+| CoreWeave | Runpod |
+| --- | --- |
+| `cwic auth login`, `export KUBECONFIG=...` | `export RUNPOD_API_KEY=...`, or `rp login` |
+| `cwic auth whoami` | `runpodctl user` |
+| `kubectl get nodepool`, `cwic node get` | `runpodctl gpu list`, `runpodctl datacenter list` |
+| `kubectl apply -f deployment.yaml` | `runpodctl serverless create`, or `runpodctl pod create` |
+| `kubectl get pods`, `kubectl get deploy` | `runpodctl pod list`, `runpodctl serverless list` |
+| `kubectl describe pod NAME` | `runpodctl pod get POD_ID`, `runpodctl serverless get ENDPOINT_ID --include-workers` |
+| `kubectl logs NAME` | `runpodctl pod logs POD_ID` |
+| `kubectl exec -it NAME -- bash` | SSH. See [`runpodctl ssh`](/runpodctl/reference/runpodctl-ssh). |
+| `kubectl scale deploy NAME --replicas N` | `runpodctl serverless update ENDPOINT_ID --workers-min N --workers-max N` |
+| `kubectl scale nodepool NAME --replicas N` | Not needed. Capacity follows the workers. |
+| `kubectl rollout restart deploy NAME` | `runpodctl pod restart POD_ID` |
+| `kubectl delete deploy NAME` | `runpodctl serverless delete ENDPOINT_ID`, `runpodctl pod delete POD_ID` |
+| `kubectl create secret generic` | `POST /v2/account/secrets` |
+| `kubectl apply -f pvc.yaml` | `runpodctl network-volume create` |
+| `kubectl create secret docker-registry` | `runpodctl registry create` |
+| `kubectl cp` | `runpodctl send` and `runpodctl receive`. See [Transfer files](/pods/storage/transfer-files). |
+| `cwic cwobject list`, creating a bucket | `runpodctl network-volume list`, `runpodctl network-volume create` |
+| `sbatch`, `squeue`, `sinfo` on a SUNK login node | The same commands on the Slurm controller node |
+
+### API map
+
+| CoreWeave | Runpod REST API v2 (`https://api.runpod.io`) |
+| --- | --- |
+| Kubernetes API: create a Deployment and Service | `POST /v2/serverless`, or `POST /v2/pods` |
+| Kubernetes API: patch replicas or an HPA | `PATCH /v2/serverless/ENDPOINT_ID` |
+| Kubernetes API: create a Job | `POST https://api.runpod.ai/v2/ENDPOINT_ID/run` |
+| Kubernetes API: read Pod logs | `GET /v2/pods/POD_ID/logs`, `GET /v2/serverless/ENDPOINT_ID/workers/WORKER_ID/logs` |
+| Kubernetes API: create a PVC | `POST /v2/network-volumes`, `POST /v2/global-volumes` |
+| Kubernetes API: create a Secret | `POST /v2/account/secrets` |
+| `POST /v1alpha1/inference/deployments` | `POST /v2/serverless` |
+| `DELETE /v1alpha1/inference/deployments/ID` | `DELETE /v2/serverless/ENDPOINT_ID` |
+| CKS API: create a cluster | Not needed. For multi-node work, `POST /v2/clusters`. |
+| Capacity Finder | `GET /v2/catalog/gpus?include=AVAILABILITY&product=POD` |
+| PromQL and LogQL at `observe.coreweave.com` | `GET /v2/serverless/ENDPOINT_ID/metrics/requests`, `/metrics/cold-starts`, `/metrics/workers` |
+| FOCUS billing export | `GET /v2/billing` |
+
+Both APIs take `Authorization: Bearer TOKEN`.
+
+### Environment variable map
+
+| On CKS | On Runpod | Notes |
+| --- | --- | --- |
+| `KUBERNETES_SERVICE_HOST` | None | No Kubernetes API in the container. |
+| Pod name from the Downward API | `RUNPOD_POD_ID` | Set on Pods. |
+| Zone or node labels from the Downward API | `RUNPOD_DC_ID` | Data center ID. |
+| `nvidia.com/gpu` count you passed yourself | `RUNPOD_GPU_COUNT` | Set by Runpod. |
+| Service port from the manifest | `PORT`, `PORT_HEALTH` | Load-balancing workers. You set both. |
+| `AWS_ENDPOINT_URL_S3=http://cwlota.com` | Remove, or the Runpod S3-compatible endpoint | Prefer reading the mounted path. |
+| Secret mounted as a variable | Variable set to `{{ RUNPOD_SECRET_name }}` | Resolved when the Pod or worker starts. |
+| SUNK and Slurm variables | Unchanged, plus `PRIMARY_ADDR`, `NODE_RANK`, `NUM_NODES` | See [cluster configuration](/instant-clusters/configuration). |
+
+### Status map
+
+| Kubernetes | Runpod Pod | Runpod Serverless |
+| --- | --- | --- |
+| Pod `Pending` (unschedulable, pulling image) | `PROVISIONING`, `STARTING` | Worker `INITIALIZING`, or `THROTTLED` while the host's GPUs are busy |
+| Pod `Running` and ready | `RUNNING` with `runtimeStatus: running` | Worker `RUNNING` or `IDLE` |
+| Pod `Running` but not ready | `RUNNING` with `runtimeStatus: initializing` | Worker `UNHEALTHY`, or health check returning `204` |
+| Pod `Succeeded` | `EXITED` | Job `COMPLETED` |
+| Pod `Failed`, `CrashLoopBackOff` | `ERROR` | Job `FAILED` or `TIMED_OUT` |
+| Deleted | `TERMINATED` | Endpoint deleted |
+| Job active | Not applicable | Job `IN_QUEUE`, `IN_PROGRESS` |
+
+## Migrate with a coding agent
+
+A coding agent with the Runpod skills and MCP server can run this migration with you: it reads your manifests, proposes a mapping, and creates the Runpod resources after you approve.
+
+Install the tools for your agent:
+
+<Tabs>
+  <Tab title="Claude Code">
+    ```bash
+    # Claude Code (the plugin also connects the hosted MCP server)
+    claude plugin marketplace add runpod/runpod-plugins-official
+    claude plugin install runpod@runpod
+    ```
+  </Tab>
+  <Tab title="Other agents">
+    ```bash
+    # Any other agent (Codex, Cursor, and others): skills, then the hosted MCP server
+    npx skills add runpod/runpod-plugins-official --skill '*' --agent AGENT_ID --global
+    npx @runpod/mcp-server@latest add --client CLIENT_ID
+    ```
+  </Tab>
+</Tabs>
+
+The MCP server signs in with OAuth ("Sign in with Runpod"), so you don't need an API key to start. See [Agent skills](/get-started/agent-skills) and [MCP servers](/get-started/mcp-servers) for supported agents and options.
+
+Then give the agent this prompt from the root of the repository that holds your manifests:
+
+```text
+Use the runpod-cloud-migrate skill to migrate this project from CoreWeave to Runpod.
+
+1. Inventory first, and change nothing. Read every Kubernetes manifest, Helm values file,
+   Terraform file, and CI script in this repo. If kubectl is configured for my CKS cluster,
+   also run read-only commands (kubectl get nodepool, deploy, statefulset, job, cronjob, hpa,
+   svc, ingress, pvc -A) to see what is running. List each workload with its image,
+   command, env, ports, GPU count, instance type, volumes, and replica range.
+2. For each workload, propose a Runpod target (Serverless load-balancing endpoint, Serverless
+   queue endpoint, Pod, Instant Cluster, or SDK task) and say why. Flag anything with no
+   direct equivalent: DaemonSets, operators, CRDs, sidecars, VPC rules, bucket policies.
+3. Show me the plan as a table, with a GPU type per workload, the data to copy and where it
+   lands, and a cost estimate from live Runpod pricing. Check GPU stock before proposing a
+   type. Wait for my approval before creating anything billable.
+4. Migrate one workload end to end: create the secret references, volume, and endpoint or
+   Pod, copy only the data that workload needs, and verify with a real request from outside
+   Runpod. Show me the response and the latency.
+5. Update the client code and CI config for that workload, on a branch.
+6. Never delete, scale down, or modify CoreWeave resources, and never print secret values.
+   When I ask for the shutdown, list the exact commands and wait for my approval.
+```
+
+## Troubleshooting
+
+**A load-balancing worker shows as running but requests time out.** The health check never returned `200`. Expose the server's port in `ports`, set both `PORT` and `PORT_HEALTH` to that port, and set `HEALTH_CHECK_PATH` if your server's health route isn't `/ping`. A readiness probe that pointed at a different port than the Service is the usual cause after a manifest translation.
+
+**The model downloads again on every cold start.** The server is still writing to the PVC's old `mountPath`. On Serverless the volume is at `/runpod-volume`, so update the cache or download directory, or use [cached models](/serverless/endpoints/model-caching) for Hugging Face models.
+
+**The image fails to pull.** Check two things: the image must be `linux/amd64`, and a private image needs a registry credential (`registry` or `--registry-auth-id`). `imagePullSecrets` and registries that were only reachable inside the CKS cluster don't carry over.
+
+**Requests return `{"error":"not allowed for QB API"}`.** The URL style doesn't match the endpoint type. Load-balancing endpoints are called at `https://ENDPOINT_ID.api.runpod.ai/PATH`, and queue-based endpoints at `https://api.runpod.ai/v2/ENDPOINT_ID/run`. The type is fixed at creation, so recreate the endpoint if it's the wrong one.
+
+**Requests through a Pod's proxy URL fail after about 100 seconds.** That's the proxy timeout. Stream the response, move the workload to a Serverless endpoint, or expose a TCP port and connect to the Pod's public IP and mapped port.
+
+**The app can't reach another service by its Kubernetes name.** Names like `redis.default.svc.cluster.local` don't exist on Runpod. Use the other service's endpoint URL, or enable global networking on both Pods and use `POD_ID.runpod.internal`. Code that loads in-cluster Kubernetes credentials needs to be rewritten against the Runpod API.
+
+**The Pod or endpoint can't find capacity.** A network volume pins everything that mounts it to one data center, and a CUDA floor narrows the machines further. List more than one pool in `gpu.pools`, attach a network volume per data center, or pick another GPU type that fits the workload.
+
+**`aws s3` commands fail against the Runpod S3-compatible API.** Pass `--region` with the data center ID and `--endpoint-url` with that data center's URL, and use the Runpod S3 API key, not your Runpod API key. Keep the Runpod settings in a separate AWS CLI profile from the `cw` profile, because the `cw` profile sets CoreWeave's endpoint and addressing style.
+
+**`/status` returns 404 for a job that finished.** Results of `/run` jobs are kept for 30 minutes, and jobs are removed when their TTL expires. Have the handler write outputs to a volume or object store, or pass a `webhook`.
+
+**Slurm doesn't start on a new cluster.** Managed Slurm Clusters support only official Runpod PyTorch images. Recreate the cluster with one, or follow the [unmanaged Slurm guide](/instant-clusters/slurm) for a custom image.
+
+If something in this guide is wrong or missing, open an issue on the [Runpod docs repository](https://github.com/runpod/docs/issues).
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Load balancing endpoints" href="/serverless/load-balancing/overview" icon="scale-balanced" horizontal>
+    Health checks, limits, and when to use a queue instead.
+  </Card>
+  <Card title="Endpoint settings" href="/serverless/endpoints/endpoint-configurations" icon="sliders" horizontal>
+    Tune workers, scaling, timeouts, and FlashBoot.
+  </Card>
+  <Card title="Network volumes" href="/storage/network-volumes" icon="hard-drive" horizontal>
+    Storage tiers, multi-data-center setups, and the S3-compatible API.
+  </Card>
+  <Card title="Slurm Clusters" href="/instant-clusters/slurm-clusters" icon="server" horizontal>
+    Deploy and configure managed Slurm on Instant Clusters.
+  </Card>
+</CardGroup>

@@ -1,0 +1,1388 @@
+---
+title: "Migrate from Baseten to Runpod"
+sidebarTitle: "Baseten"
+description: "Move Truss models, custom servers, Model APIs calls, Chains, and training jobs from Baseten to Runpod Serverless, Public Endpoints, and Pods."
+---
+
+This guide is for teams that run production inference on [Baseten](https://docs.baseten.co/overview) and want to run it on Runpod. A [Truss](https://docs.baseten.co/development/model/overview) model with a `Model` class becomes a [Serverless](/serverless/overview) queue endpoint with a handler, a [custom Docker server](https://docs.baseten.co/development/model/custom-server) becomes a load balancing endpoint or the Runpod vLLM worker, [Model APIs](https://docs.baseten.co/inference/model-apis/overview) calls move to [Public Endpoints](/public-endpoints/overview) or your own vLLM endpoint, [Chains](https://docs.baseten.co/development/chain/overview) become several endpoints behind an orchestrator, and [Training Jobs](https://docs.baseten.co/training/overview) move to [Pods](/pods/overview). At the end you'll have each workload deployed on Runpod, your clients pointed at the new URLs, and your Baseten deployments deactivated.
+
+<Tip>
+You can hand this migration to a coding agent. See [Migrate with a coding agent](#migrate-with-a-coding-agent) for the setup commands and a prompt.
+</Tip>
+
+## How Baseten maps to Runpod
+
+| Baseten concept | Runpod equivalent | Notes |
+| --- | --- | --- |
+| Truss model (`config.yaml` + `model/model.py`) | Serverless queue endpoint with a [handler function](/serverless/workers/handler-functions) | You build the image yourself (Dockerfile), or skip the Dockerfile with the [Runpod SDK](/sdk/overview) and `@app.queue`. |
+| Custom server (`docker_server`) | Serverless [load balancing endpoint](/serverless/load-balancing/overview) | Your HTTP server is exposed at its own paths. No `/predict` remapping. |
+| vLLM custom server or engine | [vLLM worker](/serverless/vllm/overview) on a queue endpoint | Includes an OpenAI-compatible route. |
+| Model APIs (`https://inference.baseten.co/v1`) | [Public Endpoints](/public-endpoints/overview) | Only for models listed in the [model reference](/public-endpoints/reference). Otherwise deploy the model on a vLLM endpoint. |
+| Chains (`truss_chains`) | Several endpoints called from a CPU orchestrator endpoint | Runpod has no pipeline product. You write the calls between steps. |
+| Training Jobs (`baseten train push`) | A [Pod](/pods/overview), or `@app.task` in the Runpod SDK | `@app.task` runs one Pod per call and terminates it when the function returns. |
+| Multi-node (`resources.node_count`) | [Instant Clusters](/instant-clusters) | Stock varies by data center. |
+| Deployment (one version of a model) | An endpoint release | Changing an endpoint's image or env creates a release and a [rolling release](/serverless/endpoints/rolling-releases). |
+| Environments (production, staging, custom) and promotion | One endpoint per environment, or `rp flash deploy --env` for SDK apps | Each endpoint has its own ID and URL. |
+| Replica | Worker | |
+| Min replicas / max replicas | Active workers / max workers | Both platforms default to a minimum of 0 (scale to zero). |
+| Scale-down delay | Idle timeout | 1 to 3,600 seconds on Runpod. |
+| Concurrency target | Request count scaler value | See [What works differently](#what-works-differently). |
+| `runtime.predict_concurrency` | `concurrency_modifier` in the handler, or `max_concurrency` on `@app.queue` | |
+| `weights` and `model_cache` (Hugging Face sources) | [Cached models](/serverless/endpoints/model-caching) | One cached model per endpoint. |
+| `weights` from S3, GCS, R2, or Azure, and BDN volumes | [Network volume](/storage/network-volumes), mounted at `/runpod-volume` on Serverless | A network volume is writable and pinned to one data center. |
+| `data/` directory (bundled files) | Files copied into the image | |
+| Baseten secrets | Runpod [secrets](/pods/templates/secrets), referenced from env vars | Baseten passes secrets to `__init__` or mounts files at `/secrets/NAME`. Runpod injects them as environment variables. |
+| Regions and regional environments | Data centers (`--data-center-ids`, `dataCenterIds`) | |
+| Instance types (`L4:4x16`, `H100`) | GPU pools (`AMPERE_24`, `ADA_80_PRO`) and CPU instance IDs (`cpu3g-4-16`) | See the [GPU mapping](#gpu-mapping). |
+| Billing | Per second while a worker runs | Baseten's docs describe per-minute billing per running replica. See [Serverless pricing](/serverless/pricing). |
+| Terraform provider `basetenlabs/baseten` | Terraform provider `runpod/runpod` (`~> 2.0`) | See [Migrate your Terraform](#migrate-your-terraform). |
+| `baseten` CLI and `truss` CLI | `runpodctl` and `rp` | `runpodctl` manages resources. `rp` ships with `pip install runpod` and runs `rp flash dev` and `rp flash deploy`. |
+| Management API (`https://api.baseten.co/v1`) | [REST API v2](/api-reference-v2/overview) (`https://api.runpod.io/v2`) | |
+| Inference API (`https://model-MODEL_ID.api.baseten.co`) | `https://api.runpod.ai/v2/ENDPOINT_ID` (queue) or `https://ENDPOINT_ID.api.runpod.ai` (load balancing) | |
+| `Authorization: Bearer` or legacy `Api-Key` with `BASETEN_API_KEY` | `Authorization: Bearer` with `RUNPOD_API_KEY` | |
+| Teams, roles, SSO | [Organizations](/organizations/orgs-overview) with roles and groups | |
+| Logs and metrics (`baseten model deployment logs`, metrics export) | Console **Logs** and **Metrics** tabs, and the REST v2 worker log and metrics routes | See [Logs](/serverless/development/logs). |
+
+## What's different
+
+### What works differently
+
+- **You own the image build.** `baseten model push` uploads a Truss and Baseten builds the image. On Runpod you build and push a `linux/amd64` image, deploy from a [GitHub repository](/serverless/workers/github-integration) that contains a Dockerfile, or use the Runpod SDK, which packages your code without a container build.
+- **The request body is wrapped.** A Truss `predict` receives the JSON body as is. A Runpod queue endpoint expects `{"input": {...}}` and your handler reads `job["input"]`.
+- **The response is wrapped.** `/predict` returns your model's output directly. `/runsync` returns a job object, and your output is under the `output` key.
+- **Load at import time instead of in `load()`.** Code at the top of `handler.py` runs once when the worker starts. That's where the work from `__init__` and `load()` goes.
+- **Secrets are environment variables.** Replace `kwargs["secrets"]["hf_access_token"]` and reads of `/secrets/hf_access_token` with `os.environ`.
+- **Sync requests have a shorter wait window.** Baseten's docs give a default 1,200 second predict timeout for sync requests. Runpod's `/runsync` waits 90 seconds by default and up to 5 minutes with `?wait=`. For anything longer, including requests that might land on a cold start, use `/run` with `/status` or a webhook.
+- **Async results are stored.** Baseten delivers async output only to your webhook and doesn't store it. Runpod keeps `/run` results for 30 minutes and returns them from `/status/JOB_ID`, with or without a webhook.
+- **Streaming on queue endpoints is polled.** A Truss generator streams over the open HTTP response. A Runpod generator handler publishes chunks that clients read from `/stream/JOB_ID`. For a streamed HTTP response (for example server-sent events), use a load balancing endpoint or the vLLM worker's OpenAI-compatible route.
+- **Autoscaling has fewer knobs.** Runpod scales a queue endpoint by queue delay (add workers when requests wait longer than a threshold, 4 seconds by default) or by request count (`ceil((queued + in progress) / scaler value)`). Set the request count scaler value to your Baseten concurrency target. To keep headroom like a target utilization below 100%, use a lower scaler value. Runpod has no autoscaling window, max scale-down rate, or schedule settings.
+- **Idle timeout and request count scaling don't combine on queue endpoints.** REST API v2 rejects an idle timeout on a queue endpoint that scales by request count. Pick queue delay scaling when you need a long idle timeout.
+- **Promotion is an image update.** Instead of promoting a deployment into an environment, you update the endpoint's image tag. Runpod replaces workers progressively: workers without a job are replaced right away, and busy workers finish their job first.
+- **Cancel works on running jobs.** Baseten cancels only `QUEUED` async requests. Runpod's `/cancel/JOB_ID` stops queued and in-progress jobs.
+- **Health checks.** A `docker_server` declares readiness and liveness endpoints. A load balancing worker has one health path (`/ping` by default, configurable with `HEALTH_CHECK_PATH`). Return `200` when ready and `204` while initializing.
+- **Ports.** Baseten reserves port 8080 and sets `PORT=8080`. On a load balancing endpoint, `PORT` and `PORT_HEALTH` both default to `80`, and you set both if your server listens elsewhere.
+- **Load balancing timeouts.** A load balancing endpoint allows 5.5 minutes of processing per request and a 30 MB payload. Longer requests belong on a queue endpoint.
+- **Payload limits on queue endpoints.** 10 MB for `/run` and 20 MB for `/runsync`. Send large inputs as URLs.
+- **Idle endpoints scale themselves down.** After 3 days without requests, Runpod reduces an endpoint's max workers to 2, and after 7 days to 0. Raise max workers again before you send traffic to an endpoint that sat unused.
+
+### What has no direct equivalent
+
+| On Baseten | On Runpod | Workaround |
+| --- | --- | --- |
+| Engine builder (`trt_llm`), BEI, and BIS-LLM managed engines | No managed engine builder | Use the [vLLM worker](/serverless/vllm/overview), or run your own TensorRT-LLM or embeddings server image on a load balancing endpoint. Benchmark before you cut over, because throughput per GPU can differ. |
+| Chains (typed Chainlet-to-Chainlet calls, one deploy) | No pipeline product | Deploy each step as an endpoint and call them from a CPU orchestrator endpoint. See [Chains](#chains). |
+| Loops (managed LoRA fine-tuning API) | No managed fine-tuning API | Run your training script on a Pod or with `@app.task`. |
+| Environments with a stable URL and promotion | No environment object on endpoints | One endpoint per environment. Keep the endpoint ID in your client config per environment. |
+| Rolling deployments you can pause, resume, or cancel | Rolling releases run automatically | For staged traffic shifting, run two endpoints and split traffic in your client or gateway. |
+| Development deployments with live patching (`baseten model push --watch`) | `rp flash dev` for SDK apps | For Dockerfile workers, test locally with `python handler.py --test_input`. See [Local testing](/serverless/development/local-testing). |
+| Async request priority (`priority` 0 to 2) and `max_time_in_queue_seconds` | `policy.lowPriority` and `policy.ttl` | `lowPriority` stops a job from triggering scale-up. `ttl` covers queue time plus run time. |
+| Webhook signatures (`X-BASETEN-SIGNATURE`) | Runpod's webhook docs describe no signature header | Put an unguessable token in the webhook URL and verify it in your receiver, then confirm the result with `/status/JOB_ID`. |
+| gRPC and WebSocket transports on the model URL | Expose HTTP/TCP ports on the endpoint | Persistent connections go to the worker's public IP and port, not through the endpoint URL. See [Endpoint settings](/serverless/endpoints/endpoint-configurations). |
+| Single-tenant, self-hosted, and hybrid hosting | Runpod runs in Runpod data centers | For compliance details see [Security and compliance](/references/security-and-compliance). |
+| Prometheus metrics export and OpenTelemetry tracing | Console metrics and REST v2 metrics routes | Export from your own code if you need traces. |
+
+Going the other way, these Runpod features don't have a counterpart in the Baseten docs this guide was checked against: Pods that keep running as long-lived, general-purpose GPU machines outside of a deployment or training job (Baseten's docs describe SSH into running deployments and training jobs), writable shared [network volumes](/storage/network-volumes) (Baseten's BDN volumes are immutable and mounted read-only), and job results you can fetch from `/status` after the fact.
+
+## Requirements
+
+- A [Runpod account](/accounts-billing/manage-accounts) with credits and an [API key](/get-started/credentials).
+- Access to your Baseten workspace, with the `baseten` CLI authenticated (`baseten auth login` or `BASETEN_API_KEY`).
+- [Docker](https://docs.docker.com/get-started/get-docker/) and a container registry account (for example Docker Hub), unless you migrate with the Runpod SDK only.
+- Python 3.10 to 3.14 for the Runpod SDK.
+- The source of each Truss (`config.yaml`, `model/`, `data/`, `packages/`). If you don't have it locally, Step 1 shows how to download it.
+
+## Step 1: Take inventory of what you run on Baseten
+
+List every model, then every deployment and environment for each model. The `baseten` CLI prints JSON with `--output json`, which is easier to diff later.
+
+```bash
+# Models, deployments, and environments
+baseten model list --output json
+baseten model deployment list --model-id MODEL_ID --output json
+baseten model environment list --model-id MODEL_ID --output json
+
+# The config.yaml a deployment was built from, and its autoscaling settings
+baseten model deployment config --model-id MODEL_ID --deployment-id DEPLOYMENT_ID
+baseten model deployment describe --model-id MODEL_ID --deployment-id DEPLOYMENT_ID --jq '.autoscaling_settings'
+
+# The full Truss source of a deployment
+baseten model deployment download --model-id MODEL_ID --deployment-id DEPLOYMENT_ID --out-dir ./exported/MODEL_ID
+```
+
+For each deployment, record the instance type, region, min and max replicas, scale-down delay, concurrency target, and which environment points at it. If the download fails (a push can disable archive download), fall back to your repository.
+
+Then list the resources that aren't models:
+
+```bash
+baseten api management chains            # Chains (GET /v1/chains)
+baseten train job list                   # Training jobs
+baseten org secret list                  # Secret names (values are never returned)
+baseten org regions                      # Regions your workspace can deploy to
+baseten api management instance_types    # Instance types available to you
+baseten volume ls bdn:NAMESPACE          # BDN volumes in a namespace
+baseten org billing usage --output json  # Usage per resource, to find what is actually in use
+```
+
+Secret values can't be exported from Baseten. Collect them from wherever you keep the originals before you start.
+
+Next, find every Truss in your repositories and every place your code calls Baseten:
+
+```bash
+# Truss directories
+grep -rlE "^(model_name|docker_server|trt_llm|model_cache|weights):" --include="config.yaml" .
+
+# Client code, CI, and infrastructure that call Baseten
+grep -rnE "api\.baseten\.co|inference\.baseten\.co|BASETEN_API_KEY|Api-Key|truss_chains|import truss|truss push|baseten model|async_predict|run_remote|basetenlabs/baseten" \
+  --include="*.py" --include="*.ts" --include="*.js" --include="*.go" \
+  --include="*.yaml" --include="*.yml" --include="*.tf" --include="*.sh" --include="*.env*" .
+```
+
+The second command catches inference URLs, Model APIs base URLs, the legacy `Api-Key` header, Chains code, CI jobs that push models, and Terraform.
+
+## Step 2: Set up Runpod
+
+Create an API key in the console (see [Manage API keys](/get-started/credentials)), then install the tools.
+
+```bash
+# runpodctl: manages endpoints, templates, volumes, and registries
+curl -fsSL https://cli.runpod.net | sudo bash
+runpodctl doctor
+
+# Runpod SDK and the rp CLI
+pip install runpod
+rp login
+```
+
+`runpodctl doctor` walks you through first-time setup, including the API key. `rp login` stores credentials in `~/.runpod/config.toml`, and the SDK also reads `RUNPOD_API_KEY`. On macOS you can install the CLI with `brew install runpod/runpodctl/runpodctl`.
+
+If you manage infrastructure as code, add the [Terraform provider](/integrations/terraform/overview). To let an agent manage resources, connect the [MCP server](/get-started/mcp-servers).
+
+## Step 3: Choose where each workload lands
+
+| Baseten workload | Runpod target | Why |
+| --- | --- | --- |
+| Truss with a `Model` class, called through `/predict` or `/async_predict` | Serverless queue endpoint | Same request-in, result-out shape, with a queue, retries, and stored results. |
+| Truss that returns a generator | Queue endpoint with a streaming handler, or a load balancing endpoint | Use load balancing if clients need a streamed HTTP response. |
+| Truss that implements `chat_completions` or other `/v1` methods | Load balancing endpoint, or the vLLM worker | Clients keep using OpenAI SDKs with a new base URL. |
+| `docker_server` running vLLM | vLLM worker on a queue endpoint | Prebuilt, with cached model support and an OpenAI-compatible route. |
+| `docker_server` running SGLang, TGI, Triton, NIM, Ollama, or your own server | Load balancing endpoint | Runs your image and routes HTTP straight to it. |
+| Model APIs calls for a model Runpod hosts | Public Endpoint | No deployment. |
+| Model APIs calls for any other model | vLLM worker on a queue endpoint | You choose the GPU and the model. |
+| Chain | One endpoint per Chainlet plus a CPU orchestrator endpoint | |
+| Training job, single node | Pod, or `@app.task` | |
+| Training job or deployment with `node_count` above 1 | Instant Cluster | |
+| Engine builder (`trt_llm`) or BEI deployment | vLLM worker, or your own server image on a load balancing endpoint | Requires a rebuild on a different serving stack. Test output quality and throughput. |
+
+### GPU mapping
+
+Serverless endpoints select GPUs by pool. Pick the pool by the VRAM your model needs, not by name. To request several GPUs per worker (for example `H100:2`), set the GPU count.
+
+| Baseten accelerator | VRAM | Runpod GPU pool | GPUs in the pool |
+| --- | --- | --- | --- |
+| `T4` | 16 GB | `AMPERE_16` | RTX A4000, RTX A4500, RTX 4000 Ada, RTX 2000 Ada |
+| `L4` | 24 GB | `AMPERE_24` | L4, RTX A5000, RTX 3090 |
+| `A10G` | 24 GB | `AMPERE_24` or `ADA_24` | L4, RTX A5000, RTX 3090, or RTX 4090 |
+| `H100_40GB` (`H100MIG`) | 40 GB | `AMPERE_48` or `ADA_48_PRO` | A40, RTX A6000, or L40, L40S, RTX 6000 Ada |
+| `L40S` | 48 GB | `ADA_48_PRO` | L40, L40S, RTX 6000 Ada |
+| `A100` | 80 GB | `AMPERE_80` | A100 80GB |
+| `H100` | 80 GB | `ADA_80_PRO` | H100 |
+| `RTX_PRO_6000` | 96 GB | `BLACKWELL_96` | RTX PRO 6000 Blackwell |
+| `H200` | 141 GB | `HOPPER_141` | H200 |
+| `B200` | 180 GB | `BLACKWELL_180` | B200 |
+
+A pool can hold a different GPU model than the one you ran on Baseten, so rerun your latency benchmarks. GPU stock varies by data center and over time. Check what's available before you commit to a pool with `runpodctl gpu list`, and list more than one pool where your model fits both. For the full list of GPU IDs and pools, see [GPU types](/references/gpu-types).
+
+CPU-only instances map to CPU instance IDs in the form `cpu{generation}{type}-{vCPU}-{memory GB}`:
+
+| Baseten instance | Runpod CPU instance |
+| --- | --- |
+| `1x2` | `cpu3c-1-2` |
+| `1x4` | `cpu3g-1-4` |
+| `2x8` | `cpu3g-2-8` |
+| `4x16` | `cpu3g-4-16` |
+| `8x32` | `cpu3g-8-32` |
+
+## Step 4: Move your images and code
+
+Runpod runs `linux/amd64` images. If you build on an Apple Silicon machine, pass `--platform linux/amd64`. Use versioned tags instead of `:latest`, because workers can keep serving a cached copy of a mutable tag.
+
+### Translate a Truss model to a handler
+
+This is a complete Truss for a text generation model. `config.yaml` declares the environment and `model/model.py` holds the `Model` class.
+
+<CodeGroup>
+```yaml config.yaml
+model_name: text-generator
+python_version: py311
+requirements:
+  - torch==2.8.0
+  - transformers==4.56.1
+  - accelerate==1.10.1
+resources:
+  accelerator: L4
+  cpu: "4"
+  memory: 16Gi
+  use_gpu: true
+secrets:
+  hf_access_token: null
+environment_variables:
+  MODEL_ID: HuggingFaceTB/SmolLM2-1.7B-Instruct
+runtime:
+  predict_concurrency: 1
+```
+
+```python model/model.py
+import os
+
+import torch
+from transformers import pipeline
+
+
+class Model:
+    def __init__(self, **kwargs):
+        self._secrets = kwargs["secrets"]
+        self._pipe = None
+
+    def load(self):
+        self._pipe = pipeline(
+            "text-generation",
+            model=os.environ["MODEL_ID"],
+            token=self._secrets["hf_access_token"],
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+        )
+
+    def predict(self, model_input):
+        prompt = model_input["prompt"]
+        max_new_tokens = model_input.get("max_new_tokens", 256)
+        result = self._pipe(prompt, max_new_tokens=max_new_tokens, return_full_text=False)
+        return {"output": result[0]["generated_text"]}
+```
+</CodeGroup>
+
+On Runpod, the same model is three files. The handler loads the pipeline at module scope, which replaces `__init__` and `load()`, and `handler(job)` replaces `predict(model_input)`.
+
+<CodeGroup>
+```python handler.py
+import os
+
+import runpod
+import torch
+from transformers import pipeline
+
+# Runs once when the worker starts. This replaces __init__() and load().
+pipe = pipeline(
+    "text-generation",
+    model=os.environ["MODEL_ID"],
+    token=os.environ.get("HF_TOKEN"),
+    torch_dtype=torch.bfloat16,
+    device_map="auto",
+)
+
+
+def handler(job):
+    # job["input"] is the dict that predict() received as model_input.
+    model_input = job["input"]
+    prompt = model_input.get("prompt")
+    if not prompt:
+        return {"error": "Missing required input: prompt"}
+
+    max_new_tokens = model_input.get("max_new_tokens", 256)
+    result = pipe(prompt, max_new_tokens=max_new_tokens, return_full_text=False)
+    return {"output": result[0]["generated_text"]}
+
+
+runpod.serverless.start({"handler": handler})
+```
+
+```dockerfile Dockerfile
+FROM runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404
+
+WORKDIR /
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY handler.py .
+
+CMD ["python3", "-u", "/handler.py"]
+```
+
+```txt requirements.txt
+runpod>=2.0,<3
+transformers==4.56.1
+accelerate==1.10.1
+```
+</CodeGroup>
+
+What matters in the translation:
+
+- The base image already contains PyTorch 2.8 and CUDA 12.8, so `torch` isn't in `requirements.txt`. If your Truss pins a different `torch`, choose a base image that matches it, or start from an `nvidia/cuda` image and install it yourself. See [Create a Dockerfile](/serverless/workers/create-dockerfile).
+- The secret arrives as the `HF_TOKEN` environment variable. You wire it to a Runpod secret when you create the endpoint in Step 6.
+- `preprocess` and `postprocess` don't exist as separate hooks. Call them in order inside the handler: `postprocess(predict(preprocess(job["input"])))`.
+- An exception raised in the handler marks the job `FAILED`. To fail with your own message, return `{"error": "..."}`.
+- Test before you build: `python handler.py --test_input '{"input": {"prompt": "Hello"}}'`.
+
+### Field-by-field map of config.yaml
+
+| `config.yaml` field | Dockerfile worker | Runpod SDK (`@app.queue`, `@app.api`) |
+| --- | --- | --- |
+| `model_name` | Endpoint and template `--name` | `runpod.App("NAME")` and the function name |
+| `python_version` | Python version of the base image in `FROM` | `rp flash deploy --python-version 3.11` |
+| `requirements`, `requirements_file` | `requirements.txt` and `RUN pip install -r requirements.txt` | `dependencies=[...]` and the project's `requirements.txt` |
+| `system_packages` | `RUN apt-get update && apt-get install -y PACKAGE` | `system_dependencies=[...]` |
+| `build_commands` | `RUN` lines | Build a custom image and pass `image=` |
+| `base_image.image` | `FROM` | `image="..."` |
+| `base_image.docker_auth` | `runpodctl registry create`, then `--registry-auth-id` on the template | `rp registry add`, then `registry_auth="..."` |
+| `docker_server.start_command` | `CMD` in the Dockerfile, `--docker-start-cmd` on the template, or `cmd` in REST v2 | Not applicable. Use a Dockerfile worker. |
+| `docker_server.server_port` | `PORT` and `PORT_HEALTH` env vars, and the endpoint's `ports` | Not applicable |
+| `docker_server.predict_endpoint` | Call the path directly on `https://ENDPOINT_ID.api.runpod.ai` | `@runpod.post("/path")` on an `@app.api` class |
+| `docker_server.readiness_endpoint`, `liveness_endpoint` | `HEALTH_CHECK_PATH` env var (default `/ping`) | A `@runpod.get` health route |
+| `resources.accelerator` | `--gpu-id POOL`, `gpu.pools` in REST v2 | `gpu="..."` |
+| `resources.accelerator: L4:4` (count) | `--gpu-count 4`, `gpu.count` | `gpu_count=4` |
+| `resources.cpu`, `resources.memory`, `instance_type` (CPU-only) | `--compute-type CPU --instance-id cpu3g-4-16` | `cpu="cpu3g-4-16"` |
+| `resources.node_count`, `resources.fabric` | Instant Clusters | Not applicable |
+| `secrets` | Create a Runpod secret, then set an env var to `{{ RUNPOD_SECRET_name }}` | `env={"HF_TOKEN": runpod.Secret("name")}` |
+| `environment_variables` | Template `--env`, or `ENV` in the Dockerfile | `env={...}` |
+| `runtime.predict_concurrency` | `concurrency_modifier` in `runpod.serverless.start` | `max_concurrency=N` |
+| `runtime.health_checks.startup_threshold_seconds` | `RUNPOD_INIT_TIMEOUT` env var (default 420 seconds) | Same env var through `env` |
+| `weights` or `model_cache` with a Hugging Face source | `--model-reference` on `runpodctl serverless create`, or the **Model** field in the console | `model=runpod.Model("org/name")` |
+| `weights` from S3, GCS, R2, or Azure | Network volume, or bake the files into the image | `mounts={"/runpod-volume": runpod.NetworkVolume("name")}` |
+| `external_data` | `RUN wget` in the Dockerfile | Download in code, or use a volume |
+| `data/` directory (`data_dir`) | `COPY data/ /data/` | Project files are packaged with the app |
+| `packages/`, `external_package_dirs` | `COPY` the directories and set `PYTHONPATH` | Project files are packaged with the app |
+| `model_metadata.example_model_input` | `test_input.json` next to the handler | The `@runpod.local_entrypoint` function |
+| `trt_llm` | No equivalent. See [What has no direct equivalent](#what-has-no-direct-equivalent). | No equivalent |
+
+GPU endpoints have no separate vCPU or memory field. You choose a GPU pool and the container disk size. If your Truss asks for a lot of system RAM next to a small GPU, check the pool's hosts with `runpodctl gpu list` before you settle on it.
+
+### Streaming
+
+A Truss `predict` that returns a generator becomes a handler that yields.
+
+<CodeGroup>
+```python model/model.py (Baseten)
+from threading import Thread
+
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
+
+CHECKPOINT = "HuggingFaceTB/SmolLM2-1.7B-Instruct"
+
+
+class Model:
+    def __init__(self, **kwargs):
+        self.tokenizer = None
+        self.model = None
+
+    def load(self):
+        self.tokenizer = AutoTokenizer.from_pretrained(CHECKPOINT)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            CHECKPOINT, torch_dtype=torch.bfloat16, device_map="auto"
+        )
+
+    def predict(self, model_input):
+        inputs = self.tokenizer(model_input["prompt"], return_tensors="pt").to("cuda")
+        streamer = TextIteratorStreamer(self.tokenizer, skip_prompt=True)
+        thread = Thread(
+            target=self.model.generate,
+            kwargs={**inputs, "max_new_tokens": 256, "streamer": streamer},
+        )
+        thread.start()
+
+        def stream_output():
+            for text in streamer:
+                yield text
+            thread.join()
+
+        return stream_output()
+```
+
+```python handler.py (Runpod)
+from threading import Thread
+
+import runpod
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
+
+CHECKPOINT = "HuggingFaceTB/SmolLM2-1.7B-Instruct"
+
+tokenizer = AutoTokenizer.from_pretrained(CHECKPOINT)
+model = AutoModelForCausalLM.from_pretrained(
+    CHECKPOINT, torch_dtype=torch.bfloat16, device_map="auto"
+)
+
+
+def handler(job):
+    inputs = tokenizer(job["input"]["prompt"], return_tensors="pt").to("cuda")
+    streamer = TextIteratorStreamer(tokenizer, skip_prompt=True)
+    thread = Thread(
+        target=model.generate,
+        kwargs={**inputs, "max_new_tokens": 256, "streamer": streamer},
+    )
+    thread.start()
+
+    for text in streamer:
+        yield text
+    thread.join()
+
+
+runpod.serverless.start({
+    "handler": handler,
+    "return_aggregate_stream": True,
+})
+```
+</CodeGroup>
+
+Clients read the chunks from `/stream/JOB_ID`. With `return_aggregate_stream` set, the full output is also available from `/run` (through `/status`) and `/runsync`, as a list of the yielded chunks instead of one string. See [Streaming handlers](/serverless/workers/handler-functions#streaming-handlers).
+
+### Concurrency
+
+`runtime.predict_concurrency` with an `async def predict` becomes an async handler plus a `concurrency_modifier`.
+
+<CodeGroup>
+```python model/model.py (Baseten)
+# config.yaml sets:
+# runtime:
+#   predict_concurrency: 8
+import asyncio
+
+
+class Model:
+    def __init__(self, **kwargs):
+        pass
+
+    def load(self):
+        pass
+
+    async def predict(self, model_input):
+        await asyncio.sleep(model_input.get("delay", 1))
+        return {"processed": model_input}
+```
+
+```python handler.py (Runpod)
+import asyncio
+
+import runpod
+
+
+async def handler(job):
+    job_input = job["input"]
+    await asyncio.sleep(job_input.get("delay", 1))
+    return {"processed": job_input}
+
+
+def concurrency_modifier(current_concurrency):
+    # The number of jobs this worker takes at once.
+    return 8
+
+
+runpod.serverless.start({
+    "handler": handler,
+    "concurrency_modifier": concurrency_modifier,
+})
+```
+</CodeGroup>
+
+The function can return a different number over time to adapt to load. See [Build a concurrent handler](/serverless/workers/concurrent-handler).
+
+### Skip the Dockerfile with the Runpod SDK
+
+The Runpod SDK is the closest match to the Truss workflow: you declare hardware and dependencies in Python, and `rp flash deploy` packages and deploys the code. This file replaces `config.yaml`, `model/model.py`, the Dockerfile, and the endpoint settings from the example above.
+
+```python main.py
+import runpod
+
+app = runpod.App("text-generator")
+
+MODEL_ID = "HuggingFaceTB/SmolLM2-1.7B-Instruct"
+weights = runpod.Model(MODEL_ID)
+
+_pipe = None
+
+
+@app.queue(
+    gpu="AMPERE_24",
+    workers=(0, 3),
+    idle_timeout=300,
+    dependencies=["transformers==4.56.1", "accelerate==1.10.1"],
+    model=weights,
+    env={"HF_TOKEN": runpod.Secret("hf_access_token")},
+    max_concurrency=1,
+    execution_timeout_ms=600000,
+)
+def generate(prompt: str, max_new_tokens: int = 256):
+    global _pipe
+    if _pipe is None:
+        import torch
+        from transformers import pipeline
+
+        _pipe = pipeline(
+            "text-generation",
+            model=MODEL_ID,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+        )
+
+    result = _pipe(prompt, max_new_tokens=max_new_tokens, return_full_text=False)
+    return {"output": result[0]["generated_text"]}
+
+
+@runpod.local_entrypoint
+def main():
+    print(generate.remote("Write a haiku about GPUs."))
+```
+
+Run it against temporary endpoints with `rp flash dev main.py`, then deploy with `rp flash deploy`. A few things to know:
+
+- `model=weights` stages the Hugging Face weights on the host before the worker starts, and `transformers` finds them through the standard cache. This replaces `weights` or `model_cache` in `config.yaml`.
+- Imports of worker-only packages go inside the function, so your machine doesn't need them. `torch` is preinstalled on the built-in GPU images.
+- The SDK docs describe a once-per-worker setup hook, `@runpod.init`, for `@app.api` classes. For an `@app.queue` function, this example keeps the pipeline in a module-level variable. Confirm in `rp flash dev` that a second call skips the load. If it doesn't, move the model to an `@app.api` class with `@runpod.init`, which mirrors `load()` and `predict()` directly.
+- Environments map to `rp flash deploy --env staging` and `rp flash deploy --env production`. Each environment gets its own endpoints. See [Apps and environments](/sdk/apps/apps-and-environments).
+
+For every decorator argument, see [Resource parameters](/sdk/configuration/parameters).
+
+### Custom servers
+
+A `docker_server` Truss already is a container with an HTTP server, so the image moves as is. What changes is the wiring around it.
+
+```yaml config.yaml
+base_image:
+  image: vllm/vllm-openai:v0.29.0
+docker_server:
+  start_command: sh -c "HF_TOKEN=$(cat /secrets/hf_access_token) vllm serve Qwen/Qwen2.5-3B-Instruct --port 8000"
+  server_port: 8000
+  predict_endpoint: /v1/chat/completions
+  readiness_endpoint: /health
+  liveness_endpoint: /health
+resources:
+  accelerator: L4
+secrets:
+  hf_access_token: null
+```
+
+You have two options on Runpod:
+
+- **vLLM worker (recommended for vLLM).** Deploy Runpod's vLLM worker from the Hub and set `MODEL_NAME`. You get cached models, the queue, and an OpenAI-compatible route at `https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1`. Any `vllm serve` flag can be set as an environment variable in upper snake case, for example `MAX_MODEL_LEN=8192`. See [vLLM environment variables](/serverless/vllm/environment-variables).
+- **Load balancing endpoint (any server).** Run the same image and start command. Set `PORT` and `PORT_HEALTH` to your server port, set `HEALTH_CHECK_PATH` to your readiness route, and expose the port. Requests to `https://ENDPOINT_ID.api.runpod.ai/v1/chat/completions` reach `/v1/chat/completions` on your server. There's no `/predict` alias and no `/sync/` prefix.
+
+Step 6 has the deploy commands for both. If your image depends on Baseten's runtime contract, check these before you move it:
+
+| Baseten runtime detail | On Runpod |
+| --- | --- |
+| Runs as user `app` (UID 60000) unless `run_as_user_id` is set | Runs as the user your image defines |
+| Secrets as files in `/secrets/NAME` | Environment variables |
+| `PORT=8080` reserved for Baseten's proxy | `PORT` is yours to set on load balancing endpoints (default `80`) |
+| `/app/data` holds the Truss `data/` directory | Copy the files into your own image |
+| `/etc/b10_dynamic_config/environment` holds the environment name | Set your own variable, for example `APP_ENV=production`, per endpoint |
+
+### Chains
+
+A Chain deploys several Chainlets together and lets one call another through `run_remote`. On Runpod, each Chainlet becomes its own endpoint with its own hardware and scaling, and the entrypoint becomes a small CPU endpoint that calls the others.
+
+<CodeGroup>
+```python hello.py (Baseten)
+import random
+
+import truss_chains as chains
+
+
+class RandInt(chains.ChainletBase):
+    async def run_remote(self, max_value: int) -> int:
+        return random.randint(1, max_value)
+
+
+@chains.mark_entrypoint
+class HelloWorld(chains.ChainletBase):
+    def __init__(self, rand_int=chains.depends(RandInt, retries=3)) -> None:
+        self._rand_int = rand_int
+
+    async def run_remote(self, max_value: int) -> str:
+        num_repetitions = await self._rand_int.run_remote(max_value)
+        return "Hello World! " * num_repetitions
+```
+
+```python rand_int/handler.py (Runpod)
+import random
+
+import runpod
+
+
+def handler(job):
+    return random.randint(1, job["input"]["max_value"])
+
+
+runpod.serverless.start({"handler": handler})
+```
+
+```python hello_world/handler.py (Runpod)
+import os
+import time
+
+import requests
+import runpod
+
+RAND_INT_BASE = f"https://api.runpod.ai/v2/{os.environ['RAND_INT_ENDPOINT_ID']}"
+RAND_INT_URL = f"{RAND_INT_BASE}/runsync"
+STATUS_URL = f"{RAND_INT_BASE}/status"
+HEADERS = {"Authorization": f"Bearer {os.environ['ORCHESTRATOR_API_KEY']}"}
+
+
+def call_rand_int(max_value, retries=3):
+    for attempt in range(retries):
+        response = requests.post(
+            RAND_INT_URL,
+            headers=HEADERS,
+            json={"input": {"max_value": max_value}},
+            timeout=120,
+        )
+        response.raise_for_status()
+        job = response.json()
+        # /runsync returns before the job finishes if it runs long. The job is
+        # still running, so poll it instead of submitting a second one.
+        while job["status"] in ("IN_QUEUE", "IN_PROGRESS"):
+            time.sleep(1)
+            status = requests.get(f"{STATUS_URL}/{job['id']}", headers=HEADERS, timeout=30)
+            status.raise_for_status()
+            job = status.json()
+        if job["status"] == "COMPLETED":
+            return job["output"]
+        # FAILED, CANCELLED or TIMED_OUT: submit a new job on the next attempt.
+    raise RuntimeError("rand_int did not complete")
+
+
+def handler(job):
+    num_repetitions = call_rand_int(job["input"]["max_value"])
+    return "Hello World! " * num_repetitions
+
+
+runpod.serverless.start({"handler": handler})
+```
+</CodeGroup>
+
+Deploy `rand_int` and `hello_world` as two endpoints (the orchestrator on a CPU instance), store a Runpod API key as a secret, and pass it to the orchestrator as `ORCHESTRATOR_API_KEY` along with `RAND_INT_ENDPOINT_ID`. Secret names can't start with `runpod`, so don't name the secret `RUNPOD_API_KEY`.
+
+What you give up compared with Chains: typed stubs between steps, a single `truss chains push` for the whole pipeline, and Chainlet-level retries declared in `chains.depends`. What stays the same: each step scales separately on its own hardware. Keep the orchestrator's wait under the `/runsync` window, or switch the inner calls to `/run` and poll `/status`.
+
+## Step 5: Move your data and models
+
+**Hugging Face weights.** If your Truss uses `weights` with an `hf://` source, or `model_cache` with a Hugging Face `repo_id`, use a [cached model](/serverless/endpoints/model-caching). Runpod tries to start workers on hosts that already hold the model and doesn't bill worker time for the download. Cached models are mounted at `/runpod-volume/huggingface-cache/hub/` in the Hugging Face cache layout, so the path changes from your Truss `mount_location` or `/app/model_cache/VOLUME_FOLDER`. [Use Hugging Face models](/serverless/development/huggingface-models#use-cached-models) has a helper that resolves the snapshot path. Each endpoint takes one cached model.
+
+**Weights in S3, GCS, R2, or Azure, and BDN volumes.** Put them on a [network volume](/storage/network-volumes), which mounts at `/runpod-volume` on Serverless workers. A network volume lives in one data center, and an endpoint that attaches it runs only there, so choose a data center that stocks the GPU pool you need.
+
+```bash
+# Create the volume in the data center where your endpoint will run
+runpodctl network-volume create --name model-weights --size 100 --data-center-id US-KS-2
+
+# Copy weights in over the S3-compatible API (bucket name = volume ID)
+aws s3 sync ./weights s3://NETWORK_VOLUME_ID/weights \
+  --region US-KS-2 \
+  --endpoint-url https://s3api-us-ks-2.runpod.io/
+```
+
+The S3-compatible API uses its own access key and secret, which you create in the console, and is available in the data centers listed in [S3-compatible API](/storage/s3-api). To pull a BDN volume down first, run `baseten volume pull bdn:NAMESPACE/VOLUME ./weights`. For large transfers, start a Pod with the volume attached and copy from your bucket inside the data center instead of through your laptop.
+
+**Small files.** Anything in the Truss `data/` directory, or fetched by `external_data`, can be copied or downloaded into the image in the Dockerfile. This keeps the worker self-contained but increases image size.
+
+**Weights without a data center pin.** A [global volume](/storage/globalvolume/overview) (beta) isn't tied to a data center and attaches to GPU endpoints at `/runpod-volume`. It bills for storage and requests and has no S3-compatible API, so load it from a Pod.
+
+**Training checkpoints.** Baseten stores checkpoints from Training Jobs. Download the ones you need before you shut down, and write new ones to a network volume on Runpod.
+
+## Step 6: Deploy on Runpod
+
+### Queue endpoint from your image
+
+First build and push the image from Step 4, and create the secret the handler reads.
+
+```bash
+docker build --platform linux/amd64 -t DOCKER_USERNAME/text-generator:v1.0.0 .
+docker push DOCKER_USERNAME/text-generator:v1.0.0
+
+# Prompts for the value
+rp secret add hf_access_token
+```
+
+On Baseten, one command deploys the Truss and sets autoscaling:
+
+```bash
+baseten model push --wait \
+  --min-replica 0 --max-replica 3 \
+  --scale-down-delay 300 --concurrency-target 1
+```
+
+On Runpod, create a Serverless template for the image, then an endpoint that uses it.
+
+<Tabs>
+  <Tab title="runpodctl">
+    ```bash
+    runpodctl template create \
+      --name text-generator \
+      --image docker.io/DOCKER_USERNAME/text-generator:v1.0.0 \
+      --serverless \
+      --container-disk-in-gb 20 \
+      --env '{"MODEL_ID":"HuggingFaceTB/SmolLM2-1.7B-Instruct","HF_TOKEN":"{{ RUNPOD_SECRET_hf_access_token }}","HF_HUB_CACHE":"/runpod-volume/huggingface-cache/hub"}'
+
+    runpodctl serverless create \
+      --name text-generator \
+      --template-id TEMPLATE_ID \
+      --gpu-id AMPERE_24 \
+      --workers-min 0 --workers-max 3 \
+      --idle-timeout 300 \
+      --scale-by delay --scale-threshold 4 \
+      --execution-timeout 600 \
+      --min-cuda-version 12.8 \
+      --model-reference https://huggingface.co/HuggingFaceTB/SmolLM2-1.7B-Instruct:main
+    ```
+
+    `TEMPLATE_ID` comes from the output of the first command. `HF_HUB_CACHE` points `transformers` at the cached model that `--model-reference` attaches. Without it, the handler downloads the weights again on every cold start. Each Serverless template binds to one endpoint, so create one template per endpoint. For a private image, run `runpodctl registry create` and add `--registry-auth-id` to the template.
+  </Tab>
+  <Tab title="REST API v2">
+    ```bash
+    curl -X POST https://api.runpod.io/v2/serverless \
+      -H "Authorization: Bearer $RUNPOD_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "text-generator",
+        "image": "docker.io/DOCKER_USERNAME/text-generator:v1.0.0",
+        "type": "QUEUE",
+        "gpu": {"pools": ["AMPERE_24"], "count": 1, "minCudaVersion": "12.8"},
+        "workers": {"min": 0, "max": 3, "idleTimeout": 300},
+        "scaling": {"type": "QUEUE_DELAY", "queueDelay": 4},
+        "flashboot": "FLASHBOOT",
+        "timeout": 600000,
+        "disk": 20,
+        "env": {
+          "MODEL_ID": "HuggingFaceTB/SmolLM2-1.7B-Instruct",
+          "HF_TOKEN": "{{ RUNPOD_SECRET_hf_access_token }}"
+        }
+      }'
+    ```
+
+    `name`, `type`, and `scaling` are required. REST v2 defaults differ from the console: FlashBoot is `OFF` and the execution timeout is 300,000 ms unless you set them. See [Create a Serverless endpoint](/api-reference-v2/serverless/create-a-serverless-endpoint).
+  </Tab>
+  <Tab title="Console">
+    Go to **Serverless**, click **New Endpoint**, choose **Import from Docker Registry**, enter the image, and set the GPU, workers, environment variables, and **Model** field. See [Deploy a worker](/serverless/workers/deploy#deploy-an-endpoint).
+  </Tab>
+</Tabs>
+
+The autoscaling flags map as follows:
+
+| Baseten setting | Runpod setting | Notes |
+| --- | --- | --- |
+| `--min-replica` | `--workers-min` (active workers) | Active workers are billed continuously. |
+| `--max-replica` | `--workers-max` | Baseten defaults to 1, Runpod to 3. |
+| `--scale-down-delay` (default 900 s) | `--idle-timeout` | A worker is billed while it waits. The console default is 5 seconds. |
+| `--concurrency-target` | `--scale-by requests --scale-threshold N` | On a queue endpoint, request count scaling can't be combined with `--idle-timeout`. Or keep queue delay scaling and set per-worker concurrency in the handler. |
+| `--target-utilization-percentage` | No setting | Lower the request count threshold to leave headroom. |
+| `--autoscaling-window`, `--max-scale-down-rate` | No setting | |
+| `--instance-type` | `--gpu-id`, `--gpu-count`, or `--compute-type CPU --instance-id` | |
+| `--region` | `--data-center-ids` | |
+| `--environment` | A separate endpoint per environment | |
+
+### Queue endpoint from the Runpod SDK
+
+If you wrote `main.py` in Step 4, there's no template or image to create:
+
+```bash
+rp secret add hf_access_token
+rp flash dev main.py --once     # Run the entrypoint once against temporary endpoints
+rp flash deploy --env production
+```
+
+`rp flash deploy` prints a link to each endpoint. To remove them later, run `rp flash undeploy --app text-generator --env production`.
+
+### vLLM worker
+
+Find the vLLM worker in the Hub and create an endpoint from it:
+
+```bash
+runpodctl hub search vllm
+
+runpodctl serverless create \
+  --hub-id HUB_ID \
+  --name qwen-chat \
+  --gpu-id AMPERE_24 \
+  --env MODEL_NAME=Qwen/Qwen2.5-3B-Instruct \
+  --env MAX_MODEL_LEN=8192 \
+  --model-reference https://huggingface.co/Qwen/Qwen2.5-3B-Instruct:main
+```
+
+For a gated model, also set `HF_TOKEN` from a secret. The endpoint answers Runpod-native requests on `/run` and `/runsync`, and OpenAI SDK requests at `https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1`. See [Get started with vLLM](/serverless/vllm/get-started).
+
+### Load balancing endpoint
+
+`runpodctl serverless create` creates queue endpoints. Create a load balancing endpoint with REST API v2 (or the console, by choosing **Load Balancer** as the endpoint type). This is the `docker_server` example from Step 4:
+
+```bash
+curl -X POST https://api.runpod.io/v2/serverless \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "qwen-vllm-lb",
+    "image": "vllm/vllm-openai:v0.29.0",
+    "cmd": ["Qwen/Qwen2.5-3B-Instruct", "--port", "8000"],
+    "type": "LOAD_BALANCER",
+    "ports": ["8000/http"],
+    "gpu": {"pools": ["AMPERE_24"], "count": 1},
+    "workers": {"min": 0, "max": 3, "idleTimeout": 300},
+    "scaling": {"type": "REQUEST_COUNT", "requestCount": 32},
+    "disk": 40,
+    "env": {
+      "PORT": "8000",
+      "PORT_HEALTH": "8000",
+      "HEALTH_CHECK_PATH": "/health",
+      "HF_TOKEN": "{{ RUNPOD_SECRET_hf_access_token }}"
+    }
+  }'
+```
+
+`cmd` is the argument list passed to the image's entrypoint, so check what your image's `ENTRYPOINT` is and set `entrypoint` too if you need to replace it. Load balancing endpoints scale by request count only. Set `requestCount` to the concurrency target you used on Baseten. The response includes the endpoint ID, and your server is then reachable at `https://ENDPOINT_ID.api.runpod.ai`.
+
+### Pods for training
+
+A Baseten Training Job packages your code and runs it on a GPU. On Runpod, the SDK equivalent is `@app.task`, which starts a Pod for the call and terminates it when the function returns:
+
+```python train.py
+import runpod
+
+app = runpod.App("finetune")
+checkpoints = runpod.NetworkVolume("checkpoints", size=100)
+
+
+@app.task(gpu="H100", gpu_count=1, mounts={"/checkpoints": checkpoints})
+def train(steps: int = 1000):
+    # Your training loop. Write checkpoints under checkpoints.path.
+    return {"steps": steps}
+
+
+@runpod.local_entrypoint
+def main():
+    print(train.remote(steps=1000))
+```
+
+Run it with `rp flash dev train.py --once`. For interactive work, create a Pod from the console or with `runpodctl pod create` and connect over SSH. See [Pods](/pods/overview).
+
+## Step 7: Update the code that calls Baseten
+
+### Sync requests
+
+The URL, the body wrapper, and the response wrapper change. Both platforms accept `Authorization: Bearer`. If your code still sends Baseten's legacy `Authorization: Api-Key ...` header, change the scheme to `Bearer`.
+
+<CodeGroup>
+```python Baseten
+import os
+
+import requests
+
+response = requests.post(
+    f"https://model-{os.environ['BASETEN_MODEL_ID']}.api.baseten.co/environments/production/predict",
+    headers={"Authorization": f"Bearer {os.environ['BASETEN_API_KEY']}"},
+    json={"prompt": "Hello, world!"},
+    timeout=60,
+)
+response.raise_for_status()
+print(response.json()["output"])
+```
+
+```python Runpod
+import os
+
+import requests
+
+response = requests.post(
+    f"https://api.runpod.ai/v2/{os.environ['ENDPOINT_ID']}/runsync",
+    headers={"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}"},
+    json={"input": {"prompt": "Hello, world!"}},
+    timeout=120,
+)
+response.raise_for_status()
+job = response.json()
+if job["status"] != "COMPLETED":
+    raise RuntimeError(f"Job {job['id']} is {job['status']}")
+print(job["output"]["output"])
+```
+</CodeGroup>
+
+The Runpod response is a job object with `id`, `status`, `output`, `delayTime`, and `executionTime`. The first `output` key is Runpod's, and the second is the key the handler returned. An HTTP 200 doesn't mean the job succeeded, so check `status`.
+
+### Async requests and webhooks
+
+<CodeGroup>
+```python Baseten
+import os
+
+import requests
+
+response = requests.post(
+    f"https://model-{os.environ['BASETEN_MODEL_ID']}.api.baseten.co/environments/production/async_predict",
+    headers={"Authorization": f"Bearer {os.environ['BASETEN_API_KEY']}"},
+    json={
+        "model_input": {"prompt": "Hello, world!"},
+        "webhook_endpoint": "https://example.com/webhook",
+    },
+    timeout=30,
+)
+request_id = response.json()["request_id"]
+
+status = requests.get(
+    f"https://model-{os.environ['BASETEN_MODEL_ID']}.api.baseten.co/async_request/{request_id}",
+    headers={"Authorization": f"Bearer {os.environ['BASETEN_API_KEY']}"},
+    timeout=30,
+).json()
+print(status["status"])  # Lifecycle only. The output goes to the webhook.
+```
+
+```python Runpod
+import os
+import time
+
+import requests
+
+BASE_URL = f"https://api.runpod.ai/v2/{os.environ['ENDPOINT_ID']}"
+HEADERS = {"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}"}
+
+response = requests.post(
+    f"{BASE_URL}/run",
+    headers=HEADERS,
+    json={
+        "input": {"prompt": "Hello, world!"},
+        "webhook": "https://example.com/webhook",
+    },
+    timeout=30,
+)
+job_id = response.json()["id"]
+
+interval = 1
+while True:
+    job = requests.get(f"{BASE_URL}/status/{job_id}", headers=HEADERS, timeout=30).json()
+    if job["status"] in ("COMPLETED", "FAILED", "CANCELLED", "TIMED_OUT"):
+        break
+    time.sleep(interval)
+    interval = min(interval * 2, 30)
+
+print(job["status"], job.get("output"))
+```
+</CodeGroup>
+
+Update your webhook receiver too. Baseten posts `{"request_id", "model_id", "deployment_id", "type", "time", "data", "errors"}` and signs it with `X-BASETEN-SIGNATURE`. Runpod posts the job object (the same shape `/status` returns) and expects a `200`, retrying up to 2 more times with a 10 second delay. Read `output` instead of `data`, `id` instead of `request_id`, and replace the signature check as described in [What has no direct equivalent](#what-has-no-direct-equivalent). The `webhook` field is optional: you can poll `/status` alone. Per-request options move as follows: `max_time_in_queue_seconds` becomes `policy.ttl` (milliseconds, covering queue plus run time), and `priority: 1` or `2` becomes `policy.lowPriority: true`. See [Send API requests](/serverless/endpoints/send-requests).
+
+### Streaming
+
+On a queue endpoint, submit with `/run`, then read chunks with the Runpod SDK's endpoint client:
+
+```python
+import os
+
+import runpod
+
+runpod.api_key = os.environ["RUNPOD_API_KEY"]
+endpoint = runpod.Endpoint(os.environ["ENDPOINT_ID"])
+
+run_request = endpoint.run({"input": {"prompt": "Tell me about falcons"}})
+for chunk in run_request.stream():
+    print(chunk, end="", flush=True)
+```
+
+This replaces a `requests.post(..., stream=True)` loop over a Baseten `/predict` response. If a browser or another service consumes the HTTP stream directly, serve it from a load balancing endpoint instead.
+
+### OpenAI-compatible clients
+
+For Model APIs, and for deployments you called through `/environments/production/sync/v1`, only the base URL, API key, and model name change.
+
+<CodeGroup>
+```python Baseten Model APIs
+import os
+
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://inference.baseten.co/v1",
+    api_key=os.environ["BASETEN_API_KEY"],
+)
+response = client.chat.completions.create(
+    model="openai/gpt-oss-120b",
+    messages=[{"role": "user", "content": "Reply with exactly: Paris."}],
+)
+print(response.choices[0].message.content)
+```
+
+```python Runpod Public Endpoint
+import os
+
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://api.runpod.ai/v2/qwen3-32b-awq/openai/v1",
+    api_key=os.environ["RUNPOD_API_KEY"],
+)
+response = client.chat.completions.create(
+    model="Qwen/Qwen3-32B-AWQ",
+    messages=[{"role": "user", "content": "Reply with exactly: Paris."}],
+)
+print(response.choices[0].message.content)
+```
+
+```python Runpod vLLM endpoint
+import os
+
+from openai import OpenAI
+
+client = OpenAI(
+    base_url=f"https://api.runpod.ai/v2/{os.environ['ENDPOINT_ID']}/openai/v1",
+    api_key=os.environ["RUNPOD_API_KEY"],
+)
+response = client.chat.completions.create(
+    model="Qwen/Qwen2.5-3B-Instruct",
+    messages=[{"role": "user", "content": "Reply with exactly: Paris."}],
+)
+print(response.choices[0].message.content)
+```
+</CodeGroup>
+
+Each Public Endpoint has its own base URL that contains the model's endpoint ID, unlike Baseten's single base URL with a model slug per request. The example uses [Qwen3 32B AWQ](/public-endpoints/models/qwen3-32b) (`qwen3-32b-awq`, model `Qwen/Qwen3-32B-AWQ`), which documents an OpenAI-compatible route. The [model reference](/public-endpoints/reference) lists the text models Runpod hosts, and the catalog is smaller than Baseten's Model APIs, so check it for the model you call. For any other Model APIs slug, deploy that model on a vLLM endpoint. The vLLM worker serves `/chat/completions`, `/completions`, and `/models`. If you use Baseten's Responses or Anthropic Messages protocols, move those calls to chat completions or serve the protocol from your own server on a load balancing endpoint. For a load balancing endpoint that runs an OpenAI-compatible server, the base URL is `https://ENDPOINT_ID.api.runpod.ai/v1`.
+
+### Control-plane automation
+
+Replace CI steps and scripts that call the `baseten` or `truss` CLIs or the Management API. The common ones:
+
+| Task | Baseten | Runpod |
+| --- | --- | --- |
+| Deploy a new version | `baseten model push`, `truss push --promote` | Build and push an image tag, then `PATCH /v2/serverless/ENDPOINT_ID` with the new `image`. For SDK apps, `rp flash deploy`. |
+| Change scaling | `baseten model deployment update-autoscaling` | `runpodctl serverless update ENDPOINT_ID --workers-min N --workers-max N --idle-timeout N` |
+| Read logs | `baseten model deployment logs --tail` | Console **Logs** tab, or `GET /v2/serverless/ENDPOINT_ID/workers/WORKER_ID/logs` |
+| Set a secret | `baseten org secret set` | `rp secret add NAME`, or `POST /v2/account/secrets` |
+
+Updating the image creates a release, and workers move to it as a [rolling release](/serverless/endpoints/rolling-releases). To roll a new image, patch the endpoint itself:
+
+```bash
+curl -X PATCH https://api.runpod.io/v2/serverless/ENDPOINT_ID \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"image": "docker.io/DOCKER_USERNAME/text-generator:v1.1.0"}'
+```
+
+The full maps are in the [Reference](#reference) section.
+
+## Step 8: Verify, cut over, and shut down
+
+<Steps>
+  <Step title="Send a real request from outside">
+    Call the new endpoint from a machine outside Runpod and check the job status and output.
+
+    ```bash
+    curl -X POST https://api.runpod.ai/v2/ENDPOINT_ID/runsync \
+      -H "Authorization: Bearer $RUNPOD_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"input": {"prompt": "Hello, world!"}}'
+
+    curl https://api.runpod.ai/v2/ENDPOINT_ID/health \
+      -H "Authorization: Bearer $RUNPOD_API_KEY"
+    ```
+
+    The first request after a deploy includes a cold start. Send a second one to see warm latency.
+  </Step>
+  <Step title="Compare outputs and latency">
+    Replay a fixed set of production inputs against both platforms with the same seed and sampling settings, and diff the outputs. In the Runpod job object, `delayTime` is queue plus cold start time and `executionTime` is handler time, both in milliseconds. Compare `executionTime` with your Baseten inference latency, and tune active workers and idle timeout against `delayTime`.
+  </Step>
+  <Step title="Run both in parallel and shift traffic">
+    Keep the Baseten deployment active and send a small share of traffic to Runpod from your client or gateway. Raise max workers before each increase. Watch the endpoint's **Metrics** tab for delay time, cold starts, and failed requests.
+  </Step>
+  <Step title="Set a cost guard on Runpod">
+    Max workers caps how far an endpoint scales, and the execution timeout stops runaway jobs. Keep active workers at 0 unless you need warm capacity. Check spend with `runpodctl billing --help` or the REST v2 `/v2/billing/serverless` route.
+  </Step>
+  <Step title="Shut down Baseten">
+    When traffic has been at zero for long enough to trust it, deactivate first (reversible), then delete.
+
+    ```bash
+    # Stop compute spend but keep the deployment
+    baseten model deployment deactivate --model-id MODEL_ID --deployment-id DEPLOYMENT_ID --yes
+
+    # Stop any running training jobs
+    baseten train job list --status running
+    baseten train job stop --job-id JOB_ID --yes
+
+    # Later: delete models, Chains, and BDN volumes
+    baseten model delete --model-id MODEL_ID --yes
+    curl -X DELETE https://api.baseten.co/v1/chains/CHAIN_ID \
+      -H "Authorization: Bearer $BASETEN_API_KEY"
+    baseten volume rm --recursive --yes bdn:NAMESPACE/VOLUME
+
+    # Confirm nothing is still accruing
+    baseten org billing usage
+    ```
+
+    Deleting a model or volume can't be undone. Deactivate instead of only scaling to zero, because a scaled-to-zero deployment stays live and any stray request starts a replica. Finally, delete the Baseten API keys your services used (`baseten org api-key list`) and remove `BASETEN_API_KEY` from your secret stores.
+  </Step>
+</Steps>
+
+## Migrate your Terraform
+
+Baseten publishes the `basetenlabs/baseten` provider with a `baseten_model` resource (which can push a Truss directory and manage environment autoscaling) and a `baseten_secret` resource. The Runpod provider, `runpod/runpod` at `~> 2.0`, is built on REST API v2.
+
+| Baseten | Runpod | Notes |
+| --- | --- | --- |
+| `baseten_model` with `push` | `runpod_serverless_endpoint` with `image` | The Runpod provider deploys an image you already built. Build and push in CI before `terraform apply`. |
+| `baseten_model.environments.NAME.autoscaling` | `workers_min`, `workers_max`, `idle_timeout`, `scaling_type`, `scaling_value` | One `runpod_serverless_endpoint` per environment. |
+| `baseten_model.environments.NAME.promotion.rolling_deploy` | No arguments | Rolling releases run on every image change. |
+| `baseten_secret` | No secret resource | Create the secret in the console or with `POST /v2/account/secrets`, and reference it in `env` as `{{ RUNPOD_SECRET_name }}`. |
+| Registry auth in `config.yaml` | `runpod_registry`, referenced by `registry` | |
+| BDN volume | `runpod_network_volume` | |
+
+<CodeGroup>
+```hcl Baseten
+terraform {
+  required_providers {
+    baseten = {
+      source  = "basetenlabs/baseten"
+      version = "~> 0.1"
+    }
+  }
+}
+
+provider "baseten" {}
+
+resource "baseten_model" "text_generator" {
+  name = "text-generator"
+
+  push = {
+    config_dir  = "${path.module}/text-generator"
+    environment = "production"
+    wait        = true
+  }
+
+  environments = {
+    production = {
+      autoscaling = {
+        min_replica      = 0
+        max_replica      = 3
+        scale_down_delay = 300
+      }
+    }
+  }
+}
+```
+
+```hcl Runpod
+terraform {
+  required_version = ">= 1.6"
+  required_providers {
+    runpod = {
+      source  = "runpod/runpod"
+      version = "~> 2.0"
+    }
+  }
+}
+
+provider "runpod" {}
+
+resource "runpod_serverless_endpoint" "text_generator" {
+  name          = "text-generator"
+  image         = "docker.io/DOCKER_USERNAME/text-generator:v1.0.0"
+  endpoint_type = "QUEUE"
+
+  gpu_pools        = ["AMPERE_24"]
+  gpu_count        = 1
+  min_cuda_version = "12.8"
+  disk             = 20
+
+  workers_min   = 0
+  workers_max   = 3
+  idle_timeout  = 300
+  scaling_type  = "QUEUE_DELAY"
+  scaling_value = 4
+  flashboot     = "FLASHBOOT"
+  timeout       = 600000
+
+  env = {
+    MODEL_ID = "HuggingFaceTB/SmolLM2-1.7B-Instruct"
+    HF_TOKEN = "{{ RUNPOD_SECRET_hf_access_token }}"
+  }
+}
+
+output "run_url" {
+  value = runpod_serverless_endpoint.text_generator.request_urls.run
+}
+```
+</CodeGroup>
+
+Both providers read the API key from the environment (`BASETEN_API_KEY` and `RUNPOD_API_KEY`). A new image tag in `image` rolls the endpoint. `timeout` is in milliseconds and `idle_timeout` in seconds. For every argument, see the [provider reference](https://registry.terraform.io/providers/runpod/runpod/latest/docs).
+
+## Reference
+
+### CLI command map
+
+| Baseten | Runpod |
+| --- | --- |
+| `baseten auth login`, `truss login` | `runpodctl doctor`, `rp login` |
+| `truss init` | `rp flash init my-app` (SDK apps) |
+| `baseten model push`, `truss push` | `docker build` and `docker push`, then `runpodctl template create --serverless` and `runpodctl serverless create`. For SDK apps, `rp flash deploy`. |
+| `baseten model push --watch`, `truss watch` | `rp flash dev main.py` |
+| `baseten model push --environment staging` | `rp flash deploy --env staging`, or a separate endpoint |
+| `baseten model deployment promote` | `PATCH /v2/serverless/ENDPOINT_ID` with a new `image` |
+| `baseten model list` | `runpodctl serverless list` |
+| `baseten model describe`, `baseten model deployment describe` | `runpodctl serverless get ENDPOINT_ID --include-template` |
+| `baseten model deployment update-autoscaling` | `runpodctl serverless update ENDPOINT_ID` |
+| `baseten model predict` | `curl` to `/runsync` or `/run` |
+| `baseten model deployment logs` | Console **Logs** tab, or the REST v2 worker logs route |
+| `baseten model deployment deactivate` | `runpodctl serverless update ENDPOINT_ID --workers-max 0` on a current `runpodctl`, then confirm with `runpodctl serverless get` |
+| `baseten model delete` | `runpodctl serverless delete ENDPOINT_ID` |
+| `baseten org secret set`, `list` | `rp secret add`, `rp secret list` |
+| `baseten org regions` | `runpodctl datacenter list` |
+| `baseten api management instance_types` | `runpodctl gpu list` |
+| `baseten volume push`, `pull` | `runpodctl network-volume create`, then `aws s3 sync` with the S3-compatible API |
+| `truss chains push` | Deploy each step as its own endpoint |
+| `baseten train push` | `rp flash dev train.py --once` with `@app.task`, or `runpodctl pod create` |
+| `baseten org billing usage` | `runpodctl billing serverless`, `runpodctl billing pods`, `runpodctl billing network-volume` |
+
+### API map
+
+| Baseten | Runpod |
+| --- | --- |
+| `POST https://model-MODEL_ID.api.baseten.co/environments/production/predict` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/runsync` |
+| `POST .../environments/production/async_predict` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/run` |
+| `GET https://model-MODEL_ID.api.baseten.co/async_request/REQUEST_ID` | `GET https://api.runpod.ai/v2/ENDPOINT_ID/status/JOB_ID` |
+| Cancel a queued async request | `POST https://api.runpod.ai/v2/ENDPOINT_ID/cancel/JOB_ID` |
+| Streamed `/predict` response | `GET https://api.runpod.ai/v2/ENDPOINT_ID/stream/JOB_ID` |
+| `.../environments/production/sync/PATH` (custom server routes) | `https://ENDPOINT_ID.api.runpod.ai/PATH` (load balancing) |
+| `.../environments/production/sync/v1` (OpenAI base URL) | `https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1` (vLLM worker) |
+| `https://inference.baseten.co/v1` (Model APIs) | `https://api.runpod.ai/v2/PUBLIC_ENDPOINT_ID/openai/v1` |
+| `https://chain-CHAIN_ID.api.baseten.co/production/run_remote` | `/runsync` on your orchestrator endpoint |
+| Wake endpoint | No equivalent call. A request starts a worker. |
+| `GET https://api.baseten.co/v1/models` | `GET https://api.runpod.io/v2/serverless` |
+| `PATCH /v1/models/MODEL_ID/deployments/DEPLOYMENT_ID/autoscaling_settings` | `PATCH /v2/serverless/ENDPOINT_ID` (`workers`, `scaling`) |
+| `POST /v1/models/MODEL_ID/deployments/DEPLOYMENT_ID/promote` | `PATCH /v2/serverless/ENDPOINT_ID` (`image`) |
+| `POST /v1/models/MODEL_ID/deployments/DEPLOYMENT_ID/deactivate` | `PATCH /v2/serverless/ENDPOINT_ID` (`workers.max` set to 0) |
+| `DELETE /v1/models/MODEL_ID` | `DELETE /v2/serverless/ENDPOINT_ID` |
+| `POST /v1/secrets` | `POST /v2/account/secrets` |
+| `GET /v1/instance_types` | `GET /v2/catalog/gpus`, `GET /v2/catalog/cpus` |
+
+### Request and response field map
+
+| Baseten | Runpod |
+| --- | --- |
+| Request body is the model input | `{"input": MODEL_INPUT}` |
+| `model_input` (async) | `input` |
+| `webhook_endpoint` | `webhook` |
+| `max_time_in_queue_seconds` | `policy.ttl` (ms, queue plus run time) |
+| `priority` | `policy.lowPriority` |
+| Response body is the model output | `output` inside the job object |
+| `request_id` | `id` |
+| Webhook `data` | Webhook `output` |
+| `X-Baseten-Request-Id` header | `job["id"]` in the handler |
+
+### Environment variable map
+
+| Inside a Baseten container | Inside a Runpod worker |
+| --- | --- |
+| `BT_MODEL_ID` | `RUNPOD_ENDPOINT_ID` |
+| `BT_MODEL_DEPLOYMENT_ID` | No equivalent. Put the version in your image tag or an env var. |
+| Replica identity | `RUNPOD_POD_ID` (the worker ID) |
+| `kwargs["secrets"]["NAME"]`, `/secrets/NAME` | An env var set to `{{ RUNPOD_SECRET_NAME }}` |
+| `kwargs["environment"]["name"]` | An env var you set per endpoint |
+| `kwargs["data_dir"]` (`/app/data`) | A path you `COPY` to in the image |
+| `/app/model_cache/VOLUME_FOLDER`, `weights` `mount_location` | `/runpod-volume/huggingface-cache/hub/` (cached models) or `/runpod-volume` (network volume) |
+| `PORT` (always `8080`) | `PORT`, `PORT_HEALTH` on load balancing endpoints (default `80`) |
+
+### Status map
+
+| Baseten async request | Runpod job |
+| --- | --- |
+| `QUEUED` | `IN_QUEUE` |
+| `IN_PROGRESS` | `IN_PROGRESS` |
+| `SUCCEEDED` | `COMPLETED` |
+| `FAILED` | `FAILED` |
+| `EXPIRED` | `TIMED_OUT`. Once a job's `ttl` passes, its data is deleted and `/status` stops returning it. |
+| `CANCELED` | `CANCELLED` |
+| `WEBHOOK_FAILED` | `COMPLETED`. The result is still available from `/status`. |
+
+Baseten deployment statuses map more loosely: **Active** is an endpoint with a running worker, **Scaled to zero** is an endpoint with no running workers, **Waking up** and **Loading model** are a worker that is initializing, and **Inactive** is an endpoint with max workers set to 0.
+
+## Migrate with a coding agent
+
+Install the Runpod plugin or skills and connect the MCP server.
+
+<Tabs>
+  <Tab title="Claude Code">
+    ```bash
+    # The plugin also connects the hosted MCP server
+    claude plugin marketplace add runpod/runpod-plugins-official
+    claude plugin install runpod@runpod
+    ```
+  </Tab>
+  <Tab title="Other agents">
+    ```bash
+    # Codex, Cursor, and others: skills, then the hosted MCP server
+    npx skills add runpod/runpod-plugins-official --skill '*' --agent AGENT_ID --global
+    npx @runpod/mcp-server@latest add --client CLIENT_ID
+    ```
+  </Tab>
+</Tabs>
+
+The MCP server signs in with OAuth ("Sign in with Runpod"), so you don't need an API key to start. See [Agent skills](/get-started/agent-skills) and [MCP servers](/get-started/mcp-servers) for the supported agents and client IDs.
+
+Then give the agent this prompt from the root of your repository:
+
+```text
+Migrate this project from Baseten to Runpod using the runpod-cloud-migrate skill.
+
+1. Inventory first. Find every Truss (config.yaml + model/model.py), every docker_server
+   config, every Chain (truss_chains), every training config, every call to
+   *.api.baseten.co or inference.baseten.co, every use of BASETEN_API_KEY, and any
+   basetenlabs/baseten Terraform. If the baseten CLI is authenticated, also list models,
+   deployments, environments, autoscaling settings, and secret names. Don't change
+   anything yet.
+2. Show me a plan: for each workload, the Runpod target (queue endpoint with a handler,
+   load balancing endpoint, vLLM worker, Public Endpoint, Pod, or @app.task), the GPU
+   pool, the worker and idle timeout settings mapped from my Baseten autoscaling, how
+   weights and secrets move, and an estimated cost from current Runpod pricing. List
+   anything with no direct equivalent (engine builder, Chains, Loops, environments,
+   webhook signatures) and what you propose instead.
+3. Wait for my approval before you create anything billable on Runpod.
+4. Migrate one workload end to end: translate the Truss to handler.py, a Dockerfile, and
+   requirements.txt (or a runpod.App if I ask for no Dockerfile), deploy it with max
+   workers of 1, and send a real request. Show me the job output next to the Baseten
+   output for the same input.
+5. Update the client code for that workload: URL, {"input": ...} wrapper, response
+   parsing, async polling or webhook payload, and auth header.
+6. Stop and report. Don't deactivate or delete any Baseten model, deployment, Chain,
+   volume, secret, or API key unless I approve that exact action.
+```
+
+## Troubleshooting
+
+**The handler raises `KeyError` on the input.** The client is still sending the bare model input. Wrap it as `{"input": {...}}`. If the handler receives a nested `input` inside `job["input"]`, the client wrapped it twice.
+
+**The client gets a 200 but no result.** `/runsync` returned before the job finished, or the code reads the top level of the response. Check `status`, read `output`, and switch long requests to `/run` plus `/status`.
+
+**The model reloads on every request.** The load is inside `handler` (a direct port of `predict` that calls `self.load()`-style code). Move it to module scope.
+
+**The secret is empty.** Code still reads `kwargs["secrets"]` or `/secrets/NAME`. Read the environment variable, and check that its value on the endpoint is `{{ RUNPOD_SECRET_name }}` with the exact secret name. Workers pick up a changed secret the next time they start.
+
+**The worker never becomes ready on a load balancing endpoint, and requests return 502.** The server listens on a port the load balancer doesn't check. Set `PORT` and `PORT_HEALTH` to the server's port, expose that port, and make sure `HEALTH_CHECK_PATH` returns `200`. A server ported from Baseten that reads `PORT` and expects `8080` needs the variable set explicitly.
+
+**The worker is stopped during startup with a large model.** Initialization exceeded `RUNPOD_INIT_TIMEOUT` (420 seconds by default). Raise it in the endpoint's environment variables, and use a cached model so the download doesn't count against startup. Baseten's default startup threshold is 30 minutes, so a model that loaded there can time out here.
+
+**Jobs sit in the queue with no workers.** The GPU pool has no stock in the endpoint's data centers, the endpoint is pinned to one data center by a network volume, or max workers is 0 because the endpoint went unused for 7 days. Add a second pool, widen the data centers, or raise max workers.
+
+**`exec format error` in the worker logs.** The image was built for ARM. Rebuild with `--platform linux/amd64`.
+
+**The new image isn't running after a push.** The endpoint still references the old tag, or you pushed over a mutable tag such as `:latest`. Push a new version tag and patch the endpoint's `image`.
+
+**The webhook receiver rejects Runpod's callbacks.** It still verifies `X-BASETEN-SIGNATURE` and parses `data`. Update it for the Runpod job payload.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Handler functions" icon="code" horizontal href="/serverless/workers/handler-functions">
+    Streaming, async, and concurrent handlers, error handling, and payload limits.
+  </Card>
+  <Card title="Endpoint settings" icon="sliders" horizontal href="/serverless/endpoints/endpoint-configurations">
+    Workers, scaling, timeouts, FlashBoot, and data centers.
+  </Card>
+  <Card title="Runpod SDK" icon="python" horizontal href="/sdk/overview">
+    Define and deploy endpoints from Python with `runpod.App`.
+  </Card>
+  <Card title="Cached models" icon="bolt" horizontal href="/serverless/endpoints/model-caching">
+    Start workers on hosts that already hold your Hugging Face model.
+  </Card>
+</CardGroup>
