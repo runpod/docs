@@ -343,44 +343,79 @@ For setup guides and troubleshooting, refer to each agent's official documentati
 
 
 export const AgentButtons = () => {
+  const NODE_SKILLS = "Needs Node.js 22.20 or newer. If yours is older, skip this step: the MCP server serves the same playbooks as the skills.";
+  const sk = (id) => ({ title: "Install the skills", text: NODE_SKILLS, code: "npx -y skills add runpod/runpod-plugins-official --skill '*' --agent " + id + " --yes --global" });
+  const inst = (id) => ({ title: "Register the MCP server", text: "This writes the config without prompts. Needs Node.js 20.12 or newer.", code: "npx @runpod/mcp-server@latest add --client " + id });
+  const signin = (text) => ({ title: "Sign in", text });
+  const AFTER = "After the installer writes the config, it prints the sign-in step for your client. Do that step, then approve the sign-in in your browser the first time a Runpod tool is called.";
+  const OAUTH = "The first time your agent calls a Runpod tool, approve the sign-in in your browser.";
+  const generic = {
+    title: "Register the MCP server",
+    text: "Add a server entry named runpod, with the streamable HTTP transport and the URL below, to your agent's MCP configuration. Merge it into the existing file and don't overwrite other servers. Check your agent's MCP documentation for the file location and key names.",
+    code: '{\n  "mcpServers": {\n    "runpod": { "url": "https://mcp.runpod.io/" }\n  }\n}',
+  };
+
+  const featured = ["Claude Code", "Cursor", "Codex", "ChatGPT", "GitHub Copilot", "Gemini CLI", "Windsurf"];
   const agents = [
-    {
-      name: "Claude Code", letter: "C", color: "#c97b5a", logo: "https://cdn.simpleicons.org/claude",
-      steps: [
-        { title: "Install the plugin", text: "This installs the Runpod skills and the MCP server in one step.", code: "claude plugin marketplace add runpod/runpod-plugins-official\nclaude plugin install runpod@runpod" },
-        { title: "Verify", text: "Expect Status: ✔ enabled. If it is disabled, run claude plugin enable runpod@runpod.", code: "claude plugin list | grep -A2 'runpod@runpod'" },
-        { title: "Sign in", text: "Run /reload-plugins inside Claude Code, then open /mcp, select runpod, and choose Sign in with Runpod. This uses OAuth, so no API key is needed." },
-      ],
-    },
-    {
-      name: "Cursor", letter: "C", color: "#111111", logo: "https://cdn.simpleicons.org/cursor",
-      steps: [
-        { title: "Install the skills", text: "Needs Node.js 22.20 or newer.", code: "npx -y skills add runpod/runpod-plugins-official --skill '*' --agent cursor --yes --global" },
-        { title: "Register the MCP server", text: "Needs Node.js 20.12 or newer.", code: "npx @runpod/mcp-server@latest add --client cursor" },
-        { title: "Sign in", text: "Restart Cursor. The first time it calls a Runpod tool, approve the Runpod sign-in in your browser." },
-      ],
-    },
-    {
-      name: "Codex", letter: "C", color: "#4a9d83", logo: "https://cdn.simpleicons.org/openai",
-      steps: [
-        { title: "Install the plugin", text: "The plugin installs the skills and registers the MCP server. Do not also run codex mcp add, or you will get a second entry that needs its own sign-in.", code: "codex plugin marketplace add https://github.com/runpod/runpod-plugins-official.git\ncodex plugin add runpod@runpod" },
-        { title: "Restart", text: "In Codex Desktop, fully quit and reopen the app before the plugin and MCP tools appear." },
-        { title: "Sign in", text: "Approve the Runpod sign-in in your browser the first time a Runpod tool is used." },
-      ],
-    },
-    {
-      name: "ChatGPT", letter: "G", color: "#3f9a7c", logo: "https://cdn.simpleicons.org/openai",
-      steps: [
-        { title: "Add the Runpod plugin", text: "No terminal setup is needed.", link: { label: "Open the Runpod plugin in ChatGPT", href: "https://chatgpt.com/plugins/plugin_asdk_app_6ada3b2d28b4819188b6ced6c229aadf" } },
-        { title: "Sign in", text: "Sign in with your Runpod account when ChatGPT asks." },
-      ],
-    },
+    { name: "Claude Code", slug: "claude", steps: [
+      { title: "Install the plugin", text: "This installs the Runpod skills and the MCP server in one step.", code: "claude plugin marketplace add runpod/runpod-plugins-official\nclaude plugin install runpod@runpod" },
+      { title: "Verify", text: "Expect Status: ✔ enabled. If the plugin is listed but disabled, run claude plugin enable runpod@runpod.", code: "claude plugin list | grep -A2 'runpod@runpod'" },
+      signin("Run /reload-plugins inside Claude Code. Then open /mcp, select runpod, and choose Sign in with Runpod. This uses OAuth, so no API key is created or stored."),
+    ] },
+    { name: "Cursor", slug: "cursor", steps: [sk("cursor"), inst("cursor"), signin("Restart Cursor. " + OAUTH)] },
+    { name: "Codex", slug: "openai", steps: [
+      { title: "Install the plugin", text: "The plugin installs the skills and registers the MCP server. Don't also run codex mcp add, or you will get a second entry that needs its own sign-in.", code: "codex plugin marketplace add https://github.com/runpod/runpod-plugins-official.git\ncodex plugin add runpod@runpod" },
+      { title: "Restart", text: "In Codex Desktop, fully quit and reopen the app before the plugin and MCP tools appear." },
+      signin(OAUTH),
+    ] },
+    { name: "ChatGPT", slug: "openai", steps: [
+      { title: "Add the Runpod plugin", text: "No terminal setup is needed.", link: { label: "Open the Runpod plugin in ChatGPT", href: "https://chatgpt.com/plugins/plugin_asdk_app_6ada3b2d28b4819188b6ced6c229aadf" } },
+      signin("Sign in with your Runpod account when ChatGPT asks."),
+    ] },
+    { name: "GitHub Copilot", slug: "githubcopilot", steps: [sk("github-copilot"), inst("vscode"), signin(AFTER)] },
+    { name: "Gemini CLI", slug: "googlegemini", steps: [
+      sk("gemini-cli"),
+      { title: "Register the MCP server", text: "Run this command to add the hosted server.", code: "gemini mcp add -s user -t http runpod https://mcp.runpod.io/" },
+      signin(OAUTH),
+    ] },
+    { name: "Windsurf", slug: "windsurf", steps: [sk("windsurf"), inst("windsurf"), signin(AFTER)] },
+    { name: "Cline", steps: [sk("cline"), generic, signin(OAUTH)] },
+    { name: "opencode", steps: [
+      sk("opencode"), inst("opencode"),
+      signin("Run opencode mcp auth runpod and approve the sign-in in your browser. If no browser window opens, the sign-in link is in the opencode log."),
+    ] },
+    { name: "Pi", steps: [
+      sk("pi"),
+      { title: "Register the MCP server", text: "Run this command to add the hosted server.", code: "pi mcp add runpod --url https://mcp.runpod.io/" },
+      signin(OAUTH),
+    ] },
+    { name: "Hermes", steps: [
+      sk("hermes-agent"),
+      { title: "Register the MCP server", text: "Run both commands.", code: "hermes config set mcp_servers.runpod.url https://mcp.runpod.io/\nhermes config set mcp_servers.runpod.auth oauth" },
+      signin("Run hermes mcp login runpod and approve the sign-in in your browser. Then check with hermes mcp test runpod. If Hermes shows a 403 error before the browser opens, connect with an API key instead."),
+    ] },
+    { name: "Goose", steps: [sk("goose"), generic, signin(OAUTH)] },
+    { name: "Zed", steps: [sk("zed"), generic, signin(OAUTH)] },
+    { name: "Kilo Code", steps: [sk("kilo"), generic, signin(OAUTH)] },
+    { name: "Amp", steps: [sk("amp"), generic, signin(OAUTH)] },
+    { name: "Grok Build", steps: [
+      sk("grok"),
+      { title: "Register the MCP server", text: "Run this command to add the hosted server.", code: "grok mcp add --transport http runpod https://mcp.runpod.io/" },
+      signin("In Grok, open /mcps, select runpod, and press i to sign in."),
+    ] },
+    { name: "Claude Desktop", slug: "claude", steps: [
+      inst("claude-desktop"),
+      signin(AFTER + " The skills install isn't covered for Claude Desktop. The MCP server serves the same playbooks."),
+    ] },
   ];
 
+  const palette = ["#c97b5a", "#111111", "#4a9d83", "#3f9a7c", "#3b6fd4", "#7a5af0", "#b5547b"];
+  const more = agents.filter((a) => !featured.includes(a.name));
   const [active, setActive] = useState("Claude Code");
   const [failed, setFailed] = useState({});
   const [copied, setCopied] = useState("");
   const agent = agents.find((a) => a.name === active);
+  const line = "1px solid rgba(127,127,127,.3)";
 
   const copy = async (key, text) => {
     try {
@@ -392,78 +427,65 @@ export const AgentButtons = () => {
     }
   };
 
-  const line = "1px solid rgba(127,127,127,.3)";
+  const Badge = ({ a, size }) => {
+    const idx = agents.indexOf(a);
+    const showLogo = a.slug && !failed[a.name];
+    return (
+      <span aria-hidden="true" style={{ width: size, height: size, borderRadius: 6, flex: "none", background: showLogo ? "#ffffff" : palette[idx % palette.length], color: "#ffffff", fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+        {showLogo ? (
+          <img src={"https://cdn.simpleicons.org/" + a.slug} alt="" onError={() => setFailed((f) => ({ ...f, [a.name]: true }))} style={{ width: 16, height: 16, objectFit: "contain", margin: 0 }} />
+        ) : (
+          a.name[0]
+        )}
+      </span>
+    );
+  };
+
+  const chip = (selected) => ({
+    display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 10, font: "inherit", fontWeight: 500, cursor: "pointer",
+    color: selected ? "#5b34f0" : "inherit",
+    background: selected ? "rgba(109,74,255,.12)" : "transparent",
+    border: selected ? "2px solid #6d4aff" : "2px solid rgba(127,127,127,.3)",
+  });
 
   return (
     <div className="not-prose" style={{ display: "grid", gap: 16, margin: "16px 0" }}>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        {agents.map((a) => {
-          const selected = active === a.name;
-          const showLogo = a.logo && !failed[a.name];
+        {featured.map((name) => {
+          const a = agents.find((x) => x.name === name);
           return (
-            <button
-              key={a.name}
-              type="button"
-              onClick={() => setActive(a.name)}
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 10,
-                font: "inherit", fontWeight: 500, cursor: "pointer",
-                color: selected ? "#5b34f0" : "inherit",
-                background: selected ? "rgba(109,74,255,.12)" : "transparent",
-                border: selected ? "2px solid #6d4aff" : "2px solid rgba(127,127,127,.3)",
-              }}
-            >
-              <span
-                aria-hidden="true"
-                style={{
-                  width: 24, height: 24, borderRadius: 6, flex: "none",
-                  background: showLogo ? "#ffffff" : a.color, color: "#ffffff", fontSize: 12, fontWeight: 700,
-                  display: "inline-flex", alignItems: "center", justifyContent: "center",
-                }}
-              >
-                {showLogo ? (
-                  <img
-                    src={a.logo}
-                    alt=""
-                    onError={() => setFailed((f) => ({ ...f, [a.name]: true }))}
-                    style={{ width: 16, height: 16, objectFit: "contain", margin: 0 }}
-                  />
-                ) : (
-                  a.letter
-                )}
-              </span>
-              {a.name}
+            <button key={name} type="button" onClick={() => setActive(name)} style={chip(active === name)}>
+              <Badge a={a} size={24} />
+              {name}
             </button>
           );
         })}
+        <select
+          aria-label="More agents"
+          value={more.some((a) => a.name === active) ? active : ""}
+          onChange={(e) => e.target.value && setActive(e.target.value)}
+          style={{ ...chip(more.some((a) => a.name === active)), borderStyle: "dashed" }}
+        >
+          <option value="">{more.length} more</option>
+          {more.map((a) => (<option key={a.name} value={a.name}>{a.name}</option>))}
+        </select>
       </div>
 
       <div style={{ border: line, borderRadius: 14, padding: 16, display: "grid", gap: 16 }}>
-        <div style={{ fontSize: 18, fontWeight: 600 }}>Set up Runpod in {agent.name}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 18, fontWeight: 600 }}>
+          <Badge a={agent} size={28} />
+          Set up Runpod in {agent.name}
+        </div>
         {agent.steps.map((step, i) => (
           <div key={agent.name + i} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-            <span
-              style={{
-                width: 26, height: 26, borderRadius: 13, flex: "none", background: "#111", color: "#fff",
-                fontSize: 13, fontWeight: 600, display: "inline-flex", alignItems: "center", justifyContent: "center",
-              }}
-            >
-              {i + 1}
-            </span>
+            <span style={{ width: 26, height: 26, borderRadius: 13, flex: "none", background: "#111", color: "#fff", fontSize: 13, fontWeight: 600, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</span>
             <div style={{ minWidth: 0, flex: 1, display: "grid", gap: 8 }}>
               <div style={{ fontWeight: 600 }}>{step.title}</div>
               {step.text && <div style={{ fontSize: 15, lineHeight: 1.6, opacity: 0.9 }}>{step.text}</div>}
               {step.code && (
                 <div style={{ border: line, borderRadius: 10, overflow: "hidden" }}>
                   <div style={{ display: "flex", justifyContent: "flex-end", padding: "6px 8px", borderBottom: line }}>
-                    <button
-                      type="button"
-                      onClick={() => copy(agent.name + i, step.code)}
-                      style={{
-                        padding: "4px 10px", borderRadius: 6, border: line, background: "transparent",
-                        color: "inherit", font: "inherit", fontSize: 13, cursor: "pointer",
-                      }}
-                    >
+                    <button type="button" onClick={() => copy(agent.name + i, step.code)} style={{ padding: "4px 10px", borderRadius: 6, border: line, background: "transparent", color: "inherit", font: "inherit", fontSize: 13, cursor: "pointer" }}>
                       {copied === agent.name + i ? "Copied" : "Copy"}
                     </button>
                   </div>
@@ -471,13 +493,16 @@ export const AgentButtons = () => {
                 </div>
               )}
               {step.link && (
-                <a href={step.link.href} target="_blank" rel="noreferrer" style={{ color: "#5b34f0", fontWeight: 500 }}>
-                  {step.link.label}
-                </a>
+                <a href={step.link.href} target="_blank" rel="noreferrer" style={{ color: "#5b34f0", fontWeight: 500 }}>{step.link.label}</a>
               )}
             </div>
           </div>
         ))}
+        {agent.name !== "ChatGPT" && (
+          <div style={{ fontSize: 14, lineHeight: 1.6, opacity: 0.8 }}>
+            If OAuth sign-in fails (for example with redirect_uri is not allowed, or a 403 error before the browser opens), connect with an API key instead. Create a key on the Credentials page, set RUNPOD_API_KEY in the environment your agent starts from, and send it as an Authorization: Bearer header on the server entry. See "If OAuth sign-in fails" further down this page.
+          </div>
+        )}
       </div>
     </div>
   );
