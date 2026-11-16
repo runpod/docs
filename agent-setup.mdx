@@ -344,33 +344,70 @@ For setup guides and troubleshooting, refer to each agent's official documentati
 
 export const AgentButtons = () => {
   const agents = [
-    { name: "Claude Code", letter: "C", color: "#c97b5a", logo: "https://cdn.simpleicons.org/claude" },
-    { name: "Cursor", letter: "C", color: "#111111", logo: "https://cdn.simpleicons.org/cursor" },
-    { name: "Codex", letter: "C", color: "#4a9d83", logo: "https://cdn.simpleicons.org/openai" },
-    { name: "ChatGPT", letter: "G", color: "#3f9a7c", logo: "https://cdn.simpleicons.org/openai" },
+    {
+      name: "Claude Code", letter: "C", color: "#c97b5a", logo: "https://cdn.simpleicons.org/claude",
+      steps: [
+        { title: "Install the plugin", text: "This installs the Runpod skills and the MCP server in one step.", code: "claude plugin marketplace add runpod/runpod-plugins-official\nclaude plugin install runpod@runpod" },
+        { title: "Verify", text: "Expect Status: ✔ enabled. If it is disabled, run claude plugin enable runpod@runpod.", code: "claude plugin list | grep -A2 'runpod@runpod'" },
+        { title: "Sign in", text: "Run /reload-plugins inside Claude Code, then open /mcp, select runpod, and choose Sign in with Runpod. This uses OAuth, so no API key is needed." },
+      ],
+    },
+    {
+      name: "Cursor", letter: "C", color: "#111111", logo: "https://cdn.simpleicons.org/cursor",
+      steps: [
+        { title: "Install the skills", text: "Needs Node.js 22.20 or newer.", code: "npx -y skills add runpod/runpod-plugins-official --skill '*' --agent cursor --yes --global" },
+        { title: "Register the MCP server", text: "Needs Node.js 20.12 or newer.", code: "npx @runpod/mcp-server@latest add --client cursor" },
+        { title: "Sign in", text: "Restart Cursor. The first time it calls a Runpod tool, approve the Runpod sign-in in your browser." },
+      ],
+    },
+    {
+      name: "Codex", letter: "C", color: "#4a9d83", logo: "https://cdn.simpleicons.org/openai",
+      steps: [
+        { title: "Install the plugin", text: "The plugin installs the skills and registers the MCP server. Do not also run codex mcp add, or you will get a second entry that needs its own sign-in.", code: "codex plugin marketplace add https://github.com/runpod/runpod-plugins-official.git\ncodex plugin add runpod@runpod" },
+        { title: "Restart", text: "In Codex Desktop, fully quit and reopen the app before the plugin and MCP tools appear." },
+        { title: "Sign in", text: "Approve the Runpod sign-in in your browser the first time a Runpod tool is used." },
+      ],
+    },
+    {
+      name: "ChatGPT", letter: "G", color: "#3f9a7c", logo: "https://cdn.simpleicons.org/openai",
+      steps: [
+        { title: "Add the Runpod plugin", text: "No terminal setup is needed.", link: { label: "Open the Runpod plugin in ChatGPT", href: "https://chatgpt.com/plugins/plugin_asdk_app_6ada3b2d28b4819188b6ced6c229aadf" } },
+        { title: "Sign in", text: "Sign in with your Runpod account when ChatGPT asks." },
+      ],
+    },
   ];
+
   const [active, setActive] = useState("Claude Code");
   const [failed, setFailed] = useState({});
+  const [copied, setCopied] = useState("");
+  const agent = agents.find((a) => a.name === active);
+
+  const copy = async (key, text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(key);
+      setTimeout(() => setCopied(""), 1800);
+    } catch (e) {
+      setCopied("");
+    }
+  };
+
+  const line = "1px solid rgba(127,127,127,.3)";
+
   return (
-    <div className="not-prose" style={{ display: "grid", gap: 12, margin: "16px 0" }}>
+    <div className="not-prose" style={{ display: "grid", gap: 16, margin: "16px 0" }}>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        {agents.map((agent) => {
-          const selected = active === agent.name;
-          const showLogo = agent.logo && !failed[agent.name];
+        {agents.map((a) => {
+          const selected = active === a.name;
+          const showLogo = a.logo && !failed[a.name];
           return (
             <button
-              key={agent.name}
+              key={a.name}
               type="button"
-              onClick={() => setActive(agent.name)}
+              onClick={() => setActive(a.name)}
               style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "8px 14px",
-                borderRadius: 10,
-                font: "inherit",
-                fontWeight: 500,
-                cursor: "pointer",
+                display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 10,
+                font: "inherit", fontWeight: 500, cursor: "pointer",
                 color: selected ? "#5b34f0" : "inherit",
                 background: selected ? "rgba(109,74,255,.12)" : "transparent",
                 border: selected ? "2px solid #6d4aff" : "2px solid rgba(127,127,127,.3)",
@@ -379,36 +416,69 @@ export const AgentButtons = () => {
               <span
                 aria-hidden="true"
                 style={{
-                  width: 24,
-                  height: 24,
-                  borderRadius: 6,
-                  background: showLogo ? "#ffffff" : agent.color,
-                  color: "#ffffff",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flex: "none",
+                  width: 24, height: 24, borderRadius: 6, flex: "none",
+                  background: showLogo ? "#ffffff" : a.color, color: "#ffffff", fontSize: 12, fontWeight: 700,
+                  display: "inline-flex", alignItems: "center", justifyContent: "center",
                 }}
               >
                 {showLogo ? (
                   <img
-                    src={agent.logo}
+                    src={a.logo}
                     alt=""
-                    onError={() => setFailed((f) => ({ ...f, [agent.name]: true }))}
+                    onError={() => setFailed((f) => ({ ...f, [a.name]: true }))}
                     style={{ width: 16, height: 16, objectFit: "contain", margin: 0 }}
                   />
                 ) : (
-                  agent.letter
+                  a.letter
                 )}
               </span>
-              {agent.name}
+              {a.name}
             </button>
           );
         })}
       </div>
-      <div style={{ fontSize: 14, opacity: 0.8 }}>Selected: {active}</div>
+
+      <div style={{ border: line, borderRadius: 14, padding: 16, display: "grid", gap: 16 }}>
+        <div style={{ fontSize: 18, fontWeight: 600 }}>Set up Runpod in {agent.name}</div>
+        {agent.steps.map((step, i) => (
+          <div key={agent.name + i} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+            <span
+              style={{
+                width: 26, height: 26, borderRadius: 13, flex: "none", background: "#111", color: "#fff",
+                fontSize: 13, fontWeight: 600, display: "inline-flex", alignItems: "center", justifyContent: "center",
+              }}
+            >
+              {i + 1}
+            </span>
+            <div style={{ minWidth: 0, flex: 1, display: "grid", gap: 8 }}>
+              <div style={{ fontWeight: 600 }}>{step.title}</div>
+              {step.text && <div style={{ fontSize: 15, lineHeight: 1.6, opacity: 0.9 }}>{step.text}</div>}
+              {step.code && (
+                <div style={{ border: line, borderRadius: 10, overflow: "hidden" }}>
+                  <div style={{ display: "flex", justifyContent: "flex-end", padding: "6px 8px", borderBottom: line }}>
+                    <button
+                      type="button"
+                      onClick={() => copy(agent.name + i, step.code)}
+                      style={{
+                        padding: "4px 10px", borderRadius: 6, border: line, background: "transparent",
+                        color: "inherit", font: "inherit", fontSize: 13, cursor: "pointer",
+                      }}
+                    >
+                      {copied === agent.name + i ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                  <pre style={{ margin: 0, padding: 12, fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap", wordBreak: "break-word", background: "rgba(127,127,127,.08)" }}>{step.code}</pre>
+                </div>
+              )}
+              {step.link && (
+                <a href={step.link.href} target="_blank" rel="noreferrer" style={{ color: "#5b34f0", fontWeight: 500 }}>
+                  {step.link.label}
+                </a>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
