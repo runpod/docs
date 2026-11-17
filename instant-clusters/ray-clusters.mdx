@@ -1,0 +1,259 @@
+---
+title: Ray Clusters
+sidebarTitle: Ray Clusters
+description: "Run Ray on Instant Clusters with the supported Ray cluster image. Covers image variants, environment variables, ports, dashboard access, and metrics."
+---
+
+{/* TODO(DOCS-609): confirm release stage wording (alpha 11/17, open beta 11/23) before publishing. */}
+
+<Note>
+
+Ray Clusters are in beta. Join the [Runpod Discord](https://discord.gg/runpod) to share feedback and get support.
+
+</Note>
+
+Ray Clusters are Instant Clusters that start a [Ray](https://docs.ray.io/) cluster across every node for you. Use them to serve models that are too large for a single node with vLLM, or to run your own Ray jobs and Ray Serve applications across multiple GPU nodes.
+
+Every Ray Cluster runs the supported Ray cluster image (`runpod/ray-cluster`) or an image you build from it. The image starts Ray on each node, so you don't need to install Ray or run `ray start` yourself.
+
+To deploy your first Ray Cluster, follow the [distributed inference quickstart](/instant-clusters/ray-vllm).
+
+## How Ray Clusters work
+
+When you create a Ray Cluster, Runpod deploys one Pod per node and gives each Pod the cluster topology:
+
+- `NODE_RANK`: the Pod's position in the cluster. The Pod with rank `0` is the Ray head node.
+- `NUM_NODES`: the configured number of nodes in the cluster.
+- Hostnames `node-0` through `node-N` in `/etc/hosts`, one for each member of the cluster. The head node is always `node-0`.
+
+The image entrypoint uses these values to start Ray. On the head node, it runs `ray start --head`. On each worker, it waits until `node-0` is reachable, then joins the cluster. If the head node isn't running yet, workers keep retrying and join as soon as it comes up.
+
+After Ray starts, the entrypoint runs the image's start command. In the inference variant, the start command serves a model with vLLM across all nodes.
+
+Ray, Python, CUDA, PyTorch, and vLLM versions are pinned in the image. Because the head and workers run the same image, their versions always match.
+
+## Image variants
+
+The supported image is published as pinned, versioned tags of [`runpod/ray-cluster`](https://hub.docker.com/r/runpod/ray-cluster). It comes in two variants:
+
+{/* TODO(DOCS-609): confirm the tag naming for each variant. Known tag: runpod/ray-cluster:1.1.2-cu1281-torch2130-ubuntu2404. 11/12 demo: image ran Ray 2.59.0; plan is to move to Ray 2.60 for alpha, and template titles will include the Ray major.minor and CUDA versions. Add the final Ray / vLLM / CUDA versions and template names here. */}
+
+| Variant | Includes | Use it to |
+| --- | --- | --- |
+| Inference | Python, CUDA, PyTorch, Ray, and vLLM. | Serve a model across multiple nodes, configured only with environment variables. |
+| Base | Python, CUDA, PyTorch, and Ray. | Submit Ray jobs, run Ray Serve applications, or work interactively over SSH or JupyterLab. |
+
+When you create a Ray Cluster, the console selects the Ray Cluster template automatically. It uses the supported image and exposes the right ports on the head node. If you change the template's ports, Runpod can't guarantee that the cluster works. Use the template as is unless you need dependencies that are slow to install for every job. See [build a custom image](#build-a-custom-image).
+
+## Serve a model with the inference variant
+
+The inference variant serves a model without any image build. Set the model and options as environment variables in the template.
+
+On the head node, the start command waits until all `NUM_NODES` nodes have joined Ray, then runs `vllm serve` with:
+
+- Tensor parallelism set to the number of GPUs per node.
+- Pipeline parallelism set to the number of nodes.
+
+vLLM listens on port `8000`. A front door on port `8001` forwards requests to vLLM and returns a `503` response while the model is loading. Worker nodes join Ray and run nothing else.
+
+vLLM runs in a `screen` session. If vLLM crashes, the Pod stays up so you can connect and debug it.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `MODEL_REPO` | None | Hugging Face model to serve, such as `Qwen/Qwen3-235B-A22B`. Required for serving. If unset, the head node logs an error and stays available for interactive use. |
+| `HF_TOKEN` | None | Hugging Face access token for gated or private models. |
+| `VLLM_API_KEY` | `sk-` followed by the head Pod ID | Bearer token required on every request. Set to `none` to turn off authentication. |
+| `MAX_MODEL_LENGTH` | `auto` | Passed to vLLM as the maximum model context length. |
+| `VLLM_EXTRA_ARGS` | None | Extra arguments appended to `vllm serve`, such as tool call parsers or quantization flags. |
+
+<Tip>
+
+Tool calling with some models requires a chat template or a tool call parser. Pass these in `VLLM_EXTRA_ARGS`, for example `--enable-auto-tool-choice --tool-call-parser hermes`. See the [vLLM tool calling guide](https://docs.vllm.ai/en/latest/features/tool_calling.html) for the flags each model needs.
+
+</Tip>
+
+## Run Ray jobs with the base variant
+
+Use the base variant when you want to run your own Ray workloads. Connect to the head node over [SSH](/pods/configuration/use-ssh) or JupyterLab, then submit work with `ray job submit` or a Python driver.
+
+```bash
+# Run on the head node.
+ray job submit --working-dir . -- python my_job.py
+```
+
+This command uploads the current directory to the cluster and runs `my_job.py` as a Ray job.
+
+For light, per-job dependencies, use Ray's [runtime environments](https://docs.ray.io/en/latest/ray-core/handling-dependencies.html) instead of building a new image:
+
+```bash
+ray job submit \
+    --working-dir . \
+    --runtime-env-json '{"pip": ["datasets", "transformers"]}' \
+    -- python my_job.py
+```
+
+Ray installs the listed packages on each node before running the job. You can also keep a virtual environment on a [network volume](/storage/network-volumes) attached to the cluster.
+
+To run a different command when the cluster starts, such as a Ray Serve application stored on a network volume, change the container start command in the template. The entrypoint still starts Ray before running your command.
+
+## Environment variables
+
+These variables control the supported image. Set them in the template or when you create the cluster.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `RAY_START_EXTRA_ARGS` | None | Extra arguments for `ray start` on every node, such as `--resources` or `--object-store-memory`. Can't include `--dashboard-port` or `--metrics-export-port`. |
+| `RAY_DASHBOARD_PASSWORD` | Value of `JUPYTER_PASSWORD` | Token for signing in to the Ray dashboard. |
+| `JUPYTER_PASSWORD` | Set by Runpod | Token for JupyterLab on the head node. Also used for the Ray dashboard when `RAY_DASHBOARD_PASSWORD` is unset. |
+| `GRAFANA_PASSWORD` | Ray dashboard token | Token for the Grafana instance on the head node. |
+| `RAY_CLUSTER_METRICS` | `1` | Set to `0` to turn off the Prometheus and Grafana metrics stack on the head node. |
+
+Runpod also sets `NODE_RANK`, `NUM_NODES`, and the standard cluster variables on every Pod. See the [Instant Clusters configuration reference](/instant-clusters/configuration) for the full list.
+
+{/* TODO(DOCS-609): confirm GRAFANA_PASSWORD default ships with STO-1246, and confirm whether JUPYTER_PASSWORD is set automatically on the head Pod. */}
+
+## Ports
+
+The head node exposes the following HTTP ports through the [Runpod proxy](/pods/configuration/expose-ports). Worker nodes expose only non-HTTP ports such as SSH.
+
+| Port | Node | Service |
+| --- | --- | --- |
+| `8266` | Head | Ray dashboard, behind token authentication. |
+| `8888` | Head | JupyterLab. |
+| `8889` | Head | Grafana, behind token authentication. |
+| `8001` | Head | vLLM API front door (inference variant). |
+
+The console's links to the Ray dashboard, JupyterLab, and Grafana include your token, so you're signed in when you open them.
+
+{/* TODO(DOCS-609): the 11/12 demo template exposed only 8266, 8888, and 8889 on the head. Confirm whether the inference variant's template also maps 8001 (or 8000) before publishing the 8001 row. */}
+
+The following ports are reserved inside every Ray Cluster Pod. Don't use them for your own services:
+
+| Port | Purpose |
+| --- | --- |
+| `8265` | Ray dashboard. Unauthenticated and never exposed directly. |
+| `20217` | Ray metrics endpoint on every node. |
+| `6379` | Ray GCS, used by workers to join the head node. |
+
+Ports `8265` and `20217` are fixed. If you set `RAY_DASHBOARD_PORT` or `RAY_METRICS_PORT` to a different value, or pass `--dashboard-port` or `--metrics-export-port` in `RAY_START_EXTRA_ARGS`, the container exits before Ray starts with an error that names the variable and the required value.
+
+## Open the Ray dashboard
+
+The Ray dashboard runs on the head node behind a token-protected proxy on port `8266`. Ray's own dashboard port (`8265`) is never exposed, because it allows anyone who can reach it to submit jobs to your cluster.
+
+To open the dashboard:
+
+<Steps>
+  <Step title="Open your cluster">
+    Go to the [Instant Clusters page](https://console.runpod.io/instant-clusters) and select your Ray Cluster.
+  </Step>
+  <Step title="Connect to the head node">
+    Select the head Pod (rank `0`), then click **Connect**.
+  </Step>
+  <Step title="Open the dashboard">
+    Click **Ray Dashboard**. The console opens the dashboard with your token, and the dashboard sets a session cookie so you stay signed in.
+  </Step>
+</Steps>
+
+{/* TODO(DOCS-609): verify console labels for the cluster card link and the Connect modal against the live console (STO-1112). */}
+
+To open the dashboard from a URL instead, append your token as a query parameter:
+
+```text
+https://HEAD_POD_ID-8266.proxy.runpod.net/?token=RAY_DASHBOARD_PASSWORD
+```
+
+The token is the value of `RAY_DASHBOARD_PASSWORD`, or `JUPYTER_PASSWORD` if `RAY_DASHBOARD_PASSWORD` is unset. Requests without a valid token receive a `403` response.
+
+## View cluster metrics
+
+The Ray dashboard shows metrics in two places:
+
+- **Cluster** tab: live CPU, GPU, memory, and disk usage for each node. Available with no setup.
+- **Metrics** tab: historical charts for every node, plus vLLM serving metrics on the inference variant.
+
+The **Metrics** tab is powered by a Prometheus and Grafana stack that runs on the head node. Prometheus discovers each node's metrics endpoint automatically, and Grafana comes with Ray's standard dashboards. Retention is capped by time and size so the stack can't fill the head node's disk.
+
+Metrics data stays on the head node, inside your cluster, and is deleted when you delete the cluster.
+
+New data takes a short time to reach the **Metrics** tab, so charts can lag the **Cluster** tab by a minute or more after a workload starts.
+
+{/* TODO(DOCS-609): remove this note once STO-1246 ships, if the single ?token= link signs in to Grafana too. */}
+
+<Note>
+
+If the **Metrics** tab is empty, open Grafana on port `8889` with the same `?token=` value once, then reload the dashboard.
+
+</Note>
+
+If you already run your own monitoring stack, set `RAY_CLUSTER_METRICS=0` to turn off the bundled stack. You can scrape each node's metrics endpoint at `node-RANK:20217/metrics` from inside the cluster.
+
+## Build a custom image
+
+Build your own image when you need dependencies that are slow to install for every job, a different serving framework, or a locked, reproducible production image. Start from a pinned tag of the supported image:
+
+```dockerfile
+FROM runpod/ray-cluster:TAG
+
+# Add your dependencies.
+RUN pip install --no-cache-dir my-package==1.2.3
+
+# Optional: replace the default start command.
+CMD ["python", "/app/serve.py"]
+```
+
+Your image inherits the supported image's entrypoint and the `com.runpod.ray-cluster.contract` label that Ray Clusters require. To keep your image compatible:
+
+- Don't override `ENTRYPOINT`. The entrypoint is what starts Ray on each node.
+- Don't upgrade or downgrade Ray. The image logs a warning if the Ray version changes.
+- Don't use ports `8265` or `20217` for your own services.
+
+After you push the image, create a [template](/pods/templates/manage-templates) that uses it, then select that template when you create a Ray Cluster.
+
+{/* TODO(DOCS-609): confirm how a customer template is marked Ray-capable in the console (STO-992 rayClusterCapable owner opt-in) and add the exact step here. */}
+
+## Limitations
+
+- Ray Clusters run only on the supported image or an image built from it. Creating a Ray Cluster with any other image fails.
+- Ray Clusters can only be created from the console. The REST API doesn't support creating Ray Clusters.
+- The status shown on the cluster card reflects the requested cluster, not whether Ray is ready. Run `ray status` on the head node to check readiness.
+- Ray processes aren't restarted automatically. If Ray exits on a node, the Pod stays up so you can connect and investigate, but that node leaves the cluster.
+- If the head node restarts, workers that were already running don't rejoin on their own. Restart the worker Pods after the head node is back.
+
+{/* TODO(DOCS-609): Taylor is investigating API/agent support (11/12 demo). Remove the API bullet if it ships. Remove the status bullet once the console readout is fixed. */}
+
+## Troubleshooting
+
+### Cluster creation fails with an image error
+
+{/* TODO(DOCS-609): in the 11/12 demo this showed as a pod initialization "image pull error". Taylor plans to make the message more specific. Confirm the final text before publishing. */}
+
+The Pods fail to initialize with an error saying that Ray cluster pods require the official Ray cluster image or an image built from it. The template uses an image that isn't the supported Ray cluster image or built from it, or the template overrides the image entrypoint. Use the Ray Cluster template, or rebuild your image with `FROM runpod/ray-cluster:TAG` and keep the entrypoint.
+
+### Container exits with a port error
+
+The template or image sets a reserved port, for example "RAY_METRICS_PORT is fixed at 20217". Remove the override and move your own service to a different port.
+
+### Workers don't join the cluster
+
+Connect to the head node and run:
+
+```bash
+ray status
+```
+
+The output lists each node that has joined. If a node is missing, check that Pod's logs for the entrypoint output. Workers retry until `node-0` is reachable, so a worker that started before the head node joins once the head node is running.
+
+### Requests return `503`
+
+The model is still loading. Large models can take several minutes to download and load across all nodes. To follow progress, connect to the head node and attach to the vLLM session with `screen -r`.
+
+### Dashboard returns `403`
+
+The request has no token or the wrong token. Open the dashboard from the console, or add `?token=` with your `RAY_DASHBOARD_PASSWORD` (or `JUPYTER_PASSWORD`) value.
+
+## Next steps
+
+- [Deploy a Ray Cluster for distributed inference with vLLM](/instant-clusters/ray-vllm).
+- [Review Instant Cluster environment variables and networking](/instant-clusters/configuration).
+- [Attach a network volume](/storage/network-volumes) to share models and data across nodes.
