@@ -4,21 +4,21 @@ sidebarTitle: "Runtime"
 description: "Learn what the runpod-sdk-runtime package does, where its source lives, and when you need to think about it separately from the runpod Python SDK."
 ---
 
-{/* TODO(DOCS-504): Blocked on SLS-631: runpod-sdk-runtime is not yet published to PyPI (runpod-workers/sdk-runtime is at 0.0.0 with no releases). Confirm the package name, repository, and the RUNPOD_RUNTIME_PACKAGE_SPEC behavior with Ezekiel Wotring once it is released. */}
+{/* TODO(DOCS-504): runpod-sdk-runtime isn't on PyPI. runpod-python#706 makes the shim install it from the latest runpod-workers/sdk-runtime GitHub release asset. runpod 2.3.0 and earlier still run `pip install runpod-sdk-runtime` and fail on custom images. Add the first SDK version that includes #706 once it's released, and confirm the RUNPOD_RUNTIME_PACKAGE_SPEC behavior with Ezekiel Wotring. */}
 
 When you run an app built with the Runpod SDK, two pieces of code are involved:
 
 - **The SDK** (`runpod`) runs on your machine. It defines your app, talks to the Runpod API, and powers the `rp` CLI.
 - **The runtime** (`runpod-sdk-runtime`) runs on each worker. It loads your code, binds storage and other resources, and executes your functions when requests arrive.
 
-The runtime used to ship inside the SDK. It now lives in its own repository, [runpod-workers/sdk-runtime](https://github.com/runpod-workers/sdk-runtime), and is released as a separate package. This lets Runpod ship runtime fixes and update worker images without requiring you to upgrade the SDK, and the reverse.
+The runtime used to ship inside the SDK. It lives in its own repository, [runpod-workers/sdk-runtime](https://github.com/runpod-workers/sdk-runtime), and Runpod publishes it as releases of that repository. This lets Runpod ship runtime fixes and update worker images without requiring you to upgrade the SDK, and the reverse.
 
 ## How the runtime gets onto workers
 
 You don't install the runtime yourself. Runpod handles it in one of two ways, depending on how your resource is configured:
 
 - **Default images.** Runpod's worker images come with the runtime already installed and cached on Runpod machines, so workers start without an extra install step.
-- **Custom images.** If you set `image=` on a resource, the worker installs `runpod-sdk-runtime` when it starts. Your image needs Python and `pip`, and the worker needs network access to the package index.
+- **Custom images.** If you set `image=` on a resource, the worker uses the runtime already installed in your image. If the image doesn't include it, the worker installs the latest `runpod-sdk-runtime` release from GitHub when it starts. Your image needs Python 3 and `pip`, and the worker needs network access to GitHub and the Python package index.
 
 {/* TODO(DOCS-504): Confirm minimum requirements for a custom image (Python version, pip, base OS). Confirm that CON-682 (cache runtime images on all machines) means default images need no install step. */}
 
@@ -26,7 +26,7 @@ You don't install the runtime yourself. Runpod handles it in one of two ways, de
 
 Most users never interact with the runtime directly. You might need to think about it in these cases:
 
-- **You use a custom container image.** The image must be able to install `runpod-sdk-runtime` at startup. If the install fails, the worker can't start and requests time out.
+- **You use a custom container image.** The image must include the runtime or be able to install it at startup. If the install fails, the worker stops before running your code and requests time out.
 - **You need a specific runtime version.** For example, to pick up a fix before it reaches the default images, or to pin a known-good version.
 - **You're debugging worker startup.** Worker logs that mention the runtime or its bootstrap step come from this package, not from your code or the SDK.
 - **You want to read or contribute to the worker-side code.** It lives in the [runpod-workers/sdk-runtime](https://github.com/runpod-workers/sdk-runtime) repository, not in runpod-python.
