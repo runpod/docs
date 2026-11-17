@@ -1,234 +1,165 @@
 ---
-title: "Deploy an Instant Cluster with Ray and vLLM"
-sidebarTitle: "Ray + vLLM"
-description: "Deploy a Runpod Cluster with Ray and vLLM to serve distributed inference across multiple nodes, including setup, networking, and validation."
-tag: BETA
+title: Deploy a Ray Cluster for distributed inference with vLLM
+sidebarTitle: Ray and vLLM quickstart
+description: "Deploy a Ray Cluster on Runpod and serve a large language model across multiple nodes with vLLM, configured only with environment variables."
 ---
 
-This tutorial shows how to use Instant Clusters with Ray to run distributed inference on large language models. By combining Ray's cluster management with vLLM's tensor and pipeline parallelism, you can serve models that exceed the memory of a single node — for example, a 70B parameter model across multiple 8×H100 pods.
-
-Ray handles the cluster topology; vLLM uses it to split the model across GPUs both within each node (tensor parallelism) and across nodes (pipeline parallelism).
+{/* TODO(DOCS-609): confirm release stage wording (alpha 11/17, open beta 11/23) before publishing. */}
 
 <Note>
-  Distributed inference with Ray and vLLM on Instant Clusters is currently in beta. Join our [Discord](https://discord.gg/runpod) to provide feedback and get support.
+
+Ray Clusters are in beta. Join the [Runpod Discord](https://discord.gg/runpod) to share feedback and get support.
+
 </Note>
 
----
+This tutorial shows you how to serve a large language model across multiple GPU nodes using a [Ray Cluster](/instant-clusters/ray-clusters). The supported Ray cluster image starts Ray on every node and runs vLLM for you, so you configure the deployment with environment variables and never build an image or run a startup script.
+
+vLLM splits the model across GPUs within each node with tensor parallelism, and across nodes with pipeline parallelism. This lets you serve models that don't fit in the memory of a single node.
+
+## What you'll learn
+
+In this tutorial, you'll learn how to:
+
+- Create a Ray Cluster with the Ray Cluster template.
+- Configure the model to serve with environment variables.
+- Check that every node has joined the Ray cluster.
+- Send requests to the OpenAI-compatible vLLM API.
+- Monitor the cluster in the Ray dashboard.
 
 ## Requirements
 
-- A Runpod account with sufficient credits for a multi-node cluster
-- Basic familiarity with large language model inference and distributed GPU setups
+- A Runpod account with enough credits for a multi-node cluster.
+- A [Hugging Face access token](https://huggingface.co/settings/tokens) if the model you serve is gated or private.
 
----
+## Step 1: Create a Ray Cluster
 
-## Step 1: Deploy an Instant Cluster
+{/* TODO(DOCS-609): verify every console label in this step against the live create flow (cluster type selector, template name, env var editing) once the Ray Clusters flag is on. */}
 
-1. Open the [Instant Clusters page](https://console.runpod.io/instant-clusters).
-2. Click **Create Cluster**.
-3. Name your cluster and configure it. For this walkthrough, set **Pod Count** to **2** and select **8× H100 SXM GPUs** per pod. Use the **Runpod PyTorch** template as your base image.
+1. Open the [Instant Clusters page](https://console.runpod.io/instant-clusters) and click **Create Cluster**.
+2. Select **Ray** as the cluster type.
+3. Name your cluster, set **Pod Count** to **2**, and select **8x H100 SXM** as the GPU configuration for each Pod.
+4. Optionally, select a [network volume](/storage/network-volumes) to share model weights across nodes.
+5. Confirm that the **Ray Cluster** template is selected. The console selects it automatically for Ray Clusters. Ray Clusters only accept the supported Ray cluster image or images built from it.
+6. Click **Edit Template** and add the following environment variables:
 
-   <Note>
-   Increase `/dev/shm` when configuring your pod. The default (64 MB) is too small for large tensor-parallel workloads. Set it to at least 8 GB. In the pod configuration, add the environment variable `MALLOC_ARENA_MAX=1` and set `--shm-size` to `8g` in your Docker run options.
-   </Note>
+   | Variable | Value |
+   | --- | --- |
+   | `MODEL_REPO` | `Qwen/Qwen3-235B-A22B` |
+   | `HF_TOKEN` | Your Hugging Face token, if the model is gated. |
 
-4. Click **Deploy Cluster**. You are redirected to the Instant Clusters page.
+   You can also set `VLLM_API_KEY`, `MAX_MODEL_LENGTH`, and `VLLM_EXTRA_ARGS`. See [serve a model with the inference variant](/instant-clusters/ray-clusters#serve-a-model-with-the-inference-variant) for every option.
 
----
+7. Click **Deploy Cluster**.
 
-## Step 2: Start the Ray head on pod-0
+Runpod deploys one Pod per node. The Pod with rank `0` is the Ray head node, and the other Pods are workers.
 
-The first pod (`CLUSTERNAME-pod-0`) runs the Ray head node. All other pods connect to it as workers.
+## Step 2: Check that the cluster is ready
 
-1. Click your cluster to expand the pod list.
-2. Click **CLUSTERNAME-pod-0**, then click **Connect → Web Terminal**.
-3. In the terminal, clone the reference scripts:
+Each Pod starts Ray as soon as its container starts. Workers wait for the head node, then join. After every node has joined, the head node starts vLLM.
 
-   ```bash
-   {/* [STO-463] Replace with canonical repo URL once scripts are published. */}
-   git clone https://github.com/runpod/ray-vllm-cluster.git
-   ```
+The status shown on the cluster card reflects the requested cluster, not whether Ray is ready. Use `ray status` on the head node to check that every node has joined.
 
-4. Run the head startup script:
+{/* TODO(DOCS-609): remove the sentence above once the console status readout reflects actual readiness (raised in the 11/12 demo). */}
 
-   ```bash
-   bash ray-vllm-cluster/head.sh
-   ```
-
-   The script sets the correct NIC address and starts Ray:
+1. On the Instant Clusters page, expand your cluster and select the head Pod (rank `0`).
+2. Click **Connect**, then open a **Web Terminal**.
+3. Check the state of the Ray cluster:
 
    ```bash
-   # head.sh (excerpt — see full script in the repo)
-   export RAY_NODE_IP_ADDRESS=$(hostname -I | awk '{print $1}')
-   export VLLM_HOST_IP=$RAY_NODE_IP_ADDRESS
-
-   ray start --head \
-     --node-ip-address=$RAY_NODE_IP_ADDRESS \
-     --port=6379 \
-     --num-gpus=$NUM_TRAINERS
+   ray status
    ```
 
-   <Note>
-   `RAY_NODE_IP_ADDRESS` and `VLLM_HOST_IP` must be set to the pod's internal network IP — not `0.0.0.0`. Setting them prevents Ray and vLLM from binding to the wrong interface on multi-NIC pods.
-   </Note>
+   When both nodes have joined, the output lists 2 healthy nodes and 16 GPUs:
 
----
+   ```text
+   ======== Autoscaler status: 2026-11-17 10:00:00 ========
+   Node status
+   ---------------------------------------------------------------
+   Active:
+    1 node_...
+    1 node_...
+   ...
+   Resources
+   ---------------------------------------------------------------
+   Usage:
+    0.0/16.0 GPU
+   ```
 
-## Step 3: Join the worker pods to the cluster
-
-Repeat this for each remaining pod in the cluster (`pod-1`, `pod-2`, …).
-
-1. In the Instant Clusters page, click the next pod and open its **Web Terminal**.
-2. Clone the same scripts:
+4. Attach to the vLLM session to follow model loading:
 
    ```bash
-   {/* [STO-463] Replace with canonical repo URL once scripts are published. */}
-   git clone https://github.com/runpod/ray-vllm-cluster.git
+   screen -r
    ```
 
-3. Run the worker startup script:
+   Press `Ctrl+A`, then `D`, to detach without stopping vLLM.
+
+{/* TODO(DOCS-609): confirm the screen session name used by the inference variant, and replace the sample ray status output with real output from a 2-node test cluster. */}
+
+Downloading and loading a large model across nodes can take several minutes. vLLM is ready when its log shows that the API server has started.
+
+## Step 3: Send a request
+
+The head node exposes the vLLM API through the Runpod proxy on port `8001`. While the model is loading, this port returns a `503` response.
+
+Every request needs the API key in `VLLM_API_KEY`. If you didn't set one, the default is `sk-` followed by the head Pod's ID, for example `sk-abc123xyz`.
+
+1. List the models served by the cluster:
 
    ```bash
-   bash ray-vllm-cluster/worker.sh
+   curl https://HEAD_POD_ID-8001.proxy.runpod.net/v1/models \
+       -H "Authorization: Bearer VLLM_API_KEY"
    ```
 
-   The script waits for the head to be reachable, then joins:
+2. Send a chat completion request:
 
    ```bash
-   # worker.sh (excerpt — see full script in the repo)
-   export RAY_NODE_IP_ADDRESS=$(hostname -I | awk '{print $1}')
-   export VLLM_HOST_IP=$RAY_NODE_IP_ADDRESS
-
-   # Wait for Ray head
-   until bash -c ">/dev/tcp/$MASTER_ADDR/6379" 2>/dev/null; do
-     echo "Waiting for Ray head at $MASTER_ADDR:6379..."
-     sleep 2
-   done
-
-   ray start \
-     --address=$MASTER_ADDR:6379 \
-     --node-ip-address=$RAY_NODE_IP_ADDRESS \
-     --num-gpus=$NUM_TRAINERS
+   curl https://HEAD_POD_ID-8001.proxy.runpod.net/v1/chat/completions \
+       -H "Authorization: Bearer VLLM_API_KEY" \
+       -H "Content-Type: application/json" \
+       -d '{
+           "model": "Qwen/Qwen3-235B-A22B",
+           "messages": [{"role": "user", "content": "Explain pipeline parallelism in one sentence."}]
+       }'
    ```
 
-   `$MASTER_ADDR` is injected automatically by Runpod into all pods in the cluster — it resolves to `pod-0`.
+Replace `HEAD_POD_ID` with the ID of the head Pod and `VLLM_API_KEY` with your API key.
 
----
+Because the API is OpenAI-compatible, you can also use the OpenAI Python client:
 
-## Step 4: Verify the cluster
+```python
+from openai import OpenAI
 
-Run this on `pod-0` to confirm all nodes have joined:
+client = OpenAI(
+    base_url="https://HEAD_POD_ID-8001.proxy.runpod.net/v1",
+    api_key="VLLM_API_KEY",
+)
 
-```bash
-ray status
+response = client.chat.completions.create(
+    model="Qwen/Qwen3-235B-A22B",
+    messages=[{"role": "user", "content": "Explain pipeline parallelism in one sentence."}],
+)
+print(response.choices[0].message.content)
 ```
 
-Expected output for a two-pod cluster with 8 GPUs each:
+This script points the OpenAI client at your cluster's vLLM server and prints the model's reply.
 
-```
-======== Autoscaler status: ... ========
-Node status
----------------------------------------------------------------
-Healthy:
- 2 node(s) with resources: {"GPU": 8.0, ...}
-```
+{/* TODO(DOCS-609): BLOCKER. In the 11/12 demo the Ray Cluster template exposed only three HTTP ports on the head (Ray dashboard, Jupyter, Grafana), with no vLLM port. Confirm whether the alpha template is the inference variant and whether it maps 8001/http. If not, this step must either add 8001 to the template's exposed ports or send requests from the head node's terminal (localhost:8000). */}
 
-You can also open the Ray dashboard. The console shows the dashboard port in the **Connect** dialog for `pod-0`.
+## Step 4: Monitor the cluster
 
----
+1. Select the head Pod and click **Connect**.
+2. Click **Ray Dashboard**. The console signs you in with the head node's token.
+3. Open the **Cluster** tab to see live CPU, GPU, memory, and disk usage for each node.
+4. Open the **Metrics** tab to see historical charts for every node and vLLM serving metrics.
 
-## Step 5: Launch distributed inference with vLLM
+See [open the Ray dashboard](/instant-clusters/ray-clusters#open-the-ray-dashboard) for token details and troubleshooting.
 
-Run this on `pod-0` only. vLLM uses the Ray cluster that is already running.
+## Step 5: Clean up
 
-```bash
-bash ray-vllm-cluster/serve.sh
-```
-
-The script launches vLLM with tensor parallelism across GPUs within each node and pipeline parallelism across nodes:
-
-```bash
-# serve.sh (excerpt — see full script in the repo)
-python -m vllm.entrypoints.openai.api_server \
-  --model meta-llama/Meta-Llama-3-70B \
-  --tensor-parallel-size $NUM_TRAINERS \   # GPUs per node (e.g., 8)
-  --pipeline-parallel-size $NUM_NODES \    # number of nodes (e.g., 2)
-  --host 0.0.0.0 \
-  --port 8000
-```
-
-<Tip>
-`--tensor-parallel-size` should equal the number of GPUs per node (`$NUM_TRAINERS`). `--pipeline-parallel-size` should equal the number of nodes (`$NUM_NODES`). Both are injected as environment variables by Runpod.
-</Tip>
-
-vLLM connects to the running Ray cluster automatically. It may take several minutes to load model weights across all nodes.
-
----
-
-## Step 6: Test the endpoint
-
-Once vLLM reports that it is ready, validate from `pod-0`:
-
-```bash
-# Check the server is healthy
-curl http://localhost:8000/health
-
-# Confirm the model is loaded
-curl http://localhost:8000/v1/models
-```
-
-Then send a test request:
-
-```bash
-curl http://localhost:8000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "meta-llama/Meta-Llama-3-70B",
-    "messages": [{"role": "user", "content": "Hello!"}]
-  }'
-```
-
----
-
-## Step 7: Clean up
-
-When you are done, return to the [Instant Clusters page](https://console.runpod.io/instant-clusters) and delete your cluster. Leaving it running continues to incur charges.
-
----
-
-## Environment variables reference
-
-Runpod injects these environment variables into every pod in the cluster. The startup scripts rely on them.
-
-| Variable | Description |
-|---|---|
-| `MASTER_ADDR` | Hostname of `pod-0`, the Ray head node |
-| `MASTER_PORT` | Port for inter-node communication (default: `29500`) |
-| `NUM_NODES` | Total number of pods in the cluster |
-| `NUM_TRAINERS` | Number of GPUs per pod |
-| `NODE_RANK` | Index of this pod (`0` for head, `1+` for workers) |
-
----
-
-## Common issues
-
-**Ray workers don't join**
-Confirm `$MASTER_ADDR` resolves from each worker pod. Run `ping $MASTER_ADDR` in a worker terminal. If it fails, the cluster network may still be initializing — wait 30 seconds and try again.
-
-**vLLM OOM during model load**
-Check that `/dev/shm` is large enough (at least 8 GB for 70B models). Also verify that `--tensor-parallel-size` matches the number of GPUs per node — a mismatch causes uneven shard sizes.
-
-**`VLLM_HOST_IP` binding error**
-This error occurs when vLLM tries to bind to `0.0.0.0` on a pod with multiple network interfaces. Make sure `VLLM_HOST_IP` is set to the internal IP (`hostname -I | awk '{print $1}'`) before starting the server.
-
-**Stale Ray cluster after restart**
-If you restart a pod, Ray does not automatically rejoin the cluster. Rerun `head.sh` on `pod-0` first, then `worker.sh` on all other pods.
-
----
+When you're done, return to the [Instant Clusters page](https://console.runpod.io/instant-clusters) and delete your cluster. A running cluster continues to incur charges.
 
 ## Next steps
 
-- Adapt the serve script to load your own model from a [Network Volume](/storage/network-volumes) mount.
-- Scale up by increasing the pod count and adjusting `--pipeline-parallel-size` accordingly.
-- Try [Axolotl on an Instant Cluster](/instant-clusters/axolotl) for distributed fine-tuning.
-- Review the [Instant Cluster configuration reference](/instant-clusters/configuration) for full details on environment variables and networking.
+- [Learn how Ray Clusters work](/instant-clusters/ray-clusters), including the base variant for your own Ray jobs.
+- [Build a custom image](/instant-clusters/ray-clusters#build-a-custom-image) from the supported Ray cluster image.
+- [Attach a network volume](/storage/network-volumes) to cache model weights across deployments.
