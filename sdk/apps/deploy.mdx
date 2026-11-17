@@ -1,0 +1,96 @@
+---
+title: "Deploy an app"
+sidebarTitle: "Deploy"
+description: "Deploy a Runpod SDK app with rp flash deploy: what goes into the build, ignore rules, size limits, Python versions, and how to call deployed resources."
+---
+
+When your app works in a [dev session](/sdk/apps/dev-sessions), deploy it to create long-running endpoints:
+
+```bash
+rp flash deploy
+```
+
+The command finds every app in the current directory, builds an artifact for each one, uploads it, and creates or updates the endpoints in the target environment. When it finishes, it prints a link to each endpoint.
+
+To deploy a different directory, pass it as an argument: `rp flash deploy path/to/project`.
+
+## Options
+
+| Flag | Description |
+| --- | --- |
+| `--env`, `-e` | The environment to deploy to. Defaults to the app's environment, which is `default` unless you set `env=` on `runpod.App`. |
+| `--python-version` | The worker Python version used to pick dependency wheels: 3.10 to 3.14. Defaults to the Python running the CLI. |
+| `--exclude` | A comma-separated list of packages to leave out of the artifact, for example `--exclude scipy,pandas`. Excluded packages must already be installed in the worker image. |
+| `--build-only` | Builds the artifact without deploying it, and writes `APP_NAME-artifact.tar.gz` to the current directory. Use it to check what's included. |
+
+## What goes into a build
+
+Each build artifact contains:
+
+- **Your project's source files**, filtered by the [ignore rules](#ignore-rules).
+- **Your dependencies**, collected from the project's `requirements.txt` and every resource's `dependencies` list, and installed for Linux x86_64 workers.
+- **A manifest** describing every resource and its configuration.
+
+You don't build container images. Resources run on Runpod's runtime images, which unpack the artifact and run your code.
+
+On the built-in GPU images, `torch`, `torchvision`, `torchaudio`, and `triton` are already installed, so they're left out of the artifact automatically. If you use a custom `image`, every dependency is included unless you exclude it.
+
+### Size limit
+
+The artifact can be up to 1,500 MB. If it's larger, the build fails. To shrink it, exclude large packages that your worker image already provides with `--exclude`, or leave out project files with `.runpodignore`.
+
+## Ignore rules
+
+The SDK uses Git-style ignore patterns to decide which project files go into the artifact. It applies them in this order, with later rules taking precedence:
+
+1. **Default exclusions** for virtual environments (`.venv/`, `venv/`, `env/`), caches (`__pycache__/`, `*.pyc`, `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/`), `node_modules/`, `.DS_Store`, `*.tar.gz` archives, and tests (`tests/`, `test/`, `test_*.py`, `*_test.py`).
+2. **Your project's `.gitignore` files.** A `.gitignore` in a subdirectory overrides its parents for that subtree. Global and parent-directory Git ignores aren't read.
+3. **A `.runpodignore` file** at the project root.
+
+To include a file that an earlier rule excludes, add a negation pattern such as `!data/sample.csv`. If a parent directory is excluded, re-include the directory before its files. Symlinks are never included.
+
+### Files that are always excluded
+
+These paths are left out of every artifact, and negation patterns can't re-include them:
+
+- `.env` files and variants such as `.env.local` and `prod.env`.
+- Keys and certificates: `*.pem`, `*.key`, and SSH private keys such as `id_rsa` and `id_ed25519`.
+- Credential directories and files: `.ssh`, `.aws`, `.azure`, `.kube`, `.docker/config.json`, `.netrc`, `.npmrc`, `.pypirc`, `.git-credentials`, `.boto`, and `service-account*.json`.
+- Internal paths: `.git`, `.runpod`, `.flash`, and the root `env/` directory.
+
+<Warning>
+  These safeguards match file names. They don't scan file contents for secrets. Review a `--build-only` artifact before deploying, and pass credentials to workers with `env` and `runpod.Secret`.
+</Warning>
+
+## Call deployed resources
+
+From another codebase, use `runpod.Queue` and `runpod.Api` to call resources in a deployed app by name:
+
+```python
+import runpod
+
+transcribe = runpod.Queue(app="media", name="transcribe")
+result = transcribe.remote(audio_url="https://example.com/audio.mp3")
+
+inference = runpod.Api(app="media", name="inference")
+response = inference.post("/generate", {"prompt": "hi"})
+```
+
+Both target the `default` environment unless you pass `env=`.
+
+You can also call a deployed queue endpoint by ID with the [endpoint client](/sdk/overview#endpoint-client), or send HTTP requests to it directly. See [Send API requests](/serverless/endpoints/send-requests).
+
+## Update and remove a deployment
+
+To deploy new code, run `rp flash deploy` again with the same environment. To remove an environment's endpoints, run:
+
+```bash
+rp flash undeploy --env ENVIRONMENT_NAME
+```
+
+See [Apps and environments](/sdk/apps/apps-and-environments).
+
+## Next steps
+
+- [Organize deployments with environments](/sdk/apps/apps-and-environments).
+- [See every rp flash deploy option](/sdk/cli#rp-flash-deploy).
