@@ -10,12 +10,19 @@ Environment variables let you configure your vLLM workers without rebuilding you
 
 To set environment variables, go to your [endpoint settings](/serverless/endpoints/overview#edit-an-endpoint) and add them under **Environment Variables**.
 
-The latest vLLM worker release, [v2.30.1](https://github.com/runpod-workers/worker-vllm/releases), is built on vLLM v0.32.0. The tables below list common settings, but you're not limited to them:
+The latest vLLM worker release, [v2.30.3](https://github.com/runpod-workers/worker-vllm/releases), is built on vLLM v0.32.0. The worker starts `vllm serve` with flags built from your environment variables. The tables below list common settings, but you're not limited to them:
 
 - Any environment variable named after a `vllm serve` flag in upper snake case becomes that flag. For example, `MAX_MODEL_LEN=4096` becomes `--max-model-len 4096`.
+- Boolean variables take `true` or `false`.
 - `VLLM_EXTRA_ARGS` passes extra flags straight to `vllm serve`. They're added last, so they override any earlier setting. Use it for flags that don't have an environment variable, for example `VLLM_EXTRA_ARGS="--tool-call-parser qwen3_coder --enable-auto-tool-choice"`.
 
 You can use any tool-call parser or speculative decoding method that vLLM v0.32.0 supports, such as MTP, even if the tables below don't list it.
+
+<Warning>
+
+A variable named after a flag that vLLM has removed is ignored. The worker logs a warning at startup and continues. If a setting from an older deployment has no effect, check [Removed variables](#removed-variables).
+
+</Warning>
 
 ## LLM settings
 
@@ -23,7 +30,7 @@ These variables control the core language model configuration.
 
 | Variable | Default | Type(s) | Description |
 | --- | --- | --- | --- |
-| `MODEL_NAME` | `facebook/opt-125m` | `str` | Hugging Face repo ID or local filesystem path for the model weights. Change this to deploy a different model. |
+| `MODEL_NAME` | None | `str` | Required. Hugging Face repo ID or local filesystem path for the model weights. |
 | `MODEL_REVISION` | `main` | `str` | The model revision to load. |
 | `TOKENIZER` | None | `str` | The name or path of the Hugging Face tokenizer to use. |
 | `SKIP_TOKENIZER_INIT` | `False` | `bool` | If `True`, skips the initialization of the tokenizer and detokenizer. |
@@ -34,19 +41,15 @@ These variables control the core language model configuration.
 | `HF_TOKEN` | - | `str` | Hugging Face token required to download gated/private models. Not needed for public models. Provide it via secrets. |
 | `DTYPE` | `auto` | `auto`, `half`, `float16`, `bfloat16`, `float`, `float32` | The data type for model weights and activations. |
 | `KV_CACHE_DTYPE` | `auto` | `auto`, `fp8` | The data type for KV cache storage. |
-| `QUANTIZATION_PARAM_PATH` | None | `str` | The path to the JSON file containing the KV cache scaling factors. |
+| `STRUCTURED_OUTPUTS_CONFIG` | None | `dict` | Structured output (guided decoding) settings as a JSON string, including the backend. Replaces `GUIDED_DECODING_BACKEND`. |
 | `MAX_MODEL_LEN` | None | `int` | Maximum context length (tokens) the engine will allocate KV cache for. Lower it to reduce VRAM usage; raise it for long-context models if supported and you have VRAM. |
-| `GUIDED_DECODING_BACKEND` | `outlines` | `outlines`, `lm-format-enforcer` | The default engine for guided decoding. |
 | `DISTRIBUTED_EXECUTOR_BACKEND` | None | `ray`, `mp` | The backend to use for distributed serving. |
-| `WORKER_USE_RAY` | `False` | `bool` | Deprecated. Use `DISTRIBUTED_EXECUTOR_BACKEND=ray` instead. |
 | `PIPELINE_PARALLEL_SIZE` | `1` | `int` | The number of pipeline stages. |
-| `TENSOR_PARALLEL_SIZE` | `1` | `int` | Tensor parallel degree (number of GPUs to shard across). On multi-GPU machines, this worker auto-sets it to the number of visible GPUs. |
+| `TENSOR_PARALLEL_SIZE` | `1` | `int` | Tensor parallel degree (number of GPUs to shard across). Set it to the number of GPUs per worker when you deploy on more than one GPU. |
 | `MAX_PARALLEL_LOADING_WORKERS` | None | `int` | Load model sequentially in multiple batches to avoid RAM OOM when using tensor parallelism and large models. |
 | `RAY_WORKERS_USE_NSIGHT` | `False` | `bool` | If `True`, uses nsight to profile Ray workers. |
 | `ENABLE_PREFIX_CACHING` | `False` | `bool` | If `True`, enables automatic prefix caching. |
 | `DISABLE_SLIDING_WINDOW` | `False` | `bool` | If `True`, disables the sliding window, capping to the sliding window size. |
-| `USE_V2_BLOCK_MANAGER` | `False` | `bool` | If `True`, uses the BlockSpaceMangerV2. |
-| `NUM_LOOKAHEAD_SLOTS` | `0` | `int` | The number of lookahead slots, an experimental scheduling configuration for speculative decoding. |
 | `SEED` | `0` | `int` | The random seed for operations. |
 | `NUM_GPU_BLOCKS_OVERRIDE` | None | `int` | If specified, this value overrides the GPU profiling result for the number of GPU blocks. |
 | `MAX_NUM_BATCHED_TOKENS` | None | `int` | The maximum number of batched tokens per iteration. |
@@ -54,11 +57,6 @@ These variables control the core language model configuration.
 | `MAX_LOGPROBS` | `20` | `int` | The maximum number of log probabilities to return when `logprobs` is specified in `SamplingParams`. |
 | `DISABLE_LOG_STATS` | `False` | `bool` | If `True`, disables logging statistics. |
 | `QUANTIZATION` | None | `awq`, `squeezellm`, `gptq`, `bitsandbytes` | Quantization backend for loading quantized checkpoints (AWQ/GPTQ/...) or BitsAndBytes. Must match the checkpoint format. |
-| `ROPE_SCALING` | None | `dict` | The RoPE scaling configuration in JSON format. |
-| `ROPE_THETA` | None | `float` | The RoPE theta value. Use with `ROPE_SCALING`. |
-| `TOKENIZER_POOL_SIZE` | `0` | `int` | The size of the tokenizer pool for asynchronous tokenization. |
-| `TOKENIZER_POOL_TYPE` | `ray` | `str` | The type of the tokenizer pool for asynchronous tokenization. |
-| `TOKENIZER_POOL_EXTRA_CONFIG` | None | `dict` | Extra configuration for the tokenizer pool. |
 
 ## LoRA settings
 
@@ -69,31 +67,26 @@ Configure LoRA (Low-Rank Adaptation) adapters for your model.
 | `ENABLE_LORA` | `False` | `bool` | If `True`, enables the handling of LoRA adapters. |
 | `MAX_LORAS` | `1` | `int` | The maximum number of LoRAs in a single batch. |
 | `MAX_LORA_RANK` | `16` | `int` | The maximum LoRA rank. |
-| `LORA_EXTRA_VOCAB_SIZE` | `256` | `int` | The maximum size of the extra vocabulary for LoRA adapters. |
 | `LORA_DTYPE` | `auto` | `auto`, `float16`, `bfloat16`, `float32` | The data type for LoRA. |
-| `LONG_LORA_SCALING_FACTORS` | None | `tuple` | Specifies multiple scaling factors for LoRA adapters. |
 | `MAX_CPU_LORAS` | None | `int` | The maximum number of LoRAs to store in CPU memory. |
 | `FULLY_SHARDED_LORAS` | `False` | `bool` | If `True`, enables fully sharded LoRA layers. |
 | `LORA_MODULES` | `[]` | `list[dict]` | A list of LoRA adapters to add from Hugging Face. Example: `[{"name": "adapter1", "path": "user/adapter1"}]` |
 
 ## Speculative decoding settings
 
-Configure speculative decoding to improve <InferenceTooltip /> performance.
+Configure speculative decoding to improve <InferenceTooltip /> performance. Pass the whole configuration as one JSON string in `SPECULATIVE_CONFIG`, which vLLM parses directly.
 
 | Variable | Default | Type(s) | Description |
 | --- | --- | --- | --- |
-| `SCHEDULER_DELAY_FACTOR` | `0.0` | `float` | Applies a delay before scheduling the next prompt. |
-| `ENABLE_CHUNKED_PREFILL` | `False` | `bool` | If `True`, enables chunked prefill requests. |
-| `SPECULATIVE_MODEL` | None | `str` | The name of the draft model for speculative decoding. |
-| `NUM_SPECULATIVE_TOKENS` | None | `int` | The number of speculative tokens to sample from the draft model. |
-| `SPECULATIVE_DRAFT_TENSOR_PARALLEL_SIZE` | None | `int` | The number of tensor parallel replicas for the draft model. |
-| `SPECULATIVE_MAX_MODEL_LEN` | None | `int` | The maximum sequence length supported by the draft model. |
-| `SPECULATIVE_DISABLE_BY_BATCH_SIZE` | None | `int` | Disables speculative decoding if the number of enqueued requests is larger than this value. |
-| `NGRAM_PROMPT_LOOKUP_MAX` | None | `int` | The maximum window size for ngram prompt lookup in speculative decoding. |
-| `NGRAM_PROMPT_LOOKUP_MIN` | None | `int` | The minimum window size for ngram prompt lookup in speculative decoding. |
-| `SPEC_DECODING_ACCEPTANCE_METHOD` | `rejection_sampler` | `rejection_sampler`, `typical_acceptance_sampler` | The acceptance method for draft token verification in speculative decoding. |
-| `TYPICAL_ACCEPTANCE_SAMPLER_POSTERIOR_THRESHOLD` | None | `float` | Sets the lower bound threshold for the posterior probability of a token to be accepted. |
-| `TYPICAL_ACCEPTANCE_SAMPLER_POSTERIOR_ALPHA` | None | `float` | A scaling factor for the entropy-based threshold for token acceptance. |
+| `SPECULATIVE_CONFIG` | None | `dict` | Speculative decoding configuration as a JSON string. |
+
+For example, to use a draft model with three speculative tokens:
+
+```text
+SPECULATIVE_CONFIG={"model":"RedHatAI/Qwen3-8B-speculator.eagle3","method":"eagle3","num_speculative_tokens":3}
+```
+
+The per-field variables from earlier releases, such as `SPECULATIVE_MODEL` and `NUM_SPECULATIVE_TOKENS`, are no longer read. See [Removed variables](#removed-variables).
 
 ## System performance settings
 
@@ -103,11 +96,10 @@ Configure GPU memory and system resource utilization.
 | --- | --- | --- | --- |
 | `GPU_MEMORY_UTILIZATION` | `0.95` | `float` | Fraction of GPU VRAM vLLM is allowed to use for KV cache and runtime allocations. Lower if you hit CUDA OOM; raise if you have VRAM headroom. |
 | `MAX_PARALLEL_LOADING_WORKERS` | None | `int` | Loads the model sequentially in multiple batches to avoid RAM OOM when using tensor parallelism and large models. |
+| `ENABLE_CHUNKED_PREFILL` | `True` | `bool` | If `True`, enables chunked prefill requests. |
 | `BLOCK_SIZE` | `16` | `8`, `16`, `32` | The token block size for contiguous chunks of tokens. |
-| `SWAP_SPACE` | `4` | `int` | The CPU swap space size (in GiB) per GPU. |
 | `ENFORCE_EAGER` | `False` | `bool` | If `True`, always uses eager-mode PyTorch. If `False`, uses a hybrid of eager mode and CUDA graphs for maximal performance and flexibility. |
-| `MAX_SEQ_LEN_TO_CAPTURE` | `8192` | `int` | Maximum context length covered by CUDA graphs. When a sequence has context length larger than this, we fall back to eager mode. |
-| `DISABLE_CUSTOM_ALL_REDUCE` | `0` | `int` | If `0`, enables custom all-reduce. If `1`, disables it. |
+| `DISABLE_CUSTOM_ALL_REDUCE` | `False` | `bool` | If `True`, disables custom all-reduce. |
 | `ENABLE_EXPERT_PARALLEL` | `False` | `bool` | Enable expert parallelism for Mixture of Experts (MoE) models. |
 
 ## Tokenizer settings
@@ -120,29 +112,14 @@ Customize tokenizer behavior and chat templates.
 | `TOKENIZER_REVISION` | None | `str` | The tokenizer revision to load. |
 | `CUSTOM_CHAT_TEMPLATE` | None | `str` of single-line jinja template | Override the model chat template (single-line Jinja2). Useful when sending `messages` to a base model without a built-in chat template. See the [Hugging Face documentation](https://huggingface.co/docs/transformers/chat_templating) for more information. |
 
-## Streaming and batch settings
-
-Control how tokens are streamed back in HTTP responses.
-
-These settings control how tokens are batched in HTTP responses when streaming. The batch size starts at `DEFAULT_MIN_BATCH_SIZE` and increases by a factor of `DEFAULT_BATCH_SIZE_GROWTH_FACTOR` with each request until it reaches `DEFAULT_BATCH_SIZE`.
-
-For example, with default values, the batch sizes would be 1, 3, 9, 27, and then 50 for all subsequent requests. These settings do not affect vLLM's internal batching.
-
-| Variable | Default | Type(s) | Description |
-| --- | --- | --- | --- |
-| `DEFAULT_BATCH_SIZE` | `50` | `int` | The default and maximum batch size for token streaming. |
-| `DEFAULT_MIN_BATCH_SIZE` | `1` | `int` | The initial batch size for the first request. |
-| `DEFAULT_BATCH_SIZE_GROWTH_FACTOR` | `3` | `float` | The growth factor for the dynamic batch size. |
-
 ## OpenAI compatibility settings
 
 Configure OpenAI API compatibility features.
 
 | Variable | Default | Type(s) | Description |
 | --- | --- | --- | --- |
-| `RAW_OPENAI_OUTPUT` | `1` | boolean as `int` | If `1`, enables raw OpenAI SSE format string output when streaming. This is required for OpenAI compatibility. |
 | `OPENAI_SERVED_MODEL_NAME_OVERRIDE` | None | `str` | Exposes a custom model ID via `/v1/models` and accepts it as the `model` field in OpenAI requests (alias for the served model). |
-| `OPENAI_RESPONSE_ROLE` | `assistant` | `str` | The role of the LLM's response in OpenAI chat completions. |
+| `RESPONSE_ROLE` | `assistant` | `str` | The role of the LLM's response in OpenAI chat completions. Replaces `OPENAI_RESPONSE_ROLE`. |
 | `ENABLE_AUTO_TOOL_CHOICE` | `false` | `bool` | Enables vLLM automatic tool selection for OpenAI Chat Completions. Only enable for tool-capable models. |
 | `TOOL_CALL_PARSER` | None | `str` | Tool-call parser that matches your model's tool-call format (required for most tool-calling models). Supported values: `mistral`, `hermes`, `llama3_json`, `llama4_json`, `llama4_pythonic`, `granite`, `granite-20b-fc`, `deepseek_v3`, `internlm`, `jamba`, `phi4_mini_json`, `pythonic`. |
 | `REASONING_PARSER` | None | `str` | Parser for reasoning-capable models (enables reasoning mode). Examples: `deepseek_r1`, `qwen3`, `granite`, `hunyuan_a13b`. Leave unset to disable. |
@@ -155,14 +132,17 @@ Configure OpenAI API compatibility features.
 
 ## Serverless and concurrency settings
 
-Configure startup, concurrency, and logging for Serverless deployments.
+Configure startup, concurrency, timeouts, and logging for Serverless deployments. The worker reads `MAX_CONCURRENCY`, the two timeouts, `VLLM_EXTRA_ARGS`, and `VLLM_CONFIG_FILE` itself. The logging variables go to vLLM.
 
 | Variable | Default | Type(s) | Description |
 | --- | --- | --- | --- |
 | `MAX_CONCURRENCY` | `30` | `int` | Max concurrent requests per worker instance (Runpod-side). Not a vLLM engine arg; it controls Runpod worker concurrency and affects how requests are fed into vLLM (queueing/throughput/latency). |
 | `VLLM_STARTUP_TIMEOUT` | `1800` | `int` | Seconds the worker waits for vLLM to load the model and become ready before it fails and restarts. Raise it for very large models (400 GB or more) that take longer to load. See [vLLM worker times out during startup](/serverless/troubleshooting#vllm-worker-times-out-during-startup). |
-| `DISABLE_LOG_STATS` | `False` | `bool` | If `False`, enables vLLM stats logging. |
-| `DISABLE_LOG_REQUESTS` | `False` | `bool` | If `False`, enables vLLM request logging. |
+| `REQUEST_TIMEOUT` | `3600` | `int` | Per-request timeout to the vLLM server, in seconds. |
+| `VLLM_EXTRA_ARGS` | None | `str` | Extra flags passed straight to `vllm serve`, added last. |
+| `VLLM_CONFIG_FILE` | None | `str` | Path to a `vllm serve` YAML config file. |
+| `DISABLE_LOG_STATS` | `False` | `bool` | If `True`, disables vLLM stats logging. |
+| `ENABLE_LOG_REQUESTS` | `False` | `bool` | If `True`, enables vLLM request logging. Replaces `DISABLE_LOG_REQUESTS`. |
 
 ## Advanced settings
 
@@ -171,30 +151,37 @@ Additional configuration options for specialized use cases.
 | Variable | Default | Type | Description |
 | --- | --- | --- | --- |
 | `MODEL_LOADER_EXTRA_CONFIG` | None | `dict` | Extra configuration for the model loader. |
-| `PREEMPTION_MODE` | None | `str` | The preemption mode. If `recompute`, the engine performs preemption-aware recomputation. If `save`, the engine saves activations to CPU memory during preemption. |
-| `PREEMPTION_CHECK_PERIOD` | `1.0` | `float` | The frequency (in seconds) at which the engine checks for preemption. |
-| `PREEMPTION_CPU_CAPACITY` | `2` | `float` | The percentage of CPU memory to use for saved activations. |
-| `DISABLE_LOGGING_REQUEST` | `False` | `bool` | If `True`, disables logging requests. |
 | `MAX_LOG_LEN` | None | `int` | The maximum number of prompt characters or prompt ID numbers to print in the log. |
 
 ## Docker build arguments
 
-These variables are used when building custom Docker images with models baked in.
+These arguments are used when building a custom worker image, for example to bake a model in. They're set at build time, so changing them on an endpoint has no effect.
 
-| Variable | Default | Type | Description |
+| Argument | Default | Type | Description |
 | --- | --- | --- | --- |
-| `BASE_PATH` | `/runpod-volume` | `str` | The storage directory for the Hugging Face cache and model. |
-| `WORKER_CUDA_VERSION` | `12.1.0` | `str` | The CUDA version for the worker image. |
+| `VLLM_VERSION` | `v0.32.0` | `str` | Tag of the official `vllm/vllm-openai` base image. |
+| `MODEL_NAME` | None | `str` | If set, the model is baked into the image at build time. |
+| `MODEL_REVISION` | `main` | `str` | Model revision for the baked model. |
+| `TOKENIZER_NAME` | None | `str` | Optional separate tokenizer repo. Defaults to the model's tokenizer. |
+| `TOKENIZER_REVISION` | None | `str` | Tokenizer revision. Defaults to the model revision. |
+| `QUANTIZATION` | None | `str` | Recorded for baked models. |
+| `BASE_PATH` | `/runpod-volume` | `str` | The storage directory for the Hugging Face cache and the vLLM compile cache. To move them on a running endpoint, set `HF_HUB_CACHE` and `VLLM_CACHE_ROOT` instead. |
 
-## Deprecated variables
+## Removed variables
 
-<Warning>
+The worker no longer reads the following variables. Setting one has no effect. Variables named after a flag that vLLM removed also log a warning at startup.
 
-The following variables are deprecated and will be removed in future versions.
+| Removed variable | Use instead |
+| --- | --- |
+| `GUIDED_DECODING_BACKEND` | `STRUCTURED_OUTPUTS_CONFIG` |
+| `SPECULATIVE_MODEL`, `NUM_SPECULATIVE_TOKENS`, `SPECULATIVE_METHOD`, `NGRAM_PROMPT_LOOKUP_MIN`, `NGRAM_PROMPT_LOOKUP_MAX`, `NUM_LOOKAHEAD_SLOTS` | `SPECULATIVE_CONFIG` as a JSON string. |
+| `DISABLE_LOG_REQUESTS` | `ENABLE_LOG_REQUESTS=false` |
+| `OPENAI_RESPONSE_ROLE` | `RESPONSE_ROLE` |
+| `RAW_OPENAI_OUTPUT`, `DEFAULT_BATCH_SIZE`, `DEFAULT_MIN_BATCH_SIZE`, `DEFAULT_BATCH_SIZE_GROWTH_FACTOR` | Nothing. The worker passes vLLM's streaming chunks through directly, so there's no output batching to tune. |
+| `ROPE_SCALING`, `ROPE_THETA` | `HF_OVERRIDES` with `rope_scaling` or `rope_theta`. |
+| `CUDA_GRAPH_SIZES` | `COMPILATION_CONFIG` with `cudagraph_capture_sizes`. |
+| `MAX_SEQ_LEN_TO_CAPTURE`, `MAX_CONTEXT_LEN_TO_CAPTURE` | No replacement. |
+| `SWAP_SPACE`, `LORA_EXTRA_VOCAB_SIZE`, `USE_V2_BLOCK_MANAGER`, `WORKER_USE_RAY`, `TOKENIZER_POOL_SIZE`, `TOKENIZER_POOL_TYPE`, `TOKENIZER_POOL_EXTRA_CONFIG`, `PREEMPTION_MODE`, `PREEMPTION_CHECK_PERIOD`, `PREEMPTION_CPU_CAPACITY`, `SCHEDULER_DELAY_FACTOR` | No replacement. |
+| `VLLM_API_KEY` | Nothing. Runpod authenticates requests with your Runpod API key. |
 
-</Warning>
-
-| Old Variable | New Variable | Note |
-| --- | --- | --- |
-| `MAX_CONTEXT_LEN_TO_CAPTURE` | `MAX_SEQ_LEN_TO_CAPTURE` | Use the new variable name. |
-| `kv_cache_dtype=fp8_e5m2` | `kv_cache_dtype=fp8` | Simplified fp8 format. |
+For the complete list, see the worker's [configuration reference](https://github.com/runpod-workers/worker-vllm/blob/main/docs/configuration.md).

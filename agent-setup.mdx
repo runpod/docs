@@ -202,7 +202,7 @@ After registering, the user approves the OAuth sign-in in the browser the first 
 
 OAuth sign-in works in Claude, ChatGPT, Codex, and Cursor, and in any client that receives the sign-in on a local address (`http://localhost` or `http://127.0.0.1`). Other clients may fail with `redirect_uri is not allowed`, or get a `403` error before the browser opens. If that happens, connect with an API key instead, even when a user is present:
 
-1. Ask the user to create a key on the [Credentials page](https://console.runpod.io/user/settings) and set it as `RUNPOD_API_KEY` in the environment your agent starts from.
+1. Get a key. Either ask the user to create one on the [Credentials page](https://console.runpod.io/user/settings), or [get one yourself by email](#get-an-api-key-by-email). It must be set as `RUNPOD_API_KEY` in the environment your agent starts from.
 2. Send it as a header on the server entry, for example:
 
    ```json
@@ -219,6 +219,56 @@ OAuth sign-in works in Claude, ChatGPT, Codex, and Cursor, and in any client tha
    `${RUNPOD_API_KEY}` reads the key from the environment, but clients write this differently, so check your client's docs. If your client can't read environment variables, run the server locally instead, with `RUNPOD_API_KEY` set: `npx -y @runpod/mcp-server@latest`.
 
 If your agent can't load skills, the MCP server serves the same playbooks: `list-guides` and `read-guide` return them, and `lookup-concept` and `search-concepts` answer questions about how Runpod works.
+
+#### Get an API key by email
+
+If the user doesn't have a Runpod account yet, or can't open the console, get an API key by email with the Runpod CLI. If the email address already has a Runpod account, this signs in to it. If not, it creates a new account.
+
+Run these steps yourself. The only things you need from the user are their email address and, unless you can read their inbox, the 6-digit code Runpod emails them. If no user is present, do this only when your task tells you to and you can read the inbox. Otherwise follow [No user in the loop](#no-user-in-the-loop).
+
+**Step 1: Install the CLI and request a code.** Replace `user@example.com` with the user's email address:
+
+```bash
+pip install -U runpod
+runpod login --agent --email user@example.com
+```
+
+The second command emails a 6-digit code and exits. It doesn't wait for input. If `pip` fails with `externally-managed-environment`, run `pipx install runpod` or `uv tool install runpod` instead. This needs `runpod` 2.2.1 or later. Installing it here is fine, even though the skills normally install it later.
+
+**Step 2: Get the code.**
+
+> **User step.** Ask the user for the 6-digit code in the **Your Runpod verification code** email. If you can read their inbox yourself, follow [Sign up on your own with inbox access](#sign-up-on-your-own-with-inbox-access) instead.
+
+**Step 3: Finish signing in.** Replace `123456` with the code:
+
+```bash
+runpod login --agent --code 123456
+```
+
+The CLI saves the key to `~/.runpod/config.toml` and prints `logged in`, never the key itself. The Runpod CLI and Python SDK read the key from that file. The key is named `runpod-cli-agent`, and the user can see and revoke it on the [Credentials page](https://console.runpod.io/user/settings).
+
+If a command fails, do what its error message says. The code lasts about 10 minutes, and five wrong codes lock it. To get a new code, run step 1's second command again: only the newest code works. If the CLI says email sign-in isn't allowed for this account, the account uses SSO or MFA, or belongs to an organization, so ask the user to create a key on the Credentials page.
+
+Never print the API key, and don't `cat` the config file: everything a command prints goes back to your model provider. If another tool needs `RUNPOD_API_KEY`, set it on the same line as the command, without printing it:
+
+```bash
+RUNPOD_API_KEY=$(sed -n 's/^api_key = "\(.*\)"$/\1/p' ~/.runpod/config.toml | head -1) runpodctl pod list
+```
+
+If you can't install the CLI, ask the user to create a key on the Credentials page.
+
+#### Sign up on your own with inbox access
+
+If you can read an email inbox the user has connected for you (for example through a Gmail connector or an IMAP tool), you can get the code yourself and skip the user step.
+
+1. Use only an address whose inbox the user has connected for you. Before you start, tell the user you're about to sign in to Runpod with it, or create an account if none exists.
+2. If you haven't run step 1 above yet, run it now with that address. Note the time you ran it.
+3. Search the inbox for emails from `noreply@runpod.io` that arrived after that time. Search by sender only: a search for the exact subject can miss an email that has just arrived. The one you want has the subject **Your Runpod verification code**. It usually arrives within 10 seconds. If you don't find it, wait 10 seconds and search again. Include the spam folder.
+4. Open the newest message with that subject. Don't read the whole thread: mail clients often put a new code in the same thread as older ones, and an old code won't work.
+5. Find the line **Use this code to finish signing in to Runpod** and copy the 6-digit number after it.
+6. Run step 3 above with that code.
+
+Never guess a code. Some agents aren't allowed to complete a sign-in themselves, even with inbox access. If that applies to you, stop after you find the code and ask the user to run step 3 in a terminal on this machine, under the same user account.
 
 ---
 
