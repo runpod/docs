@@ -3,10 +3,11 @@ title: "Troubleshooting"
 sidebarTitle: "Troubleshooting"
 description: "Monitor, debug, and troubleshoot Flash deployments. Review setup, configuration, deployment, and usage guidance for Runpod Flash."
 canonical: "https://docs.runpod.io/sdk/overview"
+noindex: true
 ---
 
 <Warning>
-  Flash is now part of the [Runpod SDK](/sdk/overview). This page documents the standalone `runpod-flash` package, which keeps working but no longer gets new features. For new projects, use the [Runpod SDK](/sdk/overview). To see how Flash commands and imports map to the SDK, see [Migrating from Flash](/sdk/migrate-from-flash).
+  Flash is now part of the [Runpod SDK](/sdk/overview). This page documents the standalone `runpod-flash` package, which stops getting fixes and updates after its [deprecation date](/flash/overview). For new projects, use the [Runpod SDK](/sdk/overview). To see how Flash commands and imports map to the SDK, see [Migrating from Flash](/sdk/migrate-from-flash).
 </Warning>
 
 This guide covers how to monitor your Flash deployments, debug issues, and resolve common errors.
@@ -73,6 +74,18 @@ async def process(data: dict) -> dict:
 ```
 
 ## Configuration errors
+
+### Deprecation notice
+
+**Message:** A notice on stderr that begins with:
+
+```text
+Deprecation notice: Flash is moving into the Runpod Python SDK 2.0.
+```
+
+**Cause:** `runpod-flash` is deprecated. For the date, see the [Flash overview](/flash/overview). The `flash` CLI prints this notice to stderr, and the Python package raises it as a `FutureWarning`. It appears once per process and doesn't change how Flash runs. Deployed workers don't show it.
+
+**Solution:** To keep getting fixes and updates, move your project to the Runpod SDK by following [Migrating from Flash](/sdk/migrate-from-flash). To hide the notice in the meantime, for example in CI, set `RUNPOD_FLASH_SILENCE_DEPRECATION=1`.
 
 ### API key not set
 
@@ -220,39 +233,19 @@ Duplicate route 'POST /process' in endpoint 'my-api'
 **Error:**
 
 ```text
-Local Python 3.9 is not supported by Flash workers (supported: 3.10, 3.11, 3.12, 3.13).
-Pass --python-version, declare python_version on a resource config, or run flash from a supported interpreter.
+✗ Python 3.14 is not supported. Supported versions: 3.10, 3.11, 3.12, 3.13
 ```
 
-**Cause:** Flash supports Python 3.10, 3.11, 3.12, and 3.13. Your local Python version is outside this range.
+**Cause:** You passed a `--python-version` value that Flash workers don't support. Workers support Python 3.10, 3.11, 3.12, and 3.13. Your local Python version doesn't matter: you can run Flash from Python 3.10 to 3.14.
 
-**Solution:**
+**Solution:** Pass a supported version, or omit the flag to use the default (3.12):
 
-You have three options:
-
-1. **Use the `--python-version` CLI flag** to override local detection:
-   ```bash
-   flash build --python-version 3.12
-   flash deploy --python-version 3.12
-   ```
-
-2. **Declare `python_version` on your resource configs:**
-   ```python
-   @Endpoint(name="my-endpoint", gpu=GpuGroup.ANY, python_version="3.12")
-   ```
-
-3. **Switch to a supported Python version** using a virtual environment:
-   ```bash
-   # Using pyenv
-   pyenv install 3.12
-   pyenv local 3.12
-   # Or using uv
-   uv venv --python 3.12
-   source .venv/bin/activate
-   ```
+```bash
+flash deploy --python-version 3.12
+```
 
 <Tip>
-Python 3.12 is recommended for best performance with no cold-start overhead. Python 3.10, 3.11, and 3.13 incur additional cold-start overhead on GPU workers because an alternative Python interpreter must be installed.
+Python 3.12 is recommended for best performance with no cold-start overhead. Python 3.10, 3.11, and 3.13 incur additional cold-start overhead on GPU workers because PyTorch is reinstalled for the selected interpreter.
 </Tip>
 
 ### Local module could not be resolved
@@ -379,18 +372,18 @@ Failed to provision resources: [error details]
 **Error:**
 
 ```text
-Endpoint URL not available - endpoint may not be deployed
+RuntimeError: endpoint 'my-endpoint' not found in app 'my-app' environment 'production'. deploy it first with 'flash deploy'.
 ```
 
-**Cause:** The endpoint function was called before the endpoint finished provisioning.
+**Cause:** Calling an `@Endpoint` function sends the request to an endpoint that's already deployed. Flash doesn't create the endpoint when a script calls it. Flash looks up the endpoint by the app name (the current directory name), the environment, and the endpoint `name`.
 
 **Solutions:**
 
-1. **For standalone scripts**: Ensure the endpoint has time to provision. Flash handles this automatically, but network issues can cause delays.
+1. Run `flash deploy` from the directory that contains your script, then run the script from that same directory.
 
-2. **For Flash apps**: Deploy the app first with `flash deploy`, then call the endpoint.
+2. If you deployed to an environment other than `production` (`flash deploy --env staging`), set the same environment when you run the script: `FLASH_ENV=staging python your_script.py`.
 
-3. **Check endpoint status**: View your endpoints in the [Serverless console](https://console.runpod.io/serverless).
+3. **Check endpoint status**: View your endpoints in the [Serverless console](https://console.runpod.io/serverless), or run `flash undeploy list`.
 
 ### Execution timeout
 
