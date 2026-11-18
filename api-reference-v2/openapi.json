@@ -76,6 +76,12 @@
         "write"
       ]
     },
+    "tags": {
+      "levels": [
+        "read",
+        "write"
+      ]
+    },
     "catalog": {
       "levels": [
         "read"
@@ -135,6 +141,10 @@
     {
       "name": "Cost Centers",
       "description": "Named labels that attribute resource spend for billing breakdowns."
+    },
+    {
+      "name": "Tags",
+      "description": "Key-value labels for organizing and filtering pods, clusters, serverless endpoints, and network volumes."
     },
     {
       "name": "Audit Logs",
@@ -222,6 +232,30 @@
                   "status": 400,
                   "detail": "request could not be processed"
                 }
+              }
+            }
+          }
+        }
+      },
+      "TemplateReadme": {
+        "headers": {
+          "RateLimit": {
+            "$ref": "#/components/headers/RateLimit"
+          },
+          "RateLimit-Policy": {
+            "$ref": "#/components/headers/RateLimit-Policy"
+          }
+        },
+        "description": "The template's README, as Markdown.",
+        "content": {
+          "text/markdown; charset=utf-8": {
+            "schema": {
+              "type": "string"
+            },
+            "examples": {
+              "readme": {
+                "summary": "Successful response",
+                "value": "# PyTorch 2.8\n\nJupyterLab on port 8888.\n"
               }
             }
           }
@@ -869,10 +903,12 @@
     "schemas": {
       "Organization": {
         "type": "object",
-        "description": "The authenticated caller's current organization.",
+        "description": "The authenticated caller's current organization. Its role and groups are the caller's membership in this organization.",
         "required": [
           "id",
-          "name"
+          "name",
+          "role",
+          "groups"
         ],
         "properties": {
           "id": {
@@ -888,6 +924,16 @@
             "examples": [
               "my-org"
             ]
+          },
+          "role": {
+            "$ref": "#/components/schemas/OrganizationRoleRef"
+          },
+          "groups": {
+            "type": "array",
+            "description": "The caller's groups in this organization. Empty when the caller belongs to no groups.",
+            "items": {
+              "$ref": "#/components/schemas/OrganizationGroupRef"
+            }
           }
         }
       },
@@ -1755,7 +1801,7 @@
               "global": {
                 "type": "array",
                 "maxItems": 1,
-                "description": "At most one global volume, on GPU and CPU pods, with no data\ncenter constraint. Combinable with `network` but not with\n`persistent` (rejected with 400): a persistent disk is dropped\nwhenever a volume is attached. Same PATCH rules as `network`.\n",
+                "description": "At most one global volume, with no data center constraint.\nCombinable with `network` but not with `persistent` (rejected\nwith 400): a persistent disk is dropped whenever a volume is\nattached. Same PATCH rules as `network`.\n",
                 "items": {
                   "$ref": "#/components/schemas/GlobalMount"
                 }
@@ -2448,6 +2494,23 @@
             "examples": [
               5
             ]
+          },
+          "initTimeout": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 60,
+            "maximum": 14400,
+            "x-go-type": "nullable.Nullable[int]",
+            "x-go-type-import": {
+              "path": "github.com/oapi-codegen/nullable"
+            },
+            "x-go-type-skip-optional-pointer": true,
+            "description": "Seconds a worker may take to become ready before it is terminated\nand replaced. In responses, the endpoint setting, or null if none is\nset. In PATCH, null clears the endpoint setting so the platform\ndefault applies. Changes apply to workers that start initializing\nafter the change and do not trigger a rollout.\n",
+            "examples": [
+              1800
+            ]
           }
         }
       },
@@ -2592,7 +2655,8 @@
                 ],
                 "required": [
                   "min",
-                  "max"
+                  "max",
+                  "initTimeout"
                 ]
               },
               "scaling": {
@@ -2639,6 +2703,26 @@
                 "format": "date-time",
                 "examples": [
                   "2026-03-13T20:00:00Z"
+                ]
+              },
+              "userId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "ID of the account the endpoint is stamped to. This is its\ncreator, unless the endpoint was migrated from a team. Omitted\nwhen unknown.\n",
+                "examples": [
+                  "user_abc123"
+                ]
+              },
+              "version": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "The endpoint's current worker configuration version. To see\nwhether a worker runs an older configuration, use its\n`isStale`: comparing versions directly can disagree on legacy\nendpoints (version 1). It changes on edits that roll out new\nworkers (image, template, compute, volumes, CUDA versions,\ndata centers) and not on scaling, worker count or timeout\nedits. Omitted when unknown.\n",
+                "examples": [
+                  4
                 ]
               }
             }
@@ -3894,6 +3978,66 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "Limit": {
+        "type": "object",
+        "required": [
+          "limit"
+        ],
+        "properties": {
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The cap. Null when the account has no limit.",
+            "examples": [
+              10
+            ]
+          }
+        }
+      },
+      "AccountLimits": {
+        "type": "object",
+        "required": [
+          "spendRate",
+          "serverlessWorkers"
+        ],
+        "properties": {
+          "spendRate": {
+            "type": "object",
+            "required": [
+              "limit",
+              "current"
+            ],
+            "description": "Spend rate limit: the hourly cap checked when a Pod or serverless worker starts. The start is refused when the hourly cost of running Pods and serverless workers plus the new one's cost would exceed it.",
+            "properties": {
+              "limit": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "format": "double",
+                "description": "Spend rate limit in USD per hour. Null when the account has no spend rate limit (postpaid accounts).",
+                "examples": [
+                  80
+                ]
+              },
+              "current": {
+                "type": "number",
+                "format": "double",
+                "description": "Current spend rate in USD per hour, the same value the console shows next to the limit. It also counts storage (network volumes, stopped Pods' disks), so it can be slightly higher than what the limit is checked against.",
+                "examples": [
+                  12.4
+                ]
+              }
+            }
+          },
+          "serverlessWorkers": {
+            "$ref": "#/components/schemas/Limit",
+            "description": "Sum of workersMax across all serverless endpoints."
           }
         }
       },
@@ -5884,7 +6028,7 @@
       "EndpointMountsInput": {
         "type": "object",
         "additionalProperties": false,
-        "description": "Volumes to mount on the endpoint's workers. A `network` or `global`\nlist that is present replaces the endpoint's current list of that kind;\nan empty list detaches it, and an omitted list is left unchanged. Both\nkinds cannot be present on the endpoint at once, so to switch kinds send\n`[]` for one and the new list for the other in the same request. Changes\napply to workers created afterwards. At most one global volume, GPU\nendpoints only. `network` may accompany the deprecated `networkVolumes` field\nonly if the two agree exactly.\n",
+        "description": "Volumes to mount on the endpoint's workers. A `network` or `global`\nlist that is present replaces the endpoint's current list of that kind;\nan empty list detaches it, and an omitted list is left unchanged. Both\nkinds cannot be present on the endpoint at once, so to switch kinds send\n`[]` for one and the new list for the other in the same request. Changes\napply to workers created afterwards. At most one global volume. `network`\nmay accompany the deprecated `networkVolumes` field only if the two agree\nexactly.\n",
         "properties": {
           "network": {
             "type": "array",
@@ -5951,6 +6095,28 @@
             "minLength": 1,
             "maxLength": 191,
             "description": "Registry username (write-only, not returned in responses)"
+          }
+        }
+      },
+      "UpdateRegistryRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "username",
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16384,
+            "description": "New registry password (write-only, not returned in responses)"
+          },
+          "username": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 191,
+            "description": "Registry username to store with the new password (write-only, not returned in responses)"
           }
         }
       },
@@ -6843,7 +7009,7 @@
         ],
         "properties": {
           "key": {
-            "$ref": "#/components/schemas/TagFilterKey"
+            "$ref": "#/components/schemas/TagKey"
           },
           "values": {
             "type": "array",
@@ -6862,7 +7028,7 @@
           }
         }
       },
-      "TagFilterKey": {
+      "TagKey": {
         "type": "string",
         "minLength": 1,
         "maxLength": 191,
@@ -6873,6 +7039,135 @@
         "description": "Tag key, 1–191 characters as sent, with at least one that is not whitespace. Leading and trailing whitespace is ignored. Keys under the reserved `runpod:` prefix, in any letter case, are rejected.",
         "examples": [
           "env"
+        ]
+      },
+      "Tag": {
+        "type": "object",
+        "required": [
+          "id",
+          "key",
+          "value",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Shared by every resource the tag is attached to.",
+            "examples": [
+              "clz1x9k4a0000qw3h8s7d2f1g"
+            ]
+          },
+          "key": {
+            "type": "string",
+            "description": "Returned exactly as stored.",
+            "examples": [
+              "env"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "description": "Returned exactly as stored. May be empty.",
+            "examples": [
+              "dev"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "examples": [
+              "2026-11-04T09:00:00Z"
+            ]
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "examples": [
+              "2026-11-04T09:00:00Z"
+            ]
+          }
+        }
+      },
+      "ListTagsResponse": {
+        "type": "object",
+        "required": [
+          "tags",
+          "pagination"
+        ],
+        "properties": {
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tag"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        }
+      },
+      "ListTagResourcesResponse": {
+        "type": "object",
+        "required": [
+          "resources",
+          "pagination"
+        ],
+        "properties": {
+          "resources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CostCenterResource"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        }
+      },
+      "CreateTagRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "value"
+        ],
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/TagKey"
+          },
+          "value": {
+            "$ref": "#/components/schemas/TagValue"
+          },
+          "resources": {
+            "type": "array",
+            "description": "Existing resources to attach the new tag to.",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/CostCenterResource"
+            }
+          }
+        }
+      },
+      "UpdateTagRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "description": "The fields to change; omitted fields are unchanged. Resources the tag is attached to stay attached.",
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/TagKey"
+          },
+          "value": {
+            "$ref": "#/components/schemas/TagValue"
+          }
+        }
+      },
+      "TagValue": {
+        "type": "string",
+        "maxLength": 191,
+        "description": "Tag value, at most 191 characters. May be empty. Stored exactly as sent, whitespace included.",
+        "examples": [
+          "dev"
         ]
       },
       "AuditLog": {
@@ -7020,6 +7315,37 @@
         "examples": [
           "day"
         ]
+      },
+      "BillingMode": {
+        "type": "string",
+        "enum": [
+          "PREPAID",
+          "POSTPAID"
+        ],
+        "description": "PREPAID accounts spend from the balance. POSTPAID accounts are invoiced, so a low balance doesn't stop them.",
+        "examples": [
+          "PREPAID"
+        ]
+      },
+      "Balance": {
+        "type": "object",
+        "required": [
+          "balanceAmount",
+          "billingMode"
+        ],
+        "properties": {
+          "balanceAmount": {
+            "type": "number",
+            "format": "double",
+            "description": "Account balance in USD. On a prepaid account, new Pods and workers are refused when it runs out.",
+            "examples": [
+              42.18
+            ]
+          },
+          "billingMode": {
+            "$ref": "#/components/schemas/BillingMode"
+          }
+        }
       },
       "BillingAmounts": {
         "type": "object",
@@ -7816,10 +8142,10 @@
         "summary": "Get your current organization",
         "x-mint": {
           "metadata": {
-            "description": "Retrieve the ID and name of your current Runpod organization through the REST API, including membership requirements and error responses."
+            "description": "Retrieve your current Runpod organization."
           }
         },
-        "description": "Returns the authenticated caller's current organization. Organization context comes from the caller's membership; no organization selector is required. Returns 404 when the caller does not belong to an organization, or 403 when organizations are unavailable to the caller.",
+        "description": "Returns the authenticated caller's current organization. Organization context comes from the caller's membership; no selector is required. Returns 404 when the caller does not belong to an organization, or 403 when organizations are unavailable to the caller.",
         "tags": [
           "Organization"
         ],
@@ -7844,7 +8170,18 @@
                     "summary": "Current organization",
                     "value": {
                       "id": "org_id_abc_123",
-                      "name": "my-org"
+                      "name": "my-org",
+                      "role": {
+                        "id": "builtin:dev",
+                        "type": "builtin",
+                        "name": "Developer"
+                      },
+                      "groups": [
+                        {
+                          "id": "group_id_abc_123",
+                          "name": "Engineering"
+                        }
+                      ]
                     }
                   }
                 }
@@ -8643,6 +8980,83 @@
                     "value": {
                       "id": "user_2abc123",
                       "email": "dev@example.com"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/account/limits": {
+      "get": {
+        "operationId": "getAccountLimits",
+        "x-runpod-scope": "account:read",
+        "summary": "Get account limits",
+        "x-mint": {
+          "metadata": {
+            "description": "Read the spend rate limit, current spend rate, and resource limits that apply to your Runpod account before you deploy."
+          }
+        },
+        "description": "Returns the limits that apply to the account this request acts for. A create or resume that would go past a limit is refused. Not available for organizations (403).",
+        "tags": [
+          "Account"
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountLimits"
+                },
+                "examples": {
+                  "free": {
+                    "summary": "Account on the free plan",
+                    "value": {
+                      "spendRate": {
+                        "limit": 80,
+                        "current": 12.4
+                      },
+                      "serverlessWorkers": {
+                        "limit": 10
+                      }
                     }
                   }
                 }
@@ -12166,7 +12580,7 @@
             "description": "Run one command inside a running Runpod Pod's container and get its stdout, stderr, and exit code back, with no SSH setup."
           }
         },
-        "description": "Runs one command inside the pod's container and returns its stdout,\nstderr and exit code once it finishes. No SSH key, public IP or exposed\nport is needed, and it works with any image.\n\n`command` is an argv array, run directly and never through a shell. For\npipes, redirects or globbing pass `[\"sh\", \"-c\", \"...\"]`.\n\nA command that exits non-zero is a result, not an error: the call\nanswers `200` with `exitCode` set. A command still running after\n`timeoutSeconds` (1-25, default 20) answers `200` with\n`timedOut: true` and a null `exitCode`. `timedOut` means the call\nstopped waiting, not that the command was stopped: it may keep\nrunning in the container.\n\n`stdout` and `stderr` are each capped at 1 MiB. Output past the cap is\ncut and `truncated` is `true`.\n\nThe pod must be running with its container up, otherwise this answers\n`409`; while the container is still starting, the `409` carries\n`Retry-After`. A pod whose machine has not been updated for exec yet\nanswers `503` with `Retry-After`.\n\n`X-Team-Id` is not applied on this route: it reaches only pods owned by\nthe caller's own account.\n",
+        "description": "Runs one command inside the pod's container and returns its stdout,\nstderr and exit code once it finishes. No SSH key, public IP or exposed\nport is needed, and it works with any image.\n\n`command` is an argv array, run directly and never through a shell. For\npipes, redirects or globbing pass `[\"sh\", \"-c\", \"...\"]`.\n\nA command that exits non-zero is a result, not an error: the call\nanswers `200` with `exitCode` set. A command still running after\n`timeoutSeconds` (1-25, default 20) answers `200` with\n`timedOut: true` and a null `exitCode`. `timedOut` means the call\nstopped waiting, not that the command was stopped: it may keep\nrunning in the container.\n\n`stdout` and `stderr` are each capped at 1 MiB. Output past the cap is\ncut and `truncated` is `true`.\n\nThe pod must be running with its container up, otherwise this answers\n`409`; while the container is still starting, the `409` carries\n`Retry-After`. A pod whose machine has not been updated for exec yet\nanswers `503` with `Retry-After`.\n\nA caller whose team or organization role lacks the Terminal permission\ngets `403`.\n",
         "tags": [
           "Pods"
         ],
@@ -13156,7 +13570,8 @@
                           "workers": {
                             "min": 0,
                             "max": 5,
-                            "idleTimeout": 5
+                            "idleTimeout": 5,
+                            "initTimeout": null
                           },
                           "scaling": {
                             "type": "QUEUE_DELAY",
@@ -13360,7 +13775,8 @@
                       "workers": {
                         "min": 0,
                         "max": 5,
-                        "idleTimeout": 5
+                        "idleTimeout": 5,
+                        "initTimeout": null
                       },
                       "scaling": {
                         "type": "QUEUE_DELAY",
@@ -13422,7 +13838,8 @@
                       "workers": {
                         "min": 0,
                         "max": 3,
-                        "idleTimeout": 10
+                        "idleTimeout": 10,
+                        "initTimeout": null
                       },
                       "scaling": {
                         "type": "QUEUE_DELAY",
@@ -13559,7 +13976,8 @@
                       "workers": {
                         "min": 0,
                         "max": 5,
-                        "idleTimeout": 5
+                        "idleTimeout": 5,
+                        "initTimeout": null
                       },
                       "scaling": {
                         "type": "REQUEST_COUNT",
@@ -13629,7 +14047,7 @@
             "description": "Update selected settings on a Runpod Serverless endpoint, including compute, workers, scaling, storage, and container configuration."
           }
         },
-        "description": "Partially updates a serverless endpoint. This is a PATCH: only the\nfields present in the body are changed; omitted fields are left\nuntouched. See `UpdateEndpointRequest` for the full body.\n\nMutable fields: `name`, `gpu`, `cpu`, `workers` (`min`/`max`),\n`scaling` (`type`/`value`/`idleTimeout`), `dataCenterIds`,\n`networkVolumes`, `timeout`, `flashboot`, and the\ncontainer settings (`image`, `args`, `disk`, `ports`, `env`,\n`registry`). A patch that leaves the endpoint pulling a private\nAmazon ECR image with no `registry` credential is checked against\nyour ECR delegations as on create (400 when none covers the\nrepository, 403 when the caller's organization role cannot use\ndelegations); a patch that changes neither `image` nor `registry`\nis not.\n\nOmitted compute preserves the current selection. `cpu` completely\nreplaces a CPU endpoint's selection; compute family is immutable.\n`gpu` on CPU, `cpu` on GPU, or both fields returns 400.\n\nReturns `200` with the full updated endpoint. Effect timing differs\nby field: scaling and worker-bound settings (`workers`, `scaling`,\n`timeout`) are applied to the autoscaler promptly, while\ncontainer-affecting changes (e.g. `image`, `env`) create a new\nendpoint release that rolls out as workers cycle — in-flight workers\nkeep the previous version until they are replaced. Track rollout via\n`listEndpointReleases`.\n",
+        "description": "Partially updates a serverless endpoint. This is a PATCH: only the\nfields present in the body are changed; omitted fields are left\nuntouched. See `UpdateEndpointRequest` for the full body.\n\nMutable fields: `name`, `gpu`, `cpu`, `workers` (`min`/`max`/`initTimeout`),\n`scaling` (`type`/`value`/`idleTimeout`), `dataCenterIds`,\n`networkVolumes`, `timeout`, `flashboot`, and the\ncontainer settings (`image`, `args`, `disk`, `ports`, `env`,\n`registry`). A patch that leaves the endpoint pulling a private\nAmazon ECR image with no `registry` credential is checked against\nyour ECR delegations as on create (400 when none covers the\nrepository, 403 when the caller's organization role cannot use\ndelegations); a patch that changes neither `image` nor `registry`\nis not.\n\nOmitted compute preserves the current selection. `cpu` completely\nreplaces a CPU endpoint's selection; compute family is immutable.\n`gpu` on CPU, `cpu` on GPU, or both fields returns 400.\n\nReturns `200` with the full updated endpoint. Effect timing differs\nby field: scaling and worker-bound settings (`workers`, `scaling`,\n`timeout`) are applied to the autoscaler promptly, while\ncontainer-affecting changes (e.g. `image`, `env`) create a new\nendpoint release that rolls out as workers cycle — in-flight workers\nkeep the previous version until they are replaced. Track rollout via\n`listEndpointReleases`.\n",
         "tags": [
           "Serverless"
         ],
@@ -13652,6 +14070,23 @@
                     "scaling": {
                       "type": "QUEUE_DELAY",
                       "queueDelay": 8
+                    }
+                  }
+                },
+                "setInitTimeout": {
+                  "summary": "Give workers longer to start",
+                  "value": {
+                    "workers": {
+                      "initTimeout": 1800
+                    }
+                  }
+                },
+                "clearInitTimeout": {
+                  "summary": "Clear the initialization timeout",
+                  "description": "`null` removes the endpoint setting so the platform default\napplies. Omitting `initTimeout` leaves it unchanged.\n",
+                  "value": {
+                    "workers": {
+                      "initTimeout": null
                     }
                   }
                 },
@@ -13737,7 +14172,8 @@
                       "workers": {
                         "min": 1,
                         "max": 10,
-                        "idleTimeout": 10
+                        "idleTimeout": 10,
+                        "initTimeout": null
                       },
                       "scaling": {
                         "type": "QUEUE_DELAY",
@@ -15404,6 +15840,68 @@
         }
       }
     },
+    "/v2/templates/{id}/readme": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "example": "tpl_abc"
+        }
+      ],
+      "get": {
+        "operationId": "getTemplateReadme",
+        "x-runpod-scope": "templates:read",
+        "summary": "Get a template README",
+        "x-mint": {
+          "metadata": {
+            "description": "Retrieve the Markdown README of an owned or public Runpod template, with setup and usage instructions."
+          }
+        },
+        "description": "Returns the template's README as raw Markdown. Serves the same\ntemplates as `GET /v2/templates/{id}`: templates you own and public\ncatalog templates. Returns `404` when the template does not exist,\nis not readable by you, or has no README.\n",
+        "tags": [
+          "Templates"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/TemplateReadme"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v2/network-volumes": {
       "get": {
         "operationId": "listNetworkVolumes",
@@ -16527,6 +17025,7 @@
       }
     },
     "/v2/registries/{id}": {
+      "x-runpod-sensitive-request": true,
       "parameters": [
         {
           "name": "id",
@@ -16587,6 +17086,107 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFoundError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateRegistry",
+        "x-runpod-scope": "secrets:write",
+        "summary": "Update a container registry credential",
+        "x-mint": {
+          "metadata": {
+            "description": "Rotate the username and password of a Runpod container registry credential in place, without repointing the Pods, templates, and Serverless endpoints that use it."
+          }
+        },
+        "description": "Replaces the username and password stored in a container registry\ncredential. The ID and `name` stay the same, so every pod, template,\nand Serverless endpoint that references the credential keeps\nreferencing it and needs no change.\n\nSend both `username` and `password`, even when only one of them\nchanged. They are stored together and are write-only, so there is no\nstored value to keep for an omitted field.\n\nThe new credentials apply to image pulls that start after the update.\nRunning pods and workers keep the image they already pulled.\n",
+        "tags": [
+          "Registries"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRegistryRequest"
+              },
+              "examples": {
+                "rotatePassword": {
+                  "summary": "Rotate the password",
+                  "value": {
+                    "username": "runpod-user",
+                    "password": "new-correct-horse-battery-staple"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Registry"
+                },
+                "examples": {
+                  "registry": {
+                    "summary": "Successful response",
+                    "value": {
+                      "id": "6n2k8v4d",
+                      "name": "dockerhub-private"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequestsError"
@@ -17807,6 +18407,68 @@
         }
       }
     },
+    "/v2/catalog/templates/{id}/readme": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "example": "30zmvf89kd"
+        }
+      ],
+      "get": {
+        "operationId": "getPublicTemplateReadme",
+        "x-runpod-scope": "catalog:read",
+        "summary": "Get a public template README",
+        "x-mint": {
+          "metadata": {
+            "description": "Retrieve the Markdown README of a public Runpod template, with setup and usage instructions."
+          }
+        },
+        "description": "Returns the README of a public catalog template as raw Markdown.\nOnly public templates are served. Returns `404` when the template does\nnot exist, is not public, or has no README. Use\n`GET /v2/templates/{id}/readme` for your private templates.\n",
+        "tags": [
+          "Catalog"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/TemplateReadme"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v2/cost-centers": {
       "get": {
         "operationId": "listCostCenters",
@@ -18577,6 +19239,789 @@
         }
       }
     },
+    "/v2/tags": {
+      "get": {
+        "operationId": "listTags",
+        "x-runpod-scope": "tags:read",
+        "summary": "List tags",
+        "x-mint": {
+          "metadata": {
+            "description": "List the Runpod tags available to the authenticated user."
+          }
+        },
+        "description": "Returns the caller's tags, newest first, cursor-paginated. Tags under\nthe reserved `runpod:` prefix, such as cost centers, are never listed.\nFollow `pagination.nextCursor` until `hasNextPage` is false.\n",
+        "tags": [
+          "Tags"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PaginationCursor"
+          },
+          {
+            "$ref": "#/components/parameters/PaginationLimit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListTagsResponse"
+                },
+                "examples": {
+                  "tags": {
+                    "summary": "Successful response",
+                    "value": {
+                      "tags": [
+                        {
+                          "id": "clz1x9k4a0000qw3h8s7d2f1g",
+                          "key": "env",
+                          "value": "dev",
+                          "createdAt": "2026-11-04T09:00:00Z",
+                          "updatedAt": "2026-11-04T09:00:00Z"
+                        }
+                      ],
+                      "pagination": {
+                        "nextCursor": null,
+                        "hasNextPage": false
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "413": {
+            "$ref": "#/components/responses/ResponseTooLargeError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createTag",
+        "x-runpod-scope": "tags:write",
+        "summary": "Create a tag",
+        "x-mint": {
+          "metadata": {
+            "description": "Create a Runpod tag and optionally attach it to pods, clusters, serverless endpoints, and network volumes."
+          }
+        },
+        "description": "Creates a tag. Pass `resources` to attach it at creation time; the tag is created and attached in one step, so if any resource cannot be attached, no tag is created.",
+        "tags": [
+          "Tags"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTagRequest"
+              },
+              "examples": {
+                "bare": {
+                  "summary": "Key and value only",
+                  "value": {
+                    "key": "env",
+                    "value": "dev"
+                  }
+                },
+                "withResources": {
+                  "summary": "With resources attached",
+                  "value": {
+                    "key": "env",
+                    "value": "dev",
+                    "resources": [
+                      {
+                        "id": "p9k2m4n6q8",
+                        "type": "POD"
+                      },
+                      {
+                        "id": "nv_7h3x1q",
+                        "type": "NETWORK_VOLUME"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tag"
+                },
+                "examples": {
+                  "tag": {
+                    "summary": "Successful response",
+                    "value": {
+                      "id": "clz1x9k4a0000qw3h8s7d2f1g",
+                      "key": "env",
+                      "value": "dev",
+                      "createdAt": "2026-11-04T09:00:00Z",
+                      "updatedAt": "2026-11-04T09:00:00Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "409": {
+            "description": "A tag with this key and value already exists, or a resource already carries 25 public tags, the most one resource can carry. In the second case the detail names the resource.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/tags/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Tag identifier."
+        }
+      ],
+      "get": {
+        "operationId": "getTag",
+        "x-runpod-scope": "tags:read",
+        "summary": "Get a tag",
+        "x-mint": {
+          "metadata": {
+            "description": "Retrieve a Runpod tag by ID."
+          }
+        },
+        "description": "Returns one tag. Its ID stays the same when the key or value changes. Returns 404 when the tag does not exist, is deleted, is not the caller's, or is reserved: a cost center ID is a reserved tag, so read it through `GET /v2/cost-centers/{id}`.",
+        "tags": [
+          "Tags"
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tag"
+                },
+                "examples": {
+                  "tag": {
+                    "summary": "Successful response",
+                    "value": {
+                      "id": "clz1x9k4a0000qw3h8s7d2f1g",
+                      "key": "env",
+                      "value": "dev",
+                      "createdAt": "2026-11-04T09:00:00Z",
+                      "updatedAt": "2026-11-04T09:00:00Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateTag",
+        "x-runpod-scope": "tags:write",
+        "summary": "Update a tag",
+        "x-mint": {
+          "metadata": {
+            "description": "Change the key or value of a Runpod tag. Resources it is attached to keep it."
+          }
+        },
+        "description": "Changes a tag's key, value, or both. The tag keeps its ID and stays attached to the same resources. Returns 404 when the tag does not exist or is not the caller's.",
+        "tags": [
+          "Tags"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTagRequest"
+              },
+              "examples": {
+                "value": {
+                  "summary": "Change the value",
+                  "value": {
+                    "value": "prod"
+                  }
+                },
+                "keyAndValue": {
+                  "summary": "Change the key and value",
+                  "value": {
+                    "key": "environment",
+                    "value": "prod"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tag"
+                },
+                "examples": {
+                  "tag": {
+                    "summary": "Successful response",
+                    "value": {
+                      "id": "clz1x9k4a0000qw3h8s7d2f1g",
+                      "key": "environment",
+                      "value": "prod",
+                      "createdAt": "2026-11-04T09:00:00Z",
+                      "updatedAt": "2026-11-04T09:30:00Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "409": {
+            "description": "Another tag already has this key and value.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteTag",
+        "x-runpod-scope": "tags:write",
+        "summary": "Delete a tag",
+        "x-mint": {
+          "metadata": {
+            "description": "Delete a Runpod tag and remove it from every resource it is attached to."
+          }
+        },
+        "description": "Deletes a tag and removes it from every resource it is attached to. The resources themselves are unchanged, and nothing needs to be detached first. Returns 404 when the tag does not exist, is already deleted, is not the caller's, or is reserved: a cost center ID is a reserved tag, so delete it through `DELETE /v2/cost-centers/{id}`.",
+        "tags": [
+          "Tags"
+        ],
+        "responses": {
+          "204": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Deleted. Response has no body."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/tags/{id}/resources": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Tag identifier."
+        }
+      ],
+      "get": {
+        "operationId": "listTagResources",
+        "x-runpod-scope": "tags:read",
+        "summary": "List a tag's resources",
+        "x-mint": {
+          "metadata": {
+            "description": "List the Runpod pods, clusters, serverless endpoints, and network volumes a tag is attached to."
+          }
+        },
+        "description": "Returns the resources a tag is attached to, newest attachment first,\ncursor-paginated. Each entry is the `{type}/{id}` pair\n`/v2/tags/{id}/resources/{resourceType}/{resourceId}` takes. A tag\nattached to nothing returns an empty list; one that does not exist, is\ndeleted, is not the caller's, or is reserved returns 404.\n",
+        "tags": [
+          "Tags"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PaginationCursor"
+          },
+          {
+            "$ref": "#/components/parameters/PaginationLimit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListTagResourcesResponse"
+                },
+                "examples": {
+                  "resources": {
+                    "summary": "Successful response",
+                    "value": {
+                      "resources": [
+                        {
+                          "id": "p9k2m4n6q8",
+                          "type": "POD"
+                        },
+                        {
+                          "id": "nv_7h3x1q",
+                          "type": "NETWORK_VOLUME"
+                        }
+                      ],
+                      "pagination": {
+                        "nextCursor": null,
+                        "hasNextPage": false
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "413": {
+            "$ref": "#/components/responses/ResponseTooLargeError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/tags/{id}/resources/{resourceType}/{resourceId}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Tag identifier."
+        },
+        {
+          "name": "resourceType",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/ResourceType"
+          },
+          "description": "Kind of resource."
+        },
+        {
+          "name": "resourceId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Resource identifier."
+        }
+      ],
+      "put": {
+        "operationId": "attachTagResource",
+        "x-runpod-scope": "tags:write",
+        "summary": "Attach a tag to a resource",
+        "x-mint": {
+          "metadata": {
+            "description": "Attach a Runpod tag to a pod, cluster, serverless endpoint, or network volume."
+          }
+        },
+        "description": "Attaches a tag to a resource. Repeating the request is a no-op. A resource can carry several tags. Returns 404 when the tag or the resource does not exist or is not the caller's; the detail names a missing resource as `{resourceType}/{resourceId}`.",
+        "tags": [
+          "Tags"
+        ],
+        "responses": {
+          "204": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Attached. Response has no body."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "409": {
+            "description": "The resource already carries 25 public tags, the most one resource can carry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "detachTagResource",
+        "x-runpod-scope": "tags:write",
+        "summary": "Remove a tag from a resource",
+        "x-mint": {
+          "metadata": {
+            "description": "Remove a Runpod tag from a pod, cluster, serverless endpoint, or network volume."
+          }
+        },
+        "description": "Removes a tag from one resource. The tag, the resource and the tag's other attachments are untouched. Returns 404 when the tag does not exist, is not the caller's, or is reserved (a cost center); when the resource does not carry it, so repeating a DELETE that succeeded returns 404; or when the resource is not the caller's to change. The detail names that last resource as `{resourceType}/{resourceId}`.",
+        "tags": [
+          "Tags"
+        ],
+        "responses": {
+          "204": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Removed. Response has no body."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v2/audit-logs": {
       "get": {
         "operationId": "listAuditLogs",
@@ -18687,6 +20132,81 @@
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/billing/balance": {
+      "get": {
+        "operationId": "getBalance",
+        "x-runpod-scope": "billing:read",
+        "summary": "Get the account balance",
+        "x-mint": {
+          "metadata": {
+            "description": "Read your Runpod account balance and billing mode before you deploy."
+          }
+        },
+        "description": "Returns the balance of the account this request acts for: your own account, the team selected for the request, or your organization. An organization with no billing account answers 404.",
+        "tags": [
+          "Billing"
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Balance"
+                },
+                "examples": {
+                  "prepaid": {
+                    "summary": "Prepaid account",
+                    "value": {
+                      "balanceAmount": 42.18,
+                      "billingMode": "PREPAID"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequestsError"
