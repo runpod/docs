@@ -13,7 +13,7 @@ Ray Clusters are Instant Clusters that start a [Ray](https://docs.ray.io/) clust
 
 Every Ray Cluster runs the supported Ray cluster image (`runpod/ray-cluster`) or an image you build from it. The image starts Ray on each node, so you don't need to install Ray or run `ray start` yourself.
 
-To deploy your first Ray Cluster, follow the [distributed inference quickstart](/instant-clusters/ray-vllm).
+To deploy your first Ray Cluster, follow the [Ray Clusters quickstart](/instant-clusters/ray-quickstart).
 
 ## How Ray Clusters work
 
@@ -139,41 +139,31 @@ The token is the value of `RAY_DASHBOARD_PASSWORD`, or `JUPYTER_PASSWORD` if `RA
 The Ray dashboard shows metrics in two places:
 
 - **Cluster** tab: live CPU, GPU, memory, and disk usage for each node. Available with no setup.
-- **Metrics** tab: historical charts for every node, plus vLLM serving metrics on the inference variant.
+- **Metrics** tab: historical charts for every node.
 
-The **Metrics** tab is powered by a Prometheus and Grafana stack that runs on the head node. Prometheus discovers each node's metrics endpoint automatically, and Grafana comes with Ray's standard dashboards. Retention is capped by time and size so the stack can't fill the head node's disk.
+The **Metrics** tab is powered by a Prometheus and Grafana stack that runs on the head node. Prometheus discovers each node's metrics endpoint automatically, and Grafana comes with Ray's standard dashboards. When you open the Ray dashboard, it signs you in to Grafana too, so the charts load without a separate sign-in. Retention is capped by time and size so the stack can't fill the head node's disk.
 
 Metrics data stays on the head node, inside your cluster, and is deleted when you delete the cluster.
 
 New data takes a short time to reach the **Metrics** tab, so charts can lag the **Cluster** tab by a minute or more after a workload starts.
 
-{/* TODO(DOCS-609): remove this note once STO-1246 ships, if the single ?token= link signs in to Grafana too. */}
-
-<Note>
-
-If the **Metrics** tab is empty, open Grafana on port `8889` with the same `?token=` value once, then reload the dashboard.
-
-</Note>
-
 If you already run your own monitoring stack, set `RAY_CLUSTER_METRICS=0` to turn off the bundled stack. You can scrape each node's metrics endpoint at `node-RANK:20217/metrics` from inside the cluster.
 
 ## Build a custom image
 
-Build your own image when you need dependencies that are slow to install for every job, a different serving framework, or a locked, reproducible production image. Start from a pinned tag of the supported image:
+Build your own image when you need dependencies that are slow to install for every job, or a locked, reproducible production image. Start from a pinned tag of the supported image and add your dependencies:
 
 ```dockerfile
 FROM runpod/ray-cluster:TAG
 
 # Add your dependencies.
 RUN pip install --no-cache-dir my-package==1.2.3
-
-# Optional: replace the default start command.
-CMD ["python", "/app/serve.py"]
 ```
 
-Your image inherits the supported image's entrypoint and the `com.runpod.ray-cluster.contract` label that Ray Clusters require. To keep your image compatible:
+Your image inherits the supported image's entrypoint, start command, and the `com.runpod.ray-cluster.contract` label that Ray Clusters require. To keep your image compatible:
 
 - Don't override `ENTRYPOINT`. The entrypoint is what starts Ray on each node.
+- Don't override `CMD`. The start command runs the Ray dashboard, JupyterLab, and Grafana on the head node, and changing it breaks them.
 - Don't upgrade or downgrade Ray. The image logs a warning if the Ray version changes.
 - Don't use ports `8265` or `20217` for your own services.
 
@@ -184,12 +174,12 @@ After you push the image, create a [template](/pods/templates/manage-templates) 
 ## Limitations
 
 - Ray Clusters run only on the supported image or an image built from it. Creating a Ray Cluster with any other image fails.
-- Ray Clusters can only be created from the console. The REST API doesn't support creating Ray Clusters.
+- Ray Clusters can only be created from the console. Support for creating them through the REST API is planned.
 - The status shown on the cluster card reflects the requested cluster, not whether Ray is ready. Run `ray status` on the head node to check readiness.
 - Ray processes aren't restarted automatically. If Ray exits on a node, the Pod stays up so you can connect and investigate, but that node leaves the cluster.
 - If the head node restarts, workers that were already running don't rejoin on their own. Restart the worker Pods after the head node is back.
 
-{/* TODO(DOCS-609): Taylor is investigating API/agent support (11/12 demo). Remove the API bullet if it ships. Remove the status bullet once the console readout is fixed. */}
+{/* TODO(DOCS-609): remove the cluster card status bullet once the latest main-ui changes are deployed to prod (fixed, not yet deployed). Update the API bullet when API support ships. */}
 
 ## Troubleshooting
 
@@ -213,16 +203,12 @@ ray status
 
 The output lists each node that has joined. If a node is missing, check that Pod's logs for the entrypoint output. Workers retry until `node-0` is reachable, so a worker that started before the head node joins once the head node is running.
 
-### Requests return `503`
-
-The model is still loading. Large models can take several minutes to download and load across all nodes. To follow progress, connect to the head node and attach to the vLLM session with `screen -r`.
-
 ### Dashboard returns `403`
 
 The request has no token or the wrong token. Open the dashboard from the console, or add `?token=` with your `RAY_DASHBOARD_PASSWORD` (or `JUPYTER_PASSWORD`) value.
 
 ## Next steps
 
-- [Deploy a Ray Cluster for distributed inference with vLLM](/instant-clusters/ray-vllm).
+- [Deploy your first Ray Cluster](/instant-clusters/ray-quickstart).
 - [Review Instant Cluster environment variables and networking](/instant-clusters/configuration).
-- [Attach a network volume](/storage/network-volumes) to share models and data across nodes.
+- [Attach a network volume](/storage/network-volumes) to share data and environments across nodes.
