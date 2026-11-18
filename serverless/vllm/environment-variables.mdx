@@ -10,13 +10,13 @@ Environment variables let you configure your vLLM workers without rebuilding you
 
 To set environment variables, go to your [endpoint settings](/serverless/endpoints/overview#edit-an-endpoint) and add them under **Environment Variables**.
 
-The latest [vLLM worker release](https://github.com/runpod-workers/worker-vllm/releases) is built on vLLM v0.33.0. The worker starts `vllm serve` with flags built from your environment variables. The tables below list common settings, but you're not limited to them:
+The latest [vLLM worker release](https://github.com/runpod-workers/worker-vllm/releases) is built on vLLM v0.34.0. The worker starts `vllm serve` with flags built from your environment variables. The tables below list common settings, but you're not limited to them:
 
 - Any environment variable named after a `vllm serve` flag in upper snake case becomes that flag. For example, `MAX_MODEL_LEN=4096` becomes `--max-model-len 4096`.
 - Boolean variables take `true` or `false`.
 - `VLLM_EXTRA_ARGS` passes extra flags straight to `vllm serve`. They're added last, so they override any earlier setting. Use it for flags that don't have an environment variable, for example `VLLM_EXTRA_ARGS="--tool-call-parser qwen3_coder --enable-auto-tool-choice"`.
 
-You can use any tool-call parser or speculative decoding method that vLLM v0.33.0 supports, such as MTP, even if the tables below don't list it.
+You can use any tool-call parser or speculative decoding method that vLLM v0.34.0 supports, such as MTP, even if the tables below don't list it.
 
 <Warning>
 
@@ -94,10 +94,10 @@ Configure GPU memory and system resource utilization.
 
 | Variable | Default | Type(s) | Description |
 | --- | --- | --- | --- |
-| `GPU_MEMORY_UTILIZATION` | `0.95` | `float` | Fraction of GPU VRAM vLLM is allowed to use for KV cache and runtime allocations. Lower if you hit CUDA OOM; raise if you have VRAM headroom. |
+| `GPU_MEMORY_UTILIZATION` | `0.95` | `float` | Fraction of GPU VRAM vLLM can use. The Hub template sets `0.95`. If unset, vLLM uses `1.0` and sizes the KV cache from the memory left free after startup. Lower it if you hit CUDA OOM or other processes share the GPU. |
 | `MAX_PARALLEL_LOADING_WORKERS` | None | `int` | Loads the model sequentially in multiple batches to avoid RAM OOM when using tensor parallelism and large models. |
 | `ENABLE_CHUNKED_PREFILL` | `True` | `bool` | If `True`, enables chunked prefill requests. |
-| `BLOCK_SIZE` | `16` | `8`, `16`, `32` | The token block size for contiguous chunks of tokens. |
+| `BLOCK_SIZE` | `16` | `int` | The token block size for contiguous chunks of tokens. The Hub template sets `16`. If unset, vLLM uses `64`. |
 | `ENFORCE_EAGER` | `False` | `bool` | If `True`, always uses eager-mode PyTorch. If `False`, uses a hybrid of eager mode and CUDA graphs for maximal performance and flexibility. |
 | `DISABLE_CUSTOM_ALL_REDUCE` | `False` | `bool` | If `True`, disables custom all-reduce. |
 | `ENABLE_EXPERT_PARALLEL` | `False` | `bool` | Enable expert parallelism for Mixture of Experts (MoE) models. |
@@ -127,6 +127,8 @@ Configure OpenAI API compatibility features.
 <Note>
 
 `TOOL_CALL_PARSER` tells vLLM how to interpret a model's tool-call output. If the parser doesn't match the model's format, tool calls may not be detected (or may error during parsing).
+
+With `llama3_json`, streamed responses return each tool call's arguments in one chunk instead of token by token.
 
 </Note>
 
@@ -159,7 +161,7 @@ These arguments are used when building a custom worker image, for example to bak
 
 | Argument | Default | Type | Description |
 | --- | --- | --- | --- |
-| `VLLM_VERSION` | `v0.33.0` | `str` | Tag of the official `vllm/vllm-openai` base image. |
+| `VLLM_VERSION` | `v0.34.0` | `str` | Tag of the official `vllm/vllm-openai` base image. |
 | `MODEL_NAME` | None | `str` | If set, the model is baked into the image at build time. |
 | `MODEL_REVISION` | `main` | `str` | Model revision for the baked model. |
 | `TOKENIZER_NAME` | None | `str` | Optional separate tokenizer repo. Defaults to the model's tokenizer. |
@@ -183,5 +185,10 @@ The worker no longer reads the following variables. Setting one has no effect. V
 | `MAX_SEQ_LEN_TO_CAPTURE`, `MAX_CONTEXT_LEN_TO_CAPTURE` | No replacement. |
 | `SWAP_SPACE`, `LORA_EXTRA_VOCAB_SIZE`, `USE_V2_BLOCK_MANAGER`, `WORKER_USE_RAY`, `TOKENIZER_POOL_SIZE`, `TOKENIZER_POOL_TYPE`, `TOKENIZER_POOL_EXTRA_CONFIG`, `PREEMPTION_MODE`, `PREEMPTION_CHECK_PERIOD`, `PREEMPTION_CPU_CAPACITY`, `SCHEDULER_DELAY_FACTOR` | No replacement. |
 | `VLLM_API_KEY` | Nothing. Runpod authenticates requests with your Runpod API key. |
+
+vLLM itself fails at startup if your endpoint sets either of these vLLM variables:
+
+- `VLLM_USE_V2_MODEL_RUNNER` with any value other than `1`. Remove the variable. vLLM v0.34.0 always uses the V2 model runner.
+- `VLLM_MARLIN_INPUT_DTYPE`. Remove the variable. For 8-bit activations, set `QUANTIZATION=humming` and set the activation data type in `VLLM_HUMMING_INPUT_QUANT_CONFIG`.
 
 For the complete list, see the worker's [configuration reference](https://github.com/runpod-workers/worker-vllm/blob/main/docs/configuration.md).
