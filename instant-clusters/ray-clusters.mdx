@@ -172,9 +172,45 @@ RUN pip install --no-cache-dir my-package==1.2.3
 Your image inherits the supported image's entrypoint, start command, and the `com.runpod.ray-cluster.contract` label that Ray Clusters require. To keep your image compatible:
 
 - Don't override `ENTRYPOINT`. The entrypoint is what starts Ray on each node.
-- Don't override `CMD`. The start command runs the Ray dashboard, JupyterLab, and Grafana on the head node, and changing it breaks them.
+- If you set your own `CMD`, end it with `/start.sh`. See [run your own start command](#run-your-own-start-command).
 - Don't upgrade or downgrade Ray. The image logs a warning if the Ray version changes.
 - Don't use ports `8265` or `20217` for your own services.
+
+### Run your own start command
+
+The image's default start command is `/start.sh`, which starts SSH, JupyterLab, the Ray dashboard proxy, and Grafana. The entrypoint starts Ray first and then runs the start command, so a custom `CMD` replaces `/start.sh`. If your command doesn't call it, those services don't start, and you can't connect to any node over SSH.
+
+To run your own commands when the container starts, put them in a script that ends by handing off to `/start.sh`:
+
+```bash start.sh
+#!/bin/bash
+set -euo pipefail
+
+# Your per-boot setup.
+python /opt/app/setup.py
+
+# Hand off to the base image's start script.
+exec /start.sh
+```
+
+```dockerfile
+FROM runpod/ray-cluster:TAG
+
+COPY start.sh /opt/app/start.sh
+RUN chmod +x /opt/app/start.sh
+CMD ["/opt/app/start.sh"]
+```
+
+`/start.sh` keeps running after the services start, so handing off with `exec` also keeps the container up. To run a long-lived process alongside the services, start it in the background before the handoff: `my-app & exec /start.sh`.
+
+The start command runs on every node. To run a step only on the head node, check `NODE_RANK`:
+
+```bash
+if [[ "$NODE_RANK" == "0" ]]; then
+    serve deploy /workspace/serve_config.yaml &
+fi
+exec /start.sh
+```
 
 After you push the image, create a [template](/pods/templates/manage-templates) that uses it, then select that template when you create a Ray Cluster.
 
