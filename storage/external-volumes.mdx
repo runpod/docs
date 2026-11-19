@@ -9,7 +9,7 @@ External volumes are in beta and available to enterprise accounts only. Features
 
 </Note>
 
-An external volume lets you mount an S3-compatible bucket you already own on Pods and Serverless workers, in any data center. Your data stays in your bucket. Runpod doesn't copy, move, or delete it, and doesn't charge a storage fee. You pay your storage provider directly.
+An external volume lets you mount an S3-compatible bucket you already own on Pods and Serverless workers in any Secure Cloud data center. Your data stays in your bucket. Runpod doesn't copy, move, or delete it, and doesn't charge a storage fee. You pay your storage provider directly.
 
 Like a [global volume](/storage/globalvolume/overview), an external volume appears as a directory inside the container, so your code reads and writes files without an S3 client. The difference is where the data lives: Runpod provisions and manages a global volume for you, while an external volume is your own bucket, plus the credentials Runpod needs to reach it.
 
@@ -17,7 +17,7 @@ Use an external volume when:
 
 - Your datasets or model weights already live in a bucket and you don't want to migrate them.
 - Your data must stay with a specific provider or in a specific region.
-- You want Pods in any data center to read the same data, without duplicating volumes.
+- You want Pods in any Secure Cloud data center to read the same data, without duplicating volumes.
 
 ## Requirements
 
@@ -115,7 +115,7 @@ When you create an external volume, Runpod checks the credential against your bu
     Enter the **Access key ID** and **Secret access key**. You can't view the secret again after saving.
   </Step>
   <Step title="Connect the bucket">
-    Optionally add tags, then click **Connect bucket**.
+    Click **Connect bucket**.
   </Step>
 </Steps>
 
@@ -129,17 +129,16 @@ Attach an external volume when you deploy a Pod, from the **Storage** section of
 
 On Pods:
 
-- The volume mounts at `/workspace-global` by default. You can choose a different mount path.
+- The volume mounts at `/workspace-external` by default. You can choose a different mount path.
 - External volumes work on GPU and CPU Pods in Secure Cloud.
 - A Pod can attach one external volume and one network volume.
 - A Pod can't attach a global volume and an external volume at the same time.
-- You can attach, move, or detach an external volume on an existing Pod with the REST API. The change restarts the Pod.
+- You can attach, move, or detach an external volume on an existing Pod from the console or with the REST API. The change restarts the Pod.
 
 ### Serverless
 
 On Serverless endpoints:
 
-- External volumes work with GPU endpoints only.
 - The volume always mounts at `/runpod-volume`.
 - An endpoint can attach one external volume, and can't use it together with a network volume or a global volume.
 - You can attach, replace, or detach the volume on an existing endpoint. Workers redeploy to pick up the change.
@@ -150,11 +149,11 @@ You can replace the access key for an external volume without recreating it or r
 
 Running Pods and workers switch to the new key within a few minutes, without a restart. Keep the old key active until then.
 
-## Delete an external volume
+## Remove an external volume
 
-Deleting an external volume removes its registration from Runpod. It never touches your bucket or its data.
+Removing an external volume removes its registration from Runpod. It never touches your bucket or its data.
 
-You can't delete an external volume while it's in use. First:
+You can't remove an external volume while it's in use. First:
 
 - Detach it from every Pod, running or stopped, or terminate the Pod.
 - Detach it from every Serverless endpoint.
@@ -241,11 +240,11 @@ curl --request POST \
 
 {/* Add the remaining required Pod fields (image, GPU) to match the current /v2/pods example in the API reference. */}
 
-`mounts.external` accepts one volume. Omit `path` to mount at `/workspace-global`.
+`mounts.external` accepts one volume. Omit `path` to mount at `/workspace-external`.
 
 ### Attach to a Serverless endpoint
 
-Pass the volume ID under `mounts.external` when you create or update a GPU endpoint:
+Pass the volume ID under `mounts.external` when you create or update an endpoint:
 
 ```bash
 curl --request PATCH \
@@ -284,10 +283,9 @@ For the full schemas, see the [external volumes API reference](/api-reference-v2
 
 - **S3-compatible storage only:** Azure Blob Storage and native Google Cloud Storage authentication aren't supported.
 - **Access keys only:** Temporary credentials and role assumption aren't supported.
-- **Location is fixed:** You can't change the endpoint, bucket, prefix, or region after creation. To change them, delete the volume and create a new one.
+- **Location is fixed:** You can't change the endpoint, bucket, prefix, or region after creation. To change them, remove the volume and create a new one.
 - **No usage reporting:** Runpod doesn't show size, object count, or cost for external volumes.
 - **One global or external volume per Pod:** A Pod can attach a global volume or an external volume, not both.
-- **GPU endpoints only:** Serverless endpoints on CPU can't attach external volumes.
 - **Revoked keys aren't detected on running Pods:** If you revoke a key or narrow its permissions while a Pod is running, reads and writes fail with I/O errors, but the mount still appears healthy.
 
 ## Troubleshooting
@@ -313,7 +311,7 @@ Fix the key or the bucket in your provider's console. If you created a new key, 
 
 If file operations fail with I/O errors while the mount looks healthy, the key was likely revoked or its permissions narrowed after the Pod started. Restore the key's access, or update the credentials on the volume. Running Pods pick up the change within a few minutes.
 
-### Deleting the volume fails
+### Removing the volume fails
 
 The volume is still attached. Detach it from every Pod that mounts it, including stopped Pods, or terminate those Pods. Then detach it from any Serverless endpoints.
 
