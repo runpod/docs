@@ -33,7 +33,7 @@ runpodctl serverless list
 #### List flags
 
 <ResponseField name="--include-template" type="bool">
-Include template information in the output.
+Include the endpoint's container configuration in the output: image, start command or Docker arguments, disk size, environment variables, and ports. Environment variable values may contain secrets.
 </ResponseField>
 
 <ResponseField name="--include-workers" type="bool">
@@ -48,10 +48,12 @@ Get detailed information about a specific endpoint:
 runpodctl serverless get <endpoint-id>
 ```
 
+The output doesn't include the ID of the template the endpoint uses. To see what the endpoint runs, add `--include-template`.
+
 #### Get flags
 
 <ResponseField name="--include-template" type="bool">
-Include template information in the output.
+Include the endpoint's container configuration in the output: image, start command or Docker arguments, disk size, environment variables, and ports. Environment variable values may contain secrets.
 </ResponseField>
 
 <ResponseField name="--include-workers" type="bool">
@@ -179,6 +181,14 @@ Environment variable in `KEY=VALUE` format. Use multiple `--env` flags to set mu
 Model reference URL to attach to the endpoint. Use multiple `--model-reference` flags to attach multiple models. Works with both `--template-id` and `--hub-id`, and requires GPU compute type.
 </ResponseField>
 
+<ResponseField name="--wait" type="bool">
+Block until the endpoint's health reports a worker that is ready or running. A ready worker may be restored from FlashBoot, so the first request can still take longer. Setting `--workers-min 1` is the fastest way to get a worker.
+</ResponseField>
+
+<ResponseField name="--wait-timeout" type="string">
+Maximum time to wait with `--wait`, such as `90s`, `10m`, or `1h` (default `10m`). On timeout, the endpoint is kept and the error includes its ID.
+</ResponseField>
+
 ### Update an endpoint
 
 Update endpoint configuration:
@@ -206,24 +216,26 @@ New maximum number of workers.
 </ResponseField>
 
 <ResponseField name="--idle-timeout" type="int">
-New idle timeout in seconds.
+New idle timeout in seconds. Valid range: 1-3600 seconds.
 </ResponseField>
 
-<ResponseField name="--scaler-type" type="string">
-Scaler type (`QUEUE_DELAY` or `REQUEST_COUNT`).
+<ResponseField name="--scale-by" type="string">
+Autoscaling strategy: `delay` (scales based on queue wait time in seconds) or `requests` (scales based on pending request count). Setting only `--scale-by` keeps the current threshold.
 </ResponseField>
 
-<ResponseField name="--scaler-value" type="int">
-Scaler value.
+<ResponseField name="--scale-threshold" type="int">
+Trigger point for the autoscaler. For `delay`, this is the queue wait time in seconds. For `requests`, this is the pending request count. Switching from a fractional delay to `requests` requires an integer threshold.
 </ResponseField>
 
-<ResponseField name="--flash-boot" type="bool">
-Enable or disable flash boot for faster worker startup.
+<ResponseField name="--model-reference" type="string">
+Model reference to cache on the endpoint. Use multiple `--model-reference` flags to attach multiple models. The references you pass replace the endpoint's existing model references.
 </ResponseField>
 
-<ResponseField name="--execution-timeout" type="int">
-Execution timeout in seconds. Jobs that exceed this duration are terminated.
+<ResponseField name="--clear-models" type="bool">
+Remove all model references from the endpoint.
 </ResponseField>
+
+`--idle-timeout` doesn't apply to queue-based endpoints that scale by request count.
 
 ### Delete an endpoint
 
@@ -232,6 +244,147 @@ Delete an endpoint:
 ```bash
 runpodctl serverless delete <endpoint-id>
 ```
+
+### Send a request
+
+Send a JSON payload to an endpoint and wait for the job to finish:
+
+```bash
+# Send a request and wait for the result
+runpodctl serverless run <endpoint-id> --input '{"prompt": "hello"}'
+
+# Read a large payload from a file, or from stdin
+runpodctl serverless run <endpoint-id> --input-file payload.json
+cat payload.json | runpodctl serverless run <endpoint-id> --input -
+
+# Give a cold or slow endpoint more time
+runpodctl serverless run <endpoint-id> --input '{}' --wait 15m
+
+# Submit the job and return its ID immediately
+runpodctl serverless run <endpoint-id> --input '{}' --no-wait
+```
+
+Pass only your handler's payload. The CLI sends it as `{"input": YOUR_PAYLOAD}`, so wrapping it in `input` yourself nests it twice.
+
+The command submits the job with `/run` and polls `/status` until the job reaches a final state. If the wait runs out, the job keeps running on the endpoint: the CLI prints the last job payload, reports a `timeout` error that names the `serverless status` command to use, and exits with code 1. Check the job with `serverless status` instead of sending the request again, which would start a second job.
+
+The command exits with code 0 when the job is `COMPLETED`, or when `--no-wait` submitted it successfully. It exits with code 1 when the request fails, the wait runs out, or the job ends as `FAILED`, `CANCELLED`, or `TIMED_OUT`. The job payload is printed in every case.
+
+#### Run flags
+
+<ResponseField name="--input" type="string">
+JSON payload for your handler. Use `-` to read it from stdin.
+</ResponseField>
+
+<ResponseField name="--input-file" type="string">
+Read the JSON payload from a file. Use `-` to read it from stdin.
+</ResponseField>
+
+<ResponseField name="--wait" type="duration">
+How long to wait for the job to finish, such as `90s` or `10m` (default `5m`). `0` doesn't wait.
+</ResponseField>
+
+<ResponseField name="--no-wait" type="bool">
+Submit the job and print its ID without waiting. Same as `--wait 0`, and can't be combined with an explicit `--wait`.
+</ResponseField>
+
+### Check a job
+
+Get the status of a job you submitted earlier, for example with `serverless run --no-wait`:
+
+```bash
+runpodctl serverless status <endpoint-id> <job-id>
+
+# Keep polling until the job finishes, for up to five minutes
+runpodctl serverless status <endpoint-id> <job-id> --wait 5m
+```
+
+The command exits with code 0 when the job is `COMPLETED` or still queued or running. It exits with code 1 when the job ended as `FAILED`, `CANCELLED`, or `TIMED_OUT`, or when `--wait` ran out.
+
+#### Status flags
+
+<ResponseField name="--wait" type="duration">
+Keep polling until the job finishes, up to this long. The default, `0`, checks once.
+</ResponseField>
+
+### Check endpoint health
+
+Get worker counts by state and job counts by outcome:
+
+```bash
+runpodctl serverless health <endpoint-id>
+```
+
+### Read worker logs
+
+Read the logs of the workers behind an endpoint:
+
+```bash
+# Recent logs from every worker
+runpodctl serverless logs <endpoint-id>
+
+# Follow one worker
+runpodctl serverless logs <endpoint-id> --worker <worker-id> --follow
+
+# The last hour of platform events, to see why a worker won't start
+runpodctl serverless logs <endpoint-id> --since 1h --source system
+```
+
+The output is JSON lines, one object per line with `source`, `line`, `ts`, and `workerId` fields, so you can pipe it to `jq`. Logs belong to workers, so without `--worker` the command reads every worker on the endpoint and tags each line with its worker ID. With `--follow`, it reconnects if the connection drops and picks up workers that start while it runs.
+
+Repeated `system` lines about starting the container with no `container` output usually mean the container exits before your handler runs.
+
+#### Logs flags
+
+<ResponseField name="--worker" type="string">
+Read one worker by ID instead of every worker on the endpoint.
+</ResponseField>
+
+<ResponseField name="--follow, -f" type="bool">
+Keep streaming new lines until you interrupt the command. Without it, the command replays recent lines and exits once they stop arriving.
+</ResponseField>
+
+<ResponseField name="--tail" type="int">
+Number of historical lines to replay before live output, from 0 to 5000 (default `100`). Use `0` for live output only.
+</ResponseField>
+
+<ResponseField name="--since" type="string">
+Only show logs after this point: a duration such as `30m`, `2h`, or `7d`, or an RFC 3339 timestamp. Overrides `--tail`.
+</ResponseField>
+
+<ResponseField name="--source" type="string">
+Which log source to read: `container` (your workload's own output), `system` (platform events such as image pull, container create, and start), or `both` (default).
+</ResponseField>
+
+<ResponseField name="--max-wait" type="duration">
+How long to wait for output before exiting when not following (default `5s`). The command exits earlier once the replayed lines stop arriving.
+</ResponseField>
+
+### Show environment variable overrides
+
+Show the environment variables set directly on an endpoint. These override the template's defaults and are what the running container receives:
+
+```bash
+runpodctl serverless env <endpoint-id>
+```
+
+An empty result means the endpoint has no override and uses its template's environment variables, which [`runpodctl template get`](/runpodctl/reference/runpodctl-template) shows.
+
+<Warning>
+
+The output can contain secrets, such as a Hugging Face token. Don't paste it into tickets or chats.
+
+</Warning>
+
+### Check model status
+
+Show an endpoint's model references and, for each worker, the resolved model version, assignment status, and expected mount path:
+
+```bash
+runpodctl serverless model-status <endpoint-id>
+```
+
+Use this to find out why an endpoint with a cached model is stuck loading. A `FAILED` status includes a `failurePhase` (`download_failed`, `mount_failed`, `startup_failed`, or `cuda_failed`) and a `failureReason`. For the full detail, run `runpodctl serverless logs <endpoint-id> --source system`.
 
 ## Serverless URLs
 
@@ -243,6 +396,24 @@ Access your Serverless endpoint using these URL patterns:
 | Sync request | `https://api.runpod.ai/v2/<endpoint-id>/runsync` |
 | Health check | `https://api.runpod.ai/v2/<endpoint-id>/health` |
 | Job status | `https://api.runpod.ai/v2/<endpoint-id>/status/<job-id>` |
+
+### Invoke URLs in command output
+
+`serverless create`, `serverless get`, `serverless list`, and `serverless update` include a `urls` object on each endpoint so you can invoke a freshly deployed endpoint without a second lookup:
+
+```json
+{
+  "id": "abc123",
+  "name": "my-vllm",
+  "urls": {
+    "run": "https://api.runpod.ai/v2/abc123/run",
+    "runsync": "https://api.runpod.ai/v2/abc123/runsync",
+    "health": "https://api.runpod.ai/v2/abc123/health"
+  }
+}
+```
+
+The URLs are computed client-side from the endpoint ID. Invoke is a separate service from the control plane, so `RUNPOD_API_URL` and `RUNPOD_GRAPHQL_URL` do not move them. Set `RUNPOD_INVOKE_URL` (or the `invokeUrl` key in `~/.runpod/config.toml`) when you need to target a non-production invoke host; the default is `https://api.runpod.ai/v2`.
 
 ## Related commands
 
