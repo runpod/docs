@@ -240,7 +240,7 @@ The legacy resource verbs listed below retain their historical table or plaintex
 
 Except for the legacy commands listed below, runpodctl reports failures as a single flat JSON object on standard error and exits with a non-zero status. Branch on the `code` field, never on the message text.
 
-Standard error can also contain plaintext. `pod create --wait` and `serverless create --wait` print wait progress before the JSON error, and `serverless update` can print a partial-update warning before it. Do not decode the entire standard error stream as one JSON document; extract the JSON error object, which the error handler writes on its own line, and decode it separately so you retain fields such as `id` when a wait fails.
+Standard error can also contain plaintext. `pod create --wait` and `serverless create --wait` print wait progress before the JSON error, `serverless update` can print a partial-update warning before it, and `receive` can print `connecting...` immediately before it without a newline. Do not decode the entire standard error stream as one JSON document; extract the JSON error object even when it is adjacent to plaintext, and decode it separately so you retain fields such as `id` when a wait fails.
 
 The JSON error object has this shape:
 
@@ -259,7 +259,7 @@ Codes runpodctl generates:
 
 | Code | Meaning |
 | --- | --- |
-| `usage_error` | The invocation is invalid. Cobra command-line parsing and argument errors also print usage after the JSON object. |
+| `usage_error` | The invocation is invalid. Cobra flag parsing and Cobra argument validation errors also print usage after the JSON object. |
 | `not_found` | The resource was not found. During `--wait`, it may have been deleted or never became visible; check for an `id` before assuming nothing was created. |
 | `bad_request`, `unauthorized`, `forbidden`, `rate_limited`, `server_error`, `api_error` | Derived from the HTTP status returned by the API when it does not provide an explicit code. |
 | `conflict` | The resource state prevents the operation. This can come from an HTTP `409` response or a locally detected terminal state during a wait. |
@@ -268,7 +268,7 @@ Codes runpodctl generates:
 | `network_error` | The API could not be reached because of a transport failure such as DNS, connection refusal, TLS, or a network timeout. |
 | `create_uncertain` | A Pod create may have succeeded, but its outcome is unknown. Check `runpodctl pod list` before retrying to avoid creating a duplicate Pod. |
 | `dependent_endpoints` | A model cannot be removed because endpoints still reference it. Detach or replace the model references first. |
-| `timeout` | A request or a job or model wait timed out. Read the error message before retrying because work may still be running. |
+| `timeout` | An invoke request, a log-stream response wait, or a job or model wait timed out. Control-plane request timeouts use `network_error` instead. Read the error message before retrying because work may still be running. |
 | `job_failed` | A Serverless job reached a terminal state other than `COMPLETED`. The job payload is still written to standard output. |
 | `wait_timeout`, `wait_interrupted` | A `create --wait` operation timed out or was interrupted. The created resource still exists, and its ID is included in `id` when available. |
 | `transfer_incomplete` | A network-volume transfer stopped partway. Rerun the transfer to resume it. |
@@ -283,7 +283,7 @@ Documented resource and utility commands exit non-zero on failure, including `mo
 
 A few legacy surfaces do not use the JSON error handler:
 
-- Runtime failures inside the legacy pod verbs (`get pod`, `create pod`, `remove pod`, `start pod`, `stop pod`, `create pods`, `remove pods`) and `get cloud` print `Error: <message>` via Cobra and exit `1`. Argument and flag errors still use the structured `usage_error` path.
+- Runtime failures inside the legacy pod verbs (`get pod`, `create pod`, `remove pod`, `start pod`, `stop pod`, `create pods`, `remove pods`) and `get cloud` print `Error: <message>` via Cobra and exit `1`. Cobra flag parsing and Cobra argument validation still use the structured `usage_error` path, but validation inside a legacy handler, such as `runpodctl get cloud abc`, prints plaintext.
 - The removed `project` command prints SDK migration guidance to standard error and exits `1`.
 
 Parsers should tolerate non-JSON error output from those commands.
