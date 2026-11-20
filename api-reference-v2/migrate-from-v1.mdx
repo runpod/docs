@@ -6,7 +6,7 @@ description: "Move your integrations from the Runpod REST API v1 to the v2 base 
 
 The Runpod REST API v2 reorganizes resource paths, consolidates Pod lifecycle actions, and standardizes request and response shapes. This guide maps the v1 surface you know to its v2 equivalent so you can update your integrations with confidence.
 
-Read this guide if you have an existing integration built against the v1 API. REST API v1 is deprecated and will be retired on November 15, 2026. Migrate your integrations to v2 before that date.
+Read this guide if you have an existing integration built against REST API v1 or the GraphQL API. REST API v1 is deprecated and will be retired on November 15, 2026. Migrate your integrations to v2 before that date. For a complete list of changes that can break a migrated integration, see [Breaking changes](#breaking-changes).
 
 ## What changed at a glance
 
@@ -15,6 +15,68 @@ Read this guide if you have an existing integration built against the v1 API. RE
 - The OpenAPI schema also moves accordingly, from `https://rest.runpod.io/v1/openapi.json` to `https://api.runpod.io/v2/openapi.json`. Regenerate any client or tooling against the v2 schema.
 
 - Authentication is unchanged. Continue to pass your [Runpod API key](/get-started/credentials) as an HTTP Bearer token in the `Authorization: Bearer RUNPOD_API_KEY` header. You don't need to change key management or scopes to call v2.
+
+## Breaking changes
+
+Breaking changes between v1 or GraphQL and v2 fall into three classes:
+
+- **Renamed or moved:** the request fails with an error, so you find these right away.
+- **Same name, different behavior:** the request succeeds, but the result is different. These can pass your tests, so check each one.
+- **Removed:** the capability has no v2 equivalent.
+
+Changes marked **(GraphQL only)** apply only if you're migrating from the GraphQL API.
+
+### Renamed or moved
+
+v2 rejects unknown fields in request bodies. A field that was renamed or moved returns a `422` error that names it, for example `additional properties 'dataCenterId' not allowed`. A renamed path returns a `404`. The [endpoint mapping](#endpoint-mapping) and [request and response shape changes](#request-and-response-shape-changes) sections cover most of these. The following changes aren't covered there:
+
+| Change | v1 or GraphQL | v2 |
+| --- | --- | --- |
+| CUDA constraints | Top-level `allowedCudaVersions` and `minCudaVersion` | `gpu.allowedCudaVersions` and `gpu.minCudaVersion`. Sending both returns a `400`. |
+| GPU host filters | `minRAMPerGPU` and `minVCPUPerGPU` | `gpu.minRamPerGpu` and `gpu.minVcpuCountPerGpu` |
+
+<Warning>
+Unknown query parameters don't return an error. For example, `GET /v2/pods?desiredStatus=RUNNING` ignores the filter and returns every Pod. Filter list results in your own code instead.
+</Warning>
+
+### Same name, different behavior
+
+These changes pass validation, so they don't return an error:
+
+| Field or path | v1 or GraphQL | v2 | What to do |
+| --- | --- | --- | --- |
+| `/billing/endpoints` | Serverless billing | Public Endpoint billing | Use `/v2/billing/serverless` for Serverless billing. |
+| `flashboot` | Boolean | `OFF`, `FLASHBOOT`, or `PRIORITY_FLASHBOOT`. Defaults to `OFF`. | Set it explicitly to keep FlashBoot on. |
+| `ports` | Defaults to `8888/http,22/tcp` | No default | List every port you need, including `22/tcp` for SSH. |
+| Pod storage | Every Pod gets a 20 GB volume at `/workspace` | Without `mounts`, the Pod has no persistent storage | Add `mounts` to keep data across restarts. |
+| `idleTimeout` | Accepted with any scaler | Rejected on queue-based endpoints that scale by request count | Remove it from those endpoints. |
+| `executionTimeoutMs` → `timeout` | Set on the endpoint | Don't rely on the default value | Set `timeout` explicitly. |
+| `desiredStatus` → `status` | The requested state | The actual state, including `PROVISIONING`, `STARTING`, and `ERROR` | Handle `ERROR` in polling loops. |
+| `dockerStartCmd` → `args` | An array of arguments | A single string | Quote arguments that contain spaces, or send the array as `cmd`. |
+| `dockerEntrypoint` → `entrypoint` | Separate override | Array, stored with `cmd` in `args` | Don't send `args` together with `entrypoint` or `cmd` unless they describe the same command. |
+| `templateId` | The resource stays linked to the template | The template is copied when you create the resource | Update each Pod or endpoint directly. Template edits don't reach existing resources. |
+| Pod storage updates | `PATCH` with `volumeInGb` or `volumeMountPath` | The mount type is fixed at creation. You can't change or clear mounts. | Create a new Pod to change its storage. |
+| List responses | One response with every item | Paginated, up to 1,000 items per page | Follow `pagination.nextCursor` until `pagination.hasNextPage` is `false`. |
+| `env` (GraphQL only) | `[{key, value}]` | `{"KEY": "value"}` | Update code that reads environment variables back. |
+| `stockStatus` → `availability` (GraphQL only) | `High`, `Medium`, `Low`, `None` | `HIGH`, `MEDIUM`, `LOW`, `NONE` | Update comparisons to uppercase values. |
+| `cloudType` → `cloud` (GraphQL only) | Accepts `ALL` | `SECURE` or `COMMUNITY` | Choose one, or try one and fall back to the other. |
+
+### Removed
+
+These capabilities have no v2 equivalent:
+
+| Capability | v1 or GraphQL | v2 alternative |
+| --- | --- | --- |
+| Pod GPU fallback list | `gpuTypeIds` with several GPU types | A Pod takes one GPU type. Check availability with [List GPU types](/api-reference-v2/catalog/list-gpu-types), then retry with the next type in your own code. Serverless endpoints still accept several GPU pools. |
+| Pod `reset` action | `POST /pods/{podId}/reset` | None. The `action` field accepts `start`, `stop`, `restart`, and `terminate`. |
+| Spot Pods | `interruptible`, `podRentInterruptable`, `podBidResume` | None. |
+| Savings plans | `savingsPlans`, `adjustedCostPerHr` | None. |
+| Country placement | `countryCodes` | Find data centers in those countries with [List GPU types](/api-reference-v2/catalog/list-gpu-types), then pass them in `dataCenterIds`. |
+| Bandwidth and public IP placement | `minDownloadMbps`, `minUploadMbps`, `minDiskBandwidthMBps`, `supportPublicIp` | None. |
+| Server-side list filters | `desiredStatus`, `includeMachine`, and other query parameters | Filter in your own code after reading every page. |
+| Host machine details | `machineId`, `podHostId` | `dataCenterId` only. |
+| Account balance (GraphQL only) | `myself { clientBalance }` | None. Keep using the GraphQL API for this. |
+| Volume encryption flag | `volumeEncrypted` | None. |
 
 ## Endpoint mapping
 
@@ -34,17 +96,9 @@ Most resources keep the same concept but move to a new path. The following table
 
 v2 generalizes path parameters: where v1 used resource-specific names such as `{podId}`, `{endpointId}`, `{networkVolumeId}`, `{templateId}`, and `{containerRegistryAuthId}`, v2 uses a single generic `{id}` parameter across resources.
 
-<Warning>
-  Billing paths don't map by name. In v1, `/billing/endpoints` returns Serverless billing history; in v2, Serverless billing moves to `/v2/billing/serverless`. The v2 path `/v2/billing/endpoints` is a different, new resource — Public Endpoint billing history — so update your Serverless billing calls to the new path rather than assuming the old one carries over.
-</Warning>
-
 ## Consolidated Pod lifecycle
 
 In v1, each Pod state change had its own endpoint: `POST /pods/{podId}/start`, `/stop`, `/reset`, and `/restart`. In v2, these collapse into a single [Pod state transition endpoint](/api-reference-v2/pods/trigger-a-pod-state-transition), `POST /v2/pods/{id}/action`, whose request body carries the desired action as `{"action":"start|stop|restart|terminate"}`. Deletion still uses [`DELETE /v2/pods/{id}`](/api-reference-v2/pods/terminate-a-pod).
-
-<Note>
-  The v1 `reset` operation has no v2 action equivalent. The v2 action enum is limited to `start`, `stop`, `restart`, and `terminate`.
-</Note>
 
 For in-place changes to a Pod, v2 replaces v1's `POST /pods/{podId}/update` with a standard [PATCH request](/api-reference-v2/pods/update-a-pod) to `PATCH /v2/pods/{id}`. Serverless follows the same pattern: v2 drops v1's `POST /endpoints/{id}/update` in-place variant in favor of `PATCH /v2/serverless/{id}`.
 
