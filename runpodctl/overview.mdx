@@ -238,7 +238,11 @@ The legacy resource verbs listed below retain their historical table or plaintex
 
 ### Error format
 
-Except for the legacy commands listed below, runpodctl reports failures as a single flat JSON object on standard error and exits with a non-zero status. Branch on the `code` field, never on the message text:
+Except for the legacy commands listed below, runpodctl reports failures as a single flat JSON object on standard error and exits with a non-zero status. Branch on the `code` field, never on the message text.
+
+Standard error can also contain plaintext. `pod create --wait` and `serverless create --wait` print wait progress before the JSON error, and `serverless update` can print a partial-update warning before it. Do not decode the entire standard error stream as one JSON document; extract the JSON error object, which the error handler writes on its own line, and decode it separately so you retain fields such as `id` when a wait fails.
+
+The JSON error object has this shape:
 
 ```json
 {"error":"failed to get endpoint: endpoint not found","code":"not_found","status":404}
@@ -260,7 +264,7 @@ Codes runpodctl generates:
 | `bad_request`, `unauthorized`, `forbidden`, `rate_limited`, `server_error`, `api_error` | Derived from the HTTP status returned by the API when it does not provide an explicit code. |
 | `conflict` | The resource state prevents the operation. This can come from an HTTP `409` response or a locally detected terminal state during a wait. |
 | `graphql_error` | GraphQL returned an error, either in an HTTP `200` response body or as a non-`200` response. |
-| `no_credentials` | No Runpod API key, or no required network-volume S3 credentials, is configured. Run `runpodctl doctor` or set `RUNPOD_API_KEY` to configure an API key. |
+| `no_credentials` | No Runpod API key, or no required network-volume S3 credentials, is configured. For an API key, run `runpodctl doctor` or set `RUNPOD_API_KEY`. For network-volume transfers, set `RUNPOD_S3_ACCESS_KEY` and `RUNPOD_S3_SECRET_KEY`, pass `--s3-access-key` and `--s3-secret-key`, or set `s3AccessKey` and `s3SecretKey` in `~/.runpod/config.toml`. |
 | `network_error` | The API could not be reached because of a transport failure such as DNS, connection refusal, TLS, or a network timeout. |
 | `create_uncertain` | A Pod create may have succeeded, but its outcome is unknown. Check `runpodctl pod list` before retrying to avoid creating a duplicate Pod. |
 | `dependent_endpoints` | A model cannot be removed because endpoints still reference it. Detach or replace the model references first. |
@@ -275,7 +279,7 @@ The API can also return its own code, which is passed through in lowercase. Trea
 
 ### Exit codes
 
-Documented resource and utility commands exit non-zero on failure, including `model`, `update`, `send`, and `receive`. Do not rely on stdout being empty to detect failure. Check the exit code and parse the JSON error object on stderr.
+Documented resource and utility commands exit non-zero on failure, including `model`, `update`, `send`, and `receive`. Do not rely on stdout being empty to detect failure. Check the exit code and parse the extracted JSON error object.
 
 A few legacy surfaces do not use the JSON error handler:
 
