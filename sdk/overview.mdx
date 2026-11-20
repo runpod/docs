@@ -168,7 +168,15 @@ Decorated functions keep their Python identity. You call them through methods th
 
 For HTTP services defined with `@app.api`, call routes through the class, for example `Counter.post("/bump", {"by": 3})` or `Counter.get("/value")`.
 
-`.remote()` and `job.wait()` don't impose an execution timeout by default. For streaming examples and how spawned tasks are cleaned up, see [Dev sessions](/sdk/apps/dev-sessions#call-styles).
+How long `.remote()` waits depends on the resource type. A task call waits until the function returns, with no time limit. A queue call waits up to 5 minutes for the result, then raises `TimeoutError` while the job keeps running on the endpoint.
+
+To give a single queue call more time, set a per-job execution timeout in milliseconds with `.with_options()`. The SDK then waits for that timeout plus 60 seconds. The extra minute covers time the job spends in the queue and while a worker starts:
+
+```python
+result = chat.with_options(execution_timeout=900000).remote("Why is the sky blue?")  # Waits up to 16 minutes
+```
+
+Setting `execution_timeout_ms` on the decorator limits how long jobs can run, but it doesn't extend how long `.remote()` waits. To wait on a long queue job without setting a per-call timeout, call `job = chat.spawn(...)` and then `job.result(timeout=SECONDS)`. For streaming examples and how spawned tasks are cleaned up, see [Dev sessions](/sdk/apps/dev-sessions#call-styles).
 
 ### Local entrypoints
 
