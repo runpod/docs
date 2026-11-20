@@ -293,6 +293,48 @@ Delete a Pod:
 runpodctl pod delete <pod-id>
 ```
 
+### Read Pod logs
+
+Read a Pod's container and system logs:
+
+```bash
+# The last 100 lines, then exit
+runpodctl pod logs <pod-id>
+
+# Follow live output
+runpodctl pod logs <pod-id> --follow
+
+# The last 30 minutes of platform events only
+runpodctl pod logs <pod-id> --since 30m --source system
+
+# Live output only, with no history
+runpodctl pod logs <pod-id> --tail 0 --follow
+```
+
+The output is JSON lines, one object per line with `source`, `line`, and `ts` fields, so you can pipe it to `jq`. The `container` source is your workload's own output. The `system` source is the platform reporting image pull, container create, and start. A stalled deployment usually shows up there, as repeated pull progress or a create that never reaches start.
+
+#### Logs flags
+
+<ResponseField name="--follow, -f" type="bool">
+Keep streaming new lines until you interrupt the command. Without it, the command replays recent lines and exits once they stop arriving.
+</ResponseField>
+
+<ResponseField name="--tail" type="int">
+Number of historical lines to replay before live output, from 0 to 5000 (default `100`). Use `0` for live output only.
+</ResponseField>
+
+<ResponseField name="--since" type="string">
+Only show logs after this point: a duration such as `30m`, `2h`, or `7d`, or an RFC 3339 timestamp. Overrides `--tail`.
+</ResponseField>
+
+<ResponseField name="--source" type="string">
+Which log source to read: `container` (your workload's own output), `system` (platform events such as image pull, container create, and start), or `both` (default).
+</ResponseField>
+
+<ResponseField name="--max-wait" type="duration">
+How long to wait for output before exiting when not following (default `5s`). The command exits earlier once the replayed lines stop arriving.
+</ResponseField>
+
 ## Pod runtime status
 
 `runpodctl pod get` and `runpodctl pod list` report a Pod's real runtime state in their JSON and YAML output, alongside the existing `desiredStatus`. `desiredStatus` is the state you asked for (for example, `RUNNING`), while `runtimeStatus` is what the Pod is actually doing. For example, a Pod still pulling a large image and a Pod that has been serving traffic for an hour both show `desiredStatus: RUNNING`, but their `runtimeStatus` values differ.
