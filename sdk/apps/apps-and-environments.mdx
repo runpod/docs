@@ -1,0 +1,82 @@
+---
+title: "Apps and environments"
+sidebarTitle: "Apps and environments"
+description: "Learn how Runpod SDK apps and environments organize deployments, and manage them with the rp flash app and rp flash env commands."
+---
+
+Deployments in the Runpod SDK are organized in two levels: **apps** and **environments**.
+
+## Apps
+
+An app is a named group of resources, declared in code with `runpod.App`:
+
+```python
+import runpod
+
+app = runpod.App("inference")
+```
+
+Every resource you attach with `@app.queue`, `@app.api`, or `@app.task` belongs to that app. Resource names come from the function or class name unless you pass `name=`, and they must be unique within the app.
+
+The app is registered on Runpod the first time you deploy it. A project can define more than one app; `rp flash deploy` deploys every app it finds.
+
+## Environments
+
+An environment is an isolated deployment of an app, such as `dev`, `staging`, or `production`. Each environment has its own endpoints and runs its own build, so deploying to `staging` doesn't affect `production`.
+
+Every app has a `default` environment. To deploy somewhere else, pass `--env`:
+
+```bash
+rp flash deploy                    # Deploys to the default environment
+rp flash deploy --env staging      # Deploys to staging
+rp flash deploy --env production   # Deploys to production
+```
+
+You can also set an app's default environment in code with `runpod.App("inference", env="production")`.
+
+### Common patterns
+
+- **Single environment**: Deploy everything to `default`. Simple, with no separation between testing and production.
+- **Multiple environments**: Deploy to `dev` while you work, `staging` for review, and `production` for users.
+
+## Builds
+
+Each deployment uploads a build: an artifact containing your code, its dependencies, and a manifest describing every resource. The environment then runs that build. Undeploying an environment removes its endpoints but keeps the app's build history. See [Deploy an app](/sdk/apps/deploy#what-goes-into-a-build).
+
+## Manage apps
+
+```bash
+rp flash app list              # List your apps
+rp flash app get APP_NAME      # Show an app's details
+rp flash app delete APP_NAME   # Delete an app
+```
+
+Add `--yes` to `delete` to skip the confirmation prompt.
+
+## Manage environments
+
+```bash
+rp flash env list                     # List environments
+rp flash env get ENVIRONMENT_NAME     # Show an environment
+rp flash env add ENVIRONMENT_NAME     # Create an environment
+rp flash env delete ENVIRONMENT_NAME  # Delete an environment
+```
+
+These commands use the app defined in the current directory. If the directory has more than one app, or none, pass `--app APP_NAME`.
+
+To remove an environment's endpoints:
+
+```bash
+rp flash undeploy --env staging
+```
+
+`undeploy` deletes the environment's endpoints and the environment itself. The app and its build history remain. If you leave out `--env`, it undeploys the `default` environment.
+
+<Warning>
+  Deleting an app or environment can't be undone. Volumes aren't deleted and keep incurring storage charges. See [Storage](/sdk/configuration/storage#billing).
+</Warning>
+
+## Next steps
+
+- [Deploy an app](/sdk/apps/deploy).
+- [See the full CLI reference](/sdk/cli).
