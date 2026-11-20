@@ -1,0 +1,1112 @@
+---
+title: "Migrate from Hugging Face Inference Endpoints to Runpod"
+sidebarTitle: "Hugging Face"
+description: "Move Hugging Face Inference Endpoints, Inference Providers calls, GPU Spaces, and Jobs to Runpod while your models stay on the Hugging Face Hub."
+---
+
+This guide moves where your models run, not where they live. Your models, datasets, and access tokens stay on the Hugging Face Hub, and Runpod pulls weights from the Hub by repository ID, the same way [Inference Endpoints](https://huggingface.co/docs/inference-endpoints/index) does today.
+
+It's written for teams that run production inference on Hugging Face compute. Inference Endpoints map to Runpod [Serverless](/serverless/overview) endpoints, [Inference Providers](https://huggingface.co/docs/inference-providers/index) calls map to [Public Endpoints](/public-endpoints/overview) where the model is listed, GPU [Spaces](https://huggingface.co/docs/hub/spaces-gpus) map to [Pods](/pods/overview), and [Jobs](https://huggingface.co/docs/hub/jobs) map to `@app.task` in the Runpod SDK or to a Pod. At the end, each workload runs on Runpod, your clients call Runpod URLs with a Runpod API key, and the Hugging Face compute is paused or deleted.
+
+<Tip>
+You can hand this migration to a coding agent. See [Migrate with a coding agent](#migrate-with-a-coding-agent).
+</Tip>
+
+## How Hugging Face maps to Runpod
+
+| Hugging Face concept | Runpod equivalent | Notes |
+| --- | --- | --- |
+| Hugging Face Hub (models, datasets, tokens) | Stays where it is | Runpod downloads from the Hub. [Cached models](/serverless/endpoints/model-caching), the [Hub](/hub/overview), and `hf download` onto a network volume all use the Hub as the model source. |
+| Inference Endpoint with the vLLM, TGI, or SGLang engine | Serverless [vLLM worker](/serverless/vllm/overview) | Same Hugging Face repo ID. OpenAI-compatible route at `/openai/v1`. |
+| Inference Endpoint with the Inference Toolkit and a custom `handler.py` | Serverless queue-based endpoint with a [handler function](/serverless/workers/handler-functions), or `@app.queue` in the [Runpod SDK](/sdk/overview) | `EndpointHandler.__call__(data)` becomes `handler(job)`. |
+| Inference Endpoint with the TEI engine | Serverless [load balancing endpoint](/serverless/load-balancing/overview) running the TEI container | You keep TEI's own routes, including `/v1/embeddings`. |
+| Inference Endpoint with the llama.cpp engine or a custom container | Serverless load balancing endpoint | Your HTTP server and routes run unchanged. Health checks default to `/ping`. |
+| Inference Endpoints Model Catalog | [Runpod Hub](/hub/overview) | Preconfigured repos you deploy as endpoints. |
+| Replicas (min and max) | Workers (active and max) | Active workers are always on. Other workers start on demand. |
+| Scale-to-zero timeout (minutes) | Idle timeout (seconds) | Runpod endpoints scale to zero by default. |
+| Inference Providers (`https://router.huggingface.co/v1`) | [Public Endpoints](/public-endpoints/overview), or your own vLLM endpoint | Public Endpoints cover the models in the [model reference](/public-endpoints/reference). |
+| Spaces on GPU hardware | [Pod](/pods/overview) with an exposed HTTP port | The Pod proxy URL is public and unauthenticated. |
+| ZeroGPU Spaces | Queue-based endpoint behind your own UI | No direct equivalent. See [What has no direct equivalent](#what-has-no-direct-equivalent). |
+| Jobs (`hf jobs run`) | `@app.task` in the Runpod SDK, or a Pod | One Pod per call that terminates when the function returns. |
+| Engine container image, custom image | Container image in a Serverless template | Images must be `linux/amd64`. |
+| Model mounted at `/repository` | Cached model at `/runpod-volume/huggingface-cache/hub/` | Hugging Face cache layout, not a flat directory. |
+| Files you manage yourself (adapters, indexes, outputs) | [Network volume](/storage/network-volumes), global volume, container disk | Network volumes mount at `/runpod-volume` on Serverless and `/workspace` on Pods. Container disk is ephemeral. |
+| Default Env and Secret Env | Environment variables and [Runpod secrets](/pods/templates/secrets) | Reference a secret as `{{ RUNPOD_SECRET_name }}`. |
+| Endpoint types: public, authenticated, private | Runpod API key on every Serverless request | See [What works differently](#what-works-differently). |
+| Vendor and region (AWS, Azure, Google Cloud) | Runpod data centers | Leave data centers unrestricted unless you need a specific one. |
+| Instance type and size (for example `nvidia-l4` `x1`) | GPU pool or GPU type, plus GPU count | See the [GPU mapping](#gpu-mapping). |
+| Billed per minute for each replica while initializing and running | Billed per second while a worker runs | No charge while a cached model downloads. See [Serverless pricing](/serverless/pricing). |
+| `huggingface_hub` endpoint functions, `hf endpoints` CLI | `runpodctl serverless`, the Runpod SDK, the [MCP server](/get-started/mcp-servers) | The SDK and Terraform provider are built on REST API v2. |
+| Inference Endpoints API (`https://api.endpoints.huggingface.cloud/v2`) | [REST API v2](/api-reference-v2/overview) (`https://api.runpod.io/v2/serverless`) | Bearer token auth on both. |
+| Infrastructure as code through the API | [Terraform provider](/integrations/terraform/overview) (`runpod_serverless_endpoint`) | Optional. |
+| Hugging Face access token (`HF_TOKEN`) | Runpod API key (`RUNPOD_API_KEY`) | You still need `HF_TOKEN` on Runpod for gated and private repos. |
+| Organizations, resource groups | [Organizations](/organizations/orgs-overview) or Teams | Runpod organizations are in beta. |
+| Logs tab, Analytics tab, OpenMetrics API | Endpoint logs and metrics in the console, REST v2 metrics and worker log routes | See [Logs](/serverless/development/logs). |
+
+## What's different
+
+### What works differently
+
+**Where the model lands inside the container.** Inference Endpoints mounts the selected repository at `/repository`. Runpod's cached models land in the standard Hugging Face cache layout at `/runpod-volume/huggingface-cache/hub/models--ORG--NAME/snapshots/HASH/`. Code that loads from `/repository` needs the snapshot path instead. Step 4 has a helper that resolves it.
+
+**What happens to a request when nothing is running.** An Inference Endpoint that has scaled to zero answers with status `503` while the new replica initializes, unless the client sends the `X-Scale-Up-Timeout` header to make the proxy hold the request for a set number of seconds. A Runpod queue-based endpoint puts the request in the endpoint's queue and a worker picks it up when it's ready, so you can remove 503 retry loops. Load balancing endpoints don't queue: a request that arrives before a worker is ready can return `no workers available`, and it times out after 2 minutes without a worker.
+
+**The first synchronous request after a cold start.** `/runsync` waits up to 90 seconds by default, and synchronous routes sit behind an edge timeout of about 100 seconds. A cold vLLM worker loading a large model can take longer than that. Use `/run` and poll `/status` for the first request, or keep one active worker for latency-sensitive endpoints.
+
+**Idle time is measured in seconds.** Scale-to-zero on Inference Endpoints is set in minutes (1 hour by default). Runpod's idle timeout is set in seconds, from 1 to 3600. The console default is 5 seconds and the REST v2 default is 10 seconds. A worker is billed while it waits out the idle timeout.
+
+**Authentication.** Inference Endpoints has three endpoint types: public (no authentication), authenticated (a Hugging Face token), and private. Requests to a Runpod Serverless endpoint carry `Authorization: Bearer RUNPOD_API_KEY`. If you run a public endpoint today, put your own API or gateway in front of the Runpod endpoint and keep the key server-side.
+
+**Request and response envelope.** The Inference Toolkit accepts your JSON body as is, with `inputs` at the top level. A queue-based endpoint expects `{"input": {...}}` and returns your handler's result under `output`, next to `id`, `status`, `delayTime`, and `executionTime`.
+
+**The `model` field on OpenAI-compatible calls.** On a vLLM worker, `model` must be the Hugging Face repo ID you deployed, or the name you set in `OPENAI_SERVED_MODEL_NAME_OVERRIDE`. If your clients send the Inference Endpoint's name as `model`, set that override to the same string and they won't need a code change beyond the URL and key.
+
+**TGI's native routes.** TGI serves `/generate` and `/generate_stream` next to its OpenAI-compatible routes. The vLLM worker serves `/chat/completions`, `/completions`, and `/models`. Move `/generate` callers to `/completions`. Hugging Face put TGI in maintenance mode in late 2025 and recommends vLLM or SGLang, so this is the same move you'd make on Inference Endpoints.
+
+**Autoscaling signals.** Inference Endpoints scales on hardware utilization, pending requests, or (in beta, for vLLM and SGLang) inference load. Runpod scales on queue delay (seconds a request waits) or request count (queued plus in-progress requests divided by a target). Request count is the closer match to pending requests.
+
+**Pause and resume.** A paused Inference Endpoint stays defined and isn't billed. On Runpod, an endpoint at zero workers isn't billed for compute, so there's no separate paused state. To block new workers from starting, set max workers to 0.
+
+**Unused endpoints scale down on their own.** After 3 days without a request, Runpod reduces an endpoint's max workers to 2 and emails you. After 7 days it sets max workers to 0, and it stays there until you raise it. An Inference Endpoint with min replicas above 0 keeps running until you change it.
+
+**Worker limits.** Your account balance sets the maximum number of workers across all endpoints (5 by default). See [Max worker limits](/serverless/workers/overview#max-worker-limits) before you size a large endpoint.
+
+### What has no direct equivalent
+
+| On Hugging Face | On Runpod | Workaround |
+| --- | --- | --- |
+| Public (unauthenticated) endpoint type | API key on every Serverless request | Proxy through your own backend. |
+| AWS PrivateLink for endpoints | Serverless endpoints are reached over public HTTPS with an API key | Contact Runpod about private networking requirements before you migrate. |
+| Choice of AWS, Azure, or Google Cloud as the vendor | Runpod data centers | Pin `dataCenterIds` if you need a location. Check [security and compliance](/references/security-and-compliance) for your requirements. |
+| AWS Inferentia2 (`inf2`) instances | GPU and CPU workers | Redeploy the standard (non-Neuron) model on a GPU. |
+| Daily autoscaling schedule | Not built in | Run `runpodctl serverless update ENDPOINT_ID --workers-min N` from your scheduler. |
+| `dataParallelSize` (several model copies on one multi-GPU instance) | One model copy per worker | Use single-GPU workers and raise max workers. |
+| Inference Providers routing across many providers with `:fastest` and `:cheapest` | Public Endpoints for listed models | Deploy other models on your own vLLM endpoint. |
+| ZeroGPU (a GPU attached per function call inside a Gradio Space) | Not available | Host the UI anywhere and call a queue-based endpoint for the GPU step. |
+| OpenMetrics export | REST v2 metrics routes | Poll `/v2/serverless/ENDPOINT_ID/metrics/requests`, `/metrics/cold-starts`, and `/metrics/workers`. |
+
+In the other direction, moving gives you a few things to build on: a request queue with async jobs, status polling, and webhooks on queue-based endpoints, persistent [network volumes](/storage/network-volumes) shared across workers, and per-second billing.
+
+## Requirements
+
+- A Hugging Face account with access to the endpoints, Spaces, and Jobs you're moving, and the [`hf` CLI](https://huggingface.co/docs/huggingface_hub/guides/cli) logged in (`hf auth login`).
+- A Hugging Face access token with read access to every gated or private repo you serve.
+- A [Runpod account](/accounts-billing/manage-accounts) with credits and a [Runpod API key](/get-started/credentials).
+- Docker, if you're moving a custom handler or a custom container.
+- Python 3.10 to 3.14, if you use the Runpod SDK.
+
+## Step 1: Take inventory of what you run on Hugging Face
+
+List every Inference Endpoint in every namespace you belong to, then print the full configuration of each one:
+
+```bash
+hf endpoints ls --namespace '*'
+hf endpoints describe ENDPOINT_NAME --namespace NAMESPACE
+```
+
+To export everything at once, dump the raw API response for each endpoint. It includes the repository and revision, engine image, environment variable names, instance type and size, vendor and region, replica limits, and the scale-to-zero timeout.
+
+```python export_endpoints.py
+import json
+
+from huggingface_hub import list_inference_endpoints
+
+inventory = []
+for endpoint in list_inference_endpoints(namespace="*"):
+    inventory.append(
+        {
+            "name": endpoint.name,
+            "namespace": endpoint.namespace,
+            "repository": endpoint.repository,
+            "revision": endpoint.revision,
+            "task": endpoint.task,
+            "status": endpoint.status,
+            "type": endpoint.type,
+            "url": endpoint.url,
+            "raw": endpoint.raw,
+        }
+    )
+
+with open("hf_endpoints.json", "w") as f:
+    json.dump(inventory, f, indent=2, default=str)
+
+print(f"Exported {len(inventory)} endpoints to hf_endpoints.json")
+```
+
+Secret values aren't returned, so collect them from wherever you keep them. For each endpoint, record which engine it runs (the key under `model.image` in `raw`, such as `vllm`, `tgi`, `tei`, `llamacpp`, `huggingface`, or `custom`) and whether the model repository contains a `handler.py`. Those two facts decide where the endpoint lands in Step 3.
+
+Then list the rest of your Hugging Face compute:
+
+```bash
+# Spaces you own, with the hardware each one runs on
+python -c "
+from huggingface_hub import HfApi
+api = HfApi()
+for space in api.list_spaces(author='NAMESPACE'):
+    runtime = api.get_space_runtime(space.id)
+    print(space.id, runtime.stage, runtime.hardware)
+"
+hf spaces info NAMESPACE/SPACE_NAME
+
+# Jobs, including finished ones, and scheduled Jobs
+hf jobs ps -a
+hf jobs scheduled ls
+```
+
+Any Space whose hardware isn't `cpu-basic` is using paid compute. Note each Space's SDK (Gradio, Docker, or static), its `app_port`, and its variables and secrets.
+
+Finally, find the code that calls Hugging Face compute or manages it:
+
+```bash
+grep -rnE "endpoints\.huggingface\.cloud|router\.huggingface\.co|api\.endpoints\.huggingface\.cloud|InferenceClient|AsyncInferenceClient|create_inference_endpoint|get_inference_endpoint|list_inference_endpoints|scale_to_zero|X-Scale-Up-Timeout|EndpointHandler|hf endpoints|hf jobs|run_job|@spaces\.GPU|\.hf\.space" \
+  --include="*.py" --include="*.ts" --include="*.js" --include="*.sh" --include="*.yml" --include="*.yaml" --include="*.env*" .
+```
+
+Code that only reads from the Hub (`from_pretrained`, `hf_hub_download`, `snapshot_download`, `load_dataset`) doesn't need to change.
+
+## Step 2: Set up Runpod
+
+Install `runpodctl` and the Runpod SDK, which includes the `rp` CLI, then store your API key:
+
+```bash
+# runpodctl (macOS: brew install runpod/runpodctl/runpodctl)
+curl -fsSL https://cli.runpod.net | sudo bash
+runpodctl doctor
+
+# Runpod SDK 2.x and the rp CLI
+pip install runpod
+rp login
+
+export RUNPOD_API_KEY="YOUR_API_KEY"
+```
+
+`runpodctl doctor` walks through first-time setup, and `rp login` saves credentials to `~/.runpod/config.toml`. To let a coding agent manage resources, add the [MCP server](/get-started/mcp-servers). If you manage infrastructure as code, the [Terraform provider](/integrations/terraform/overview) covers endpoints, templates, and volumes.
+
+Next, store your Hugging Face token as a Runpod secret so it never appears in an endpoint's configuration:
+
+```bash
+rp secret add hf_token
+```
+
+The command prompts for the value. You can also create the secret on the [Secrets page](https://www.console.runpod.io/user/secrets) in the console. Secret names can't start with `runpod`. Reference the secret from any environment variable as `{{ RUNPOD_SECRET_hf_token }}`.
+
+## Step 3: Choose where each workload lands
+
+| What you run on Hugging Face | Runpod target | Why |
+| --- | --- | --- |
+| Endpoint serving an LLM with vLLM, TGI, or SGLang | Serverless vLLM worker (queue-based) | Same repo ID, OpenAI-compatible route, requests queue during cold starts. |
+| Endpoint with a custom `handler.py` (Inference Toolkit) | Queue-based endpoint with a handler, or `@app.queue` | Closest contract: one function per request. |
+| Endpoint serving embeddings or rerankers with TEI | Load balancing endpoint running the TEI image | Keeps TEI's routes and batching. |
+| Endpoint with a GGUF model on llama.cpp | Load balancing endpoint running a llama.cpp server image | The server already exposes `/health`. |
+| Endpoint with a custom container | Load balancing endpoint | Your server's paths and payloads stay the same. |
+| Inference Providers call for a model in the Public Endpoints reference | Public Endpoint | Nothing to deploy. Billed per use. |
+| Inference Providers call for any other model | Serverless vLLM worker | You run the model yourself. |
+| Gradio, Streamlit, or Docker Space on GPU hardware | Pod with an exposed HTTP port | Long-running process with a URL. |
+| ZeroGPU Space | UI host of your choice plus a queue-based endpoint | The endpoint gives you a GPU per request. |
+| Job (`hf jobs run`, `hf jobs uv run`) | `@app.task`, or a Pod | Runs to completion, then terminates. |
+| Multi-node training | [Instant Cluster](/instant-clusters) | Slurm, PyTorch, or Ray across nodes. |
+
+Queue-based or load balancing is the main decision for an Inference Endpoint. Choose queue-based when requests can wait for a worker, run longer than a few minutes, or need retries. Choose load balancing when you need your own routes, non-JSON payloads, or WebSockets, and your requests finish within the 5.5 minute processing limit and the 30 MB payload limit.
+
+### GPU mapping
+
+Match on VRAM and GPU generation, then confirm the model fits. Instance names come from the [Inference Endpoints pricing page](https://huggingface.co/docs/inference-endpoints/support/pricing), and pools and GPU IDs come from the [GPU types reference](/references/gpu-types).
+
+| Inference Endpoints instance type | VRAM per GPU | Runpod GPU pool | Runpod GPUs in the pool |
+| --- | --- | --- | --- |
+| `nvidia-t4` | 16 GB | `AMPERE_16` | A4000, A4500, RTX 4000, RTX 2000 |
+| `nvidia-l4` | 24 GB | `AMPERE_24` | L4, A5000, 3090 |
+| `nvidia-a10g` | 24 GB | `AMPERE_24` or `ADA_24` | L4, A5000, 3090, or 4090 |
+| `nvidia-l40s` | 48 GB | `ADA_48_PRO` | L40, L40S, 6000 Ada |
+| `nvidia-a100` | 80 GB | `AMPERE_80` | A100 |
+| `nvidia-h100` | 80 GB | `ADA_80_PRO` | H100 |
+| `nvidia-h200` | 141 GB | `HOPPER_141` | H200 |
+| `nvidia-b200` | Check `hf endpoints hardware` | `BLACKWELL_180` | B200 (180 GB) |
+| `intel-spr`, `intel-xeon` (CPU) | None | CPU endpoint (`--compute-type CPU`) | See [CPU types](/references/cpu-types) |
+| `inf2` (AWS Inferentia2) | Not a GPU | No equivalent | Deploy the standard model on a GPU pool |
+
+The instance size (`x1`, `x2`, `x4`, `x8`) is the number of GPUs per replica. Set the same number with `--gpu-count`, or `gpu.count` in REST v2. You can list up to three GPU choices in priority order on one endpoint, which helps when your first choice is busy. Stock varies by data center, so check live availability with `runpodctl gpu list` or `GET /v2/catalog/gpus?include=AVAILABILITY&product=SERVERLESS` before you commit to a GPU.
+
+## Step 4: Move your images and code
+
+### LLM endpoints (vLLM, TGI, SGLang)
+
+There's no image to build. The vLLM worker takes the same repo ID, and engine settings become environment variables. Any `vllm serve` flag works as an upper snake case variable (`--max-model-len 8192` becomes `MAX_MODEL_LEN=8192`), and `VLLM_EXTRA_ARGS` passes flags through as written.
+
+| Inference Endpoints setting | vLLM worker variable |
+| --- | --- |
+| Model repository | `MODEL_NAME` (and the cached model reference) |
+| Commit revision | `MODEL_REVISION` |
+| TGI: Max Number of Tokens (`MAX_TOTAL_TOKENS`) | `MAX_MODEL_LEN` |
+| TGI: Quantization | `QUANTIZATION` (must match the checkpoint format) |
+| vLLM: Max Number of Sequences | `MAX_NUM_SEQS` |
+| vLLM: Max Number of Batched Tokens | `MAX_NUM_BATCHED_TOKENS` |
+| vLLM: KV Cache DType | `KV_CACHE_DTYPE` |
+| vLLM: Tensor Parallel Size | `TENSOR_PARALLEL_SIZE` (set automatically to the worker's GPU count) |
+| Container arguments such as `--enable-auto-tool-choice --tool-call-parser hermes` | `ENABLE_AUTO_TOOL_CHOICE=true`, `TOOL_CALL_PARSER=hermes`, or `VLLM_EXTRA_ARGS` |
+| Secret Env `HF_TOKEN` | `HF_TOKEN` set to `{{ RUNPOD_SECRET_hf_token }}` |
+| Name your clients send as `model` | `OPENAI_SERVED_MODEL_NAME_OVERRIDE` |
+
+TGI's batching limits (Max Input Tokens, Max Batch Prefill Tokens, Max Batch Total Tokens) have no one-to-one vLLM setting. Start with `MAX_MODEL_LEN` and `MAX_NUM_SEQS`, then tune from there. See [vLLM environment variables](/serverless/vllm/environment-variables) and [Configure vLLM](/serverless/vllm/configuration) for model-specific settings.
+
+### Custom handlers (`handler.py`)
+
+On Inference Endpoints, the Inference Toolkit imports `EndpointHandler` from a `handler.py` in your model repository, calls `__init__` once with the path to the weights, and calls `__call__` with the request body for every request. Here's a typical handler:
+
+```python handler.py (Hugging Face)
+from typing import Any, Dict, List
+
+from transformers import pipeline
+
+
+class EndpointHandler:
+    def __init__(self, path=""):
+        # Called once when the endpoint starts. `path` points to the model weights.
+        self.pipeline = pipeline("text-classification", model=path, device=0)
+
+    def __call__(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        # Called for every request. `data` is the request body.
+        inputs = data.pop("inputs", data)
+        parameters = data.pop("parameters", None) or {}
+        return self.pipeline(inputs, **parameters)
+```
+
+On Runpod, the worker is a container that you build. Load the model at module level so it happens once per worker, and read the request from `job["input"]`:
+
+```python handler.py (Runpod)
+import os
+
+import runpod
+from transformers import pipeline
+
+MODEL_ID = os.environ.get(
+    "MODEL_ID", "distilbert/distilbert-base-uncased-finetuned-sst-2-english"
+)
+HF_CACHE_ROOT = "/runpod-volume/huggingface-cache/hub"
+
+
+def resolve_snapshot_path(model_id: str) -> str:
+    """Return the local snapshot directory for a cached Hugging Face model."""
+    org, name = model_id.split("/", 1)
+    model_root = os.path.join(HF_CACHE_ROOT, f"models--{org}--{name}")
+    refs_main = os.path.join(model_root, "refs", "main")
+    snapshots_dir = os.path.join(model_root, "snapshots")
+
+    if os.path.isfile(refs_main):
+        with open(refs_main, "r") as f:
+            candidate = os.path.join(snapshots_dir, f.read().strip())
+        if os.path.isdir(candidate):
+            return candidate
+
+    if os.path.isdir(snapshots_dir):
+        versions = sorted(
+            d
+            for d in os.listdir(snapshots_dir)
+            if os.path.isdir(os.path.join(snapshots_dir, d))
+        )
+        if versions:
+            return os.path.join(snapshots_dir, versions[0])
+
+    raise RuntimeError(f"Cached model not found: {model_id}")
+
+
+# Runs once when the worker starts. This replaces EndpointHandler.__init__.
+classifier = pipeline(
+    "text-classification", model=resolve_snapshot_path(MODEL_ID), device=0
+)
+
+
+def handler(job):
+    # Runs for every request. This replaces EndpointHandler.__call__.
+    data = job["input"]
+    inputs = data.get("inputs")
+    if inputs is None:
+        return {"error": "Missing 'inputs'."}
+    parameters = data.get("parameters") or {}
+    return classifier(inputs, **parameters)
+
+
+runpod.serverless.start({"handler": handler})
+```
+
+Three things changed. `path` is now the snapshot directory of the cached model, which Runpod places at `/runpod-volume/huggingface-cache/hub/` when you attach a model to the endpoint (see [Use Hugging Face models](/serverless/development/huggingface-models#use-cached-models)). The handler keeps the `inputs` and `parameters` keys, so clients only wrap their existing body in `input`. Errors are returned as `{"error": "..."}`, which marks the job as `FAILED`.
+
+<Tip>
+To change as little code as possible, copy your existing `handler.py` into the image unchanged as `hf_handler.py` and wrap it: create `EndpointHandler(path=resolve_snapshot_path(MODEL_ID))` at module level, then return `endpoint_handler(job["input"])` from `handler(job)`.
+</Tip>
+
+Package the handler with a Dockerfile. Copy the dependencies from the `requirements.txt` in your model repository and add `runpod`:
+
+```dockerfile Dockerfile
+FROM pytorch/pytorch:2.9.1-cuda12.8-cudnn9-runtime
+
+WORKDIR /
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY handler.py .
+
+CMD ["python", "-u", "/handler.py"]
+```
+
+```txt requirements.txt
+runpod
+transformers
+```
+
+Build for `linux/amd64` and push to a registry Runpod can pull from:
+
+```bash
+docker build --platform linux/amd64 -t DOCKER_USER/sentiment-worker:v1 .
+docker push DOCKER_USER/sentiment-worker:v1
+```
+
+The base image uses CUDA 12.8, so set a matching CUDA floor when you create the endpoint in Step 6. The weights aren't in the image: Runpod stages them on the host. For a private registry, save credentials with `runpodctl registry create` and pass the ID with `--registry-auth-id` on the template. You can also skip the registry and [deploy from GitHub](/serverless/workers/github-integration).
+
+### Custom handlers without a Dockerfile
+
+The Runpod SDK builds and deploys the worker from a Python file. `runpod.Model` stages the weights from the Hub before the worker starts, and `model.path` points to them:
+
+```python main.py
+import runpod
+
+app = runpod.App("sentiment")
+
+model = runpod.Model("distilbert/distilbert-base-uncased-finetuned-sst-2-english")
+
+
+@app.queue(
+    gpu="4090",
+    workers=(0, 3),
+    idle_timeout=60,
+    dependencies=["transformers"],
+    model=model,
+)
+def classify(inputs: str, parameters: dict | None = None):
+    from transformers import pipeline
+
+    classifier = pipeline("text-classification", model=str(model.path), device=0)
+    return classifier(inputs, **(parameters or {}))
+
+
+@runpod.local_entrypoint
+def main():
+    print(classify.remote("This migration went well."))
+```
+
+Run it against temporary endpoints with `rp flash dev main.py`, then deploy with `rp flash deploy`. For a gated model, add `env={"HF_TOKEN": runpod.Secret("hf_token")}` to the decorator. This example builds the pipeline inside the function, the same way the SDK docs do. To load the model once per worker, serve it from an `@app.api` class and load it in a method marked `@runpod.init`. See [Build an app](/sdk/apps/build-app) and [Resource parameters](/sdk/configuration/parameters).
+
+### Custom containers, TEI, and llama.cpp
+
+A container that serves HTTP on Inference Endpoints runs on a load balancing endpoint with three changes:
+
+| Inference Endpoints | Runpod load balancing endpoint |
+| --- | --- |
+| Container port set in the endpoint's container configuration | `PORT` environment variable (default `80`). Set `PORT_HEALTH` to the same value. |
+| Health route set in the container configuration (for example `/health`), polled until it returns `200` | `HEALTH_CHECK_PATH` environment variable (default `/ping`). `200` means healthy, `204` means initializing, anything else is unhealthy. |
+| Model mounted at `/repository` | Cached model under `/runpod-volume/huggingface-cache/hub/`, or downloaded at startup with `HF_TOKEN` |
+
+If you don't want to rebuild the image, set `HEALTH_CHECK_PATH` to your existing health route. Changing `PORT` doesn't change `PORT_HEALTH`, so set both, and expose the port on the endpoint. If the server loads the model from `/repository`, make that path configurable and point it at the cached snapshot directory or a Hub repo ID.
+
+For TEI, run the image from the [TEI docs](https://huggingface.co/docs/text-embeddings-inference/quick_tour) (for example `ghcr.io/huggingface/text-embeddings-inference:cuda-1.9`). TEI reads `MODEL_ID`, `HF_TOKEN`, and `PORT` from the environment and serves `/health`, `/embed`, `/rerank`, `/predict`, and `/v1/embeddings`. Runpod's docs don't cover a dedicated embeddings worker, but the Hub has an embedding category you can search:
+
+```bash
+runpodctl hub search embedding --type SERVERLESS
+```
+
+Read a listing's required environment variables with `runpodctl hub get` before you deploy it.
+
+### Spaces and Jobs
+
+A Docker Space is already a container image. Build it for `linux/amd64`, push it, and run it on a Pod with the Space's `app_port` exposed (the default is `7860`). For a Gradio or Streamlit Space, add a Dockerfile that installs `requirements.txt` and starts the app bound to `0.0.0.0`. Space variables and secrets become Pod environment variables and Runpod secrets.
+
+A Job is an image, a command, and a hardware flavor. With the Runpod SDK, the same work is a function:
+
+<Tabs>
+  <Tab title="Hugging Face Jobs">
+    ```bash
+    hf jobs run --flavor a10g-small --secrets HF_TOKEN --timeout 2h \
+      pytorch/pytorch:2.6.0-cuda12.4-cudnn9-devel \
+      python train.py --steps 1000
+    ```
+  </Tab>
+  <Tab title="Runpod SDK">
+    ```python main.py
+    import runpod
+
+    app = runpod.App("training")
+
+    checkpoints = runpod.NetworkVolume("checkpoints", size=50)
+
+
+    @app.task(
+        gpu="4090",
+        dependencies=["transformers", "datasets"],
+        mounts={"/checkpoints": checkpoints},
+        env={"HF_TOKEN": runpod.Secret("hf_token")},
+    )
+    def train(steps: int = 1000):
+        run_dir = checkpoints.path / "run-1"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        # Your training code goes here. Save checkpoints to run_dir.
+        return {"steps": steps, "checkpoints": str(run_dir)}
+
+
+    @runpod.local_entrypoint
+    def main():
+        print(train.remote(steps=1000))
+    ```
+  </Tab>
+</Tabs>
+
+Each call to `train` provisions one Pod and terminates it when the function returns. Scheduled Jobs (`hf jobs scheduled run`) have no built-in counterpart: trigger the task from your own scheduler or CI.
+
+## Step 5: Move your data and models
+
+In most migrations there's nothing to copy, because the weights are on the Hub. Pick how each endpoint gets them:
+
+| Method | Use it when | How |
+| --- | --- | --- |
+| [Cached models](/serverless/endpoints/model-caching) | The model is on the Hub (public, gated, or private) | `--model-reference https://huggingface.co/ORG/NAME:main`, or the **Model** field in the console |
+| [Network volume](/storage/network-volumes) | You need several models on one endpoint, files that aren't on the Hub, or predictable load times | `hf download` onto the volume from a Pod |
+| Baked into the image | You need a fully self-contained image | `COPY` the files in your Dockerfile |
+
+Cached models are the closest match to how Inference Endpoints delivers weights. Runpod schedules workers on hosts that already hold the model where it can, and you aren't billed while a model downloads. An endpoint supports one cached model, and a repo with several quantization variants downloads all of them. The reference includes a ref (`:main`, a tag, or a commit), so pin the commit you serve today if your Inference Endpoint pins a revision.
+
+To pre-load a network volume, create it in the data center you'll serve from, start a small Pod with the volume attached, and download from the Hub:
+
+```bash
+runpodctl network-volume create --name models --size 100 --data-center-id US-KS-2
+
+runpodctl pod create --name model-loader \
+  --image "runpod/pytorch:1.0.3-cu1281-torch291-ubuntu2404" \
+  --gpu-id "NVIDIA GeForce RTX 4090" \
+  --data-center-ids US-KS-2 \
+  --network-volume-id NETWORK_VOLUME_ID \
+  --env '{"HF_TOKEN":"{{ RUNPOD_SECRET_hf_token }}"}'
+
+# Connect with `rp ssh POD_ID`, then run on the Pod (the volume is mounted at /workspace):
+pip install -U huggingface_hub
+hf download meta-llama/Llama-3.1-8B-Instruct --local-dir /workspace/models/llama-3.1-8b-instruct
+```
+
+A network volume pins every endpoint and Pod that mounts it to the volume's data center, so choose one that has the GPUs you need. On Serverless the same files appear under `/runpod-volume/models/`. Delete the loader Pod when the download finishes.
+
+Fine-tuned weights that only exist on a replica's disk or in a Space's ephemeral storage should be pushed to a Hub repository first (`hf upload`), then served from there. Datasets on the Hub load with `load_dataset` from Runpod as they do today.
+
+## Step 6: Deploy on Runpod
+
+### vLLM worker for an LLM endpoint
+
+Here's an Inference Endpoint definition and its Runpod equivalent:
+
+<Tabs>
+  <Tab title="Hugging Face">
+    ```python
+    from huggingface_hub import create_inference_endpoint
+
+    endpoint = create_inference_endpoint(
+        "llama-3-1-8b-instruct",
+        repository="meta-llama/Llama-3.1-8B-Instruct",
+        framework="pytorch",
+        task="text-generation",
+        accelerator="gpu",
+        vendor="aws",
+        region="us-east-1",
+        instance_type="nvidia-l4",
+        instance_size="x1",
+        min_replica=0,
+        max_replica=3,
+        scale_to_zero_timeout=15,
+        type="authenticated",
+        custom_image={
+            "vLLM": {
+                "url": "vllm/vllm-openai:v0.23.0",
+                "healthRoute": "/health",
+                "port": 8000,
+                "tensorParallelSize": 1,
+            }
+        },
+        secrets={"HF_TOKEN": "YOUR_HF_TOKEN"},
+    )
+    endpoint.wait()
+    ```
+  </Tab>
+  <Tab title="Runpod">
+    ```bash
+    # Find the vLLM worker's Hub listing ID
+    runpodctl hub search vllm --type SERVERLESS
+
+    runpodctl serverless create \
+      --hub-id HUB_ID \
+      --name llama-3-1-8b-instruct \
+      --gpu-id AMPERE_24 \
+      --workers-min 0 \
+      --workers-max 3 \
+      --idle-timeout 60 \
+      --execution-timeout 600 \
+      --model-reference https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct:main \
+      --env MODEL_NAME=meta-llama/Llama-3.1-8B-Instruct \
+      --env MAX_MODEL_LEN=8192 \
+      --env HF_TOKEN='{{ RUNPOD_SECRET_hf_token }}'
+    ```
+  </Tab>
+</Tabs>
+
+`--hub-id` pulls the image, container disk size, and default environment from the Hub release, and `--env` overrides or adds variables. `--model-reference` attaches the cached model, so workers start with the weights already on the host where possible. The command prints the endpoint ID that goes in every request URL. In the console, the same deployment is **Serverless > New Endpoint > Hugging Face**, where you enter the repo ID and token.
+
+Replicas translate directly: `min_replica` is `--workers-min` (active workers, billed continuously) and `max_replica` is `--workers-max`. `scale_to_zero_timeout=15` is in minutes, and `--idle-timeout` is in seconds with a maximum of 3600. A short idle timeout costs less and causes more cold starts.
+
+### Queue-based endpoint for a custom handler
+
+Create a Serverless template for the image you pushed in Step 4, then create the endpoint from it:
+
+<Tabs>
+  <Tab title="runpodctl">
+    ```bash
+    runpodctl template create \
+      --name sentiment-worker \
+      --image DOCKER_USER/sentiment-worker:v1 \
+      --serverless \
+      --container-disk-in-gb 20 \
+      --env '{"MODEL_ID":"distilbert/distilbert-base-uncased-finetuned-sst-2-english"}'
+
+    runpodctl serverless create \
+      --template-id TEMPLATE_ID \
+      --name sentiment \
+      --gpu-id AMPERE_24 \
+      --min-cuda-version 12.8 \
+      --workers-min 0 \
+      --workers-max 3 \
+      --idle-timeout 30 \
+      --execution-timeout 300 \
+      --model-reference https://huggingface.co/distilbert/distilbert-base-uncased-finetuned-sst-2-english:main
+    ```
+  </Tab>
+  <Tab title="REST API v2">
+    ```bash
+    curl -X POST "https://api.runpod.io/v2/serverless" \
+      -H "Authorization: Bearer $RUNPOD_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "sentiment",
+        "image": "DOCKER_USER/sentiment-worker:v1",
+        "type": "QUEUE",
+        "gpu": {"pools": ["AMPERE_24"], "count": 1, "minCudaVersion": "12.8"},
+        "workers": {"min": 0, "max": 3, "idleTimeout": 30},
+        "scaling": {"type": "QUEUE_DELAY", "queueDelay": 4},
+        "flashboot": "FLASHBOOT",
+        "timeout": 300000,
+        "disk": 20,
+        "env": {
+          "MODEL_ID": "distilbert/distilbert-base-uncased-finetuned-sst-2-english"
+        }
+      }'
+    ```
+  </Tab>
+</Tabs>
+
+With `--template-id`, environment variables come from the template, so set them on `template create`. Each Serverless template binds to one endpoint. In REST v2, `type` and `scaling` are required, `timeout` is in milliseconds, and FlashBoot is off unless you set it. The REST example creates the endpoint without a cached model, and the handler above loads from the cache, so its workers fail at startup with `Cached model not found` until you attach the model in the **Model** field in the console. To attach it at creation time, use the `runpodctl` tab.
+
+### Load balancing endpoint for a custom container or TEI
+
+Create load balancing endpoints through REST v2 or the console (**Serverless > New Endpoint**, endpoint type **Load Balancer**). This example runs TEI:
+
+```bash
+curl -X POST "https://api.runpod.io/v2/serverless" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "embeddings",
+    "image": "ghcr.io/huggingface/text-embeddings-inference:cuda-1.9",
+    "type": "LOAD_BALANCER",
+    "gpu": {"pools": ["AMPERE_24"], "count": 1},
+    "workers": {"min": 0, "max": 3, "idleTimeout": 60},
+    "scaling": {"type": "REQUEST_COUNT", "requestCount": 4},
+    "flashboot": "FLASHBOOT",
+    "ports": ["8080/http"],
+    "env": {
+      "MODEL_ID": "sentence-transformers/all-MiniLM-L6-v2",
+      "PORT": "8080",
+      "PORT_HEALTH": "8080",
+      "HEALTH_CHECK_PATH": "/health",
+      "HF_TOKEN": "{{ RUNPOD_SECRET_hf_token }}"
+    }
+  }'
+```
+
+Load balancing endpoints scale on request count. The endpoint is served at `https://ENDPOINT_ID.api.runpod.ai/`, and every path your server defines is available under it. For your own container, swap in your image and port, and set `HEALTH_CHECK_PATH` to the health route you configured on Inference Endpoints. This TEI configuration downloads the model when a worker starts, so expect a longer cold start than with a cached model.
+
+### Public Endpoint for an Inference Providers call
+
+There's nothing to deploy. Check the [model reference](/public-endpoints/reference) for the model you call through `router.huggingface.co`. If it's listed, switch the client in Step 7. If it isn't, deploy it with the vLLM worker above.
+
+### Pod for a Space
+
+Run the Space's image on a Pod and expose its port over HTTP:
+
+```bash
+runpodctl pod create \
+  --name gradio-app \
+  --image DOCKER_USER/my-space:v1 \
+  --gpu-id "NVIDIA GeForce RTX 4090" \
+  --ports "7860/http" \
+  --container-disk-in-gb 40 \
+  --env '{"HF_TOKEN":"{{ RUNPOD_SECRET_hf_token }}"}'
+```
+
+The app is served at `https://POD_ID-7860.proxy.runpod.net`.
+
+<Warning>
+The Pod proxy URL is public and unauthenticated. If your Space relied on Hugging Face's access controls, add authentication in the app or put it behind your own proxy before you expose it. Proxy connections also time out after 100 seconds, so a request that takes longer needs a TCP port or a queue-based endpoint behind the app.
+</Warning>
+
+A Pod bills per second while it runs, whether or not anyone is using the app, like an upgraded Space with no sleep time. If you relied on a Space's sleep time, stop the Pod yourself with `runpodctl pod stop POD_ID` and start it again with `runpodctl pod start POD_ID`.
+
+## Step 7: Update the code that calls Hugging Face
+
+### OpenAI-compatible clients
+
+Swap the base URL and the key. Everything else in the call stays the same.
+
+<Tabs>
+  <Tab title="Before (Inference Endpoints)">
+    ```python
+    import os
+
+    from openai import OpenAI
+
+    client = OpenAI(
+        base_url="https://NAME.REGION.VENDOR.endpoints.huggingface.cloud/v1/",
+        api_key=os.environ["HF_TOKEN"],
+    )
+
+    response = client.chat.completions.create(
+        model="llama-3-1-8b-instruct",
+        messages=[{"role": "user", "content": "Why is the sky blue?"}],
+        max_tokens=200,
+    )
+    print(response.choices[0].message.content)
+    ```
+  </Tab>
+  <Tab title="After (Runpod)">
+    ```python
+    import os
+
+    from openai import OpenAI
+
+    client = OpenAI(
+        base_url="https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1",
+        api_key=os.environ["RUNPOD_API_KEY"],
+    )
+
+    response = client.chat.completions.create(
+        model="meta-llama/Llama-3.1-8B-Instruct",
+        messages=[{"role": "user", "content": "Why is the sky blue?"}],
+        max_tokens=200,
+    )
+    print(response.choices[0].message.content)
+    ```
+  </Tab>
+</Tabs>
+
+`model` is the repo ID you deployed, or the value of `OPENAI_SERVED_MODEL_NAME_OVERRIDE`. Streaming works with `stream=True`. Raise the client's timeout for the first request after a cold start, and drop the `X-Scale-Up-Timeout` header.
+
+### `InferenceClient`
+
+`InferenceClient` accepts a `base_url` and exposes the same `chat.completions.create` method, so you can keep it and point it at Runpod:
+
+```python
+import os
+
+from huggingface_hub import InferenceClient
+
+client = InferenceClient(
+    base_url="https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1",
+    api_key=os.environ["RUNPOD_API_KEY"],
+)
+
+response = client.chat.completions.create(
+    model="meta-llama/Llama-3.1-8B-Instruct",
+    messages=[{"role": "user", "content": "Why is the sky blue?"}],
+    max_tokens=200,
+)
+print(response.choices[0].message.content)
+```
+
+Task methods that call TGI's native routes, such as `client.text_generation()` or `endpoint.client.text_generation()`, have no route on the vLLM worker. Replace them with `chat.completions.create` or the OpenAI client's `completions.create`.
+
+### TGI `/generate` callers
+
+Move raw `/generate` requests to the completions route and rename the parameters:
+
+<Tabs>
+  <Tab title="Before (TGI)">
+    ```bash
+    curl "https://NAME.REGION.VENDOR.endpoints.huggingface.cloud/generate" \
+      -H "Authorization: Bearer $HF_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{"inputs": "What is deep learning?", "parameters": {"max_new_tokens": 200}}'
+    ```
+  </Tab>
+  <Tab title="After (Runpod)">
+    ```bash
+    curl "https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1/completions" \
+      -H "Authorization: Bearer $RUNPOD_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"model": "meta-llama/Llama-3.1-8B-Instruct", "prompt": "What is deep learning?", "max_tokens": 200}'
+    ```
+  </Tab>
+</Tabs>
+
+The response is an OpenAI completion object, so read `choices[0].text`. `/generate_stream` callers move to the same route with `"stream": true`.
+
+### Custom handler clients
+
+Wrap the body in `input`, change the URL and key, and read the result from `output`:
+
+<Tabs>
+  <Tab title="Before (Inference Endpoints)">
+    ```python
+    import os
+
+    import requests
+
+    response = requests.post(
+        "https://NAME.REGION.VENDOR.endpoints.huggingface.cloud",
+        headers={"Authorization": f"Bearer {os.environ['HF_TOKEN']}"},
+        json={"inputs": "I like you. I love you.", "parameters": {"top_k": 2}},
+        timeout=120,
+    )
+    response.raise_for_status()
+    print(response.json())
+    ```
+  </Tab>
+  <Tab title="After (Runpod)">
+    ```python
+    import os
+
+    import requests
+
+    response = requests.post(
+        "https://api.runpod.ai/v2/ENDPOINT_ID/runsync",
+        headers={"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}"},
+        json={"input": {"inputs": "I like you. I love you.", "parameters": {"top_k": 2}}},
+        timeout=120,
+    )
+    response.raise_for_status()
+    result = response.json()
+    if result["status"] != "COMPLETED":
+        raise RuntimeError(f"Job {result['id']} is {result['status']}")
+    print(result["output"])
+    ```
+  </Tab>
+</Tabs>
+
+`/runsync` returns the result when the job finishes within the wait window. If the job is still queued or running when the window closes, the response has a status of `IN_QUEUE` or `IN_PROGRESS`, and you fetch the result from `/status/JOB_ID`. For anything longer than a few seconds, submit to `/run`, which returns a job ID right away, then poll `/status/JOB_ID` or pass a `webhook` URL in the request. Results are kept for 30 minutes after an async job and 1 minute after a sync job. Payloads are limited to 10 MB on `/run` and 20 MB on `/runsync`, so send large inputs as URLs. The same calls are available from Python through `runpod.Endpoint("ENDPOINT_ID").run_sync({...})`. See [Send API requests](/serverless/endpoints/send-requests).
+
+### Custom container and TEI clients
+
+Only the host and the key change. Paths and payloads stay the same:
+
+```python
+import os
+
+from openai import OpenAI
+
+# Before: base_url="https://NAME.REGION.VENDOR.endpoints.huggingface.cloud/v1/", api_key=HF_TOKEN
+client = OpenAI(
+    base_url="https://ENDPOINT_ID.api.runpod.ai/v1",
+    api_key=os.environ["RUNPOD_API_KEY"],
+)
+
+result = client.embeddings.create(
+    model="sentence-transformers/all-MiniLM-L6-v2",
+    input=["Runpod pulls models from the Hugging Face Hub."],
+)
+print(len(result.data[0].embedding))
+```
+
+Add retries for the cold start window. A request that arrives before a worker is healthy can return `no workers available`. Use at least 3 retries with a 5 to 10 second delay.
+
+### Inference Providers clients
+
+For a model that's listed as a Public Endpoint with OpenAI compatibility, such as [Qwen3 32B](/public-endpoints/models/qwen3-32b), swap the router URL for the model's endpoint:
+
+<Tabs>
+  <Tab title="Before (Inference Providers)">
+    ```python
+    import os
+
+    from openai import OpenAI
+
+    client = OpenAI(
+        base_url="https://router.huggingface.co/v1",
+        api_key=os.environ["HF_TOKEN"],
+    )
+
+    completion = client.chat.completions.create(
+        model="Qwen/Qwen3-32B:fastest",
+        messages=[{"role": "user", "content": "Hello!"}],
+    )
+    ```
+  </Tab>
+  <Tab title="After (Runpod Public Endpoint)">
+    ```python
+    import os
+
+    from openai import OpenAI
+
+    client = OpenAI(
+        base_url="https://api.runpod.ai/v2/qwen3-32b-awq/openai/v1",
+        api_key=os.environ["RUNPOD_API_KEY"],
+    )
+
+    completion = client.chat.completions.create(
+        model="Qwen/Qwen3-32B-AWQ",
+        messages=[{"role": "user", "content": "Hello!"}],
+    )
+    ```
+  </Tab>
+</Tabs>
+
+Each Public Endpoint has its own URL, so there's no single router and no provider suffix (`:fastest`, `:cheapest`, `:groq`) on the model name. The Public Endpoint may serve a different variant of the model than the provider you used (here, an AWQ quantization), so compare outputs before you switch. Image, video, and audio models use `/runsync` with an `input` object. See [Make API requests](/public-endpoints/requests).
+
+### Control plane automation
+
+| `huggingface_hub` or `hf` CLI | Runpod |
+| --- | --- |
+| `create_inference_endpoint(...)`, `hf endpoints deploy` | `runpodctl serverless create`, or `POST /v2/serverless` |
+| `create_inference_endpoint_from_catalog(...)`, `hf endpoints catalog deploy` | `runpodctl serverless create --hub-id HUB_ID` |
+| `list_inference_endpoints()`, `hf endpoints ls` | `runpodctl serverless list`, or `GET /v2/serverless` |
+| `get_inference_endpoint(name)`, `hf endpoints describe` | `runpodctl serverless get ENDPOINT_ID --include-template --include-workers` |
+| `endpoint.wait()` | Poll `GET https://api.runpod.ai/v2/ENDPOINT_ID/health` until `workers.idle` (ready to start) or `workers.running` is above 0, or submit to `/run` and let the job wait in the queue |
+| `endpoint.update(min_replica=1, max_replica=6)` | `runpodctl serverless update ENDPOINT_ID --workers-min 1 --workers-max 6` |
+| `endpoint.update(scale_to_zero_timeout=15)` | `runpodctl serverless update ENDPOINT_ID --idle-timeout 900` |
+| `endpoint.scale_to_zero()` | `runpodctl serverless update ENDPOINT_ID --workers-min 0` (workers stop after the idle timeout) |
+| `endpoint.pause()` | `runpodctl serverless update ENDPOINT_ID --workers-min 0 --workers-max 0` |
+| `endpoint.resume()` | `runpodctl serverless update ENDPOINT_ID --workers-max 3` |
+| `endpoint.delete()`, `hf endpoints delete` | `runpodctl serverless delete ENDPOINT_ID` |
+| `list_inference_endpoints_hardware()`, `hf endpoints hardware` | `runpodctl gpu list`, or `GET /v2/catalog/gpus` |
+
+After any update that sets a worker count to 0, confirm it with `runpodctl serverless get ENDPOINT_ID`, and update `runpodctl` first if it's an old build.
+
+A batch script that resumes an endpoint, waits, runs inference, and pauses it again gets simpler: submit the jobs to `/run` on an endpoint with zero active workers. Workers start for the queue and stop when it's empty.
+
+## Step 8: Verify, cut over, and shut down
+
+1. **Send a real request from outside Runpod.** Check the endpoint's health, then send the same prompt or payload you send to Hugging Face:
+
+   ```bash
+   curl "https://api.runpod.ai/v2/ENDPOINT_ID/health" \
+     -H "Authorization: Bearer $RUNPOD_API_KEY"
+
+   curl "https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1/chat/completions" \
+     -H "Authorization: Bearer $RUNPOD_API_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{"model": "meta-llama/Llama-3.1-8B-Instruct", "messages": [{"role": "user", "content": "Reply with the word ready."}], "max_tokens": 10}'
+   ```
+
+2. **Compare outputs and latency.** Run a fixed set of requests against both platforms with the same sampling settings (set `temperature` to 0 where you can). Expect small differences when the engine changes, for example TGI to vLLM, or when the quantization differs. Measure a cold start as well as warm latency: the response includes `delayTime` and `executionTime`, and the endpoint's **Metrics** tab shows cold start percentiles.
+3. **Run both in parallel.** Keep the Inference Endpoint up and send a share of traffic to Runpod through a feature flag or your gateway.
+4. **Shift the rest of the traffic**, then watch error rates and queue delay for a full traffic cycle.
+5. **Stop billing on Hugging Face.** Pause first so you can roll back, then delete once you're sure:
+
+   ```bash
+   # Inference Endpoints: a paused endpoint isn't billed and keeps its configuration
+   hf endpoints pause ENDPOINT_NAME --namespace NAMESPACE
+   hf endpoints delete ENDPOINT_NAME --namespace NAMESPACE --yes
+
+   # Spaces: paused time isn't billed
+   hf spaces pause NAMESPACE/SPACE_NAME
+
+   # Jobs
+   hf jobs cancel JOB_ID
+   hf jobs scheduled delete SCHEDULED_JOB_ID
+   ```
+
+   Deleting an Inference Endpoint is permanent and removes its configuration, logs, and usage metrics. Keep the model repositories and the token that Runpod uses to read them. Revoke tokens that only the old clients used.
+
+6. **Set cost guards on Runpod.** Keep `--workers-min` at 0 unless you need warm capacity, set `--workers-max` to the concurrency you're willing to pay for, set an execution timeout on every endpoint, and keep the idle timeout short. Delete loader Pods and unused network volumes, which bill for storage until you remove them. Track spend on the [billing page](/accounts-billing/billing).
+
+## Reference
+
+### CLI command map
+
+| `hf` CLI | `runpodctl` or `rp` |
+| --- | --- |
+| `hf auth login` | `runpodctl doctor`, `rp login` |
+| `hf endpoints ls` | `runpodctl serverless list` |
+| `hf endpoints describe NAME` | `runpodctl serverless get ENDPOINT_ID` |
+| `hf endpoints deploy NAME --repo ...` | `runpodctl serverless create --template-id ...` or `--hub-id ...` |
+| `hf endpoints catalog ls` | `runpodctl hub list`, `runpodctl hub search` |
+| `hf endpoints catalog deploy --repo ...` | `runpodctl serverless create --hub-id HUB_ID` |
+| `hf endpoints update NAME --min-replica 2 --max-replica 6` | `runpodctl serverless update ENDPOINT_ID --workers-min 2 --workers-max 6` |
+| `hf endpoints pause`, `resume`, `scale-to-zero` | `runpodctl serverless update` with `--workers-min` and `--workers-max` |
+| `hf endpoints delete NAME --yes` | `runpodctl serverless delete ENDPOINT_ID` |
+| `hf endpoints hardware` | `runpodctl gpu list`, `runpodctl datacenter list` |
+| `hf jobs run`, `hf jobs uv run` | `rp flash dev main.py --once` for an `@app.task`, or `runpodctl pod create` |
+| `hf jobs logs JOB_ID` | `rp logs POD_ID --follow` |
+| `hf spaces pause`, `hf spaces restart` | `runpodctl pod stop POD_ID`, `runpodctl pod start POD_ID` |
+| `hf spaces secrets add` | `rp secret add SECRET_NAME` |
+| `hf download REPO_ID` | Unchanged. Run it on a Pod to fill a network volume. |
+
+### API map
+
+The Inference Endpoints API is at `https://api.endpoints.huggingface.cloud`. Runpod's REST API v2 is at `https://api.runpod.io`. Both use `Authorization: Bearer`.
+
+| Inference Endpoints API | Runpod REST API v2 |
+| --- | --- |
+| `POST /v2/endpoint/{namespace}` | `POST /v2/serverless` |
+| `GET /v2/endpoint/{namespace}` | `GET /v2/serverless` |
+| `GET /v2/endpoint/{namespace}/{name}` | `GET /v2/serverless/{id}` |
+| `PUT /v2/endpoint/{namespace}/{name}` | `PATCH /v2/serverless/{id}` |
+| `DELETE /v2/endpoint/{namespace}/{name}` | `DELETE /v2/serverless/{id}` |
+| `POST .../pause`, `.../resume`, `.../scale-to-zero` | `PATCH /v2/serverless/{id}` with `workers.min` and `workers.max` |
+| `GET /v2/endpoint/{namespace}/{name}/replica` | `GET /v2/serverless/{id}/workers` |
+| `GET /v2/endpoint/{namespace}/{name}/logs` | `GET /v2/serverless/{id}/workers/{workerId}/logs` |
+| `POST /v2/endpoint/{namespace}/{name}/metrics/...`, `GET .../open-metrics` | `GET /v2/serverless/{id}/metrics/requests`, `/metrics/cold-starts`, `/metrics/workers` |
+| `GET /v2/provider` (vendors, regions, compute) | `GET /v2/catalog/gpus`, `GET /v2/catalog/datacenters` |
+
+### Configuration field map
+
+| `create_inference_endpoint` argument | `runpodctl` flag | REST v2 field |
+| --- | --- | --- |
+| `name` | `--name` | `name` |
+| `repository`, `revision` | `--model-reference URL:REF`, `--env MODEL_NAME=...` | `env.MODEL_NAME` |
+| `accelerator` | `--compute-type` | `gpu` or `cpu` |
+| `instance_type` | `--gpu-id` | `gpu.pools` |
+| `instance_size` | `--gpu-count` | `gpu.count` |
+| `vendor`, `region` | `--data-center-ids` | `dataCenterIds` |
+| `min_replica` | `--workers-min` | `workers.min` |
+| `max_replica` | `--workers-max` | `workers.max` |
+| `scale_to_zero_timeout` (minutes) | `--idle-timeout` (seconds) | `workers.idleTimeout` |
+| `scaling_metric`, `scaling_threshold` | `--scale-by`, `--scale-threshold` | `scaling.type`, `scaling.queueDelay` or `scaling.requestCount` |
+| `custom_image["url"]` | `--image` on `template create` | `image` |
+| `custom_image["port"]` | `--ports` on `template create` | `ports`, `env.PORT`, `env.PORT_HEALTH` |
+| `custom_image["healthRoute"]` | Template `--env` | `env.HEALTH_CHECK_PATH` |
+| `container_command`, `container_args` | `--docker-entrypoint`, `--docker-start-cmd` on `template create` | `entrypoint`, `cmd` |
+| `container_registry_username`, `container_registry_password` | `runpodctl registry create`, then `--registry-auth-id` | `registry` |
+| `env` | `--env` | `env` |
+| `secrets` | `--env KEY='{{ RUNPOD_SECRET_name }}'` | `env` with a secret reference |
+| `type` (`public`, `authenticated`, `private`) | Not applicable | Not applicable (API key required) |
+| `task`, `framework` | Not applicable | Not applicable (decided by the worker image) |
+| No equivalent | `--execution-timeout` (seconds) | `timeout` (milliseconds) |
+
+### Environment variable map
+
+| Inside an Inference Endpoints container | Inside a Runpod worker |
+| --- | --- |
+| Model files at `/repository` | Cached model at `/runpod-volume/huggingface-cache/hub/models--ORG--NAME/snapshots/HASH/`. Network volume at `/runpod-volume`. |
+| `HF_TOKEN` from Secret Env | `HF_TOKEN` from a Runpod secret |
+| TGI: `MODEL_ID`, `MAX_INPUT_LENGTH`, `MAX_TOTAL_TOKENS` | vLLM worker: `MODEL_NAME`, `MAX_MODEL_LEN` |
+| Port and health route from the container configuration | `PORT`, `PORT_HEALTH`, `HEALTH_CHECK_PATH` (load balancing endpoints) |
+| Not applicable | `RUNPOD_INIT_TIMEOUT`: seconds a worker may take to initialize (default 420) |
+
+### Status map
+
+Inference Endpoints reports one state per endpoint. Runpod reports a state per worker, and a state per job on queue-based endpoints.
+
+| Inference Endpoint state | Runpod equivalent |
+| --- | --- |
+| `pending` | Endpoint created, no worker yet. Workers show **Initializing** while the image and cached model are pulled. |
+| `initializing` | Worker **Initializing**, then **Running** during the cold start. Jobs wait as `IN_QUEUE`. |
+| `running` | Worker **Running** (processing or waiting out the idle timeout) or **Idle** (ready to start). |
+| `scaledToZero` | All workers **Idle**. Not billed. The next request starts a worker. |
+| `paused` | Max workers set to 0. |
+| `updating` | A new release is rolling out. Workers on the old version show **Outdated** until they're replaced. |
+| `failed`, `updateFailed` | Workers **Unhealthy**. Runpod retries them with increasing delays. |
+| No equivalent | Worker **Throttled**: the host's GPUs are busy, so the worker can't start there yet. |
+
+Job states on queue-based endpoints are `IN_QUEUE`, `IN_PROGRESS`, `COMPLETED`, `FAILED`, `CANCELLED`, and `TIMED_OUT`.
+
+## Migrate with a coding agent
+
+Install the Runpod skills and connect the MCP server:
+
+<Tabs>
+  <Tab title="Claude Code">
+    ```bash
+    # The plugin also connects the hosted MCP server
+    claude plugin marketplace add runpod/runpod-plugins-official
+    claude plugin install runpod@runpod
+    ```
+  </Tab>
+  <Tab title="Other agents">
+    ```bash
+    # Codex, Cursor, and others: skills, then the hosted MCP server
+    npx skills add runpod/runpod-plugins-official --skill '*' --agent AGENT_ID --global
+    npx @runpod/mcp-server@latest add --client CLIENT_ID
+    ```
+  </Tab>
+</Tabs>
+
+The MCP server signs in with OAuth (**Sign in with Runpod**), so you don't need an API key to start. See [Agent skills](/get-started/agent-skills) and [MCP servers](/get-started/mcp-servers).
+
+Then give your agent this prompt from the root of your repository:
+
+```text
+Use the runpod-cloud-migrate skill to migrate this project from Hugging Face
+Inference Endpoints to Runpod. Models, datasets, and tokens stay on the Hugging
+Face Hub. Only the compute moves.
+
+1. Inventory first. Run `hf endpoints ls --namespace '*'` and
+   `hf endpoints describe` for each endpoint, list GPU Spaces and Jobs, and grep
+   this repo for endpoints.huggingface.cloud, router.huggingface.co,
+   InferenceClient, create_inference_endpoint, EndpointHandler, and hf jobs.
+   Don't change anything yet.
+2. For each workload, tell me the engine (vLLM, TGI, SGLang, TEI, llama.cpp,
+   Inference Toolkit with handler.py, or custom container) and the Runpod target
+   you propose: vLLM worker, queue-based endpoint, load balancing endpoint,
+   Public Endpoint, Pod, or @app.task.
+3. Show me a plan with the GPU pool, worker limits, idle timeout, and a cost
+   estimate for each endpoint. Wait for my approval before you create anything
+   billable.
+4. Migrate one workload first. Keep the same Hugging Face repo ID, attach it as
+   a cached model, and read HF_TOKEN from a Runpod secret. Never print the token.
+5. Verify with a real request to the new endpoint and compare the output with
+   the Hugging Face endpoint.
+6. Update the client code (base URL, API key, request envelope) on a branch.
+7. Don't pause or delete any Hugging Face endpoint, Space, or Job unless I
+   approve it explicitly.
+```
+
+## Troubleshooting
+
+**The worker fails with `Cached model not found` or tries to load `/repository`.** The handler still expects Hugging Face's mount path, or the endpoint has no cached model attached. Attach the model with `--model-reference` or the **Model** field, and load from the snapshot directory under `/runpod-volume/huggingface-cache/hub/`.
+
+**A gated model returns 401 or 403 while a worker starts.** The endpoint has no `HF_TOKEN`, or the token's account hasn't accepted the model's terms. Set `HF_TOKEN` to `{{ RUNPOD_SECRET_hf_token }}` and confirm the token can read the repo. Workers pick up a changed secret on their next start.
+
+**The first request after idle returns a 524 or times out.** The cold start took longer than the synchronous wait. Send the first request to `/run` and poll `/status`, raise the idle timeout, or set one active worker.
+
+**OpenAI calls return an invalid model error.** The client still sends the Inference Endpoint's name as `model`. Send the Hugging Face repo ID, or set `OPENAI_SERVED_MODEL_NAME_OVERRIDE` to the name your clients use.
+
+**`/generate` returns 404 or an error.** TGI's native routes aren't served by the vLLM worker. Call `/openai/v1/completions` or `/openai/v1/chat/completions`.
+
+**A load balancing worker never becomes healthy.** The load balancer polls `/ping` on port 80 by default. Set `HEALTH_CHECK_PATH` to your health route, set `PORT` and `PORT_HEALTH` to your server's port, and expose that port on the endpoint. With misconfigured ports, workers stay up for 8 minutes and return `502`.
+
+**Requests return `no workers available`.** A load balancing endpoint has no healthy worker yet. Retry with a delay, or keep an active worker. If the request can wait, a queue-based endpoint holds it for you.
+
+**The vLLM worker runs out of GPU memory on a model that fit before.** vLLM pre-allocates VRAM for its KV cache, and your new GPU may have less memory than the old instance. Lower `MAX_MODEL_LEN` or `GPU_MEMORY_UTILIZATION`, or move up a pool.
+
+**Workers stay Throttled or Initializing for a long time.** The selected GPU is busy in the allowed data centers, or the model is still downloading to the host. Add a second and third GPU choice, remove data center restrictions, and for large models raise `RUNPOD_INIT_TIMEOUT`.
+
+**An endpoint that worked last week returns no workers.** Runpod set max workers to 0 after 7 days without requests. Raise max workers again.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="vLLM workers" href="/serverless/vllm/overview" icon="bolt" horizontal>
+    Configure and tune LLM endpoints.
+  </Card>
+  <Card title="Cached models" href="/serverless/endpoints/model-caching" icon="database" horizontal>
+    Serve Hugging Face models without baking them into images.
+  </Card>
+  <Card title="Endpoint settings" href="/serverless/endpoints/endpoint-configurations" icon="gear" horizontal>
+    Set workers, timeouts, and autoscaling.
+  </Card>
+  <Card title="Runpod SDK" href="/sdk/overview" icon="python" horizontal>
+    Define endpoints and tasks in Python.
+  </Card>
+</CardGroup>

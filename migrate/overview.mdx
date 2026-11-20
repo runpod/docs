@@ -1,0 +1,194 @@
+---
+title: "Migrate to Runpod"
+sidebarTitle: "Overview"
+description: "Move GPU workloads to Runpod from another cloud or AI platform, with a step-by-step guide for each one and a coding agent skill that does the work."
+---
+
+These guides take a workload that runs on another platform and land it on Runpod. Each one maps the other platform's concepts to Runpod's, lists what works differently, and walks through the move with before and after code, CLI commands, and API calls. Every guide was written against the other platform's current documentation.
+
+<Tip>
+Want an agent to do it? Install the [Runpod skills](/get-started/agent-skills) and ask your coding agent to migrate the project. See [Migrate with a coding agent](#migrate-with-a-coding-agent).
+</Tip>
+
+## Choose your guide
+
+### GPU clouds
+
+<CardGroup cols={2}>
+  <Card title="Vast.ai" href="/migrate/vast-ai" icon="server" horizontal>
+    Instances, templates, and Vast Serverless to Pods and Serverless.
+  </Card>
+  <Card title="Lambda" href="/migrate/lambda" icon="server" horizontal>
+    On-demand instances, filesystems, and 1-Click Clusters.
+  </Card>
+  <Card title="CoreWeave" href="/migrate/coreweave" icon="dharmachakra" horizontal>
+    Kubernetes workloads, Slurm, and object storage.
+  </Card>
+  <Card title="Paperspace and DigitalOcean" href="/migrate/paperspace" icon="server" horizontal>
+    Machines, Notebooks, Deployments, and GPU Droplets.
+  </Card>
+</CardGroup>
+
+### Serverless and inference platforms
+
+<CardGroup cols={2}>
+  <Card title="Modal" href="/migrate/modal" icon="python" horizontal>
+    Modal apps, functions, classes, and volumes to the Runpod SDK.
+  </Card>
+  <Card title="Replicate" href="/migrate/replicate" icon="box" horizontal>
+    Hosted models, Cog models, and deployments.
+  </Card>
+  <Card title="Baseten" href="/migrate/baseten" icon="box" horizontal>
+    Truss models, Model APIs, and autoscaling settings.
+  </Card>
+  <Card title="fal" href="/migrate/fal" icon="image" horizontal>
+    Model APIs, the queue API, and fal Serverless apps.
+  </Card>
+  <Card title="Together AI" href="/migrate/together-ai" icon="message" horizontal>
+    Serverless inference, dedicated endpoints, and fine-tuned models.
+  </Card>
+  <Card title="Fireworks AI" href="/migrate/fireworks-ai" icon="message" horizontal>
+    Serverless inference, on-demand deployments, and custom models.
+  </Card>
+  <Card title="Hugging Face" href="/migrate/hugging-face" icon="face-smile" horizontal>
+    Inference Endpoints, custom handlers, and GPU Spaces.
+  </Card>
+</CardGroup>
+
+### Hyperscalers
+
+<CardGroup cols={3}>
+  <Card title="AWS" href="/migrate/aws" icon="aws" horizontal>
+    EC2 GPU instances, SageMaker, and Bedrock.
+  </Card>
+  <Card title="Google Cloud" href="/migrate/google-cloud" icon="google" horizontal>
+    Compute Engine, Vertex AI, and Cloud Run.
+  </Card>
+  <Card title="Azure" href="/migrate/azure" icon="microsoft" horizontal>
+    GPU VMs, Azure Machine Learning, and Azure OpenAI.
+  </Card>
+</CardGroup>
+
+The hyperscaler guides include a Terraform path that uses the [Runpod Terraform provider](/integrations/terraform/overview), so you can run both providers in one configuration while you move.
+
+### Frameworks and API versions
+
+<CardGroup cols={2}>
+  <Card title="Cog" href="/tutorials/migrations/cog/overview" icon="box" horizontal>
+    Run an existing Cog image on Runpod Serverless.
+  </Card>
+  <Card title="OpenAI" href="/tutorials/migrations/openai/overview" icon="message" horizontal>
+    Point OpenAI client code at a vLLM endpoint on Runpod.
+  </Card>
+  <Card title="Runpod REST v1 and GraphQL" href="/api-reference-v2/migrate-from-v1" icon="code" horizontal>
+    Move existing Runpod integrations to REST API v2.
+  </Card>
+  <Card title="Flash" href="/sdk/migrate-from-flash" icon="bolt" horizontal>
+    Move a `runpod-flash` project to the Runpod SDK.
+  </Card>
+</CardGroup>
+
+If your platform isn't listed, the process below still applies. Match each workload to a Runpod product by its shape, then follow that product's docs.
+
+## Where workloads land
+
+The other platform's product name matters less than what the workload does. Sort each one by its shape.
+
+| Workload | Runpod product | Start here |
+| --- | --- | --- |
+| Calls a model someone else hosts. | [Public Endpoints](/public-endpoints/overview), when Runpod hosts that model. | [Quickstart](/public-endpoints/quickstart) |
+| Takes a request, returns a response, and sits idle in between. | [Serverless](/serverless/overview) queue-based endpoint. | [Serverless quickstart](/serverless/quickstart) |
+| Runs your own HTTP server with custom routes and low latency. | Serverless [load-balancing endpoint](/serverless/load-balancing/overview). | [Load balancing overview](/serverless/load-balancing/overview) |
+| Serves an LLM behind an OpenAI-compatible API. | Serverless endpoint running the [vLLM worker](/serverless/vllm/overview). | [vLLM quickstart](/serverless/vllm/get-started) |
+| Python functions you'd rather not containerize yourself. | The [Runpod SDK](/sdk/overview). | [SDK quickstart](/sdk/quickstart) |
+| A job that runs to completion, such as training or a batch run. | A [Pod](/pods/overview), or one Pod per call from the Runpod SDK. | [Choose a Pod](/pods/choose-a-pod) |
+| An interactive machine for notebooks, SSH, or an IDE. | A Pod. | [Connect to a Pod](/pods/connect-to-a-pod) |
+| An always-on service with a stable address. | A Pod. | [Expose ports](/pods/configuration/expose-ports) |
+| Multi-node training or HPC. | [Instant Clusters](/instant-clusters). | [Slurm clusters](/instant-clusters/slurm-clusters) |
+
+## How a migration goes
+
+Every guide follows the same eight steps, so you can run them in order or jump to the one you need.
+
+<Steps>
+  <Step title="Take inventory">
+    List what runs on the other platform and find the code that calls it. Consoles often hold resources that no file in your repo mentions.
+  </Step>
+  <Step title="Set up Runpod">
+    Create an account, get an [API key](/get-started/credentials), and install the tools you'll use: [runpodctl](/runpodctl/overview), the [Runpod SDK](/sdk/overview), the [MCP server](/get-started/mcp-servers), or [Terraform](/integrations/terraform/overview).
+  </Step>
+  <Step title="Choose where each workload lands">
+    Use the table above, then pick a GPU that fits the model. GPU stock varies by data center, so check what's available before you commit to a type.
+  </Step>
+  <Step title="Move images and code">
+    Most container images run on Runpod unchanged if they're built for `linux/amd64`. Platform-specific contracts, such as a handler signature or a health route, need a small port.
+  </Step>
+  <Step title="Move data and models">
+    Copy datasets and checkpoints to a [network volume](/storage/network-volumes). For models on Hugging Face, [cached models](/serverless/endpoints/model-caching) skip the copy.
+  </Step>
+  <Step title="Deploy">
+    Create the Pod or endpoint from the console, runpodctl, the REST API, the SDK, or Terraform.
+  </Step>
+  <Step title="Update callers">
+    Change the URL, the auth header, and the request shape in the code that calls the workload. Put the new values behind configuration so you can switch back.
+  </Step>
+  <Step title="Verify, cut over, and shut down">
+    Send real requests to both deployments and compare. Shift traffic, then stop what's still billing on the other platform.
+  </Step>
+</Steps>
+
+## Migrate with a coding agent
+
+The Runpod plugin for coding agents includes a migration skill, `runpod-cloud-migrate`. It scans your repository for the platforms it depends on, opens the matching playbook, and proposes a plan before it changes anything. It migrates one workload at a time and verifies each with a real request.
+
+<Steps>
+  <Step title="Install the Runpod skills and MCP server">
+    <Tabs>
+      <Tab title="Claude Code">
+        The plugin installs the skills and connects the hosted MCP server:
+
+        ```bash
+        claude plugin marketplace add runpod/runpod-plugins-official
+        claude plugin install runpod@runpod
+        ```
+      </Tab>
+      <Tab title="Other agents">
+        Install the skills for your agent, then connect the hosted MCP server:
+
+        ```bash
+        npx skills add runpod/runpod-plugins-official --skill '*' --agent AGENT_ID --global
+        npx @runpod/mcp-server@latest add --client CLIENT_ID
+        ```
+
+        Replace `AGENT_ID` and `CLIENT_ID` with your agent's ID, for example `cursor` or `codex`.
+      </Tab>
+    </Tabs>
+
+    The MCP server signs you in with your Runpod account, so you don't need an API key to start. See [Agent skills](/get-started/agent-skills) and [MCP servers](/get-started/mcp-servers) for details.
+  </Step>
+  <Step title="Ask for the migration">
+    Open your project and paste this prompt. In Claude Code, you can run `/runpod:migrate-cloud` instead.
+
+    ```text
+    Use the runpod-cloud-migrate skill to move this project to Runpod.
+
+    1. Inventory the repository first and show me which platforms it uses and where.
+    2. For each workload, propose where it lands on Runpod, what changes in the code,
+       what data has to move, and anything that has no direct equivalent.
+    3. Show me the plan and an hourly cost estimate. Wait for my approval before you
+       create anything on Runpod.
+    4. Migrate one workload at a time, starting with the smallest. Verify each one with
+       a real request and show me the result.
+    5. Keep the current deployment callable behind a config switch so I can roll back.
+    6. Don't stop, change, or delete anything on the platform we're leaving unless I
+       name the resource and approve it.
+    ```
+  </Step>
+  <Step title="Review the plan">
+    The agent stops after the inventory and plan. Check the targets, the GPU choice, and the list of gaps, then approve it. Nothing billable is created before that point.
+  </Step>
+</Steps>
+
+## Get help
+
+If a guide is wrong or a step fails, [open an issue on GitHub](https://github.com/runpod/docs/issues). For large or committed workloads, [talk to the Runpod sales team](https://ecykq.share.hsforms.com/2MZdZATC3Rb62Dgci7knjbA) about capacity planning and pricing.
