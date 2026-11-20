@@ -70,6 +70,7 @@ Fast tests that don't require GPU deployments. Run these for quick validation.
 | cli-list-gpus | List available GPUs using runpodctl | `runpodctl gpu list` returns GPU types |
 | template-list | List all templates | API returns template array |
 | api-key-create | Create an API key with specific permissions | New API key ID returned |
+| mcp-hosted-connect | Connect the hosted Runpod MCP server to a coding agent | MCP tool call (e.g., list-pods) succeeds after connecting |
 | pods-add-ssh-key | Add an SSH key to your Runpod account | Key appears in account |
 | public-flux | Generate an image using FLUX public endpoint | Image data returned |
 | public-qwen | Use the Qwen3 32B public endpoint | Chat completion returned |

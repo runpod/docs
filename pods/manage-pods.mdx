@@ -1,6 +1,6 @@
 ---
 title: "Manage Pods"
-description: "Create, start, stop, and terminate Pods using the Runpod console or CLI. Review setup, configuration, and operations guidance for Runpod Pods."
+description: "Create, start, stop, restart, and terminate Pods using the Runpod console or CLI. Review setup, configuration, and operations guidance for Runpod Pods."
 ---
 
 import { MachineTooltip, TemplatesTooltip } from "/snippets/tooltips.jsx";
@@ -18,6 +18,7 @@ runpodctl config --apiKey RUNPOD_API_KEY
 | **Deploy** | [Pods page](https://www.console.runpod.io/pods) → Deploy | `runpodctl pod create --name NAME --gpu-id "GPU" --image "IMAGE"` |
 | **Start** | Expand Pod → Play icon | `runpodctl pod start POD_ID` |
 | **Stop** | Expand Pod → Stop icon | `runpodctl pod stop POD_ID` |
+| **Restart** | Three-dot menu → Restart Pod | `runpodctl pod restart POD_ID` |
 | **Update** | Three-dot menu → Edit Pod | `runpodctl pod update POD_ID` |
 | **Terminate** | Expand Pod → Trash icon | `runpodctl pod delete POD_ID` |
 | **List** | [Pods page](https://www.console.runpod.io/pods) | `runpodctl pod list` |
@@ -62,16 +63,15 @@ runpodctl pod create \
 
 ```bash
 curl --request POST \
-  --url https://rest.runpod.io/v1/pods \
-  --header 'Authorization: Bearer RUNPOD_API_KEY' \
+  --url https://api.runpod.io/v2/pods \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
   --header 'Content-Type: application/json' \
   --data '{
     "name": "my-pod",
-    "imageName": "runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04",
-    "gpuTypeIds": ["NVIDIA GeForce RTX 4090"],
-    "gpuCount": 1,
-    "containerDiskInGb": 50,
-    "volumeInGb": 20
+    "image": "runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04",
+    "gpu": {"id": "NVIDIA GeForce RTX 4090", "count": 1},
+    "disk": 50,
+    "mounts": {"persistent": {"size": 20, "path": "/workspace"}}
   }'
 ```
 
@@ -79,18 +79,17 @@ To deploy a Pod from an existing template, use the `templateId` parameter instea
 
 ```bash
 curl --request POST \
-  --url https://rest.runpod.io/v1/pods \
-  --header 'Authorization: Bearer RUNPOD_API_KEY' \
+  --url https://api.runpod.io/v2/pods \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
   --header 'Content-Type: application/json' \
   --data '{
     "name": "my-pod-from-template",
     "templateId": "YOUR_TEMPLATE_ID",
-    "gpuTypeIds": ["NVIDIA GeForce RTX 4090"],
-    "gpuCount": 1
+    "gpu": {"id": "NVIDIA GeForce RTX 4090", "count": 1}
   }'
 ```
 
-See the [Pod API reference](/api-reference/pods/POST/pods) for all parameters.
+See the [Create a Pod reference](/api-reference-v2/pods/create-a-pod) for all parameters.
 
 </Tab>
 </Tabs>
@@ -132,8 +131,10 @@ sleep 2h; runpodctl pod stop $RUNPOD_POD_ID &
 
 ```bash
 curl --request POST \
-  --url "https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID/stop" \
-  --header 'Authorization: Bearer RUNPOD_API_KEY'
+  --url "https://api.runpod.io/v2/pods/$RUNPOD_POD_ID/action" \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
+  --header 'Content-Type: application/json' \
+  --data '{"action":"stop"}'
 ```
 
 </Tab>
@@ -163,8 +164,45 @@ runpodctl pod start $RUNPOD_POD_ID
 
 ```bash
 curl --request POST \
-  --url "https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID/start" \
-  --header 'Authorization: Bearer RUNPOD_API_KEY'
+  --url "https://api.runpod.io/v2/pods/$RUNPOD_POD_ID/action" \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
+  --header 'Content-Type: application/json' \
+  --data '{"action":"start"}'
+```
+
+Unlike the console, the REST `start` action does not offer a zero-GPU start. If the GPUs on the Pod's host machine are no longer free, the request fails with `400` and a message saying there are not enough free GPUs on the host.
+
+</Tab>
+</Tabs>
+
+## Restart a Pod
+
+Restarting reboots a running Pod's container on the same machine. The Pod keeps its GPU, so it's a safe way to reload a process, such as one running as PID 1. Unlike stopping and starting, restarting can't leave you with [zero GPUs](/pods/troubleshooting/zero-gpus).
+
+<Tabs>
+<Tab title="Web">
+
+1. Open the [Pods page](https://www.console.runpod.io/pods).
+2. Open the Pod's three-dot menu and click **Restart Pod**.
+
+</Tab>
+
+<Tab title="CLI">
+
+```sh
+runpodctl pod restart $RUNPOD_POD_ID
+```
+
+</Tab>
+
+<Tab title="REST API">
+
+```bash
+curl --request POST \
+  --url "https://api.runpod.io/v2/pods/$RUNPOD_POD_ID/action" \
+  --header 'Authorization: Bearer RUNPOD_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{"action": "restart"}'
 ```
 
 </Tab>
@@ -192,16 +230,16 @@ Editing a running Pod resets it completely, erasing all data not stored in `/wor
 
 ```bash
 curl --request PATCH \
-  --url "https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID" \
-  --header 'Authorization: Bearer RUNPOD_API_KEY' \
+  --url "https://api.runpod.io/v2/pods/$RUNPOD_POD_ID" \
+  --header "Authorization: Bearer $RUNPOD_API_KEY" \
   --header 'Content-Type: application/json' \
   --data '{
-    "containerDiskInGb": 100,
-    "volumeInGb": 200
+    "disk": 100,
+    "mounts": {"persistent": {"size": 200, "path": "/workspace"}}
   }'
 ```
 
-See the [Pod API reference](/api-reference/pods/PATCH/pods/podId) for all editable fields.
+See the [Update a Pod reference](/api-reference-v2/pods/update-a-pod) for all editable fields.
 
 </Tab>
 </Tabs>
@@ -233,8 +271,8 @@ runpodctl pod delete $RUNPOD_POD_ID
 
 ```bash
 curl --request DELETE \
-  --url "https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID" \
-  --header 'Authorization: Bearer RUNPOD_API_KEY'
+  --url "https://api.runpod.io/v2/pods/$RUNPOD_POD_ID" \
+  --header "Authorization: Bearer $RUNPOD_API_KEY"
 ```
 
 </Tab>
