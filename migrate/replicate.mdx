@@ -1,0 +1,1284 @@
+---
+title: "Migrate from Replicate to Runpod"
+sidebarTitle: "Replicate"
+description: "Move Replicate models, Cog predictors, deployments, and client code to Runpod Public Endpoints and Serverless."
+---
+
+This guide is for teams that call models on [Replicate](https://replicate.com/docs) or host their own [Cog](https://cog.run) models there. Calls to [official models](https://replicate.com/docs/topics/models/official-models) map to Runpod [Public Endpoints](/public-endpoints/overview) where Runpod hosts the same model. Your own Cog models and [deployments](https://replicate.com/docs/topics/deployments) map to Runpod [Serverless](/serverless/overview) queue-based endpoints, and [trainings](https://replicate.com/docs/get-started/fine-tune-with-flux) map to Pods or `@app.task` runs in the Runpod SDK. At the end you'll have each workload running on Runpod, your client code calling it, and Replicate scaled down.
+
+<Tip>
+  You can hand most of this migration to a coding agent. See [Migrate with a coding agent](#migrate-with-a-coding-agent).
+</Tip>
+
+## How Replicate maps to Runpod
+
+| Replicate concept | Runpod equivalent | Notes |
+| --- | --- | --- |
+| Official model (always on, billed per output) | [Public Endpoint](/public-endpoints/overview) | Only for models in the [Public Endpoints model reference](/public-endpoints/reference). Billed per output. |
+| Community or public model (shared hardware, billed for run time) | Public Endpoint, a [Hub](/hub/overview) repo you deploy, or your own Serverless endpoint | On Runpod you run your own copy of anything that isn't a Public Endpoint. |
+| Private model | Serverless [queue-based endpoint](/serverless/endpoints/overview) | Scales to zero by default. |
+| Deployment (`min_instances`, `max_instances`, `hardware`) | Serverless endpoint (active workers, max workers, GPU pools) | See [Endpoint settings](/serverless/endpoints/endpoint-configurations). |
+| Model version (64-character ID) | Container image tag or digest on a Serverless template | You version by image. Endpoints built from GitHub keep a build history you can roll back. |
+| Cog (`cog.yaml`, `predict.py`, `cog push`) | `Dockerfile` + `handler.py`, or a `runpod.App` with `@app.queue` | See [Step 4](#step-4-move-your-images-and-code). |
+| `r8.im` registry | Any registry Runpod can pull from (Docker Hub, GHCR, ECR, and others) | Private registries use [container registry credentials](/get-started/credentials#container-registry-auth). |
+| Prediction | Job | `POST /run` or `/runsync` on `https://api.runpod.ai/v2/ENDPOINT_ID`. |
+| Prediction input (`{"input": {...}}`) | Job input (`{"input": {...}}`) | Same envelope. Field names inside `input` are whatever your handler reads. |
+| Output files on `replicate.delivery` | A URL you produce (your own S3-compatible bucket) or base64 in the response | Public Endpoints return hosted URLs. Your own endpoints return what your handler returns. |
+| Training (`trainings.create`, destination model) | A [Pod](/pods/overview) or an `@app.task` function that writes weights to a [network volume](/storage/network-volumes) | You own the training script and the weights. |
+| Hardware SKU (`gpu-t4`, `gpu-l40s`, `gpu-a100-large`, `gpu-h100`) | GPU pool (`AMPERE_16`, `ADA_48_PRO`, `AMPERE_80`, `ADA_80_PRO`) | See the [GPU mapping](#gpu-mapping). |
+| Cold boot | Cold start, reduced by FlashBoot, [cached models](/serverless/endpoints/model-caching), and active workers | |
+| Secret inputs (`cog.Secret`) | Endpoint environment variables that reference [Runpod secrets](/pods/templates/secrets) | Secrets are set on the endpoint, not sent per request. |
+| Billing: run time on shared hardware, or all online time for private models and deployments | Per-second billing while workers run (cold start, execution, idle timeout) | See [Serverless pricing](/serverless/pricing). Public Endpoints bill per output. |
+| HTTP API (`https://api.replicate.com/v1`) | Job API (`https://api.runpod.ai/v2/ENDPOINT_ID`) and [REST API v2](/api-reference-v2/overview) (`https://api.runpod.io/v2`) for managing resources | Two hosts: one to run jobs, one to manage infrastructure. |
+| Client libraries (`replicate` for Python and Node.js, Go, Swift) | `runpod` (Python), `runpod-sdk` (JavaScript), Go SDK, or plain HTTP | See the [operation reference](/serverless/endpoints/operation-reference). |
+| `REPLICATE_API_TOKEN` (`r8_...`) | `RUNPOD_API_KEY` | Both are sent as `Authorization: Bearer`. |
+| Organizations | [Organizations](/organizations/orgs-overview) | |
+| Deployments API for automation (`POST /v1/deployments`) | REST API v2, runpodctl, or the [Terraform provider](/integrations/terraform/overview) (`runpod/runpod`, built on REST API v2) | The provider manages `runpod_serverless_endpoint`, `runpod_template`, `runpod_network_volume`, and more. |
+| Deployment metrics dashboard, prediction logs | Endpoint **Metrics** and **Logs** tabs, worker log streaming | See [Logs](/serverless/development/logs) and [Job states and metrics](/serverless/endpoints/job-states). |
+| Replicate MCP server and agent skills | Runpod [MCP server](/get-started/mcp-servers) and [agent skills](/get-started/agent-skills) | |
+
+## What's different
+
+### What works differently
+
+**You run your own copy of community models.** On Replicate, any public model can be called by name on shared hardware. On Runpod, a model is either a Public Endpoint that Runpod hosts, or an endpoint in your account that you deploy from a Hub repo, a container image, or a `runpod.App`.
+
+**Billing follows workers, not predictions.** For Replicate public models you pay for the time a prediction runs. A Runpod Serverless endpoint bills per second while a worker is running, which includes cold start, execution, and the idle timeout after a job. With active workers set to 0, you pay nothing while no worker is running. This is closest to how Replicate bills private models and deployments.
+
+**Inputs are validated by your code.** Cog generates an input schema from the type annotations on `predict()` and rejects bad input before your code runs. A Runpod handler receives `job["input"]` as a plain dictionary. Validate it yourself, for example with the [validator utility](/serverless/development/validation). With `@app.queue` in the Runpod SDK, the keys of `input` are passed to your function as keyword arguments.
+
+**File outputs are yours to store.** Replicate uploads any `Path` your predictor returns and gives the client a `replicate.delivery` URL that expires after one hour. A Runpod handler returns JSON. Upload files to your own S3-compatible bucket and return the URL, or return base64 for small files. Response payloads are limited to 10 MB for `/run` and 20 MB for `/runsync`.
+
+**File inputs arrive as strings.** Cog downloads a file input and hands your code a local `Path`. On Runpod, your handler receives whatever the client sent (usually a URL) and downloads it itself. The Replicate client libraries also upload local files for you. With Runpod, host the file somewhere your worker can reach and send its URL.
+
+**Results are kept for a shorter time.** Replicate keeps API prediction data for one hour. Runpod keeps a job's result for 30 minutes after an async (`/run`) job completes and 1 minute after a sync (`/runsync`) job completes. Fetch results promptly, or use a webhook.
+
+**Sync waits are longer.** `Prefer: wait` holds a Replicate request open for up to 60 seconds. `/runsync` waits 90 seconds by default, and you can set `?wait=` from 1000 to 300000 milliseconds.
+
+**Timeouts are set per endpoint and per job.** Replicate predictions time out after 30 minutes unless you arrange otherwise, and `Cancel-After` sets a per-prediction deadline. Runpod has an execution timeout per endpoint (600 seconds by default in the console, up to 7 days) that you can override per request with `policy.executionTimeout`, plus a job TTL.
+
+**Streaming is polled.** Replicate streams over server-sent events from `urls.stream`. On Runpod, a handler that `yield`s exposes chunks at `GET /stream/JOB_ID`, which you call repeatedly until the job finishes. For LLMs served through an OpenAI-compatible route, `stream=True` works as it does with any OpenAI-compatible server.
+
+**Webhooks fire on completion.** Replicate can send `start`, `output`, `logs`, and `completed` events and signs each request. Runpod calls your webhook when the job finishes and retries up to 2 more times, 10 seconds apart, if your server doesn't return `200`.
+
+### What has no direct equivalent
+
+| On Replicate | On Runpod | Workaround |
+| --- | --- | --- |
+| A public catalog where anyone can call any community model by `owner/name` | Public Endpoints for a set of hosted models, and the Hub for repos you deploy into your own account | Deploy the model yourself (Hub, container, or `runpod.App`). |
+| Hosted output files (`replicate.delivery`) for your own models | Not provided for your own endpoints | Use your own bucket with `rp_upload`, or return base64. |
+| Signed webhooks (`webhook-id`, `webhook-timestamp`, `webhook-signature`) | Runpod's webhook docs don't describe a signature | Put an unguessable token in the webhook URL path, and confirm the job with `GET /status/JOB_ID` before you trust the payload. |
+| `webhook_events_filter` (`start`, `output`, `logs`) | Completion webhook only | Use `/stream` or progress updates with `/status` for intermediate state. |
+| Managed fine-tuning into a destination model with one API call | No managed trainer | Run the training script on a Pod or with `@app.task`, then serve the weights from a volume. |
+| Schema generated from `predict()` annotations, shown on the model page | No generated schema for handlers | Document your inputs, and validate in the handler. |
+| Per-request secret inputs that are redacted in logs | Secrets are endpoint environment variables | Move credentials from request inputs to endpoint env vars. |
+
+| On Runpod | On Replicate | Notes |
+| --- | --- | --- |
+| Any container image, any base, any server | Cog is the packaging format | You can still run a Cog image on Runpod. |
+| [Load balancing endpoints](/serverless/load-balancing/overview) with your own HTTP routes | Models are called through the predictions API | Useful for custom REST APIs and WebSockets. |
+| Jobs that run up to 7 days | 30 minute default prediction timeout | Set `policy.executionTimeout` and `policy.ttl`. |
+| Persistent [network volumes](/storage/network-volumes) shared by workers and Pods | Cog models typically carry weights in the image or fetch them in `setup()` | |
+
+## Requirements
+
+- Access to your Replicate account or organization, and an API token (`REPLICATE_API_TOKEN`).
+- A [Runpod account](/accounts-billing/manage-accounts) with credits, and a [Runpod API key](/get-started/credentials#api-keys).
+- [Docker](https://docs.docker.com/get-started/get-docker/) if you plan to build worker images, and an account with a container registry such as Docker Hub.
+- An S3-compatible bucket if your models return files.
+- Python 3.10 to 3.14 for the Runpod SDK.
+- The source code for each Cog model you host (`cog.yaml`, `predict.py`, and weights).
+
+## Step 1: Take inventory of what you run on Replicate
+
+List what you have on Replicate before you create anything on Runpod. Replicate's HTTP API covers most of what you need, and the commands below use `curl` and `jq`.
+
+Confirm which account or organization the token belongs to:
+
+```bash
+curl -s -H "Authorization: Bearer $REPLICATE_API_TOKEN" \
+  https://api.replicate.com/v1/account
+```
+
+List your deployments with their hardware and scaling settings:
+
+```bash
+curl -s -H "Authorization: Bearer $REPLICATE_API_TOKEN" \
+  https://api.replicate.com/v1/deployments \
+  | jq '.results[] | {owner, name, model: .current_release.model, version: .current_release.version, config: .current_release.configuration}'
+```
+
+Each result includes `current_release.configuration` with `hardware`, `min_instances`, and `max_instances`. These become the GPU pool, active workers, and max workers on Runpod. Results are paginated, so follow the `next` URL until it's `null`.
+
+List recent predictions to see which models and versions your code calls in practice:
+
+```bash
+curl -s -H "Authorization: Bearer $REPLICATE_API_TOKEN" \
+  "https://api.replicate.com/v1/predictions" \
+  | jq -r '.results[] | [.model, .version, .status, .metrics.predict_time] | @tsv' \
+  | sort | uniq -c | sort -rn
+```
+
+This returns 100 predictions per page, most recent first. Use the `predict_time` values to size timeouts and to pick a GPU later.
+
+List the trainings you've run, and the hardware SKUs Replicate offers so you can read the `hardware` values:
+
+```bash
+curl -s -H "Authorization: Bearer $REPLICATE_API_TOKEN" https://api.replicate.com/v1/trainings \
+  | jq '.results[] | {id, model, version, status, created_at}'
+
+curl -s -H "Authorization: Bearer $REPLICATE_API_TOKEN" https://api.replicate.com/v1/hardware
+```
+
+The models API lists public models, so find your own models (including private ones) on your Replicate dashboard. For each model you own, fetch its details and its input schema:
+
+```bash
+curl -s -H "Authorization: Bearer $REPLICATE_API_TOKEN" \
+  https://api.replicate.com/v1/models/OWNER/MODEL_NAME \
+  | jq '{visibility, latest: .latest_version.id, schema: .latest_version.openapi_schema.components.schemas.Input}'
+```
+
+The `Input` schema lists every input with its type, default, and constraints. Keep it: it's the contract your Runpod handler has to honor.
+
+Then find every place your code touches Replicate:
+
+```bash
+grep -rnE "import replicate|from replicate|require\(.replicate.\)|from .replicate.|api\.replicate\.com|REPLICATE_API_TOKEN|replicate\.delivery|r8\.im/|from cog import|cog (push|build|predict|run|login)" \
+  --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.venv .
+```
+
+Sort each hit into client calls (`replicate.run`, `predictions.create`, webhooks handlers), model code (`cog.yaml`, `predict.py`), and CI (`cog push` in pipelines). Also note anywhere you store or allow-list `replicate.delivery` URLs.
+
+For each workload, write down the model identifier, whether it's an official model, a community model, or your own, the hardware SKU, min and max instances, typical and worst-case run time, input and output types (especially files), and whether callers use sync mode, polling, streaming, or webhooks.
+
+## Step 2: Set up Runpod
+
+Create a [Runpod account](/accounts-billing/manage-accounts), add credits, and create an [API key](/get-started/credentials#api-keys). Then install the tools you need:
+
+```bash
+# runpodctl: manage endpoints, templates, volumes, and Pods from the terminal
+curl -fsSL https://cli.runpod.net | sudo bash
+runpodctl doctor
+
+# The Runpod SDK: endpoint client, worker SDK, and the rp CLI
+pip install runpod
+rp login
+
+export RUNPOD_API_KEY="YOUR_API_KEY"
+```
+
+`runpodctl doctor` walks you through API key and SSH key setup. `rp login` stores credentials in `~/.runpod/config.toml`, and the SDK also reads `RUNPOD_API_KEY`. On macOS you can install the CLI with `brew install runpod/runpodctl/runpodctl`. See the [runpodctl overview](/runpodctl/overview) and the [SDK overview](/sdk/overview).
+
+If you use a coding agent, also connect the [Runpod MCP server](/get-started/mcp-servers).
+
+## Step 3: Choose where each workload lands
+
+| What you run on Replicate | Where it lands on Runpod | Why |
+| --- | --- | --- |
+| Calls to an official or popular public model that Runpod also hosts | [Public Endpoint](/public-endpoints/overview) | Nothing to deploy. You change the URL, the input fields, and how you read the output. |
+| Calls to an open-source model that isn't a Public Endpoint (for example, speech-to-text) | A [Hub](/hub/overview) repo deployed to your account | A maintained worker with a handler already written. |
+| An LLM you call for chat or completions | Public Endpoint with an OpenAI-compatible route, or a [vLLM worker](/serverless/vllm/overview) | Both expose `/openai/v1`. |
+| Your own Cog model, and you want the fastest move | Serverless queue-based endpoint running your Cog image through [cog-worker](/tutorials/migrations/cog/overview) | No code changes. Adds an HTTP hop inside the worker. |
+| Your own Cog model, long term | Serverless queue-based endpoint with a native handler | Removes the Cog server from the request path and gives you full control of the image. |
+| Your own model, and you don't want to write a Dockerfile | `runpod.App` with `@app.queue` | Python-only, deployed with `rp flash deploy`. |
+| A model that needs custom HTTP routes or WebSockets | [Load balancing endpoint](/serverless/load-balancing/overview) | Your own HTTP server instead of the job queue. |
+| Trainings and fine-tunes | A [Pod](/pods/overview), or `@app.task` in the Runpod SDK | Long-running batch work that writes weights to a volume. |
+| Multi-node training | [Instant Cluster](/instant-clusters) | For jobs that need more than one machine. |
+
+### Public Endpoint model map
+
+These are the model families Runpod hosts as Public Endpoints, with the endpoint ID you put in the URL. Check the [model reference](/public-endpoints/reference) for the full list, since models are added and retired.
+
+| Model family | Runpod Public Endpoint ID | Output field |
+| --- | --- | --- |
+| FLUX.1 schnell | [`black-forest-labs-flux-1-schnell`](/public-endpoints/models/flux-schnell) | `output.image_url` |
+| FLUX.1 dev | [`black-forest-labs-flux-1-dev`](/public-endpoints/models/flux-dev) | `output.image_url` |
+| FLUX.1 Kontext dev | [`black-forest-labs-flux-1-kontext-dev`](/public-endpoints/models/flux-kontext-dev) | `output.image_url` |
+| Qwen Image | [`qwen-image-t2i`](/public-endpoints/models/qwen-image) | See the model page. |
+| Seedream 4.0 | [`seedream-v4-t2i`](/public-endpoints/models/seedream-4-t2i) | See the model page. |
+| Nano Banana 2 (edit) | [`google-nano-banana-2-edit`](/public-endpoints/models/nano-banana-2-edit) | See the model page. |
+| Wan 2.5 (image-to-video) | [`wan-2-5`](/public-endpoints/models/wan-2-5) | `output.result` |
+| Wan 2.6 (text-to-video) | [`wan-2-6-t2v`](/public-endpoints/models/wan-2-6-t2v) | See the model page. |
+| Wan 2.2 (image-to-video, 720p) | [`wan-2-2-i2v-720`](/public-endpoints/models/wan-2-2-i2v) | See the model page. |
+| Kling v2.6 Motion Control | [`kling-v2-6-std-motion-control`](/public-endpoints/models/kling-v2-6-motion-control) | See the model page. |
+| Kling Video O1 (reference-to-video) | [`kling-video-o1-r2v`](/public-endpoints/models/kling-video-o1-r2v) | `output.result` |
+| Seedance 2.5 (text-to-video) | [`tdq07exynr7zux`](/public-endpoints/models/seedance-2-5-t2v) | `output.result` |
+| Seedance 2.5 (image-to-video) | [`16jsvx5ncmm24x`](/public-endpoints/models/seedance-2-5-i2v) | `output.result` |
+| Sora 2 (image-to-video) | [`sora-2-i2v`](/public-endpoints/models/sora-2) | See the model page. |
+| Qwen3 32B | [`qwen3-32b-awq`](/public-endpoints/models/qwen3-32b) | `output[0].choices[0].tokens`, or OpenAI-compatible |
+| IBM Granite 4.0 | [`granite-4-0-h-small`](/public-endpoints/models/granite-4) | See the model page. |
+| Moonshot Kimi | [`moonshot-kimi`](/public-endpoints/models/moonshot-kimi) | OpenAI-compatible |
+| Chatterbox Turbo (text-to-speech) | [`chatterbox-turbo`](/public-endpoints/models/chatterbox-turbo) | `output.audio_url` |
+| Minimax Speech 02 HD | [`minimax-speech-02-hd`](/public-endpoints/models/minimax-speech) | See the model page. |
+
+<Note>
+  The same model family can ship in different variants on each platform, and input field names differ (for example, a Replicate model may take `aspect_ratio` where the Runpod endpoint takes `width` and `height`). Compare the input schema on the Replicate model page with the parameters on the Runpod model page before you switch.
+</Note>
+
+If the model you call isn't in the reference (Whisper and other speech-to-text models, for example), search the Hub for a worker you can deploy:
+
+```bash
+runpodctl hub search whisper --type SERVERLESS
+runpodctl hub get OWNER/REPO_NAME
+```
+
+If there's no hosted model and no Hub repo, and the model has open weights, deploy it yourself using the handler or `runpod.App` path in [Step 4](#step-4-move-your-images-and-code). Closed-weights models are only available on Runpod if they appear in the model reference.
+
+### GPU mapping
+
+Serverless endpoints select hardware by GPU pool. Map each Replicate hardware SKU to a pool with the same or more VRAM, then test: the fit depends on your model's memory use, not on the SKU name.
+
+| Replicate hardware SKU | GPU on Replicate | Runpod GPU pool | GPUs in the pool |
+| --- | --- | --- | --- |
+| `gpu-t4` | 1x T4, 16 GB | `AMPERE_16` | A4000, A4500, RTX 4000, RTX 2000 (16 GB) |
+| `gpu-t4` (if you need headroom) | 1x T4, 16 GB | `AMPERE_24` or `ADA_24` | L4, A5000, 3090, or 4090 (24 GB) |
+| `gpu-l40s` | 1x L40S, 48 GB | `ADA_48_PRO` | L40, L40S, 6000 Ada (48 GB) |
+| `gpu-a100-large` | 1x A100, 80 GB | `AMPERE_80` | A100 (80 GB) |
+| `gpu-h100` | 1x H100, 80 GB | `ADA_80_PRO` | H100 (80 GB) |
+| `gpu-h200` | 1x H200 | `HOPPER_141` | H200 (141 GB) |
+| `gpu-l40s-2x`, `gpu-a100-large-2x`, and other multi-GPU SKUs | 2 to 8 GPUs | The same pool with GPUs per worker set to the count | `--gpu-count` in runpodctl, `gpu.count` in REST v2, `gpu_count` in the SDK |
+| `cpu`, `cpu-small` | CPU only | A CPU endpoint | `--compute-type CPU`. See [CPU types](/references/cpu-types). |
+
+Run `GET https://api.replicate.com/v1/hardware` to see the SKUs your account can use. On Runpod, list available GPU types with `runpodctl gpu list` and availability by data center with `runpodctl datacenter list`, and see [GPU types](/references/gpu-types) for every device. Stock varies by data center and over time, so give an endpoint two or three pools in priority order when your model fits on more than one.
+
+## Step 4: Move your images and code
+
+Pick the path that matches each workload from Step 3.
+
+### Path 1: Call a Public Endpoint instead of a Replicate model
+
+There's no image or code to move. Skip to [Step 7](#step-7-update-the-code-that-calls-replicate) for the client changes.
+
+### Path 2a: Run your existing Cog image with cog-worker
+
+[cog-worker](https://github.com/runpod-workers/cog-worker) wraps a Cog model in a Runpod Serverless worker. You build an image that names the Replicate model and version, push it to your registry, and create an endpoint from it:
+
+```bash
+git clone https://github.com/runpod-workers/cog-worker.git
+cd cog-worker/
+
+docker build --platform linux/amd64 \
+  --tag DOCKER_USERNAME/my-cog-worker:v1 \
+  --build-arg COG_REPO=REPLICATE_OWNER \
+  --build-arg COG_MODEL=MODEL_NAME \
+  --build-arg COG_VERSION=VERSION_ID \
+  .
+
+docker push DOCKER_USERNAME/my-cog-worker:v1
+```
+
+`COG_REPO`, `COG_MODEL`, and `COG_VERSION` are the owner, model name, and 64-character version ID from the model's **Versions** tab on Replicate. The full walkthrough is in [Migrate a Cog model](/tutorials/migrations/cog/overview).
+
+<Warning>
+  This path keeps the FastAPI server that Cog uses to run the model inside the worker, so each job passes through an extra layer before it reaches your model, which can add a delay. Use it to move quickly, then port to a native handler. Send one test request to confirm how the worker maps `input` to your predictor's arguments and how it returns file outputs before you move traffic.
+</Warning>
+
+### Path 2b: Port predict.py to a Runpod handler
+
+This is the long-term path. The translation is mechanical:
+
+| Cog | Runpod handler |
+| --- | --- |
+| `cog.yaml` `build` section | `Dockerfile` |
+| `predict: "predict.py:Predictor"` | `CMD ["python", "-u", "/handler.py"]` |
+| `Predictor.setup()` | Module-level code that runs once when the worker starts |
+| `Predictor.predict(**inputs)` | `handler(job)`, reading `job["input"]` |
+| `Input(default=..., ge=..., le=..., choices=...)` | A validation schema in the handler |
+| Return `Path` | Upload the file and return a URL, or return base64 |
+| Return `Iterator[str]` and `yield` | A generator handler that `yield`s |
+| Raise an exception | Raise an exception (the job becomes `FAILED`), or return `{"error": "..."}` for a custom error message |
+| `cog predict -i prompt="..."` | `python handler.py --test_input '{"input": {"prompt": "..."}}'` |
+| `cog push r8.im/OWNER/MODEL` | `docker build` and `docker push` to your registry |
+
+Here's a complete Cog model before the port. It loads a text-to-image pipeline in `setup()` and returns a PNG:
+
+```yaml cog.yaml
+build:
+  gpu: true
+  python_version: "3.11"
+  python_requirements: requirements.txt
+predict: "predict.py:Predictor"
+```
+
+```python predict.py
+import random
+
+import torch
+from cog import BasePredictor, Input, Path
+from diffusers import AutoPipelineForText2Image
+
+
+class Predictor(BasePredictor):
+    def setup(self):
+        """Load the model into memory once, when the container starts."""
+        self.pipe = AutoPipelineForText2Image.from_pretrained(
+            "stabilityai/sdxl-turbo",
+            torch_dtype=torch.float16,
+            variant="fp16",
+        ).to("cuda")
+
+    def predict(
+        self,
+        prompt: str = Input(description="Text prompt"),
+        num_inference_steps: int = Input(description="Denoising steps", default=1, ge=1, le=8),
+        seed: int = Input(description="Random seed. Use -1 for a random seed.", default=-1),
+    ) -> Path:
+        if seed < 0:
+            seed = random.randint(0, 2**31 - 1)
+        generator = torch.Generator("cuda").manual_seed(seed)
+        image = self.pipe(
+            prompt=prompt,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=0.0,
+            generator=generator,
+        ).images[0]
+        out = "/tmp/out.png"
+        image.save(out)
+        return Path(out)
+```
+
+<Note>
+  Current Cog documentation uses `run: "run.py:Runner"`, `BaseRunner`, and a `run()` method. `BasePredictor`, `predict()`, and `cog predict` are deprecated there (`cog run -i` replaces `cog predict -i`) but still work, and Replicate's own guides still show them. The port below is the same for both: `setup()` becomes module-level code, and `predict()` or `run()` becomes the handler.
+</Note>
+
+Here's the same model as a Runpod worker. The handler validates input, generates the image, and returns a URL if a bucket is configured or base64 if not:
+
+```python handler.py
+import base64
+import os
+import random
+
+import runpod
+import torch
+from diffusers import AutoPipelineForText2Image
+from runpod.serverless.utils import rp_upload
+from runpod.serverless.utils.rp_validator import validate
+
+# Runs once per worker, when the container starts (Cog's setup()).
+pipe = AutoPipelineForText2Image.from_pretrained(
+    "stabilityai/sdxl-turbo",
+    torch_dtype=torch.float16,
+    variant="fp16",
+).to("cuda")
+
+# Replaces the Input(...) annotations on predict().
+INPUT_SCHEMA = {
+    "prompt": {"type": str, "required": True},
+    "num_inference_steps": {
+        "type": int,
+        "required": False,
+        "default": 1,
+        "constraints": lambda steps: 1 <= steps <= 8,
+    },
+    "seed": {"type": int, "required": False, "default": -1},
+}
+
+
+def handler(job):
+    """Runs once per job (Cog's predict())."""
+    validated = validate(job["input"], INPUT_SCHEMA)
+    if "errors" in validated:
+        return {"error": validated["errors"]}
+    args = validated["validated_input"]
+
+    seed = args["seed"] if args["seed"] >= 0 else random.randint(0, 2**31 - 1)
+    generator = torch.Generator("cuda").manual_seed(seed)
+    image = pipe(
+        prompt=args["prompt"],
+        num_inference_steps=args["num_inference_steps"],
+        guidance_scale=0.0,
+        generator=generator,
+    ).images[0]
+
+    out = f"/tmp/{job['id']}.png"
+    image.save(out)
+
+    try:
+        if os.environ.get("BUCKET_ENDPOINT_URL"):
+            # Uploads to your S3-compatible bucket and returns the object's URL.
+            return {"image_url": rp_upload.upload_image(job["id"], out), "seed": seed}
+
+        # No bucket configured: return the file inline. Keep this for small files only.
+        with open(out, "rb") as f:
+            return {"image_base64": base64.b64encode(f.read()).decode("utf-8"), "seed": seed}
+    finally:
+        os.remove(out)
+
+
+runpod.serverless.start({"handler": handler})
+```
+
+What matters in this file:
+
+- The model loads at module level, so it loads once per worker and stays in memory between jobs. Anything inside `handler()` runs on every job.
+- `validate()` returns either `errors` or `validated_input` with defaults filled in. Returning `{"error": ...}` sends your message back to the caller instead of running the model. See [Validate inputs](/serverless/development/validation).
+- `rp_upload.upload_image()` reads `BUCKET_ENDPOINT_URL`, `BUCKET_ACCESS_KEY_ID`, and `BUCKET_SECRET_ACCESS_KEY` from the worker's environment. `BUCKET_ENDPOINT_URL` must include your bucket name. See [S3 bucket configuration](/serverless/development/environment-variables#s3-bucket-configuration).
+- The returned dictionary becomes the job's `output`. There's no fixed output shape, so decide on one and keep it stable for your clients.
+
+The `Dockerfile` replaces the `build` section of `cog.yaml`:
+
+```dockerfile Dockerfile
+FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
+
+WORKDIR /
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Bake the weights into the image so cold starts don't download them.
+RUN python -c "import torch; from diffusers import AutoPipelineForText2Image; AutoPipelineForText2Image.from_pretrained('stabilityai/sdxl-turbo', torch_dtype=torch.float16, variant='fp16')"
+
+COPY handler.py /handler.py
+
+CMD ["python", "-u", "/handler.py"]
+```
+
+```txt requirements.txt
+runpod
+diffusers
+transformers
+accelerate
+```
+
+The base image already includes PyTorch and CUDA, so `requirements.txt` only lists what the handler adds. Pin the versions you run on Replicate so outputs match. If your model is on Hugging Face, you can leave the weights out of the image and use [cached models](/serverless/endpoints/model-caching) instead.
+
+Test the handler on a machine with a GPU before you build:
+
+```bash
+python handler.py --test_input '{"input": {"prompt": "a lighthouse at dawn", "num_inference_steps": 2}}'
+```
+
+Then build for `linux/amd64` and push:
+
+```bash
+docker build --platform linux/amd64 -t DOCKER_USERNAME/sdxl-turbo-worker:v1 .
+docker push DOCKER_USERNAME/sdxl-turbo-worker:v1
+```
+
+The `--platform linux/amd64` flag is required, including on Apple Silicon. Use a version tag or digest, not `:latest`, so you know which image each worker runs. See [Create a Dockerfile](/serverless/workers/create-dockerfile) and [Deploy workers from Docker Hub](/serverless/workers/deploy).
+
+#### File inputs
+
+If your predictor takes a `Path` input, the handler receives a string. Download it at the start of the handler:
+
+```python
+import requests
+
+
+def download(url: str, dest: str) -> str:
+    with requests.get(url, stream=True, timeout=60) as response:
+        response.raise_for_status()
+        with open(dest, "wb") as f:
+            for chunk in response.iter_content(chunk_size=1 << 20):
+                f.write(chunk)
+    return dest
+
+
+def handler(job):
+    image_path = download(job["input"]["image"], f"/tmp/{job['id']}-input")
+    ...
+```
+
+Clients that passed a local file handle to `replicate.run()` relied on the Replicate client to upload it. Change those callers to upload the file to your bucket first and send the URL. Request payloads are limited to 10 MB for `/run` and 20 MB for `/runsync`, so base64 inputs only suit small files.
+
+#### Streaming output
+
+A Cog predictor that returns `Iterator[str]` becomes a generator handler:
+
+```python handler.py
+import runpod
+
+
+def handler(job):
+    for token in generate_tokens(job["input"]["prompt"]):
+        yield token
+
+
+runpod.serverless.start({
+    "handler": handler,
+    "return_aggregate_stream": True,
+})
+```
+
+Each `yield` is available from `/stream/JOB_ID`. `return_aggregate_stream` also makes the collected output available from `/status` and `/runsync`. See [Streaming handlers](/serverless/workers/handler-functions#streaming-handlers).
+
+#### Concurrency
+
+Cog's `@cog.concurrent(max=N)` on an async `run()` (or `concurrency.max` in older `cog.yaml` files) maps to a [concurrent handler](/serverless/workers/concurrent-handler), where one worker processes several jobs at once.
+
+### Path 3: Port to a runpod.App
+
+If you'd rather not maintain a Dockerfile, define the model as a function in the Runpod SDK. The SDK packages your code and dependencies and runs them on Runpod's runtime images:
+
+```python main.py
+import runpod
+
+app = runpod.App("sdxl-turbo")
+
+sdxl_turbo = runpod.Model("stabilityai/sdxl-turbo")
+
+_pipe = None  # Loaded once per worker and reused across jobs.
+
+
+@app.queue(
+    gpu=runpod.GpuGroup.ADA_24,
+    workers=(0, 3),
+    idle_timeout=60,
+    dependencies=["diffusers", "transformers", "accelerate"],
+    model=sdxl_turbo,
+)
+def generate(prompt: str, num_inference_steps: int = 1, seed: int = -1) -> dict:
+    import base64
+    import io
+    import random
+
+    import torch
+    from diffusers import AutoPipelineForText2Image
+
+    global _pipe
+    if _pipe is None:
+        _pipe = AutoPipelineForText2Image.from_pretrained(
+            str(sdxl_turbo.path),
+            torch_dtype=torch.float16,
+            variant="fp16",
+        ).to("cuda")
+
+    if not 1 <= num_inference_steps <= 8:
+        raise ValueError("num_inference_steps must be between 1 and 8")
+    if seed < 0:
+        seed = random.randint(0, 2**31 - 1)
+
+    image = _pipe(
+        prompt=prompt,
+        num_inference_steps=num_inference_steps,
+        guidance_scale=0.0,
+        generator=torch.Generator("cuda").manual_seed(seed),
+    ).images[0]
+
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return {"image_base64": base64.b64encode(buffer.getvalue()).decode("utf-8"), "seed": seed}
+
+
+@runpod.local_entrypoint
+def main():
+    result = generate.remote(prompt="a lighthouse at dawn", num_inference_steps=2)
+    print(result["seed"], len(result["image_base64"]))
+```
+
+How this lines up with Cog:
+
+- `@app.queue(...)` replaces `cog.yaml`: `gpu` is the hardware, `workers` is the scaling range, and `dependencies` is the package list. `torch` is already on the built-in GPU images.
+- The function's parameters are the inputs. A request's `input` keys are passed as keyword arguments, so `{"input": {"prompt": "..."}}` calls `generate(prompt="...")`.
+- Imports go inside the function so your local machine doesn't need them, and the pipeline is cached in a module-level variable so it loads once per worker.
+- `model=sdxl_turbo` stages the Hugging Face weights on the host before the worker starts, and `sdxl_turbo.path` points to them inside the worker.
+- This example returns base64. For larger files, upload to your bucket inside the function and return the URL. Pass bucket credentials with `env` and `runpod.Secret`.
+
+Run it against real hardware with `rp flash dev main.py`. See the [SDK quickstart](/sdk/quickstart) and [resource parameters](/sdk/configuration/parameters).
+
+### Environment variables and secrets
+
+Cog models take secrets as `cog.Secret` inputs on each prediction. On Runpod, set them once as environment variables on the endpoint and read them with `os.environ`. Store the value as a [Runpod secret](/get-started/credentials#secrets) and reference it as `{{ RUNPOD_SECRET_secret_name }}` in the variable's value, or use `runpod.Secret("secret-name")` in a `runpod.App`. Remove secret fields from your request inputs.
+
+## Step 5: Move your data and models
+
+Cog models carry their weights in the image or fetch them in `setup()`, so there's usually no separate storage to copy. What you need to move is model weights and any files your callers depend on.
+
+**Weights in your Cog image.** If your weights are in the model repository or downloaded during the Cog build, they're already in your source. Bake them into the worker image as shown in Step 4, or put them on a network volume.
+
+**Weights from Hugging Face.** Use [cached models](/serverless/endpoints/model-caching). Runpod tries to start workers on hosts that already have the model and makes it available under `/runpod-volume/huggingface-cache/hub/`. Set it in the console's **Model** field, with `--model-reference` in runpodctl, or with `model=runpod.Model(...)` in the SDK.
+
+**Fine-tuned weights created on Replicate.** A Replicate training adds a new version to its destination model. Replicate's fine-tuning guide describes a **Download weights** option for trained models, and the training object (`GET /v1/trainings/TRAINING_ID`) has an `output` field. Download the weights while you still have access, then put them where your Runpod worker can read them.
+
+**Large or shared weights.** Create a network volume and copy files to it through the [S3-compatible API](/storage/s3-api):
+
+```bash
+runpodctl network-volume create --name model-weights --size 100 --data-center-id EU-RO-1
+
+aws s3 cp --region EU-RO-1 \
+  --endpoint-url https://s3api-eu-ro-1.runpod.io/ \
+  ./my-lora.safetensors s3://NETWORK_VOLUME_ID/loras/my-lora.safetensors
+```
+
+The S3-compatible API uses a separate S3 API key and is available in the data centers listed on that page. On Serverless workers the volume is mounted at `/runpod-volume`, so this file is at `/runpod-volume/loras/my-lora.safetensors`. A network volume lives in one data center, and an endpoint that mounts it runs its workers there. Choose a data center that has the GPU pool you need (`runpodctl datacenter list`).
+
+**Output files your users still reference.** Files on `replicate.delivery` from API predictions are deleted after an hour, so anything you need should already be in your own storage. Update allow-lists and any code that expects `replicate.delivery` hosts.
+
+## Step 6: Deploy on Runpod
+
+### Public Endpoints
+
+There's nothing to deploy. Test the model in the [Hub playground](https://console.runpod.io/hub?tabSelected=public_endpoints), then go to Step 7.
+
+### Hub repo
+
+Deploy a Hub repo to a Serverless endpoint in your account:
+
+```bash
+runpodctl hub search whisper --type SERVERLESS
+runpodctl serverless create --hub-id HUB_ID --name "speech-to-text"
+```
+
+GPU settings, container disk, and default environment variables come from the Hub release. Override the GPU with `--gpu-id` and environment variables with `--env KEY=VALUE`. In the console, open the [Hub](https://console.runpod.io/hub), select the repo, and click **Deploy**.
+
+### Serverless endpoint from your image
+
+A Replicate deployment is one API call with a model, version, hardware, and instance range:
+
+```bash
+curl -s -X POST https://api.replicate.com/v1/deployments \
+  -H "Authorization: Bearer $REPLICATE_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "sdxl-turbo",
+    "model": "acme/sdxl-turbo",
+    "version": "VERSION_ID",
+    "hardware": "gpu-l40s",
+    "min_instances": 0,
+    "max_instances": 3
+  }'
+```
+
+On Runpod, create a Serverless template that holds the image and environment, then an endpoint that holds the hardware and scaling:
+
+```bash
+runpodctl template create \
+  --name "sdxl-turbo-worker" \
+  --image "docker.io/DOCKER_USERNAME/sdxl-turbo-worker:v1" \
+  --serverless \
+  --container-disk-in-gb 30 \
+  --env '{"BUCKET_ENDPOINT_URL":"https://YOUR_BUCKET.s3.us-west-2.amazonaws.com","BUCKET_ACCESS_KEY_ID":"{{ RUNPOD_SECRET_bucket_access_key_id }}","BUCKET_SECRET_ACCESS_KEY":"{{ RUNPOD_SECRET_bucket_secret_access_key }}"}'
+
+runpodctl serverless create \
+  --name "sdxl-turbo" \
+  --template-id TEMPLATE_ID \
+  --gpu-id ADA_48_PRO \
+  --workers-min 0 \
+  --workers-max 3 \
+  --idle-timeout 5 \
+  --execution-timeout 600 \
+  --flash-boot \
+  --min-cuda-version 12.8
+```
+
+`min_instances` becomes `--workers-min` (active workers) and `max_instances` becomes `--workers-max`. `--gpu-id` takes a pool ID or a GPU type ID. Use the template ID that `template create` returns. For a private registry, create credentials with `runpodctl registry create` and pass `--registry-auth-id` to `template create`. Check `runpodctl serverless create --help` for the current flags, or see the [runpodctl serverless reference](/runpodctl/reference/runpodctl-serverless).
+
+The same endpoint through [REST API v2](/api-reference-v2/serverless/create-a-serverless-endpoint), without a separate template:
+
+```bash
+curl -s -X POST https://api.runpod.io/v2/serverless \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "sdxl-turbo",
+    "image": "docker.io/DOCKER_USERNAME/sdxl-turbo-worker:v1",
+    "type": "QUEUE",
+    "disk": 30,
+    "gpu": {"pools": ["ADA_48_PRO", "AMPERE_48"], "count": 1, "minCudaVersion": "12.8"},
+    "workers": {"min": 0, "max": 3, "idleTimeout": 5},
+    "scaling": {"type": "QUEUE_DELAY", "queueDelay": 4},
+    "flashboot": "FLASHBOOT",
+    "timeout": 600000
+  }'
+```
+
+`type` and `scaling` are required. REST v2 defaults differ from the console: `flashboot` defaults to `OFF`, `timeout` to 300000 ms, and `workers.idleTimeout` to 10 seconds, so set them explicitly. The response includes the endpoint ID you use in request URLs.
+
+In the console, go to [Serverless](https://www.console.runpod.io/serverless), click **New Endpoint**, and import from a Docker registry or a [GitHub repository](/serverless/workers/github-integration). The GitHub integration builds the image for you each time you create a GitHub release, which replaces `cog push` in CI.
+
+### Scaling and cold starts
+
+| Replicate deployment setting | Runpod endpoint setting | Notes |
+| --- | --- | --- |
+| `min_instances` | Active workers (`--workers-min`, `workers.min`) | Active workers are always on and are billed continuously. |
+| `max_instances` | Max workers (`--workers-max`, `workers.max`) | Caps concurrency and spend. |
+| `hardware` | GPU pools (`--gpu-id`, `gpu.pools`) and GPUs per worker | List up to three in priority order. |
+| `version` | Template image tag | Update the template's image to roll out a new version. |
+| Autoscaling by demand | Queue delay or request count scaling | See [auto-scaling type](/serverless/endpoints/endpoint-configurations#auto-scaling-type). |
+| Setup timeout | `RUNPOD_INIT_TIMEOUT` environment variable | 420 seconds by default. Raise it for models that take longer to load. |
+| Always-on official models | Public Endpoints, or active workers on your own endpoint | |
+
+To reduce cold starts without paying for an always-on worker, enable FlashBoot, use cached models or bake weights into the image, keep the image small, and raise the idle timeout so a worker stays warm between bursts. To remove cold starts for latency-sensitive traffic, set active workers to 1 or more.
+
+### runpod.App
+
+Deploy the app from Step 4:
+
+```bash
+rp flash deploy
+rp flash app list
+```
+
+`rp flash deploy` builds your code and dependencies into an artifact, creates the endpoints, and prints a link to each one. Scaling lives in the decorator (`workers=(0, 3)`, `idle_timeout=60`), so changing it is a code change followed by another `rp flash deploy`. See [Deploy an app](/sdk/apps/deploy).
+
+### Trainings
+
+Replicate trainings call a trainer model's `train()` function and push the result to a destination model. On Runpod, run your own training script and write the weights to a network volume that your serving endpoint also mounts.
+
+With a Pod:
+
+```bash
+runpodctl network-volume create --name ft-weights --size 50 --data-center-id EU-RO-1
+
+runpodctl pod create --name ft-train \
+  --template-id runpod-torch-v280 \
+  --gpu-id "NVIDIA GeForce RTX 4090" \
+  --data-center-ids EU-RO-1 \
+  --network-volume-id NETWORK_VOLUME_ID
+
+# Connect over SSH, run your training script, and write outputs under /workspace.
+
+runpodctl pod delete POD_ID
+```
+
+The volume is mounted at `/workspace` on the Pod and at `/runpod-volume` on Serverless workers, so a file the Pod writes to `/workspace/outputs/lora` is at `/runpod-volume/outputs/lora` in your handler. Delete the Pod when training finishes. The volume keeps the weights.
+
+With the Runpod SDK, `@app.task` provisions a Pod for each call and terminates it when the function returns:
+
+```python main.py
+import runpod
+
+app = runpod.App("finetune")
+
+weights = runpod.NetworkVolume("ft-weights", size=50)
+
+
+@app.task(gpu="4090", mounts={"/weights": weights}, dependencies=["peft", "datasets", "transformers"])
+def train(dataset_url: str, steps: int = 1000) -> dict:
+    out_dir = weights.path / "outputs" / "lora"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    # Download dataset_url, run your training loop, and save the adapter to out_dir.
+    return {"weights": "outputs/lora"}
+
+
+@app.queue(gpu="4090", mounts={"/runpod-volume": weights})
+def generate(prompt: str) -> dict:
+    adapter_dir = weights.path / "outputs" / "lora"
+    # Load the base model and the adapter from adapter_dir once per worker, then generate.
+    return {"adapter": str(adapter_dir), "prompt": prompt}
+
+
+@runpod.local_entrypoint
+def main():
+    print(train.remote(dataset_url="https://example.com/data.zip", steps=500))
+```
+
+Both functions mount the same volume, so `generate` reads what `train` wrote, and the SDK places both in the volume's data center. See [Storage](/sdk/configuration/storage).
+
+## Step 7: Update the code that calls Replicate
+
+### Run a model and wait for the result
+
+<Tabs>
+  <Tab title="Python">
+    Before, with the Replicate client:
+
+    ```python
+    import replicate
+
+    output = replicate.run(
+        "black-forest-labs/flux-schnell",
+        input={"prompt": "an iguana on the beach, pointillism", "output_format": "png"},
+    )
+
+    with open("output.png", "wb") as f:
+        f.write(output[0].read())
+    ```
+
+    After, against a Runpod Public Endpoint:
+
+    ```python
+    import os
+
+    import requests
+
+    response = requests.post(
+        "https://api.runpod.ai/v2/black-forest-labs-flux-1-schnell/runsync",
+        headers={"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}"},
+        json={"input": {"prompt": "an iguana on the beach, pointillism", "width": 1024, "height": 1024, "image_format": "png"}},
+        timeout=120,
+    )
+    response.raise_for_status()
+    result = response.json()
+
+    image = requests.get(result["output"]["image_url"], timeout=60)
+    with open("output.png", "wb") as f:
+        f.write(image.content)
+    ```
+
+    After, against your own endpoint with the Runpod SDK:
+
+    ```python
+    import base64
+    import os
+
+    import runpod
+
+    runpod.api_key = os.environ["RUNPOD_API_KEY"]
+    endpoint = runpod.Endpoint("ENDPOINT_ID")
+
+    output = endpoint.run_sync(
+        {"prompt": "an iguana on the beach, pointillism", "num_inference_steps": 2},
+        timeout=120,
+    )
+
+    with open("output.png", "wb") as f:
+        f.write(base64.b64decode(output["image_base64"]))
+    ```
+  </Tab>
+
+  <Tab title="JavaScript">
+    Before, with the Replicate client:
+
+    ```javascript
+    import { writeFile } from "node:fs/promises";
+    import Replicate from "replicate";
+
+    const replicate = new Replicate();
+
+    const [output] = await replicate.run("black-forest-labs/flux-schnell", {
+      input: { prompt: "an iguana on the beach, pointillism", output_format: "png" },
+    });
+
+    await writeFile("output.png", output);
+    ```
+
+    After, against a Runpod Public Endpoint:
+
+    ```javascript
+    import { writeFile } from "node:fs/promises";
+
+    const response = await fetch(
+      "https://api.runpod.ai/v2/black-forest-labs-flux-1-schnell/runsync",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.RUNPOD_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          input: { prompt: "an iguana on the beach, pointillism", width: 1024, height: 1024, image_format: "png" },
+        }),
+      }
+    );
+    const result = await response.json();
+
+    const image = await fetch(result.output.image_url);
+    await writeFile("output.png", Buffer.from(await image.arrayBuffer()));
+    ```
+
+    After, against your own endpoint with the `runpod-sdk` package:
+
+    ```javascript
+    import { writeFile } from "node:fs/promises";
+    import runpodSdk from "runpod-sdk";
+
+    const runpod = runpodSdk(process.env.RUNPOD_API_KEY);
+    const endpoint = runpod.endpoint("ENDPOINT_ID");
+
+    const result = await endpoint.runSync({
+      input: { prompt: "an iguana on the beach, pointillism", num_inference_steps: 2 },
+      timeout: 120000,
+    });
+
+    await writeFile("output.png", Buffer.from(result.output.image_base64, "base64"));
+    ```
+  </Tab>
+
+  <Tab title="cURL">
+    Before:
+
+    ```bash
+    curl -s -X POST https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions \
+      -H "Authorization: Bearer $REPLICATE_API_TOKEN" \
+      -H "Content-Type: application/json" \
+      -H "Prefer: wait" \
+      -d '{"input": {"prompt": "an iguana on the beach, pointillism", "output_format": "png"}}'
+    ```
+
+    After:
+
+    ```bash
+    curl -s -X POST https://api.runpod.ai/v2/black-forest-labs-flux-1-schnell/runsync \
+      -H "Authorization: Bearer $RUNPOD_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"input": {"prompt": "an iguana on the beach, pointillism", "width": 1024, "height": 1024, "image_format": "png"}}'
+    ```
+  </Tab>
+</Tabs>
+
+What changes in every caller:
+
+- The model is in the URL path (`/v2/ENDPOINT_ID/...`), not in a `version` field or a `/models/OWNER/NAME/` path.
+- The Python `runpod.Endpoint` client returns the job's `output` directly. Over HTTP, the response is a job object and your data is under `output`.
+- There's no `FileOutput` object. You get the URL or base64 string your endpoint returns. Public Endpoint output URLs expire after 7 days, so download what you need to keep.
+- A model error doesn't raise `ModelError`. Check for `status` of `FAILED` and read `error` in the job object.
+
+### Create a job and poll
+
+Before, with `predictions.create` and polling:
+
+```python
+import replicate
+
+prediction = replicate.predictions.create(
+    model="black-forest-labs/flux-schnell",
+    input={"prompt": "painting of a cat"},
+)
+prediction.wait()
+print(prediction.status, prediction.output)
+```
+
+After, with `/run` and `/status`:
+
+```python
+import os
+import time
+
+import requests
+
+BASE_URL = "https://api.runpod.ai/v2/ENDPOINT_ID"
+HEADERS = {"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}"}
+
+job = requests.post(f"{BASE_URL}/run", headers=HEADERS, json={"input": {"prompt": "painting of a cat"}}, timeout=30).json()
+
+interval = 1
+while True:
+    status = requests.get(f"{BASE_URL}/status/{job['id']}", headers=HEADERS, timeout=30).json()
+    if status["status"] in ("COMPLETED", "FAILED", "CANCELLED", "TIMED_OUT"):
+        break
+    time.sleep(interval)
+    interval = min(interval * 2, 30)
+
+print(status["status"], status.get("output"))
+```
+
+Or with the SDK, where `endpoint.run()` returns a job handle:
+
+```python
+import runpod
+
+endpoint = runpod.Endpoint("ENDPOINT_ID")
+
+run_request = endpoint.run({"prompt": "painting of a cat"})
+print(run_request.status())
+print(run_request.output(timeout=120))
+```
+
+Fetch the result within 30 minutes of completion. To cancel, send `POST /cancel/JOB_ID` in place of `prediction.cancel()`. If `/run` times out on the network, look the job up with `/status` before you resubmit, because a retry creates a second job that's billed separately.
+
+### Webhooks
+
+Before:
+
+```python
+prediction = replicate.predictions.create(
+    model="black-forest-labs/flux-schnell",
+    input={"prompt": "painting of a cat"},
+    webhook="https://example.com/webhooks/replicate",
+    webhook_events_filter=["completed"],
+)
+```
+
+After, `webhook` is a top-level field next to `input`:
+
+```bash
+curl -s -X POST https://api.runpod.ai/v2/ENDPOINT_ID/run \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": {"prompt": "painting of a cat"},
+    "webhook": "https://example.com/webhooks/runpod/UNGUESSABLE_TOKEN"
+  }'
+```
+
+Runpod posts the job result to your URL when the job finishes. Return `200`. If the call fails, Runpod retries up to 2 more times with a 10-second delay. Update your receiver for the new payload: `status` is `COMPLETED` or `FAILED` instead of `succeeded` or `failed`, and there are no `start`, `output`, or `logs` events. Replace Replicate's signature verification (`validateWebhook`, or the `webhook-signature` HMAC check) with your own check, such as a token in the URL path plus a `GET /status/JOB_ID` call to confirm the job.
+
+### Streaming
+
+Before:
+
+```python
+import replicate
+
+for event in replicate.stream(
+    "meta/meta-llama-3-70b-instruct",
+    input={"prompt": "Write a haiku about llamas."},
+):
+    print(str(event), end="")
+```
+
+After, for a Public Endpoint LLM or a vLLM worker, use the OpenAI-compatible route:
+
+```python
+import os
+
+from openai import OpenAI
+
+client = OpenAI(
+    api_key=os.environ["RUNPOD_API_KEY"],
+    base_url="https://api.runpod.ai/v2/qwen3-32b-awq/openai/v1",
+)
+
+stream = client.chat.completions.create(
+    model="Qwen/Qwen3-32B-AWQ",
+    messages=[{"role": "user", "content": "Write a haiku about llamas."}],
+    stream=True,
+)
+for chunk in stream:
+    if chunk.choices and chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="")
+```
+
+After, for your own generator handler, submit with `/run` and read `/stream`:
+
+```python
+import runpod
+
+endpoint = runpod.Endpoint("ENDPOINT_ID")
+
+run_request = endpoint.run({"prompt": "Write a haiku about llamas."})
+for chunk in run_request.stream():
+    print(chunk, end="")
+```
+
+For your own vLLM endpoint, the base URL is `https://api.runpod.ai/v2/ENDPOINT_ID/openai/v1`. See [OpenAI compatibility](/serverless/vllm/openai-compatibility).
+
+### Deployments
+
+Calls to `POST /v1/deployments/OWNER/NAME/predictions` (or `replicate.deployments.predictions.create`) become calls to your endpoint's `/run` or `/runsync`. The request body keeps its `input` object, and `webhook` stays a top-level field.
+
+### Calls from a runpod.App
+
+If the caller is Python and the target is a deployed `runpod.App`, you can call the function by name instead of by endpoint ID:
+
+```python
+import runpod
+
+generate = runpod.Queue(app="sdxl-turbo", name="generate")
+result = generate.remote(prompt="an iguana on the beach, pointillism")
+```
+
+### Control-plane automation
+
+Scripts that manage Replicate resources map to runpodctl or REST v2. See the [API map](#api-map) below. The most common change is CI: replace `cog login` and `cog push r8.im/OWNER/MODEL` with `docker build`, `docker push`, and an update of the template's image (`runpodctl template update TEMPLATE_ID --image NEW_IMAGE`), or connect the repository through the [GitHub integration](/serverless/workers/github-integration).
+
+## Step 8: Verify, cut over, and shut down
+
+<Steps>
+  <Step title="Send a real request from outside">
+    Call the Runpod endpoint from the same environment your application runs in, with a production-shaped input:
+
+    ```bash
+    curl -s -X POST "https://api.runpod.ai/v2/ENDPOINT_ID/runsync?wait=120000" \
+      -H "Authorization: Bearer $RUNPOD_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"input": {"prompt": "a lighthouse at dawn", "num_inference_steps": 2, "seed": 42}}'
+    ```
+
+    The first request includes a cold start. Check that `status` is `COMPLETED`, and note `delayTime` (queue time, including cold start) and `executionTime`, both in milliseconds.
+  </Step>
+
+  <Step title="Compare outputs and timing">
+    Run the same inputs with fixed seeds on both platforms. Compare outputs, compare `executionTime` with Replicate's `metrics.predict_time`, and measure cold and warm latency separately. Differences in GPU, library versions, and model variant all change results, so pin versions before you conclude anything.
+  </Step>
+
+  <Step title="Check failure paths">
+    Send an invalid input and confirm you get the error shape your client expects. Send a job that exceeds your execution timeout and confirm it ends in `TIMED_OUT`. Trigger a webhook and confirm your receiver handles the Runpod payload.
+  </Step>
+
+  <Step title="Run both in parallel and shift traffic">
+    Put the provider behind a flag in your client and send a small share of traffic to Runpod. Watch the endpoint's **Metrics** tab for delay time, execution time, and failures, and [worker logs](/serverless/development/logs) for errors. Increase the share as the numbers hold, and raise max workers as traffic moves.
+  </Step>
+
+  <Step title="Stop billing on Replicate">
+    Once Replicate receives no traffic, scale each deployment to zero, then delete it. Replicate only deletes deployments that have been offline and unused for at least 15 minutes:
+
+    ```bash
+    curl -s -X PATCH https://api.replicate.com/v1/deployments/OWNER/DEPLOYMENT_NAME \
+      -H "Authorization: Bearer $REPLICATE_API_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{"min_instances": 0, "max_instances": 0}'
+
+    # At least 15 minutes later:
+    curl -s -X DELETE https://api.replicate.com/v1/deployments/OWNER/DEPLOYMENT_NAME \
+      -H "Authorization: Bearer $REPLICATE_API_TOKEN"
+    ```
+
+    If Replicate rejects `max_instances` of 0 for your deployment, set the instance counts in the deployment's **Settings** tab instead. Private models bill while their instances are online, so confirm on your Replicate dashboard that nothing is still running. Download any fine-tuned weights you want to keep before you delete models, then disable the API tokens your application used at `replicate.com/account/api-tokens`.
+  </Step>
+
+  <Step title="Set cost guards on Runpod">
+    Keep active workers at 0 unless you need warm capacity, and set max workers to the concurrency you intend to pay for. Set an execution timeout so a stuck job can't run indefinitely. Runpod also reduces max workers on endpoints that receive no requests for several days. Review your account's [spending limit](/accounts-billing/billing#spending-limits), and delete network volumes you no longer need, since they bill for storage until deleted.
+  </Step>
+</Steps>
+
+## Reference
+
+### API map
+
+| Replicate | Runpod |
+| --- | --- |
+| `POST /v1/predictions` (with `version`) | `POST https://api.runpod.ai/v2/ENDPOINT_ID/run` |
+| `POST /v1/models/OWNER/NAME/predictions` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/run` (Public Endpoint ID or your own) |
+| `POST /v1/deployments/OWNER/NAME/predictions` | `POST https://api.runpod.ai/v2/ENDPOINT_ID/run` |
+| `Prefer: wait` or `Prefer: wait=N` | `POST .../runsync`, optionally with `?wait=MILLISECONDS` |
+| `GET /v1/predictions/PREDICTION_ID` | `GET .../status/JOB_ID` |
+| `POST /v1/predictions/PREDICTION_ID/cancel` | `POST .../cancel/JOB_ID` |
+| `GET urls.stream` (server-sent events) | `GET .../stream/JOB_ID`, or `/openai/v1` with `stream=True` for LLMs |
+| `Cancel-After` header | `policy.executionTimeout` and `policy.ttl` in the request body (milliseconds) |
+| `webhook`, `webhook_events_filter` | `webhook` (completion only) |
+| `POST /v1/deployments` | `POST https://api.runpod.io/v2/serverless`, or `runpodctl serverless create` |
+| `GET /v1/deployments`, `GET /v1/deployments/OWNER/NAME` | `GET https://api.runpod.io/v2/serverless`, `GET .../v2/serverless/ENDPOINT_ID`, or `runpodctl serverless list` and `get` |
+| `PATCH /v1/deployments/OWNER/NAME` | `PATCH https://api.runpod.io/v2/serverless/ENDPOINT_ID`, or `runpodctl serverless update` |
+| `DELETE /v1/deployments/OWNER/NAME` | `DELETE https://api.runpod.io/v2/serverless/ENDPOINT_ID`, or `runpodctl serverless delete` |
+| `GET /v1/hardware` | `GET https://api.runpod.io/v2/catalog/gpus`, or `runpodctl gpu list` |
+| `POST /v1/models/OWNER/NAME/versions/VERSION_ID/trainings` | `runpodctl pod create`, or an `@app.task` call |
+| `GET /v1/models`, `GET /v1/collections` | [Public Endpoints model reference](/public-endpoints/reference), `runpodctl hub list` and `search` |
+| `GET /v1/account` | `runpodctl user` |
+
+### CLI command map
+
+| Cog or Replicate | Runpod |
+| --- | --- |
+| `cog init` | `rp flash init my-app` (SDK app), or write `handler.py` and a `Dockerfile` |
+| `cog predict -i key=value` (`cog run -i key=value` in current Cog) | `python handler.py --test_input '{"input": {"key": "value"}}'`, or `rp flash dev main.py` |
+| `cog build -t IMAGE` | `docker build --platform linux/amd64 -t IMAGE .` |
+| `cog login` | `docker login` for your registry, and `rp login` or `runpodctl doctor` for Runpod |
+| `cog push r8.im/OWNER/MODEL` | `docker push IMAGE`, then `runpodctl template update TEMPLATE_ID --image IMAGE`. Or `rp flash deploy`. |
+| `cog serve` | `python handler.py --rp_serve_api` (see [Local testing](/serverless/development/local-testing)) |
+
+### Configuration field map
+
+| Replicate or Cog field | Runpod field |
+| --- | --- |
+| Deployment `name` | Endpoint `name` (`--name`) |
+| Deployment `model` and `version` | Template `image` (`--image`), or `image` in REST v2 |
+| Deployment `hardware` | `--gpu-id`, REST v2 `gpu.pools`, SDK `gpu=` |
+| Multi-GPU SKU (`-2x`, `-4x`, `-8x`) | `--gpu-count`, REST v2 `gpu.count`, SDK `gpu_count=` |
+| Deployment `min_instances` | `--workers-min`, REST v2 `workers.min`, SDK `workers=(min, max)` |
+| Deployment `max_instances` | `--workers-max`, REST v2 `workers.max`, SDK `workers=(min, max)` |
+| `cog.yaml` `build.gpu` | GPU endpoint (the default compute type) |
+| `cog.yaml` `build.python_version` | Base image in the `Dockerfile`, or `rp flash deploy --python-version` |
+| `cog.yaml` `build.python_requirements`, `python_packages` | `requirements.txt` and `pip install` in the `Dockerfile`, or SDK `dependencies=[...]` |
+| `cog.yaml` `build.system_packages` | `apt-get install` in the `Dockerfile`, or SDK `system_dependencies=[...]` |
+| `cog.yaml` `build.cuda` | Base image CUDA version, plus `--min-cuda-version` on the endpoint |
+| `cog.yaml` `build.run` | `RUN` lines in the `Dockerfile` |
+| `cog.yaml` `predict` or `run` | `CMD` in the `Dockerfile` |
+| `cog.yaml` `concurrency.max`, `@cog.concurrent(max=N)` | Concurrent handler, or SDK `max_concurrency=` |
+| `cog.Secret` input | Endpoint environment variable referencing a Runpod secret |
+
+### Environment variable map
+
+| Replicate or Cog | Runpod | Notes |
+| --- | --- | --- |
+| `REPLICATE_API_TOKEN` (client) | `RUNPOD_API_KEY` (client) | |
+| `COG_SETUP_TIMEOUT` | `RUNPOD_INIT_TIMEOUT` | Seconds a worker can take to initialize. Default 420. |
+| `COG_MAX_CONCURRENCY` | Concurrency setting in your handler | See [concurrent handlers](/serverless/workers/concurrent-handler). |
+| `COG_WEIGHTS` | Your own variable, such as `MODEL_PATH` | Set on the endpoint and read in the handler. |
+| Not applicable | `BUCKET_ENDPOINT_URL`, `BUCKET_ACCESS_KEY_ID`, `BUCKET_SECRET_ACCESS_KEY` | Read by `rp_upload`. |
+| Not applicable | `RUNPOD_ENDPOINT_ID` | Set by Runpod inside Serverless workers. |
+
+### Status map
+
+| Replicate prediction status | Runpod job status | Notes |
+| --- | --- | --- |
+| `starting` | `IN_QUEUE` | Waiting for a worker, including a worker that's cold starting. |
+| `processing` | `IN_PROGRESS` | A worker has picked up the job. |
+| `succeeded` | `COMPLETED` | |
+| `failed` | `FAILED` | Set when the handler raises an exception. |
+| `canceled` (by the user) | `CANCELLED` | Note the spelling. |
+| `canceled` (deadline passed after starting) | `TIMED_OUT` | Execution timeout reached. |
+| `aborted` (deadline passed before starting) | `TIMED_OUT` | The job expired before a worker picked it up. A job whose TTL has expired returns 404 from `/status`. |
+
+## Migrate with a coding agent
+
+A coding agent with the Runpod skills and MCP server can do the inventory, write the handler, deploy the endpoint, and update your client code. Install both first.
+
+<Tabs>
+  <Tab title="Claude Code">
+    ```bash
+    # The plugin also connects the hosted MCP server
+    claude plugin marketplace add runpod/runpod-plugins-official
+    claude plugin install runpod@runpod
+    ```
+  </Tab>
+
+  <Tab title="Other agents">
+    ```bash
+    # Skills, then the hosted MCP server (Codex, Cursor, and others)
+    npx skills add runpod/runpod-plugins-official --skill '*' --agent AGENT_ID --global
+    npx @runpod/mcp-server@latest add --client CLIENT_ID
+    ```
+  </Tab>
+</Tabs>
+
+The MCP server signs in with OAuth ("Sign in with Runpod"), so you don't need an API key to start. See [Agent skills](/get-started/agent-skills) and [MCP servers](/get-started/mcp-servers) for agent and client IDs.
+
+Then give your agent this prompt from the root of the repository that uses Replicate:
+
+```text
+Use the runpod-cloud-migrate skill to migrate this project from Replicate to Runpod.
+
+1. Inventory first, and change nothing yet. Scan the codebase for Replicate usage
+   (replicate.run, predictions.create, deployments, trainings, webhooks, streaming,
+   api.replicate.com, REPLICATE_API_TOKEN, replicate.delivery URLs, cog.yaml, predict.py,
+   cog push in CI). If REPLICATE_API_TOKEN is set, list my deployments with their hardware,
+   min_instances, and max_instances through the Replicate HTTP API.
+2. For each workload, choose a Runpod target: a Public Endpoint if Runpod hosts the model,
+   a Hub repo, a Serverless queue-based endpoint with a native handler ported from
+   predict.py, or a runpod.App with @app.queue. Map each Replicate hardware SKU to a Runpod
+   GPU pool by VRAM.
+3. Show me the plan as a table: workload, Replicate setup, Runpod target, GPU pool, worker
+   range, how file inputs and outputs will be handled, and an estimated cost from Runpod's
+   published pricing. List every difference that needs my decision (output file storage,
+   webhook verification, result retention, secret inputs).
+4. Wait for my approval before creating anything billable on Runpod.
+5. Migrate one workload end to end: write the handler and Dockerfile (or the runpod.App),
+   deploy with active workers at 0, and update the client code behind a flag.
+6. Verify with a real request, and show me the output, delayTime, and executionTime next to
+   the same request on Replicate.
+7. Never delete or scale down anything on Replicate without my explicit approval.
+```
+
+## Troubleshooting
+
+**The request returns 400 or the handler reports missing input.** The body must be `{"input": {...}}`. Remove Replicate-only fields such as `version` and `stream` from the top level. With a `runpod.App`, the keys inside `input` must match the function's parameter names.
+
+**The job stays `IN_QUEUE`.** No worker is available. Check that max workers is above 0, that the GPU pool is available in the allowed data centers (`runpodctl datacenter list`), and that the image pulls. Add a second GPU pool, or remove a data center restriction. An endpoint that received no requests for several days may have had its max workers reduced, so raise it again.
+
+**The worker starts and then exits, or never becomes ready.** The image was built for the wrong architecture, the handler isn't started, or the model takes too long to load. Build with `--platform linux/amd64`, make sure the container runs `python -u /handler.py` and that the file calls `runpod.serverless.start`, and raise `RUNPOD_INIT_TIMEOUT` for slow model loads. Read the worker logs in the endpoint's **Logs** tab.
+
+**Every request is slow.** The model is loading inside `handler()`. Move it to module level so it loads once per worker, as `setup()` did in Cog.
+
+**The job ends in `TIMED_OUT` although the model works.** The job ran past the endpoint's execution timeout, or it expired in the queue. Raise the execution timeout on the endpoint or set `policy.executionTimeout` on the request. Replicate allowed 30 minutes by default, and the Runpod console default is 10 minutes.
+
+**`/status` returns 404, or the output is missing.** The result expired. Results are kept for 30 minutes after an async job completes and 1 minute after a sync job. Fetch sooner, use a webhook, or write outputs to your own bucket.
+
+**The response fails with a payload size error, or the client receives a truncated result.** The output is over the 10 MB (`/run`) or 20 MB (`/runsync`) limit, usually because of base64 files. Upload to a bucket and return the URL.
+
+**`rp_upload` fails or returns an unusable URL.** Check that `BUCKET_ENDPOINT_URL`, `BUCKET_ACCESS_KEY_ID`, and `BUCKET_SECRET_ACCESS_KEY` are set on the endpoint, and that `BUCKET_ENDPOINT_URL` includes the bucket name. Workers read environment variables at start, so new values apply to new workers.
+
+**CUDA or driver errors on some workers only.** Workers in a pool can land on hosts with different driver versions. Set a minimum CUDA version on the endpoint (`--min-cuda-version 12.8`, or `gpu.minCudaVersion` in REST v2) that matches your image.
+
+**Client code breaks on status checks.** Runpod statuses are uppercase and spelled differently: `COMPLETED`, not `succeeded`, and `CANCELLED` with two Ls. Update comparisons using the [status map](#status-map).
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Handler functions" icon="code" href="/serverless/workers/handler-functions" horizontal>
+    Write standard, streaming, and concurrent handlers.
+  </Card>
+
+  <Card title="Endpoint settings" icon="sliders" href="/serverless/endpoints/endpoint-configurations" horizontal>
+    Tune workers, timeouts, FlashBoot, and GPU priority.
+  </Card>
+
+  <Card title="Public Endpoints model reference" icon="book" href="/public-endpoints/reference" horizontal>
+    See every hosted model, its parameters, and its pricing.
+  </Card>
+
+  <Card title="Runpod SDK" icon="python" href="/sdk/overview" horizontal>
+    Build apps with `@app.queue`, `@app.task`, and `@app.api`.
+  </Card>
+</CardGroup>
