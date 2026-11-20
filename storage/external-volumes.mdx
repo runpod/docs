@@ -161,124 +161,23 @@ You can't remove an external volume while it's in use. First:
 
 ## Manage external volumes with the REST API
 
-The REST API supports the full lifecycle of an external volume. Use it to automate registration and key rotation.
+You can manage the full lifecycle of an external volume with the REST API, which is useful for automating registration and key rotation. For request and response schemas, see the [External Volumes API reference](/api-reference-v2/external-volumes/list-external-volumes).
 
 | Action | Request | API key scope |
 | --- | --- | --- |
-| List external volumes | `GET /v2/external-volumes` | `volumes:read` |
-| Get an external volume | `GET /v2/external-volumes/{id}` | `volumes:read` |
-| Create an external volume | `POST /v2/external-volumes` | `secrets:write` |
-| Rename an external volume | `PATCH /v2/external-volumes/{id}` | `volumes:write` |
-| Replace the credential | `PUT /v2/external-volumes/{id}/authentication` | `secrets:write` |
-| Delete an external volume | `DELETE /v2/external-volumes/{id}` | `volumes:write` |
+| [List external volumes](/api-reference-v2/external-volumes/list-external-volumes) | `GET /v2/external-volumes` | `volumes:read` |
+| [Register an external volume](/api-reference-v2/external-volumes/register-an-external-volume) | `POST /v2/external-volumes` | `secrets:write` |
+| [Get an external volume](/api-reference-v2/external-volumes/get-an-external-volume) | `GET /v2/external-volumes/{id}` | `volumes:read` |
+| [Rename an external volume](/api-reference-v2/external-volumes/update-an-external-volume) | `PATCH /v2/external-volumes/{id}` | `volumes:write` |
+| [Replace the credential](/api-reference-v2/external-volumes/replace-an-external-volume-authentication) | `PUT /v2/external-volumes/{id}/authentication` | `secrets:write` |
+| [Remove an external volume](/api-reference-v2/external-volumes/unregister-an-external-volume) | `DELETE /v2/external-volumes/{id}` | `volumes:write` |
 
-Attaching a volume uses `pods:write` or `serverless:write`, the same as network and global volumes.
+To attach an external volume, pass its ID under `mounts.external`:
 
-### Create an external volume
+- **Pods:** when you [create a Pod](/api-reference-v2/pods/create-a-pod). To attach, move, or detach an external volume on an existing Pod, [update the Pod](/api-reference-v2/pods/update-a-pod). The change restarts the Pod.
+- **Serverless endpoints:** when you [create](/api-reference-v2/serverless/create-a-serverless-endpoint) or [update](/api-reference-v2/serverless/update-a-serverless-endpoint) an endpoint.
 
-The following request registers the `datasets` prefix of an Amazon S3 bucket:
-
-```bash
-curl --request POST \
-  --url https://api.runpod.io/v2/external-volumes \
-  --header 'Authorization: Bearer RUNPOD_API_KEY' \
-  --header 'Content-Type: application/json' \
-  --data '{
-    "name": "training-data",
-    "connection": {
-      "protocol": "S3",
-      "bucket": "BUCKET_NAME",
-      "prefix": "datasets",
-      "authentication": {
-        "type": "ACCESS_KEY",
-        "accessKeyId": "ACCESS_KEY_ID",
-        "secretAccessKey": "SECRET_ACCESS_KEY"
-      }
-    }
-  }'
-```
-
-For other providers, add `endpointUrl`, and add `region` when your provider requires it. Omit `prefix` to mount the whole bucket.
-
-A successful request returns `201` with the new volume. The response never includes the secret access key:
-
-```json
-{
-  "id": "obs_abc",
-  "name": "training-data",
-  "connection": {
-    "protocol": "S3",
-    "bucket": "BUCKET_NAME",
-    "endpointUrl": "https://s3.amazonaws.com",
-    "region": null,
-    "prefix": "datasets",
-    "authentication": { "type": "ACCESS_KEY", "accessKeyId": "ACCESS_KEY_ID" }
-  },
-  "createdAt": "2026-10-20T00:00:00Z",
-  "createdByUserId": "user_123"
-}
-```
-
-A `region` of `null` means the region is detected when the volume mounts.
-
-### Attach to a Pod
-
-Pass the volume ID under `mounts.external` when you create the Pod. The following example also attaches a network volume:
-
-```bash
-curl --request POST \
-  --url https://api.runpod.io/v2/pods \
-  --header 'Authorization: Bearer RUNPOD_API_KEY' \
-  --header 'Content-Type: application/json' \
-  --data '{
-    "name": "my-pod",
-    "mounts": {
-      "network": [{ "volumeId": "NETWORK_VOLUME_ID", "path": "/workspace" }],
-      "external": [{ "volumeId": "EXTERNAL_VOLUME_ID", "path": "/data" }]
-    }
-  }'
-```
-
-{/* Add the remaining required Pod fields (image, GPU) to match the current /v2/pods example in the API reference. */}
-
-`mounts.external` accepts one volume. Omit `path` to mount at `/workspace-external`.
-
-### Attach to a Serverless endpoint
-
-Pass the volume ID under `mounts.external` when you create or update an endpoint:
-
-```bash
-curl --request PATCH \
-  --url https://api.runpod.io/v2/serverless/ENDPOINT_ID \
-  --header 'Authorization: Bearer RUNPOD_API_KEY' \
-  --header 'Content-Type: application/json' \
-  --data '{ "mounts": { "external": [{ "volumeId": "EXTERNAL_VOLUME_ID" }] } }'
-```
-
-On update, the `external` field works as follows:
-
-- Omit it to leave the current volume attached.
-- Set it to a volume to attach or replace the volume.
-- Set it to `[]` to detach the volume.
-
-### Replace the credential
-
-```bash
-curl --request PUT \
-  --url https://api.runpod.io/v2/external-volumes/EXTERNAL_VOLUME_ID/authentication \
-  --header 'Authorization: Bearer RUNPOD_API_KEY' \
-  --header 'Content-Type: application/json' \
-  --data '{
-    "protocol": "S3",
-    "authentication": {
-      "type": "ACCESS_KEY",
-      "accessKeyId": "NEW_ACCESS_KEY_ID",
-      "secretAccessKey": "NEW_SECRET_ACCESS_KEY"
-    }
-  }'
-```
-
-For the full schemas, see the [external volumes API reference](/api-reference-v2/external-volumes). {/* Confirm reference path once published. */}
+Attaching a volume uses the `pods:write` or `serverless:write` scope, the same as network and global volumes.
 
 ## Limitations
 
