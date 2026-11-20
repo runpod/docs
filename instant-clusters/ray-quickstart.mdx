@@ -1,0 +1,126 @@
+---
+title: "Deploy your first Ray Cluster"
+sidebarTitle: "Ray Clusters quickstart"
+description: "Deploy a Ray Cluster on Runpod, run a Ray job across GPUs on multiple nodes, and watch GPU usage for every node in the Ray dashboard."
+tag: "Beta"
+---
+
+<Note>
+  Ray Clusters are in beta. Features and behavior may change before general availability.
+</Note>
+
+This tutorial shows you how to deploy a [Ray Cluster](/instant-clusters/ray-clusters) and run your first Ray job across GPUs on multiple nodes. The Ray cluster image starts Ray on every node for you, so you don't install Ray or run any startup scripts.
+
+## What you'll learn
+
+In this tutorial, you'll learn how to:
+
+- Create a Ray Cluster with the Ray Cluster template.
+- Check that every node has joined the Ray cluster.
+- Run a Ray job that uses every GPU in the cluster.
+- Monitor GPU usage for each node in the Ray dashboard.
+
+## Requirements
+
+- A Runpod account with enough credits for a multi-node cluster.
+
+## Step 1: Create a Ray Cluster
+
+{/* TODO(DOCS-609): verify every console label in this step against the live create flow (cluster type selector, template name) once the Ray Clusters flag is on. */}
+
+1. Open the [Instant Clusters page](https://console.runpod.io/instant-clusters) and click **Create Cluster**.
+2. Select **Ray** as the cluster type.
+3. Name your cluster, set **Pod Count** to **2**, and select a GPU type with **2** GPUs per Pod.
+4. Optionally, select a [network volume](/storage/network-volumes) to share data across nodes.
+5. Confirm that the **Ray Cluster** template is selected. The console selects it automatically for Ray Clusters.
+6. Click **Deploy Cluster**.
+
+Runpod deploys one Pod per node. The Pod with rank `0` is the Ray head node, and the other Pod is a worker.
+
+## Step 2: Check that the cluster is ready
+
+Each Pod starts Ray as soon as its container starts. The worker waits for the head node, then joins.
+
+1. On the Instant Clusters page, expand your cluster and select the head Pod (rank `0`).
+2. Click **Connect**, then open a **Web Terminal**.
+3. Check the state of the Ray cluster:
+
+   ```bash
+   ray status
+   ```
+
+   When both nodes have joined, the output lists 2 active nodes and 4 GPUs.
+
+{/* TODO(DOCS-609): add real ray status output from a 2-node, 2-GPU-per-node test cluster. */}
+
+The status shown on the cluster card reflects the requested cluster, not whether Ray is ready. Use `ray status` to confirm that every node has joined.
+
+{/* TODO(DOCS-609): remove the sentence above once the latest main-ui changes are deployed to prod. */}
+
+## Step 3: Run a Ray job across every GPU
+
+In the head node's terminal, create a file named `gpu_job.py`:
+
+```python
+import ray
+import torch
+
+ray.init()
+
+@ray.remote(num_gpus=1)
+def matmul(size=8192, iterations=200):
+    # Multiply large random matrices to keep this GPU busy.
+    x = torch.randn(size, size, device="cuda")
+    for _ in range(iterations):
+        x = torch.tanh(x @ x)
+    torch.cuda.synchronize()
+    return ray.util.get_node_ip_address(), torch.cuda.get_device_name(0)
+
+# Start one task for every GPU in the cluster.
+gpu_count = int(ray.cluster_resources().get("GPU", 0))
+results = ray.get([matmul.remote() for _ in range(gpu_count)])
+
+for node_ip, gpu_name in results:
+    print(f"Task finished on {node_ip} using {gpu_name}")
+```
+
+This script asks Ray how many GPUs the cluster has, then starts one task per GPU. Each task reserves one GPU (`num_gpus=1`), so Ray spreads the tasks across both nodes. When every task finishes, the script prints the node and GPU each one ran on.
+
+Submit the script as a Ray job:
+
+```bash
+ray job submit --working-dir . -- python gpu_job.py
+```
+
+The output lists one line per GPU, with two different node addresses:
+
+```text
+Task finished on 10.65.0.2 using NVIDIA H100 80GB HBM3
+Task finished on 10.65.0.2 using NVIDIA H100 80GB HBM3
+Task finished on 10.65.0.3 using NVIDIA H100 80GB HBM3
+Task finished on 10.65.0.3 using NVIDIA H100 80GB HBM3
+```
+
+{/* TODO(DOCS-609): replace with real output from a test cluster. */}
+
+## Step 4: Monitor the cluster
+
+1. Select the head Pod and click **Connect**.
+2. Click **Ray Dashboard**. The console signs you in with the head node's token.
+3. Open the **Jobs** tab to see the job you submitted.
+4. Open the **Cluster** tab to see live CPU, GPU, memory, and disk usage for each node.
+5. Open the **Metrics** tab to see historical charts for every node.
+
+Run the job again while the **Metrics** tab is open to watch GPU usage rise on both nodes. Charts can lag by a minute or more.
+
+See [open the Ray dashboard](/instant-clusters/ray-clusters#open-the-ray-dashboard) for token details and troubleshooting.
+
+## Step 5: Clean up
+
+When you're done, return to the [Instant Clusters page](https://console.runpod.io/instant-clusters) and delete your cluster. A running cluster continues to incur charges.
+
+## Next steps
+
+- [Learn how Ray Clusters work](/instant-clusters/ray-clusters), including environment variables and reserved ports.
+- [Add dependencies to your jobs](/instant-clusters/ray-clusters#run-ray-jobs) with runtime environments or a virtual environment on a network volume.
+- [Build a custom image](/instant-clusters/ray-clusters#build-a-custom-image) from the supported Ray cluster image.
