@@ -139,6 +139,8 @@ rp flash app get APP_NAME      # Show an app's details
 rp flash app delete APP_NAME   # Delete an app (add --yes to skip the prompt)
 ```
 
+`rp flash app delete` undeploys every environment in the app and then deletes the app. It doesn't delete the app's network volumes or global volumes, which keep incurring storage charges. Before it asks you to confirm, and also when you pass `--yes`, the command prints a warning that points you to `rp volume list` and `rp volume delete`. Check that no other app or Pod uses a volume before you [delete it](#delete-a-volume).
+
 ## rp flash env
 
 Manage an app's environments, such as `dev`, `staging`, and `production`:
@@ -164,7 +166,7 @@ rp flash undeploy --app my-app --env staging
 The app and its build history remain. `--app` is optional when the current directory has one app. Add `--yes` to skip the confirmation prompt.
 
 <Warning>
-  Undeploying an app doesn't delete network volumes it created. Volumes continue to incur storage charges until you delete them with [`rp volume delete`](#rp-volume).
+  Undeploying an app doesn't delete its network volumes or global volumes. Volumes continue to incur storage charges until you find them with `rp volume list` and delete them with [`rp volume delete`](#delete-a-volume).
 </Warning>
 
 ## Secrets and registries
@@ -267,7 +269,7 @@ For a CPU Pod, pass `--cpu` with a CPU type such as `cpu3c` or `cpu5c`. `--vcpu`
 | `--jupyter` | Start JupyterLab. Expose port 8888 with `-p 8888/http` to reach it. |
 | `--wait` | Wait until the Pod's container is running, for up to 10 minutes. |
 
-If you don't pass `--region` or `--data-center` but do attach a network volume, the CLI places the Pod in the volume's data center.
+All network volumes you attach to a Pod must be in the same data center. If you don't pass `--region` or `--data-center`, the CLI places the Pod in that data center. If you do pass them, the data centers you choose must include the volumes' data center. Global volumes aren't tied to a data center, so they don't affect placement.
 
 ### Container settings
 
@@ -281,8 +283,7 @@ If you don't pass `--region` or `--data-center` but do attach a network volume, 
 | `--port`, `-p PORT/PROTOCOL` | A port to expose, such as `8888/http` or `22/tcp`. Repeat the flag to expose more than one. |
 | `--disk GB` | The container disk size, in GB. |
 | `--persistent-volume GB[:PATH]` | A volume disk on the Pod's host, such as `50` or `50:/workspace`. The mount path defaults to `/workspace`. |
-| `--network-volume ID[:PATH]` | A [network volume](/storage/network-volumes) to attach. The mount path defaults to `/workspace`. |
-| `--global-volume ID[:PATH]` | A [global volume](/storage/globalvolume/overview) to attach. |
+| `--volume ID[:PATH]` | A [network volume](/storage/network-volumes) or [global volume](/storage/globalvolume/overview) to attach. The CLI looks up the volume's type from its ID. Repeat the flag to attach more than one, each at a different mount path. A network volume's mount path defaults to `/workspace`. |
 | `--cmd COMMAND` | The container `CMD`, as a shell string. |
 | `--entrypoint COMMAND` | The container `ENTRYPOINT`, as a shell string. |
 | `--args COMMAND` | The container start command, as one string. Pass `''` to clear it. |
@@ -295,7 +296,7 @@ If you don't pass `--region` or `--data-center` but do attach a network volume, 
 
 `rp pod update` changes a Pod's name with `--name`, its container settings, and its lock. Most changes take effect the next time the Pod starts.
 
-`--env` adds or replaces variables in the Pod's existing environment, and `--unset-env KEY` removes one. `--port` replaces the full list of exposed ports. A volume flag restates the whole mount: you can change its size or mount path, but not the volume ID. If you leave out the path, the Pod keeps the current one.
+`--env` adds or replaces variables in the Pod's existing environment, and `--unset-env KEY` removes one. `--port` replaces the full list of exposed ports. `--persistent-volume` restates the volume disk, so you can change its size or mount path. To move a network volume or global volume that's already attached, pass `--volume ID:PATH` with the new path. If you leave out the path, the volume keeps its current one. The CLI rejects an update that would mount two volumes at the same path.
 
 `--lock` keeps anyone from stopping or resetting the Pod until you run `rp pod update POD_ID --unlock`.
 
@@ -387,8 +388,7 @@ For GPU workers, pass `--gpu` with a GPU name such as `4090`, `h100`, or `a100-s
 | `--request-timeout-seconds N` | The maximum execution time for a request. |
 | `--region REGION` | A region such as `eu`, `na`, or `asia`, or a data center ID prefix such as `us` or `eu-ro`. Repeat the flag to include more than one. |
 | `--data-center ID` | An exact data center ID, such as `EU-RO-1`. Repeat the flag to include more than one. |
-| `--network-volume ID` | A [network volume](/storage/network-volumes) to attach. Repeat the flag to attach volumes in more than one data center, with at most one per data center. |
-| `--global-volume ID` | A [global volume](/storage/globalvolume/overview) to attach. Repeat the flag to attach more than one. |
+| `--volume ID` | A [network volume](/storage/network-volumes) or [global volume](/storage/globalvolume/overview) to attach. The CLI looks up the volume's type from its ID. Repeat the flag to attach more than one, with at most one network volume per data center. |
 | `--env KEY=VALUE` | An environment variable. Repeat the flag to set more than one. |
 | `--flashboot MODE` | The [FlashBoot](/serverless/endpoints/endpoint-configurations#flashboot) mode: `off`, `standard`, or `priority`. |
 | `--disk GB` | The container disk size, in GB. |
@@ -408,7 +408,7 @@ You can change an endpoint's configuration in three ways:
 - `rp endpoint edit` opens the full configuration as JSON in your editor.
 - `rp endpoint scale` changes only worker limits and scaling, with `--min-workers`, `--max-workers`, `--idle-timeout-seconds`, `--queue-delay-seconds`, and `--requests-per-worker`.
 
-With `rp endpoint update`, settings you don't pass stay the same. `--env` adds or replaces variables in the existing environment, and `--unset-env KEY` removes one. Flags that take a list, such as `--data-center`, `--region`, `--network-volume`, and `--port`, replace the whole list. You can't switch an endpoint between GPU and CPU workers.
+With `rp endpoint update`, settings you don't pass stay the same. `--env` adds or replaces variables in the existing environment, and `--unset-env KEY` removes one. Flags that take a list, such as `--data-center`, `--region`, and `--port`, replace the whole list. `--volume` replaces the endpoint's volumes of each type you pass and keeps the other type. For example, if you pass only network volume IDs, the endpoint's global volumes stay attached. You can't switch an endpoint between GPU and CPU workers.
 
 `rp endpoint edit` checks the JSON when you save and close the editor, shows the changes as a patch, and applies them after you confirm. If the JSON isn't valid, the CLI shows the problem and offers to reopen the editor. Fields you remove from the document stay unchanged. To apply a JSON document without an editor, such as in a script, pass `--file PATH`. Use `--file -` to read from stdin, and add `--yes` to skip the confirmation.
 
@@ -510,14 +510,14 @@ To use what you find in an app, see [GPU types](/sdk/configuration/gpu-types) an
 
 ## rp volume
 
-Create and manage network volumes and global volumes, and transfer files to and from network volumes. Commands act on network volumes by default. Add `--global` to act on global volumes instead.
+Create and manage network volumes and global volumes, and transfer files to and from network volumes. Commands that take a `VOLUME_ID` work with either type and look up the volume's type from its ID.
 
 ```bash
-rp volume list                                          # List network volumes
-rp volume list --global                                 # List global volumes
+rp volume list                                          # List network and global volumes
+rp volume list --global                                 # List only global volumes
 rp volume get VOLUME_ID                                 # Show one volume
 rp volume create --name models --size 100 --region eu   # Network volume in a European data center
-rp volume create --name shared --global                 # Global volume
+rp volume create --name shared --type global            # Global volume
 rp volume update VOLUME_ID --name new-name              # Rename a volume
 rp volume expand VOLUME_ID --size +50                   # Add 50 GB to a network volume
 rp volume upload VOLUME ./dataset datasets/dataset      # Upload a folder to a network volume
@@ -525,11 +525,13 @@ rp volume download VOLUME outputs/ ./outputs            # Download a folder from
 rp volume delete VOLUME_ID                              # Delete a volume and its data
 ```
 
+`rp volume list` shows each volume's type, size, data center, and storage tier. If the CLI can't list one of the two types, it shows the volumes it could list. It then exits with an error that names the missing type.
+
 If you leave out `VOLUME_ID` from `rp volume get`, the CLI prompts you to pick a volume. Add `--json` to `list`, `get`, `create`, `update`, or `expand` to print JSON for use in scripts.
 
 ### Create a network volume
 
-A network volume lives in one data center, so `rp volume create` needs a size and a location. Pass `--size` in GB, from 10 to 4096, and choose the location with one of these flags:
+`rp volume create` makes a network volume unless you pass `--type global`. A network volume lives in one data center, so it needs a size and a location. Pass `--size` in GB, from 10 to 4096, and choose the location with one of these flags:
 
 | Flag | Description |
 | --- | --- |
@@ -538,15 +540,15 @@ A network volume lives in one data center, so `rp volume create` needs a size an
 
 You can't combine the two flags. If you pass neither, the CLI considers every data center that offers network volumes. When more than one data center matches, the CLI prompts you to pick one. In a non-interactive shell, such as a script or CI job, pass `--data-center` instead.
 
-To choose a storage tier, add `--type standard` or `--type high_performance`. The CLI then picks only from data centers that offer that tier. If you leave out `--type`, the volume uses the data center's primary tier. You can't change the tier after you create the volume. To see which tiers each data center offers, run `rp catalog --datacenters`. See [High-performance storage](/storage/high-performance-storage).
+To choose a storage tier, add `--tier standard` or `--tier high_performance`. The CLI then picks only from data centers that offer that tier. If you leave out `--tier`, the volume uses the data center's primary tier. You can't change the tier after you create the volume. To see which tiers each data center offers, run `rp catalog --datacenters`. See [High-performance storage](/storage/high-performance-storage).
 
-A global volume isn't tied to a data center and grows with your data, so `rp volume create --global` takes only `--name`. See [Global volumes](/storage/globalvolume/overview).
+A global volume isn't tied to a data center and grows with your data, so `rp volume create --type global` takes only `--name`. See [Global volumes](/storage/globalvolume/overview).
 
 ### Resize or rename a volume
 
 Network volumes can grow but can't shrink. `rp volume expand` takes a new total size, such as `--size 200`, or an amount to add, such as `--size +50`. The total can't exceed 4096 GB.
 
-`rp volume update` renames a volume with `--name`, sets a new total size for a network volume with `--size`, or does both. To rename a global volume, add `--global`. Global volumes have no size to change.
+`rp volume update` renames a volume with `--name`, sets a new total size for a network volume with `--size`, or does both. Global volumes have no size to change.
 
 ### Upload and download files
 
@@ -595,7 +597,7 @@ To transfer files from Python code, see [Upload and download files](/sdk/configu
 
 ### Delete a volume
 
-`rp volume delete` permanently deletes a volume and all the data stored on it. The CLI shows the volume's details and asks you to confirm. Add `--yes` to skip the prompt. A non-interactive shell requires `--yes`. To delete a global volume, add `--global`.
+`rp volume delete` permanently deletes a volume and all the data stored on it. The CLI shows the volume's details and asks you to confirm. Add `--yes` to skip the prompt. A non-interactive shell requires `--yes`. The command works on network volumes and global volumes. Before you delete a volume, check that no other app, Pod, or endpoint uses it.
 
 ## rp completion
 
