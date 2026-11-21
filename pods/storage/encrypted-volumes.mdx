@@ -1,0 +1,112 @@
+---
+title: "Encrypted volumes"
+sidebarTitle: "Encrypted volumes"
+description: "Learn how Pod volume encryption works, what it covers, and how to keep your data protected when you move it between Pods."
+---
+
+You can encrypt the volume disk of a Pod to protect sensitive data at rest. This page explains what the **Encrypt volume** option covers, how it works, and what happens to your data when you move it to another Pod or another type of storage.
+
+## What encryption covers
+
+The **Encrypt volume** option applies only to the [volume disk](/pods/storage/types#volume-disk) of a Pod. It does not apply to any other storage type.
+
+| Storage type | Covered by Encrypt volume |
+|---|---|
+| Volume disk | Yes, when you select **Encrypt volume** at Pod creation. |
+| Container disk | No. |
+| Network volume | No. |
+| Global volume | No. |
+
+When you attach a network volume to a Pod, the network volume replaces the volume disk, so the **Encrypt volume** option is not available for that Pod.
+
+## Enable encryption
+
+To encrypt a volume disk, select the **Encrypt volume** checkbox when you create the Pod.
+
+Review these limits before you deploy:
+
+- You can only choose encryption when you create a Pod. You can't turn encryption on or off for an existing Pod, and a volume disk that you add to a running Pod can't be encrypted.
+- You can't resize an encrypted volume disk after you deploy the Pod. Choose a size that leaves room for your data to grow.
+- Encryption adds a performance cost to disk reads and writes.
+
+## How it works
+
+Volume encryption is disk-level encryption at rest. Runpod encrypts the whole volume disk on the host machine. It does not encrypt each file separately.
+
+Runpod generates and manages the encryption key, and uses it only to unlock the volume for your Pod. You can't retrieve the key, and bring your own key is not supported.
+
+Inside your Pod, you work with normal files. The disk encrypts data when your Pod writes it and decrypts data when your Pod reads it. Your applications don't need any changes.
+
+<Warning>
+Volume encryption protects data at rest. It does not protect data in transit. When you copy files out of a Pod, the transfer tool that you use decides whether the data is encrypted while it moves.
+</Warning>
+
+## Move data between Pods
+
+When you copy data out of an encrypted volume, the copy reads normal, decrypted files from the source and writes them to the destination. Encryption does not follow the files. The destination's own setting decides whether your data is encrypted at rest there.
+
+| Destination | Data at rest |
+|---|---|
+| Volume disk of a Pod created with **Encrypt volume** selected | Encrypted. |
+| Volume disk of a Pod created without **Encrypt volume** | Not encrypted. |
+| Container disk of any Pod | Not encrypted. |
+| Network volume | Not encrypted. |
+
+The source and the destination don't need the same key. Each encrypted volume uses its own key, so there is no conflict when you copy between two encrypted volumes.
+
+To keep your data protected during a manual copy:
+
+1. Create the destination Pod with **Encrypt volume** selected. This keeps the data encrypted at rest on the destination.
+2. Copy the data with a transfer method that encrypts data in transit, such as [SCP](/pods/storage/transfer-files#transfer-with-scp), [rsync over SSH](/pods/storage/transfer-files#transfer-with-rsync), SFTP, or [`runpodctl send` and `runpodctl receive`](/pods/storage/transfer-files#transfer-with-runpodctl).
+3. Write the data to the volume disk of the destination Pod (`/workspace` by default). Data that you write to the container disk is not encrypted.
+
+For transfer commands, see [Transfer files](/pods/storage/transfer-files).
+
+## Frequently asked questions
+
+### Does volume encryption protect my data in transit?
+
+No. Volume encryption protects data at rest on the volume disk. To protect data in transit, use a transfer method that encrypts the connection, such as SCP, rsync over SSH, SFTP, or `runpodctl send` and `runpodctl receive`.
+
+### Are my files still encrypted after I copy them to another Pod?
+
+It depends on the destination. Your files are encrypted at rest only if you write them to the volume disk of a Pod that you created with **Encrypt volume** selected. If the destination is an unencrypted volume disk, a container disk, or a network volume, the files are stored unencrypted.
+
+### Do the source and destination volumes need the same encryption key?
+
+No. A copy moves normal files, not encrypted disk data. The source volume decrypts the files when they are read, and the destination volume encrypts them with its own key when they are written.
+
+### Can I turn on encryption for an existing Pod?
+
+No. You can only choose encryption when you create a Pod. To encrypt data that is on an unencrypted volume, create a new Pod with **Encrypt volume** selected and copy the data to its volume disk.
+
+### Can I encrypt a network volume or a container disk?
+
+No. The **Encrypt volume** option applies only to the volume disk.
+
+### Can I get my encryption key or use my own key?
+
+No. Runpod generates and manages the key. You can't retrieve it, and bring your own key is not supported.
+
+### Can I resize an encrypted volume disk?
+
+No. You can't change the size of an encrypted volume disk after you deploy the Pod.
+
+### Does `runpodctl send` encrypt my files during the transfer?
+
+Yes. `runpodctl send` and `runpodctl receive` encrypt file data end to end with a key that is derived from the one-time transfer code. Share the code only with the person or machine that receives the files.
+
+### Does my volume stay encrypted when I use Pod migration?
+
+Yes. When you use [Pod migration](/pods/troubleshooting/pod-migration) for a Pod with an encrypted volume disk, the new Pod also has an encrypted volume disk, and your data is stored encrypted at rest on the new machine. This page does not cover how data is protected in transit during an automatic migration.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Storage options" href="/pods/storage/types" icon="hard-drive" horizontal>
+    Compare the storage types that are available for Pods.
+  </Card>
+  <Card title="Transfer files" href="/pods/storage/transfer-files" icon="upload" horizontal>
+    Learn how to move data to and from your Pod.
+  </Card>
+</CardGroup>
