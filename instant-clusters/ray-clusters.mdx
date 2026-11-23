@@ -45,6 +45,51 @@ The **Ray Inference** template uses this image and exposes port `4000`. You conf
 
 {/* TODO(DOCS-609): replace VERSION with the published tag once runpod/containers#245 ships. */}
 
+## Create a Ray Cluster with the REST API
+
+You can also create and manage Ray Clusters with the [REST API](/api-reference-v2/clusters/create-a-cluster). Set `type` to `RAY` and pass the ID of the Ray Cluster template, or your own template built from the supported image, in `templateId`:
+
+```bash
+curl -X POST https://api.runpod.io/v2/clusters \
+    -H "Authorization: Bearer RUNPOD_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+        "name": "my-ray-cluster",
+        "type": "RAY",
+        "templateId": "RAY_TEMPLATE_ID",
+        "compute": {
+            "gpuTypeId": "NVIDIA H100 80GB HBM3",
+            "gpuCountPerPod": 2,
+            "podCount": 2
+        },
+        "startSsh": true,
+        "startJupyter": true
+    }'
+```
+
+This request creates a two-node Ray Cluster with two H100 GPUs on each Pod:
+
+- `type`: `RAY` gives the Pods Ray roles. The Pod with rank `0` is the head node, and the others are workers.
+- `templateId`: the template every Pod starts from. It can't be combined with `image`, `env`, `ports`, `args`, `entrypoint`, `cmd`, or `disk`. To set environment variables such as `RAY_START_EXTRA_ARGS` or `MODEL_REPO`, save them in your own template and pass that template's ID.
+- `compute`: the shape of every Pod. `gpuTypeId` is a GPU type from `GET /v2/catalog/gpus`, and `podCount` is the number of nodes, from 2 to 250.
+- `startSsh`: adds your account's SSH public key to every Pod.
+- `startJupyter`: starts JupyterLab, as on Pod create.
+
+To choose a data center, add `dataCenterIds`. To attach a [network volume](/storage/network-volumes), add it under `mounts.network`. A cluster can mount one network volume, and global volumes aren't supported.
+
+{/* TODO(DOCS-609): replace RAY_TEMPLATE_ID with the public Ray Cluster template ID once it's published, and confirm whether startJupyter is needed for the dashboard tokens when creating from the API. */}
+
+The response includes the cluster's `id`. To find the head node, list the cluster's Pods:
+
+```bash
+curl https://api.runpod.io/v2/clusters/CLUSTER_ID/pods \
+    -H "Authorization: Bearer RUNPOD_API_KEY"
+```
+
+Each Pod's `cluster` object includes its `rank` and `role`. The head node has rank `0` and the role `RAY_HEAD`, and every worker has the role `RAY_WORKER`. Once the head node is running, the cluster's `primary.sshEndpoint` field (from `GET /v2/clusters/CLUSTER_ID`) gives its SSH address.
+
+After you create a cluster, you can only rename it with `PATCH /v2/clusters/CLUSTER_ID`. Its type, GPU type, Pod count, and template are fixed. `DELETE /v2/clusters/CLUSTER_ID` deletes the cluster and terminates every Pod in it.
+
 ## Run Ray jobs
 
 Connect to the head node over [SSH](/pods/configuration/use-ssh) or JupyterLab, then submit work with `ray job submit` or a Python driver.
@@ -219,12 +264,11 @@ After you push the image, create a [template](/pods/templates/manage-templates) 
 ## Limitations
 
 - Ray Clusters run only on the supported image or an image built from it. Creating a Ray Cluster with any other image fails.
-- Ray Clusters can only be created from the console. The REST API currently doesn't support creating Ray Clusters.
 - The status shown on the cluster card reflects the requested cluster, not whether Ray is ready. Run `ray status` on the head node to check readiness.
 - Ray processes aren't restarted automatically. If Ray exits on a node, the Pod stays up so you can connect and investigate, but that node leaves the cluster.
 - If the head node restarts, workers that were already running don't rejoin on their own. Restart the worker Pods after the head node is back.
 
-{/* TODO(DOCS-609): remove the cluster card status bullet once the latest main-ui changes are deployed to prod (fixed, not yet deployed). Update the API bullet when API support ships. */}
+{/* TODO(DOCS-609): remove the cluster card status bullet once the latest main-ui changes are deployed to prod (fixed, not yet deployed). */}
 
 ## Troubleshooting
 
