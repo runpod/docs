@@ -6,14 +6,20 @@ description: "Deploy an image generation endpoint from the Hub and integrate it 
 
 import { ServerlessTooltip, RunpodHubTooltip, WorkerTooltip, ColdStartTooltip } from "/snippets/tooltips.jsx";
 
-In this tutorial, you'll deploy a pre-built SDXL Turbo <WorkerTooltip /> from the <RunpodHubTooltip /> and integrate it into a web application. You'll build a simple frontend that sends prompts to your endpoint and displays the generated images.
+In this tutorial, you'll deploy a pre-built SDXL Turbo <WorkerTooltip /> from the <RunpodHubTooltip /> and integrate it into a web application. The frontend sends prompts to a small backend server, which calls your endpoint and returns the generated image for the page to display. Because only the backend calls the endpoint, your API key never reaches the browser.
 
-By the end, you'll know how to deploy <ServerlessTooltip /> endpoints from the Hub and integrate them into your applications using standard HTTP requests.
+## What you'll learn
+
+- How to deploy a <ServerlessTooltip /> endpoint from the Hub.
+- How to send a test request to your endpoint.
+- How to call your endpoint from a backend server so your API key stays out of client-side code.
+- How to build a frontend that displays the generated images.
 
 ## Requirements
 
 - A [Runpod account](/accounts-billing/manage-accounts) with credits.
 - A [Runpod API key](/get-started/credentials).
+- Python 3.8 or later, to run the backend server.
 
 ## Step 1: Deploy an endpoint from the Hub
 
@@ -46,9 +52,9 @@ Now that your endpoint is deployed, you'll need your endpoint ID and API key to 
 1. Navigate to **Settings** > **API Keys** in the console, or go directly to the [API Keys page](https://console.runpod.io/user/settings).
 2. Copy an existing API key, or create a new one with read and write permissions.
 
-<Tip>
-Store your API key securely. Never commit it to version control or expose it in client-side code that's publicly accessible.
-</Tip>
+<Warning>
+Anyone who has your API key can create, modify, and delete resources on your Runpod account. The key's permissions set the limit. Never commit it to version control or include it in code that runs in the browser. In this tutorial, the key stays on your backend server.
+</Warning>
 
 ## Step 3: Send a test request
 
@@ -135,9 +141,11 @@ SDXL Turbo uses adversarial diffusion distillation to generate images in just a 
 
 ## Step 4: Integrate with a web application
 
-Now that you've confirmed your endpoint is working, you can integrate it into a web application. This example creates a simple image generator with an input field for prompts and a button to generate images. While this tutorial uses JavaScript, you can make requests to your endpoint using any programming language or framework.
+Now that you've confirmed your endpoint is working, you can integrate it into a web application. This example creates a simple image generator with an input field for prompts and a button to generate images.
 
-Create two files in the same directory:
+The application has two parts. The frontend runs in the browser and sends each prompt to your own backend. The backend is a small Flask server that holds your API key, calls your Runpod endpoint, and returns only the generated image. This tutorial uses Python for the backend, but you can write it in any language or framework that can send HTTP requests.
+
+Create three files in the same directory:
 
 <Tabs>
 <Tab title="index.html">
@@ -202,13 +210,9 @@ The HTML file sets up a user interface with an input field for prompts and a but
 
 <Tab title="script.js">
 
-The JavaScript file handles API communication. The `generateImage` function reads the user's prompt, sends a POST request to your Runpod endpoint, and displays the generated image. The endpoint returns a base64-encoded PNG image in the `output.images` array, which is then converted to a displayable format.
+The JavaScript file runs in the browser. The `generateImage` function reads the user's prompt, sends it to the `/api/generate` route on your backend, and displays the returned base64-encoded PNG image. It contains no API key and never contacts Runpod directly.
 
 ```javascript script.js
-// Replace these with your actual values
-const ENDPOINT_ID = "YOUR_ENDPOINT_ID";
-const API_KEY = "YOUR_API_KEY";
-
 async function generateImage() {
     const prompt = document.getElementById("promptInput").value;
 
@@ -221,41 +225,27 @@ async function generateImage() {
     document.getElementById("loading").style.display = "block";
     document.getElementById("imageResult").innerHTML = "";
 
-    const options = {
-        method: "POST",
-        headers: {
-            "accept": "application/json",
-            "content-type": "application/json",
-            "authorization": `Bearer ${API_KEY}`,
-        },
-        body: JSON.stringify({
-            input: {
-                prompt: prompt,
-            },
-        }),
-    };
-
     try {
-        const response = await fetch(
-            `https://api.runpod.ai/v2/${ENDPOINT_ID}/runsync`,
-            options
-        );
+        // Send the prompt to your backend, which calls the Runpod endpoint.
+        const response = await fetch("/api/generate", {
+            method: "POST",
+            headers: {
+                "content-type": "application/json",
+            },
+            body: JSON.stringify({ prompt: prompt }),
+        });
         const data = await response.json();
 
         // Hide loading indicator
         document.getElementById("loading").style.display = "none";
 
-        if (data && data.output && data.output.images && data.output.images.length > 0) {
-            const imageBase64 = data.output.images[0].image;
-            const imageUrl = `data:image/png;base64,${imageBase64}`;
+        if (response.ok && data.image) {
             const img = document.createElement("img");
-            img.src = imageUrl;
+            img.src = `data:image/png;base64,${data.image}`;
             img.alt = "Generated Image";
             document.getElementById("imageResult").replaceChildren(img);
-        } else if (data && data.error) {
-            alert(`Error: ${data.error}`);
         } else {
-            alert("Failed to generate image. Check the console for details.");
+            alert(`Error: ${data.error || "Failed to generate image."}`);
             console.error("Response:", data);
         }
     } catch (error) {
@@ -266,37 +256,108 @@ async function generateImage() {
 }
 ```
 </Tab>
+
+<Tab title="server.py">
+
+The Python file is the backend. It serves `index.html` and `script.js`, and it handles requests to `/api/generate`. It reads your endpoint ID and API key from environment variables. For each prompt, it sends a `/runsync` request to your endpoint and returns only the image from `output.images[0].image`. The API key stays on the server and is never sent to the browser.
+
+```python server.py
+import os
+
+import requests
+from flask import Flask, jsonify, request, send_from_directory
+
+# Read configuration from the environment so no credentials live in the code.
+ENDPOINT_ID = os.environ["RUNPOD_ENDPOINT_ID"]
+API_KEY = os.environ["RUNPOD_API_KEY"]
+
+app = Flask(__name__)
+
+
+@app.route("/")
+def index():
+    return send_from_directory(".", "index.html")
+
+
+@app.route("/script.js")
+def script():
+    return send_from_directory(".", "script.js")
+
+
+@app.route("/api/generate", methods=["POST"])
+def generate():
+    prompt = (request.get_json(silent=True) or {}).get("prompt")
+    if not prompt:
+        return jsonify({"error": "A prompt is required."}), 400
+
+    response = requests.post(
+        f"https://api.runpod.ai/v2/{ENDPOINT_ID}/runsync",
+        headers={
+            "accept": "application/json",
+            "content-type": "application/json",
+            "authorization": f"Bearer {API_KEY}",
+        },
+        json={"input": {"prompt": prompt}},
+        timeout=300,
+    )
+    result = response.json()
+
+    images = result.get("output", {}).get("images", [])
+    if not images:
+        return jsonify({"error": result.get("error", "No image was returned.")}), 502
+
+    return jsonify({"image": images[0]["image"]})
+```
+</Tab>
 </Tabs>
-
-Before running the application:
-
-1. Replace `YOUR_ENDPOINT_ID` with your endpoint ID from step 2.
-2. Replace `YOUR_API_KEY` with your Runpod API key.
-
-<Warning>
-This example includes the API key directly in client-side code for simplicity. In production, you should make API calls from a backend server to keep your API key secure.
-</Warning>
 
 ## Step 5: Run your application
 
-You can run the application using a local server or by opening the HTML file directly in a browser.
+Run the backend server, which serves the frontend and handles requests to your endpoint.
 
-<Tabs>
-<Tab title="Python server">
-Run the following command in the directory containing your files:
+<Steps>
+  <Step title="Install the dependencies">
+    In the directory containing your files, install Flask and the `requests` library:
 
-```bash
-python -m http.server 8000
-```
+    ```bash
+    pip install flask requests
+    ```
+  </Step>
+  <Step title="Set your endpoint ID and API key">
+    Set the environment variables that `server.py` reads. Replace `YOUR_ENDPOINT_ID` with your endpoint ID from step 2 and `YOUR_API_KEY` with your Runpod API key.
 
-Then open `http://localhost:8000` in your browser.
-</Tab>
+    <Tabs>
+    <Tab title="macOS/Linux">
+    ```bash
+    export RUNPOD_ENDPOINT_ID="YOUR_ENDPOINT_ID"
+    export RUNPOD_API_KEY="YOUR_API_KEY"
+    ```
+    </Tab>
+    <Tab title="Windows (PowerShell)">
+    ```powershell
+    $env:RUNPOD_ENDPOINT_ID = "YOUR_ENDPOINT_ID"
+    $env:RUNPOD_API_KEY = "YOUR_API_KEY"
+    ```
+    </Tab>
+    </Tabs>
 
-<Tab title="Open directly">
-1. Navigate to the folder containing `index.html`.
-2. Double-click the file to open it in your default browser, or right-click and select **Open with** to choose a specific browser.
-</Tab>
-</Tabs>
+    These variables last only for the current terminal session, so start the server from the same terminal.
+  </Step>
+  <Step title="Start the server">
+    From the same directory, start the Flask server on port 8000:
+
+    ```bash
+    flask --app server run --port 8000
+    ```
+  </Step>
+  <Step title="Open the application">
+    Open `http://localhost:8000` in your browser.
+  </Step>
+</Steps>
+
+<Note>
+Always open the application through `http://localhost:8000`. If you open `index.html` directly from your file system, the page loads from a `file://` URL. That page can't reach `/api/generate` because the route exists only on the Flask server.
+</Note>
 
 Enter a prompt and click **Generate Image** to see your AI-generated image.
 

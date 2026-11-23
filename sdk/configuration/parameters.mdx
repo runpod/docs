@@ -194,6 +194,24 @@ def infer(): ...
 
 Create secrets with `rp secret add`. Secret values never pass through the SDK.
 
+Runpod sets runtime identity and credential variables on deployed workers, so `rp flash deploy` fails if `env` uses a reserved name. Queue and API resources can't use these names:
+
+- Credentials: `RUNPOD_API_KEY` and `RUNPOD_AI_API_KEY`.
+- Worker identity: `RUNPOD_ENDPOINT_ID`, `RUNPOD_POD_ID`, `RUNPOD_BUILD_ID`, and `RUNPOD_RUNTIME_KIND`.
+- App identity: `FLASH_APP_NAME`, `FLASH_ENVIRONMENT`, `FLASH_RESOURCE_NAME`, and `FLASH_BUILD_ARTIFACT_PATH`.
+- Task and dev session internals: `RUNPOD_TASK_TOKEN`, `RUNPOD_TASK_PORT`, `RUNPOD_DEV_APP`, `RUNPOD_DEV_RESOURCE`, and `RUNPOD_DEV_SESSION`.
+
+Tasks can't use any name that starts with `RUNPOD_` or `FLASH_`, in any letter case. They also can't use `PYTHONPATH`, `PYTHONHOME`, or `LD_PRELOAD`.
+
+If your code needs its own Runpod API key, store it as a secret under a name that isn't reserved:
+
+```python
+@app.queue(cpu="cpu3c-1-2", env={"MY_RUNPOD_API_KEY": runpod.Secret("runpod-api-key")})
+def manage(): ...
+```
+
+To call other resources in the same app, you don't need a key. See [Calls from deployed workers](/sdk/apps/deploy#calls-from-deployed-workers).
+
 <Warning>
   Values in a local `.env` file aren't sent to workers, and `.env` files are always left out of deployments. Pass every variable your workers need through `env`.
 </Warning>
