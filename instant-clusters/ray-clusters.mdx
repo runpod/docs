@@ -47,7 +47,7 @@ The **Ray Inference** template uses this image and exposes port `4000`. You conf
 
 ## Create a Ray Cluster with the REST API
 
-You can also create and manage Ray Clusters with the [REST API](/api-reference-v2/clusters/create-a-cluster). Set `type` to `RAY` and pass the ID of the Ray Cluster template, or your own template built from the supported image, in `templateId`:
+To create a Ray Cluster from code, call [`POST /v2/clusters`](/api-reference-v2/clusters/create-a-cluster) with `type` set to `RAY` and `templateId` set to the Ray Cluster template, or your own template built from the supported image:
 
 ```bash
 curl -X POST https://api.runpod.io/v2/clusters \
@@ -61,34 +61,17 @@ curl -X POST https://api.runpod.io/v2/clusters \
             "gpuTypeId": "NVIDIA H100 80GB HBM3",
             "gpuCountPerPod": 2,
             "podCount": 2
-        },
-        "startSsh": true,
-        "startJupyter": true
+        }
     }'
 ```
 
-This request creates a two-node Ray Cluster with two H100 GPUs on each Pod:
+{/* TODO(DOCS-609): replace RAY_TEMPLATE_ID with the public Ray Cluster template ID once it's published. */}
 
-- `type`: `RAY` gives the Pods Ray roles. The Pod with rank `0` is the head node, and the others are workers.
-- `templateId`: the template every Pod starts from. It can't be combined with `image`, `env`, `ports`, `args`, `entrypoint`, `cmd`, or `disk`. To set environment variables such as `RAY_START_EXTRA_ARGS` or `MODEL_REPO`, save them in your own template and pass that template's ID.
-- `compute`: the shape of every Pod. `gpuTypeId` is a GPU type from `GET /v2/catalog/gpus`, and `podCount` is the number of nodes, from 2 to 250.
-- `startSsh`: adds your account's SSH public key to every Pod.
-- `startJupyter`: starts JupyterLab, as on Pod create.
+To set environment variables such as `RAY_START_EXTRA_ARGS`, save them in your own template, because a request with `templateId` can't include `env`.
 
-To choose a data center, add `dataCenterIds`. To attach a [network volume](/storage/network-volumes), add it under `mounts.network`. A cluster can mount one network volume, and global volumes aren't supported.
+To find the head node, call [`GET /v2/clusters/CLUSTER_ID/pods`](/api-reference-v2/clusters/list-a-clusters-pods). The head node's `cluster` object has rank `0` and the role `RAY_HEAD`. Workers have the role `RAY_WORKER`.
 
-{/* TODO(DOCS-609): replace RAY_TEMPLATE_ID with the public Ray Cluster template ID once it's published, and confirm whether startJupyter is needed for the dashboard tokens when creating from the API. */}
-
-The response includes the cluster's `id`. To find the head node, list the cluster's Pods:
-
-```bash
-curl https://api.runpod.io/v2/clusters/CLUSTER_ID/pods \
-    -H "Authorization: Bearer RUNPOD_API_KEY"
-```
-
-Each Pod's `cluster` object includes its `rank` and `role`. The head node has rank `0` and the role `RAY_HEAD`, and every worker has the role `RAY_WORKER`. Once the head node is running, the cluster's `primary.sshEndpoint` field (from `GET /v2/clusters/CLUSTER_ID`) gives its SSH address.
-
-After you create a cluster, you can only rename it with `PATCH /v2/clusters/CLUSTER_ID`. Its type, GPU type, Pod count, and template are fixed. `DELETE /v2/clusters/CLUSTER_ID` deletes the cluster and terminates every Pod in it.
+For every request field, and for renaming or deleting a cluster, see the [Clusters API reference](/api-reference-v2/clusters/create-a-cluster).
 
 ## Run Ray jobs
 
