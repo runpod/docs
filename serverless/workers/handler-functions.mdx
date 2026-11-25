@@ -166,6 +166,35 @@ async def async_handler(job):
         raise
 ```
 
+If you swallow the `CancelledError` instead of re-raising it, the worker reports the job as completed rather than stopped. Sync handlers run on the worker's event loop, so a stop can't interrupt them. The stop takes effect after a sync handler returns.
+
+Stopping a job doesn't stop the processes its handler started. Subprocesses keep running into the next job on the same worker. If your handler starts a subprocess, start it in its own process group, then kill that group before you re-raise:
+
+```python handler.py
+import asyncio
+import os
+import signal
+
+
+async def async_handler(job):
+    proc = await asyncio.create_subprocess_exec(
+        "python", "train.py", job["input"]["config"],
+        start_new_session=True,  # The child leads its own process group.
+    )
+    try:
+        await proc.wait()
+    except asyncio.CancelledError:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass  # The group already exited.
+        await proc.wait()  # Reap the child so it doesn't linger as a zombie.
+        raise
+    return {"returncode": proc.returncode}
+```
+
+`os.killpg` reaches only processes that stay in the group. A process that calls `setsid` to start its own session escapes it. For those workloads, start the worker with `refresh_worker` so that a stopped job replaces the worker. For details, see [Worker refresh](#worker-refresh).
+
 ### Concurrent handlers
 
 Concurrent handlers process multiple requests simultaneously with a single worker. Use these for small, rapid operations that don't fully utlize the worker's GPU.
@@ -263,6 +292,8 @@ Your handler must return a dictionary that contains the `refresh_worker` flag. T
 To refresh the worker after every job instead, pass `"refresh_worker": True` to `runpod.serverless.start()` alongside your handler.
 
 Either way, the worker takes no more jobs after the refreshing job finishes, and the worker process exits shortly after it reports the result. Finish any background work, such as flushing logs from a separate thread, before your handler returns.
+
+When a job is stopped because it was cancelled, timed out, or expired, the start-time `refresh_worker` option still refreshes the worker. The worker takes no more jobs and asks Runpod to replace it. Anything the stopped handler left behind doesn't carry into the next job. A per-job `refresh_worker` flag can't apply to a stopped job, because a stopped handler never returns. Without the start-time option, the worker goes on to its next job after a stop.
 
 <Note>
 In Runpod Python SDK versions before 2.2.0, a worker that returned `refresh_worker` could take another queued job before it restarted. The restart then stopped that job. Use version 2.2.0 or later. For details, see [Jobs fail or retry after a worker refresh](/serverless/troubleshooting#jobs-fail-or-retry-after-a-worker-refresh).
