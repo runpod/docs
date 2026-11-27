@@ -9475,8 +9475,48 @@
                 "$: additional properties 'bogus' not allowed"
               ]
             ]
+          },
+          "code": {
+            "type": "string",
+            "description": "Machine-readable reason for the error. Absent when there is none.\nRoutes that set it declare which values they send; branch on\n`code`, not on `detail`.\n"
           }
         }
+      },
+      "ConflictCode": {
+        "type": "string",
+        "x-enum-varnames": [
+          "ConflictCodeGpuConcurrencyExceeded",
+          "ConflictCodeHighPerformanceGpuConcurrencyExceeded",
+          "ConflictCodeCpuConcurrencyExceeded",
+          "ConflictCodeInstantClusterNodeLimitExceeded",
+          "ConflictCodeFlashbootEndpointLimitExceeded",
+          "ConflictCodeNetworkVolumeSizeExceeded"
+        ],
+        "enum": [
+          "GPU_CONCURRENCY_EXCEEDED",
+          "HIGH_PERFORMANCE_GPU_CONCURRENCY_EXCEEDED",
+          "CPU_CONCURRENCY_EXCEEDED",
+          "INSTANT_CLUSTER_NODE_LIMIT_EXCEEDED",
+          "FLASHBOOT_ENDPOINT_LIMIT_EXCEEDED",
+          "NETWORK_VOLUME_SIZE_EXCEEDED"
+        ],
+        "description": "Machine-readable reason the request conflicts with the account's\ncurrent state. Branch on this, not on `detail`, whose wording can\nchange. Retrying unchanged does not help; `detail` says what to\nchange.\n\nNew values may be added. Treat a `code` you do not recognize as a\nconflict you cannot resolve automatically.\n"
+      },
+      "ConflictResponse": {
+        "description": "Problem body for a `409`: the standard error fields, plus `code` when\nthe conflict has a machine-readable reason. `code` is absent for the\nother reasons a route answers `409`, such as a pod whose status does\nnot allow the action.\n",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ErrorResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "$ref": "#/components/schemas/ConflictCode"
+              }
+            }
+          }
+        ]
       },
       "RateLimitHeader": {
         "type": "string",
@@ -13103,11 +13143,11 @@
             "$ref": "#/components/responses/NotFoundError"
           },
           "409": {
-            "description": "The request carried `queue`, but the account already has as many\nqueued pods as its plan allows. Cancel a queued pod or upgrade the\nplan.\n",
+            "description": "The request conflicts with the account's current state:\n\n* The account is at a usage tier limit on concurrent GPUs or\n  vCPUs, or its plan includes none of that resource. Free capacity\n  or upgrade the plan.\n* The request carried `queue`, but the account already has as many\n  queued pods as its plan allows. Cancel a queued pod or upgrade\n  the plan.\n",
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/ConflictResponse"
                 }
               }
             }
@@ -13876,11 +13916,11 @@
                 "$ref": "#/components/headers/RateLimit-Policy"
               }
             },
-            "description": "Action not valid for current pod status",
+            "description": "The request conflicts with the pod's or the account's current\nstate:\n\n* The action is not valid for the pod's current status.\n* `start` and `restart` re-admit the pod, so the account's usage\n  tier limits on concurrent GPUs and vCPUs are checked again. Free\n  capacity or upgrade the plan. A `restart` stops the pod before it\n  re-admits it, so a `restart` refused this way leaves the pod\n  stopped rather than running — retry with `start` once there is\n  capacity.\n",
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/ConflictResponse"
                 }
               }
             }
@@ -14567,6 +14607,16 @@
           "403": {
             "$ref": "#/components/responses/ForbiddenError"
           },
+          "409": {
+            "description": "The account is at a usage tier limit on concurrent GPUs or on nodes\nper Instant Cluster, or its plan includes none of that resource. Free\ncapacity or upgrade the plan.\n",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictResponse"
+                }
+              }
+            }
+          },
           "413": {
             "$ref": "#/components/responses/RequestTooLargeError"
           },
@@ -15232,6 +15282,16 @@
           "404": {
             "$ref": "#/components/responses/NotFoundError"
           },
+          "409": {
+            "description": "The account is at a usage tier limit on endpoints with FlashBoot\nenabled, or its plan does not include FlashBoot. Turn FlashBoot off on\nanother endpoint, or upgrade the plan.\n",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictResponse"
+                }
+              }
+            }
+          },
           "413": {
             "$ref": "#/components/responses/RequestTooLargeError"
           },
@@ -15573,6 +15633,16 @@
           },
           "400": {
             "$ref": "#/components/responses/BadRequestError"
+          },
+          "409": {
+            "description": "The request turns FlashBoot on, and the account is at a usage tier\nlimit on endpoints with FlashBoot enabled, or its plan does not\ninclude FlashBoot. Turn FlashBoot off on another endpoint, or upgrade\nthe plan.\n",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictResponse"
+                }
+              }
+            }
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLargeError"
@@ -17435,6 +17505,16 @@
           "400": {
             "$ref": "#/components/responses/BadRequestError"
           },
+          "409": {
+            "description": "The requested size is above the account's usage tier limit for network\nvolumes, or its plan includes no network volume storage. Choose a\nsmaller size or upgrade the plan.\n",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictResponse"
+                }
+              }
+            }
+          },
           "413": {
             "$ref": "#/components/responses/RequestTooLargeError"
           },
@@ -17642,6 +17722,16 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFoundError"
+          },
+          "409": {
+            "description": "The requested size is above the account's usage tier limit for network\nvolumes, or its plan includes no network volume storage. Choose a\nsmaller size or upgrade the plan.\n",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictResponse"
+                }
+              }
+            }
           },
           "413": {
             "$ref": "#/components/responses/RequestTooLargeError"
