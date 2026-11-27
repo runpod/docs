@@ -127,6 +127,10 @@
       "description": "Cross-data-center storage volumes that mount into workloads without pinning them to a data center."
     },
     {
+      "name": "External Volumes",
+      "description": "Customer-owned storage registered with Runpod that mounts into workloads."
+    },
+    {
       "name": "Registries",
       "description": "Container registry credentials used to pull private images."
     },
@@ -1936,6 +1940,14 @@
                 "items": {
                   "$ref": "#/components/schemas/GlobalMount"
                 }
+              },
+              "external": {
+                "type": "array",
+                "maxItems": 1,
+                "description": "At most one external volume, with no data center constraint. A\npod mounts at most one global or external volume, so `external`\ncannot be combined with `global`; it is combinable with\n`network` but not with `persistent` (both rejected with 400).\nSame PATCH rules as `global`.\n",
+                "items": {
+                  "$ref": "#/components/schemas/ExternalMount"
+                }
               }
             }
           }
@@ -2027,6 +2039,30 @@
           }
         }
       },
+      "ExternalMount": {
+        "type": "object",
+        "required": [
+          "volumeId"
+        ],
+        "additionalProperties": false,
+        "description": "Reference to an ExternalVolume. On a pod, the volume can be mounted,\nmoved, or unmounted after creation (see `UpdatePodMounts`).\n",
+        "properties": {
+          "volumeId": {
+            "type": "string",
+            "description": "ID of an existing ExternalVolume.",
+            "examples": [
+              "ext_abc"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "description": "Mount path inside the container. Optional; a default is chosen for you when omitted.",
+            "examples": [
+              "/data"
+            ]
+          }
+        }
+      },
       "UpdatePodMounts": {
         "type": "object",
         "additionalProperties": false,
@@ -2049,6 +2085,14 @@
             "description": "Global volumes to mount, move, or unmount. Up to 2 entries, so a\nrequest can swap the global volume; the pod can still hold at\nmost 1 afterwards.\n",
             "items": {
               "$ref": "#/components/schemas/GlobalMountPatch"
+            }
+          },
+          "external": {
+            "type": "array",
+            "maxItems": 2,
+            "description": "External volumes to mount, move, or unmount. Up to 2 entries, so a\nrequest can swap the external volume. Afterwards the pod can hold\nat most one global or external volume.\n",
+            "items": {
+              "$ref": "#/components/schemas/ExternalMountPatch"
             }
           }
         }
@@ -2122,6 +2166,35 @@
             "description": "ID of an existing GlobalVolume.",
             "examples": [
               "gsb_abc"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Mount path inside the container. Optional; when mounting, a default is chosen for you if omitted.",
+            "examples": [
+              "/data"
+            ]
+          },
+          "remove": {
+            "type": "boolean",
+            "description": "Unmount the volume. Cannot be combined with `path`."
+          }
+        }
+      },
+      "ExternalMountPatch": {
+        "type": "object",
+        "required": [
+          "volumeId"
+        ],
+        "additionalProperties": false,
+        "description": "Mounts, moves, or unmounts the pod's external volume.",
+        "properties": {
+          "volumeId": {
+            "type": "string",
+            "description": "ID of an existing ExternalVolume.",
+            "examples": [
+              "ext_abc"
             ]
           },
           "path": {
@@ -6117,6 +6190,360 @@
           }
         }
       },
+      "ExternalVolume": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "connection",
+          "createdAt",
+          "createdByUserId"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique external volume identifier",
+            "examples": [
+              "ext_abc"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name",
+            "examples": [
+              "training-data"
+            ]
+          },
+          "connection": {
+            "$ref": "#/components/schemas/ExternalVolumeConnection"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the volume was registered"
+          },
+          "createdByUserId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ID of the user who registered the volume, if known",
+            "examples": [
+              "user_123"
+            ]
+          }
+        }
+      },
+      "ExternalVolumeConnection": {
+        "description": "Where the volume's storage is and how Runpod reaches it — a discriminated union\non `protocol`. Clients should ignore volumes whose `protocol` they do\nnot recognize.\n",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/S3Connection"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "protocol",
+          "mapping": {
+            "S3": "#/components/schemas/S3Connection"
+          }
+        }
+      },
+      "S3Connection": {
+        "type": "object",
+        "required": [
+          "protocol",
+          "bucket",
+          "endpointUrl",
+          "region",
+          "prefix",
+          "authentication"
+        ],
+        "properties": {
+          "protocol": {
+            "type": "string",
+            "description": "Connection discriminator. Always `S3` for this variant.",
+            "enum": [
+              "S3"
+            ]
+          },
+          "bucket": {
+            "type": "string",
+            "examples": [
+              "acme-ml"
+            ]
+          },
+          "endpointUrl": {
+            "type": "string",
+            "description": "S3 endpoint, such as `https://s3.us-west-004.backblazeb2.com`.\n`https://s3.amazonaws.com` when the volume was registered without\none (Amazon S3).\n",
+            "examples": [
+              "https://s3.us-west-004.backblazeb2.com"
+            ]
+          },
+          "region": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Bucket region; null when it is detected at mount.",
+            "examples": [
+              "us-east-1"
+            ]
+          },
+          "prefix": {
+            "type": "string",
+            "description": "Key prefix mounted as the volume root; empty for the whole bucket.",
+            "examples": [
+              "datasets"
+            ]
+          },
+          "authentication": {
+            "$ref": "#/components/schemas/S3Authentication"
+          }
+        }
+      },
+      "S3Authentication": {
+        "description": "How Runpod authenticates to the bucket — a discriminated union on `type`.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/S3AccessKeyAuthentication"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "ACCESS_KEY": "#/components/schemas/S3AccessKeyAuthentication"
+          }
+        }
+      },
+      "S3AccessKeyAuthentication": {
+        "type": "object",
+        "required": [
+          "type",
+          "accessKeyId"
+        ],
+        "description": "An access key pair. The secret access key is never returned.",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Authentication discriminator. Always `ACCESS_KEY` for this variant.",
+            "enum": [
+              "ACCESS_KEY"
+            ]
+          },
+          "accessKeyId": {
+            "type": "string",
+            "examples": [
+              "AKIAIOSFODNN7EXAMPLE"
+            ]
+          }
+        }
+      },
+      "ExternalVolumeConnectionInput": {
+        "description": "Where the volume's storage is and how to reach it — a discriminated union on `protocol`.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/S3ConnectionInput"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "protocol",
+          "mapping": {
+            "S3": "#/components/schemas/S3ConnectionInput"
+          }
+        }
+      },
+      "S3ConnectionInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocol",
+          "bucket",
+          "authentication"
+        ],
+        "properties": {
+          "protocol": {
+            "type": "string",
+            "description": "Connection discriminator. Always `S3` for this variant.",
+            "enum": [
+              "S3"
+            ]
+          },
+          "bucket": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$",
+            "description": "Bucket name, up to 63 characters.",
+            "examples": [
+              "acme-ml"
+            ]
+          },
+          "endpointUrl": {
+            "type": "string",
+            "pattern": "^https://[a-zA-Z0-9.-]+(:[0-9]{1,5})?/?$",
+            "description": "S3 endpoint, a public HTTPS address. Omit for Amazon S3.",
+            "examples": [
+              "https://s3.us-west-004.backblazeb2.com"
+            ]
+          },
+          "region": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$",
+            "description": "Bucket region. Omit to detect it at mount.",
+            "examples": [
+              "us-east-1"
+            ]
+          },
+          "prefix": {
+            "type": "string",
+            "maxLength": 191,
+            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+            "description": "Key prefix to mount as the volume root. Omit for the whole bucket.\nLeading and trailing slashes are dropped: `/datasets/` is stored\nas `datasets`.\n",
+            "examples": [
+              "datasets"
+            ]
+          },
+          "authentication": {
+            "$ref": "#/components/schemas/S3AuthenticationInput"
+          }
+        }
+      },
+      "S3AuthenticationInput": {
+        "description": "How Runpod authenticates to the bucket — a discriminated union on `type`.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/S3AccessKeyAuthenticationInput"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "ACCESS_KEY": "#/components/schemas/S3AccessKeyAuthenticationInput"
+          }
+        }
+      },
+      "S3AccessKeyAuthenticationInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "accessKeyId",
+          "secretAccessKey"
+        ],
+        "description": "An access key pair scoped to the bucket. Runpod checks that it can\nlist and read under the prefix before saving it.\n",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Authentication discriminator. Always `ACCESS_KEY` for this variant.",
+            "enum": [
+              "ACCESS_KEY"
+            ]
+          },
+          "accessKeyId": {
+            "type": "string",
+            "pattern": "^[^\\x00-\\x1f\\x7f\"'\\\\]+$",
+            "examples": [
+              "AKIAIOSFODNN7EXAMPLE"
+            ]
+          },
+          "secretAccessKey": {
+            "type": "string",
+            "pattern": "^[^\\x00-\\x1f\\x7f\"'\\\\]+$",
+            "description": "Write-only; never returned."
+          }
+        }
+      },
+      "CreateExternalVolumeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "connection"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 191,
+            "pattern": "[^\\t-\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]",
+            "description": "Human-readable name, 1–191 characters with at least one non-whitespace character. Leading and trailing whitespace is trimmed.\n",
+            "examples": [
+              "training-data"
+            ]
+          },
+          "connection": {
+            "$ref": "#/components/schemas/ExternalVolumeConnectionInput"
+          }
+        }
+      },
+      "UpdateExternalVolumeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "description": "Only the provided fields are updated. At least one field must be\npresent; an empty body is rejected. The connection is fixed at\nregistration: register the storage again to change it.\n",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 191,
+            "pattern": "[^\\t-\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]",
+            "description": "New human-readable name, 1–191 characters with at least one non-whitespace character. Leading and trailing whitespace is trimmed.\n",
+            "examples": [
+              "renamed-volume"
+            ]
+          }
+        }
+      },
+      "UpdateExternalVolumeAuthenticationRequest": {
+        "description": "The volume's new authentication, under the volume's `protocol` — a\ndiscriminated union on `protocol`.\n",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/S3AuthenticationUpdate"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "protocol",
+          "mapping": {
+            "S3": "#/components/schemas/S3AuthenticationUpdate"
+          }
+        }
+      },
+      "S3AuthenticationUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocol",
+          "authentication"
+        ],
+        "properties": {
+          "protocol": {
+            "type": "string",
+            "description": "The volume's protocol. Always `S3` for this variant.",
+            "enum": [
+              "S3"
+            ]
+          },
+          "authentication": {
+            "$ref": "#/components/schemas/S3AuthenticationInput"
+          }
+        }
+      },
+      "ListExternalVolumesResponse": {
+        "type": "object",
+        "required": [
+          "externalVolumes",
+          "pagination"
+        ],
+        "properties": {
+          "externalVolumes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExternalVolume"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        }
+      },
       "EndpointMount": {
         "type": "object",
         "required": [
@@ -6138,7 +6565,8 @@
         "type": "object",
         "required": [
           "network",
-          "global"
+          "global",
+          "external"
         ],
         "description": "Volumes mounted on every worker of the endpoint.",
         "properties": {
@@ -6149,6 +6577,12 @@
             }
           },
           "global": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EndpointMount"
+            }
+          },
+          "external": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/EndpointMount"
@@ -6171,6 +6605,14 @@
           "global": {
             "type": "array",
             "maxItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/EndpointMount"
+            }
+          },
+          "external": {
+            "type": "array",
+            "maxItems": 1,
+            "description": "At most one external volume. Same rules as `global`: present\nreplaces, `[]` detaches, omitted leaves it, and it cannot be on the\nendpoint together with a network or global volume.\n",
             "items": {
               "$ref": "#/components/schemas/EndpointMount"
             }
@@ -14949,7 +15391,8 @@
                                 "volumeId": "2q9m7x4c"
                               }
                             ],
-                            "global": []
+                            "global": [],
+                            "external": []
                           },
                           "timeout": 300000,
                           "flashboot": "OFF",
@@ -15154,7 +15597,8 @@
                             "volumeId": "2q9m7x4c"
                           }
                         ],
-                        "global": []
+                        "global": [],
+                        "external": []
                       },
                       "timeout": 300000,
                       "flashboot": "OFF",
@@ -15209,7 +15653,8 @@
                       "networkVolumes": [],
                       "mounts": {
                         "network": [],
-                        "global": []
+                        "global": [],
+                        "external": []
                       },
                       "timeout": 300000,
                       "flashboot": "OFF",
@@ -15355,7 +15800,8 @@
                             "volumeId": "2q9m7x4c"
                           }
                         ],
-                        "global": []
+                        "global": [],
+                        "external": []
                       },
                       "timeout": 300000,
                       "flashboot": "OFF",
@@ -15551,7 +15997,8 @@
                             "volumeId": "2q9m7x4c"
                           }
                         ],
-                        "global": []
+                        "global": [],
+                        "external": []
                       },
                       "timeout": 300000,
                       "flashboot": "OFF",
@@ -18184,6 +18631,653 @@
                 }
               }
             }
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/external-volumes": {
+      "get": {
+        "operationId": "listExternalVolumes",
+        "x-runpod-scope": "volumes:read",
+        "summary": "List external volumes",
+        "x-mint": {
+          "metadata": {
+            "description": "List external volumes (customer-owned storage) registered to your Runpod account through the REST API, using cursor pagination for more results."
+          }
+        },
+        "description": "Returns the external volumes registered to the authenticated account,\ncursor-paginated newest-first; an omitted `limit` defaults to 1000.\nFollow `pagination.nextCursor` until `hasNextPage` is false.\n",
+        "tags": [
+          "External Volumes"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PaginationCursor"
+          },
+          {
+            "$ref": "#/components/parameters/PaginationLimit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListExternalVolumesResponse"
+                },
+                "examples": {
+                  "externalVolumes": {
+                    "summary": "Successful response",
+                    "value": {
+                      "externalVolumes": [
+                        {
+                          "id": "ext_abc",
+                          "name": "training-data",
+                          "connection": {
+                            "protocol": "S3",
+                            "bucket": "acme-ml",
+                            "endpointUrl": "https://s3.amazonaws.com",
+                            "region": null,
+                            "prefix": "datasets",
+                            "authentication": {
+                              "type": "ACCESS_KEY",
+                              "accessKeyId": "AKIAIOSFODNN7EXAMPLE"
+                            }
+                          },
+                          "createdAt": "2026-10-20T00:00:00Z",
+                          "createdByUserId": "user_123"
+                        }
+                      ],
+                      "pagination": {
+                        "nextCursor": null,
+                        "hasNextPage": false
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "413": {
+            "$ref": "#/components/responses/ResponseTooLargeError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createExternalVolume",
+        "x-runpod-scope": "secrets:write",
+        "summary": "Register an external volume",
+        "x-mint": {
+          "metadata": {
+            "description": "Register customer-owned storage, such as an S3-compatible bucket, as a Runpod external volume through the REST API so Pods and Serverless workers can mount it."
+          }
+        },
+        "description": "Registers storage you own, such as an S3-compatible bucket, as an\nexternal volume that pods and serverless endpoints can mount. Runpod\nchecks that the authentication can read the storage before anything\nis saved; rejected authentication or unreachable storage fails with\n`400`. Runpod never creates, empties or deletes the storage. Requires an organization\naccount whose plan includes external volumes.\n\nReturns `201` with the registered volume, including its assigned\n`id`. The secret access key is never returned.\n",
+        "tags": [
+          "External Volumes"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateExternalVolumeRequest"
+              },
+              "examples": {
+                "s3AccessKey": {
+                  "summary": "Amazon S3 bucket with an access key pair",
+                  "value": {
+                    "name": "training-data",
+                    "connection": {
+                      "protocol": "S3",
+                      "bucket": "acme-ml",
+                      "prefix": "datasets",
+                      "authentication": {
+                        "type": "ACCESS_KEY",
+                        "accessKeyId": "AKIAIOSFODNN7EXAMPLE",
+                        "secretAccessKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalVolume"
+                },
+                "examples": {
+                  "externalVolume": {
+                    "summary": "Successful response",
+                    "value": {
+                      "id": "ext_abc",
+                      "name": "training-data",
+                      "connection": {
+                        "protocol": "S3",
+                        "bucket": "acme-ml",
+                        "endpointUrl": "https://s3.amazonaws.com",
+                        "region": null,
+                        "prefix": "datasets",
+                        "authentication": {
+                          "type": "ACCESS_KEY",
+                          "accessKeyId": "AKIAIOSFODNN7EXAMPLE"
+                        }
+                      },
+                      "createdAt": "2026-10-20T00:00:00Z",
+                      "createdByUserId": "user_123"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/external-volumes/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "External volume identifier",
+          "example": "ext_abc"
+        }
+      ],
+      "get": {
+        "operationId": "getExternalVolume",
+        "x-runpod-scope": "volumes:read",
+        "summary": "Get an external volume",
+        "x-mint": {
+          "metadata": {
+            "description": "Retrieve a Runpod external volume by its ID through the REST API, including its connection and creation details."
+          }
+        },
+        "description": "Returns a single external volume by ID.",
+        "tags": [
+          "External Volumes"
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalVolume"
+                },
+                "examples": {
+                  "externalVolume": {
+                    "summary": "Successful response",
+                    "value": {
+                      "id": "ext_abc",
+                      "name": "training-data",
+                      "connection": {
+                        "protocol": "S3",
+                        "bucket": "acme-ml",
+                        "endpointUrl": "https://s3.amazonaws.com",
+                        "region": null,
+                        "prefix": "datasets",
+                        "authentication": {
+                          "type": "ACCESS_KEY",
+                          "accessKeyId": "AKIAIOSFODNN7EXAMPLE"
+                        }
+                      },
+                      "createdAt": "2026-10-20T00:00:00Z",
+                      "createdByUserId": "user_123"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateExternalVolume",
+        "x-runpod-scope": "volumes:write",
+        "summary": "Update an external volume",
+        "x-mint": {
+          "metadata": {
+            "description": "Rename a Runpod external volume by ID through the REST API, updating its name while leaving its connection unchanged."
+          }
+        },
+        "description": "Updates mutable fields on an external volume. Only provided fields are\nchanged. The connection is fixed at registration.\n",
+        "tags": [
+          "External Volumes"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateExternalVolumeRequest"
+              },
+              "examples": {
+                "renameExternalVolume": {
+                  "summary": "Rename external volume",
+                  "value": {
+                    "name": "renamed-volume"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalVolume"
+                },
+                "examples": {
+                  "externalVolume": {
+                    "summary": "Successful response",
+                    "value": {
+                      "id": "ext_abc",
+                      "name": "renamed-volume",
+                      "connection": {
+                        "protocol": "S3",
+                        "bucket": "acme-ml",
+                        "endpointUrl": "https://s3.amazonaws.com",
+                        "region": null,
+                        "prefix": "datasets",
+                        "authentication": {
+                          "type": "ACCESS_KEY",
+                          "accessKeyId": "AKIAIOSFODNN7EXAMPLE"
+                        }
+                      },
+                      "createdAt": "2026-10-20T00:00:00Z",
+                      "createdByUserId": "user_123"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteExternalVolume",
+        "x-runpod-scope": "volumes:write",
+        "summary": "Unregister an external volume",
+        "x-mint": {
+          "metadata": {
+            "description": "Unregister a Runpod external volume through the REST API after removing Pod and Serverless attachments; the storage and its data are left untouched."
+          }
+        },
+        "description": "Unregisters an external volume. The storage and its data are left\nuntouched. Fails with `409` while the volume is still mounted:\nterminate every pod that mounts it (stopped pods count) and detach it\nfrom every serverless endpoint first. Nothing is detached or\nterminated on your behalf.\n",
+        "tags": [
+          "External Volumes"
+        ],
+        "responses": {
+          "204": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Deleted. Response has no body."
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "409": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "The volume is still mounted by a pod or serverless endpoint.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequestsError"
+          },
+          "default": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/external-volumes/{id}/authentication": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "External volume identifier",
+          "example": "ext_abc"
+        }
+      ],
+      "put": {
+        "operationId": "updateExternalVolumeAuthentication",
+        "x-runpod-scope": "secrets:write",
+        "summary": "Replace an external volume's authentication",
+        "x-mint": {
+          "metadata": {
+            "description": "Replace the authentication Runpod uses to reach an external volume's storage through the REST API, checked against the storage before it is saved."
+          }
+        },
+        "description": "Replaces the volume's whole `authentication`, including its `type`.\nThe new authentication is checked against the storage first; on\nfailure the stored authentication is unchanged and the request fails\nwith `400`. Pods and serverless workers started afterwards use the new\nauthentication; running ones keep the old one until they restart.\n",
+        "tags": [
+          "External Volumes"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateExternalVolumeAuthenticationRequest"
+              },
+              "examples": {
+                "accessKey": {
+                  "summary": "Replace the access key pair",
+                  "value": {
+                    "protocol": "S3",
+                    "authentication": {
+                      "type": "ACCESS_KEY",
+                      "accessKeyId": "AKIAIOSFODNN7EXAMPLE",
+                      "secretAccessKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "headers": {
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              }
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalVolume"
+                },
+                "examples": {
+                  "externalVolume": {
+                    "summary": "Successful response",
+                    "value": {
+                      "id": "ext_abc",
+                      "name": "training-data",
+                      "connection": {
+                        "protocol": "S3",
+                        "bucket": "acme-ml",
+                        "endpointUrl": "https://s3.amazonaws.com",
+                        "region": null,
+                        "prefix": "datasets",
+                        "authentication": {
+                          "type": "ACCESS_KEY",
+                          "accessKeyId": "AKIAIOSFODNN7EXAMPLE"
+                        }
+                      },
+                      "createdAt": "2026-10-20T00:00:00Z",
+                      "createdByUserId": "user_123"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntityError"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequestsError"
