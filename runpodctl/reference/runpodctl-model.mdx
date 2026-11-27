@@ -63,6 +63,8 @@ runpodctl model add --name my-model --model-path ./my-model-dir \
 
 </Warning>
 
+If your account has a model repository storage quota, a local upload checks the total size of the files against your remaining quota before it creates anything. An upload that would exceed the quota fails right away, and the error shows how much space is available. Free up space or contact support to request a higher quota. Mirroring with `--huggingface-model` doesn't run this check.
+
 #### Add flags
 
 <ResponseField name="--name" type="string" required>
@@ -90,7 +92,7 @@ Maximum time to wait with `--wait-for-hash` (default `30m`). `0` disables the ti
 </ResponseField>
 
 <ResponseField name="--delete-my-model-files-after-upload" type="bool">
-Delete the uploaded `--model-path` files once the model version is confirmed deployable. Requires `--wait-for-hash`.
+Delete the uploaded `--model-path` files once the model version is confirmed deployable. Requires `--wait-for-hash`. Only the files this run uploaded are deleted. If a file can't be deleted, the command exits with an error that names it.
 </ResponseField>
 
 <ResponseField name="--verbose, -v" type="bool">
@@ -143,7 +145,15 @@ runpodctl model remove --owner <owner> --name my-model
 
 You can use `rm` or `delete` as a shorthand for `remove`.
 
-A model that a Serverless endpoint still references can't be removed. The command fails and lists the endpoints that use it. Detach the model from each endpoint first, then remove it:
+To remove a single version instead of the whole model, pass `--version` or `--hash`:
+
+```bash
+runpodctl model remove --owner <owner> --name my-model --version <version-uuid>
+```
+
+A model or version that a Serverless endpoint still references can't be removed, and there is no flag to force it. Removing the whole model fails if an endpoint references any of its versions. Removing one version fails only if an endpoint references that version. The command lists the endpoints that block the removal and deletes nothing. If `runpodctl` can't complete this check, for example because the API is unreachable, it also refuses the removal.
+
+Detach the model from each endpoint first, or point the endpoint at a different model with `--model-reference`, then remove it:
 
 ```bash
 runpodctl serverless update <endpoint-id> --clear-models
@@ -161,11 +171,11 @@ Owner of the model.
 </ResponseField>
 
 <ResponseField name="--version" type="string">
-UUID of a specific model version to remove.
+UUID of a specific model version to remove. Can't be combined with `--hash`.
 </ResponseField>
 
 <ResponseField name="--hash" type="string">
-Hash of a specific model version to remove.
+Hash of a specific model version to remove. Can't be combined with `--version`.
 </ResponseField>
 
 ## Related commands
