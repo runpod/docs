@@ -264,7 +264,9 @@ runpodctl serverless run <endpoint-id> --input '{}' --wait 15m
 runpodctl serverless run <endpoint-id> --input '{}' --no-wait
 ```
 
-Pass only your handler's payload. The CLI sends it as `{"input": YOUR_PAYLOAD}`, so wrapping it in `input` yourself nests it twice.
+You must provide one of `--input` or `--input-file`, and they're mutually exclusive. The payload must be a JSON object. `runpodctl` rejects arrays, scalars, `null`, and any payload whose compacted `{"input": ...}` request body exceeds 10 MiB as a usage error, before it sends any request.
+
+Pass only your handler's payload. The CLI sends it as `{"input": YOUR_PAYLOAD}`, so wrapping it in `input` yourself nests it twice. If your payload has its own top-level `input` key, the CLI warns you about the likely double-wrapping but still submits the request.
 
 The command submits the job with `/run` and polls `/status` until the job reaches a final state. If the wait runs out, the job keeps running on the endpoint: the CLI prints the last job payload, reports a `timeout` error that names the `serverless status` command to use, and exits with code 1. Check the job with `serverless status` instead of sending the request again, which would start a second job.
 
@@ -273,11 +275,11 @@ The command exits with code 0 when the job is `COMPLETED`, or when `--no-wait` s
 #### Run flags
 
 <ResponseField name="--input" type="string">
-JSON payload for your handler. Use `-` to read it from stdin.
+JSON payload for your handler. Use `-` to read it from stdin. Mutually exclusive with `--input-file`.
 </ResponseField>
 
 <ResponseField name="--input-file" type="string">
-Read the JSON payload from a file. Use `-` to read it from stdin.
+Read the JSON payload from a file. Use `-` to read it from stdin. Mutually exclusive with `--input`.
 </ResponseField>
 
 <ResponseField name="--wait" type="duration">
@@ -314,6 +316,12 @@ Get worker counts by state and job counts by outcome:
 ```bash
 runpodctl serverless health <endpoint-id>
 ```
+
+<Note>
+
+Health can still return a response for a recently deleted endpoint because of invoke-side caching, so it isn't a reliable existence check. Use `runpodctl serverless get` for that.
+
+</Note>
 
 ### Read worker logs
 
