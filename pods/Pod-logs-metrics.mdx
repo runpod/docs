@@ -1,0 +1,62 @@
+---
+title: "Pod logs and metrics"
+sidebarTitle: "Logs and metrics"
+description: "Pull Pod logs and metrics from the Runpod API into your data lake, monitoring stack, or Prometheus instance."
+---
+
+Use the Runpod API to retrieve logs and metrics for your Pods programmatically. Both endpoints authenticate with your Runpod API key.
+
+## Prerequisites
+
+You can find all of the following in the [console](https://console.runpod.io).
+
+- A Runpod API key. Generate one under **Settings → API Keys**.
+- Your Pod ID. Find it on the **Pods** page.
+- Your Team ID. Required for team accounts only and not required for personal accounts.
+  - Go to **Account → Team** in the left navigation. Your Team ID is shown in the top right of the page next to **ID**.
+  - You must be a team owner or admin to access this page.
+
+## Pod logs
+
+The logs endpoint supports two modes:
+ 
+- **Streaming** (`?stream=true`): Returns a live log stream. Limited to 5 concurrent connections per Pod. Additional connections return `429` with `"too many concurrent log streams"`.
+- **Snapshot** (default): Returns a point-in-time snapshot of logs.
+
+```bash
+curl -sS -D - \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "X-Team-Id: $TEAM_ID" \
+  "https://hapi.runpod.net/v1/pod/$POD_ID/logs"
+```
+For a live stream, append `?stream=true` to the URL.
+
+The X-Team-Id header is not required for personal accounts.
+
+## Pod metrics
+
+Retrieve metrics for a running Pod.
+
+```bash
+curl -sS -D - \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "X-Team-Id: $TEAM_ID" \
+  "https://hapi.runpod.net/v1/pods/$POD_ID/metrics"
+```
+
+A successful response returns JSON with `pod_id`, `timestamp`, and a `metrics` object.
+
+## Rate limits
+ 
+Both endpoints share the same rate limit: one request every 5 seconds per Pod, with a burst of 3 requests. Requests over the limit return `429`.
+
+## Response codes
+
+| Code | Cause |
+|------|-------|
+| `200` | Success |
+| `401` | Missing or malformed `Authorization` header |
+| `403` | Invalid API key, or missing `X-Team-Id` for a team-scoped Pod |
+| `404` | Pod not found or not owned by this API key |
+| `429` | Rate limit exceeded, or too many concurrent log streams |
+| `502`/`503` | Pod host agent unreachable |
