@@ -1,0 +1,269 @@
+---
+title: "Serve a model across a Ray Cluster with vLLM and LiteLLM"
+sidebarTitle: "Ray and LiteLLM inference"
+description: "Serve a large language model across multiple nodes with the Ray cluster inference image, then connect Claude Code or Pi to it through LiteLLM."
+tag: "Beta"
+---
+
+<Note>
+  Ray Clusters are in beta. Features and behavior may change before general availability.
+</Note>
+
+This tutorial shows you how to serve a large language model across multiple GPU nodes using a [Ray Cluster](/instant-clusters/ray-clusters) and the inference variant of the Ray cluster image. The inference image starts Ray on every node, runs vLLM across the whole cluster, and puts a [LiteLLM](https://docs.litellm.ai/) proxy in front of it. You configure the deployment with environment variables and never build an image or run a startup script.
+
+vLLM splits the model across GPUs within each node with tensor parallelism, and across nodes with pipeline parallelism. This lets you serve models that don't fit in the memory of a single node. LiteLLM serves the model through both an OpenAI-compatible API and an Anthropic-compatible API, so you can point coding agents such as Claude Code and Pi at your cluster.
+
+## What you'll learn
+
+In this tutorial, you'll learn how to:
+
+- Create a Ray Cluster with the Ray Inference template.
+- Configure the model to serve with environment variables.
+- Check that the model has loaded and the API is ready.
+- Send requests to the LiteLLM API.
+- Connect Claude Code and Pi to your cluster.
+- Monitor the cluster and the inference metrics.
+
+## Requirements
+
+- A Runpod account with enough credits for a multi-node cluster.
+- A [Hugging Face access token](https://huggingface.co/settings/tokens) if the model you serve is gated or private.
+- To connect a coding agent: [Claude Code](https://code.claude.com/docs/en/setup) or [Pi](https://pi.dev) installed on your local machine.
+
+## How the inference image works
+
+The inference image is published as `runpod/ray-cluster:VERSION-inference-cu1300-torch2130-ubuntu2404`. It's the supported Ray cluster image plus vLLM and LiteLLM. It keeps the same entrypoint, so Ray starts on every node exactly as it does with the base image. Only the services that run after Ray starts are different:
+
+- **Worker nodes** join the Ray cluster and run nothing else.
+- **The head node** waits until `NUM_NODES` nodes have joined Ray, then starts vLLM on `127.0.0.1:8000`. vLLM sets tensor parallelism to the number of GPUs per node and pipeline parallelism to the number of nodes, so every node must have the same number of GPUs.
+- **LiteLLM** starts on the head node once vLLM has loaded the model, and serves the API on port `4000`.
+
+vLLM listens only on the head node's loopback interface, so it's never reachable from outside the Pod. Every request goes through LiteLLM, which checks the API key.
+
+{/* TODO(DOCS-609): replace VERSION with the published tag once runpod/containers#245 ships. */}
+
+## Step 1: Create a Ray Cluster
+
+{/* TODO(DOCS-609): verify every console label in this step against the live create flow (cluster type selector, template name, environment variable editing) once the Ray Clusters flag is on. */}
+
+1. Open the [Instant Clusters page](https://console.runpod.io/instant-clusters) and click **Create Cluster**.
+2. Select **Ray** as the cluster type.
+3. Name your cluster, set **Pod Count** to **2**, and select **8x H100 SXM** as the GPU configuration for each Pod.
+4. Optionally, select a [network volume](/storage/network-volumes) to share data across nodes.
+5. Select the **Ray Inference** template. It uses the inference image and exposes the API on port `4000` alongside the usual Ray Cluster ports.
+6. Click **Edit Template** and add the following environment variables:
+
+   | Variable | Value |
+   | --- | --- |
+   | `MODEL_REPO` | `Qwen/Qwen3-235B-A22B-Instruct-2507` |
+   | `MAX_MODEL_LENGTH` | `131072` |
+   | `VLLM_EXTRA_ARGS` | `--enable-auto-tool-choice --tool-call-parser hermes` |
+   | `LITELLM_MASTER_KEY` | A secret of your choice, used as the API key. |
+   | `HF_TOKEN` | Your Hugging Face token, if the model is gated. |
+
+   `VLLM_EXTRA_ARGS` turns on tool calling, which coding agents need. See [inference environment variables](#inference-environment-variables) for every option, and [the inference variant](/instant-clusters/ray-clusters#serve-a-model-with-the-inference-variant) for an overview.
+
+7. Click **Deploy Cluster**.
+
+Runpod deploys one Pod per node. The Pod with rank `0` is the Ray head node, and the other Pod is a worker.
+
+<Tip>
+  To create the cluster from code instead, see [create a Ray Cluster with the REST API](/instant-clusters/ray-clusters#create-a-ray-cluster-with-the-rest-api).
+</Tip>
+
+## Step 2: Check that the model is ready
+
+Each Pod starts Ray as soon as its container starts. The worker waits for the head node, then joins. After every node has joined, the head node starts vLLM, and after vLLM has loaded the model, the head node starts LiteLLM.
+
+Each node downloads its own copy of the model weights, and loading a large model across nodes can take several minutes.
+
+1. On the Instant Clusters page, expand your cluster and select the head Pod (rank `0`).
+2. Click **Connect** and check the status of port `4000`. It shows as ready once LiteLLM is serving the model.
+
+{/* TODO(DOCS-609): verify the exact port status labels in the Connect view against a live inference cluster. */}
+
+Until port `4000` is ready, nothing listens on it, and requests to it return a `502` response from the Runpod proxy.
+
+## Step 3: Send a request
+
+The head node exposes the LiteLLM API through the Runpod proxy on port `4000`. Every request needs your `LITELLM_MASTER_KEY` as a bearer token. If you didn't set `LITELLM_MASTER_KEY`, the key is the head Pod's `JUPYTER_PASSWORD`.
+
+1. List the models served by the cluster:
+
+   ```bash
+   curl https://HEAD_POD_ID-4000.proxy.runpod.net/v1/models \
+       -H "Authorization: Bearer LITELLM_MASTER_KEY"
+   ```
+
+2. Send a chat completion request:
+
+   ```bash
+   curl https://HEAD_POD_ID-4000.proxy.runpod.net/v1/chat/completions \
+       -H "Authorization: Bearer LITELLM_MASTER_KEY" \
+       -H "Content-Type: application/json" \
+       -d '{
+           "model": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+           "messages": [{"role": "user", "content": "Explain pipeline parallelism in one sentence."}]
+       }'
+   ```
+
+Replace `HEAD_POD_ID` with the ID of the head Pod and `LITELLM_MASTER_KEY` with your API key. The model name is always the value of `MODEL_REPO`.
+
+Because the API is OpenAI-compatible, you can also use the OpenAI Python client:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://HEAD_POD_ID-4000.proxy.runpod.net/v1",
+    api_key="LITELLM_MASTER_KEY",
+)
+
+response = client.chat.completions.create(
+    model="Qwen/Qwen3-235B-A22B-Instruct-2507",
+    messages=[{"role": "user", "content": "Explain pipeline parallelism in one sentence."}],
+)
+print(response.choices[0].message.content)
+```
+
+This script points the OpenAI client at your cluster's LiteLLM proxy and prints the model's reply.
+
+A request with no key receives a `401` response. A request with the wrong key receives a `400` response with the message `No connected db.`, because LiteLLM looks up unknown keys in a database that the image doesn't run. Both requests are refused.
+
+## Step 4: Connect a coding agent
+
+LiteLLM serves the model through an Anthropic-compatible Messages API (`/v1/messages`) as well as the OpenAI-compatible API, so you can use the model on your cluster as the backend for a coding agent running on your local machine.
+
+Coding agents rely on tool calling and long prompts. Make sure `VLLM_EXTRA_ARGS` turns on tool calling with a parser that matches your model, and that `MAX_MODEL_LENGTH` leaves room for the agent's system prompt and your code. For example, to test the connection quickly and cheaply with a small model such as `Qwen/Qwen3-0.6B`, set:
+
+| Variable | Value |
+| --- | --- |
+| `MODEL_REPO` | `Qwen/Qwen3-0.6B` |
+| `VLLM_EXTRA_ARGS` | `--enable-auto-tool-choice --tool-call-parser hermes` |
+
+A model this small is enough to check that the agent can reach your cluster and call tools, but use a larger model for real coding work.
+
+<Tabs>
+  <Tab title="Claude Code">
+    Claude Code sends requests to the Anthropic API by default. Point it at your cluster by setting these environment variables in your local shell:
+
+    ```bash
+    export ANTHROPIC_BASE_URL="https://HEAD_POD_ID-4000.proxy.runpod.net"
+    export ANTHROPIC_AUTH_TOKEN="LITELLM_MASTER_KEY"
+    export ANTHROPIC_MODEL="Qwen/Qwen3-235B-A22B-Instruct-2507"
+    export ANTHROPIC_DEFAULT_HAIKU_MODEL="Qwen/Qwen3-235B-A22B-Instruct-2507"
+    export CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1
+    ```
+
+    - `ANTHROPIC_BASE_URL` sends Claude Code's requests to LiteLLM on your head node. Don't add `/v1`, because Claude Code adds it.
+    - `ANTHROPIC_AUTH_TOKEN` sends your LiteLLM key as a bearer token.
+    - `ANTHROPIC_MODEL` and `ANTHROPIC_DEFAULT_HAIKU_MODEL` make Claude Code use your model for both its main work and its background tasks. The cluster serves only one model, so both must be the value of `MODEL_REPO`.
+    - `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1` stops Claude Code from sending Anthropic beta headers that other models don't support.
+
+    Then start Claude Code in your project directory:
+
+    ```bash
+    claude
+    ```
+
+    Run `/status` in Claude Code to confirm that it's using your cluster's URL and model.
+
+    To keep these settings for one project instead of your whole shell, add them to the `env` block of `.claude/settings.local.json` in the project. See [Claude Code settings](https://code.claude.com/docs/en/settings) for details.
+  </Tab>
+  <Tab title="Pi">
+    [Pi](https://pi.dev) is an open-source coding agent. The community [`pi-provider-litellm`](https://github.com/balcsida/pi-provider-litellm) extension adds LiteLLM as a provider and discovers the models your proxy serves. Install Pi and the extension on your local machine:
+
+    ```bash
+    npm install -g @earendil-works/pi-coding-agent
+    pi install npm:pi-provider-litellm
+    ```
+
+    Then connect Pi to your cluster in one of two ways:
+
+    - **Sign in from Pi:** start `pi`, run `/login`, choose **Sign in with an API key**, then choose **LiteLLM API key**. Enter `https://HEAD_POD_ID-4000.proxy.runpod.net` as the base URL and your `LITELLM_MASTER_KEY` as the key. Pi saves them in `~/.pi/agent/auth.json`.
+    - **Configure a file:** add your cluster to `~/.pi/agent/models.json`:
+
+      ```json ~/.pi/agent/models.json
+      {
+        "providers": {
+          "litellm": {
+            "baseUrl": "https://HEAD_POD_ID-4000.proxy.runpod.net",
+            "apiKey": "$LITELLM_MASTER_KEY"
+          }
+        }
+      }
+      ```
+
+      `apiKey` reads your key from the `LITELLM_MASTER_KEY` environment variable, so the key isn't stored in the file. You don't need to list models, because the extension discovers them from the proxy.
+
+    In both cases, the base URL is the proxy root, without `/v1`. Run `/model` in Pi and select your cluster's model, or start Pi with it:
+
+    ```bash
+    pi --provider litellm --model Qwen/Qwen3-235B-A22B-Instruct-2507
+    ```
+  </Tab>
+</Tabs>
+
+{/* TODO(DOCS-609): test Claude Code and Pi end to end against a live inference cluster, and confirm that LiteLLM 1.108.11 translates Claude Code's /v1/messages requests (including tool use) to vLLM without extra config. */}
+
+## Step 5: Monitor the cluster
+
+1. Select the head Pod and click **Connect**.
+2. Click **Ray Dashboard**. The console signs you in with the head node's token.
+3. Open the **Cluster** tab to see live CPU, GPU, memory, and disk usage for each node.
+4. Open the **Metrics** tab to see historical charts for every node.
+
+The head node's Grafana instance also includes an **Inference** folder with vLLM's dashboards and LiteLLM's dashboard. Use them to track request rates, latency, token throughput, and cache usage. Open Grafana from the head Pod's **Connect** menu.
+
+See [open the Ray dashboard](/instant-clusters/ray-clusters#open-the-ray-dashboard) for token details and troubleshooting.
+
+## Step 6: Clean up
+
+When you're done, return to the [Instant Clusters page](https://console.runpod.io/instant-clusters) and delete your cluster. A running cluster continues to incur charges.
+
+If you connected a coding agent, unset the Claude Code environment variables, or run `/logout litellm` in Pi and remove the `litellm` block from `~/.pi/agent/models.json`, so the agent stops sending requests to the deleted cluster.
+
+## Inference environment variables
+
+Set these variables in the template you use for the cluster, in addition to the [Ray Cluster environment variables](/instant-clusters/ray-clusters#environment-variables).
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `MODEL_REPO` | None | Hugging Face model to serve, such as `Qwen/Qwen3-235B-A22B-Instruct-2507`. Also the model name clients send. If unset, the head node skips vLLM and stays up for interactive use. |
+| `HF_TOKEN` | None | Hugging Face token for gated or private models. |
+| `LITELLM_MASTER_KEY` | Value of `JUPYTER_PASSWORD` | API key required on every route on port `4000`, except LiteLLM's health checks (`/health/liveliness` and `/health/readiness`). Set to `none` to turn off authentication. Publicly known defaults such as `sk-1234` aren't accepted. |
+| `MAX_MODEL_LENGTH` | vLLM's default | Maximum context length, passed to vLLM as `--max-model-len`. |
+| `VLLM_EXTRA_ARGS` | None | Extra arguments for `vllm serve`, such as tool calling flags. Added after the default parallelism settings, so it can override them. Can't include `--api-key`. |
+
+<Warning>
+  With `LITELLM_MASTER_KEY=none`, anyone who knows your head Pod's ID can send requests to your model. Only turn off authentication for short tests.
+</Warning>
+
+## Troubleshooting
+
+### Requests return `502`
+
+The model is still loading, or vLLM or LiteLLM didn't start. Check the head Pod's logs for `[ray-inference]` messages. If vLLM or LiteLLM exits, the Pod stays up so you can investigate, and the log names the cause. Fix the cause, then restart the head Pod to serve again. Workers don't rejoin a restarted head node on their own, so restart the worker Pods after the head node is back.
+
+### Requests return `401` or `400` with `No connected db.`
+
+The request has no API key or the wrong one. Send `Authorization: Bearer` with your `LITELLM_MASTER_KEY`, or the head Pod's `JUPYTER_PASSWORD` if you didn't set one.
+
+### vLLM doesn't start
+
+The head node's log says why. Common causes:
+
+- `MODEL_REPO` isn't set.
+- Neither `LITELLM_MASTER_KEY` nor `JUPYTER_PASSWORD` is set.
+- `VLLM_EXTRA_ARGS` includes `--api-key`. Remove it, because LiteLLM checks the key instead.
+- The nodes have different numbers of GPUs, so vLLM can't split the model into even pipeline stages.
+
+### The coding agent fails on tool calls
+
+vLLM is running without tool calling, or with a parser that doesn't match the model. Set `VLLM_EXTRA_ARGS` to `--enable-auto-tool-choice --tool-call-parser PARSER`, using the parser that vLLM's [tool calling documentation](https://docs.vllm.ai/en/latest/features/tool_calling.html) lists for your model, then restart the head Pod and the worker Pods.
+
+## Next steps
+
+- [Learn how Ray Clusters work](/instant-clusters/ray-clusters), including the base image for your own Ray jobs.
+- [Deploy your first Ray Cluster](/instant-clusters/ray-quickstart) and run a Ray job across every GPU.
+- [Attach a network volume](/storage/network-volumes) to share data across nodes.
